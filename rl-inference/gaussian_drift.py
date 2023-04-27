@@ -164,133 +164,157 @@ def evaluate_log_r_psi(x_t, y_T, g_coeff_t, g_bias_t, sigma2_r_t):
     return log_gaussian_pdf(y_T, mean, sigma2_r_t)
 
 
-# def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
-#         y_T, alpha_drift_param, g_coeff_params, g_bias_params, sigma2_r_params, T):
-#     log_z_hat_t = 0.
-#     # TODO REPLACE WITH LAX.SCAN
-#     for t in range(T):
-#         key, subkey = jax.random.split(key)
-#         if t == 0:
-#             log_w_t_minus_1 = 0.
-#             x_t = get_gaussian_proposal_q_0_samples(subkey,
-#                                                     b_q_t=b_params[0],
-#                                                     c_q_t=c_params[0],
-#                                                     sigma2_q_t=sigma2_q_params[0],
-#                                                     y_T=y_T)
-#             x_1_to_t = x_t.reshape(1, -1)
-#             log_q_t_eval = evaluate_log_q_0(x_t, b_params[0], c_params[0], sigma2_q_params[0], y_T)
-#             log_gamma_1_to_t_minus_1_eval = 0. # Ignore this term at the beginning TODO ensure this is correct; think about more
-#
-#         else:
-#             x_t_minus_1 = x_t
-#             log_w_t_minus_1 = log_w_t
-#             x_t = get_gaussian_proposal_q_t_samples(subkey,
-#                                                     a_q_t_minus_1=a_params[t-1],
-#                                                     b_q_t=b_params[t],
-#                                                     c_q_t=c_params[t],
-#                                                     sigma2_q_t=sigma2_q_params[t],
-#                                                     x_t_minus_1=x_t_minus_1,
-#                                                     y_T=y_T)
-#
-#             x_1_to_t = jnp.concatenate((x_1_to_t, x_t.reshape(1, -1)), axis=0)
-#
-#             log_q_t_eval = evaluate_log_q_t(x_t, a_params[t-1], b_params[t], c_params[t], sigma2_q_params[t], x_t_minus_1, y_T)
-#             log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
-#
-#         # evaluate_p_theta_x_1_to_t(jnp.stack(x_1_to_t))
-#         log_p_theta_1_to_t_eval = evaluate_log_p_theta_x_1_to_t(alpha_drift_param, x_1_to_t)
-#         # TODO I think one way maybe around this is, since x_1_to_t is the only thing that has dynamic array and it is only used in the p evaluation
-#         # Then what I can do is I can save the evaluation of p up to t - 1
-#         # and then pass that into the carry too, and now I can evaluate just the incremental conditional distribution
-#         # Since alpha does not change during the smc sweep, then this should actually work.
-#         # This would solve the SMC speed problem. But what about the other variance problem???
-#
-#         # Yes so we will condition on x_t and evaluate r_psi to get a probability value
-#         # for y_T given x_t (that's from r_psi)
-#         # TODO: so how is this used in monte carlo? Once finished implementing, review everything from
-#         # start to finish, including the math - figure out what is really happening and why it all makes sense.
-#         log_r_psi_t_eval = evaluate_log_r_psi(x_t, y_T, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])
-#         log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
-#
-#         # print("---terms used in gamma calc---")
-#         # print(x_1_to_t)
-#         # print(log_p_theta_1_to_t_eval)
-#         # print(log_r_psi_t_eval)
-#
-#         log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval
-#
-#         # print("---terms used in alpha calc---")
-#         # print(log_gamma_1_to_t_eval)
-#         # print(log_gamma_1_to_t_minus_1_eval)
-#         # print(log_q_t_eval)
-#
-#         # print("---alpha---")
-#
-#         # print(log_alpha_t)
-#         # print(alpha_t.shape)
-#         # print(w_t_minus_1)
-#         log_w_t = log_w_t_minus_1 + log_alpha_t
-#         # print(f"----t = {t}----")
-#         # print(x_t)
-#         # print(w_t)
-#
-#         if t == 0:
-#             log_z_over_z = jax.nn.logsumexp(log_w_t)
-#             # z_over_z = (jnp.exp(log_w_t)).sum()
-#         else:
-#             log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1)
-#             # z_over_z = (jnp.exp(log_w_t)).sum() / (jnp.exp(log_w_t_minus_1)).sum()
-#             # print("------------")
-#             # print((jnp.exp(log_w_t)).sum())
-#             # print((jnp.exp(log_w_t_minus_1)).sum())
-#             # print(z_over_z)
-#             # print(log_w_t)
-#             # print(log_w_t_minus_1)
-#
-#             # print("------------")
-#             # print(w_t)
-#             # print(w_t.sum())
-#             #
-#             # print(w_t_minus_1)
-#             # print(w_t_minus_1.sum())
-#         log_z_hat_t = log_z_hat_t + log_z_over_z
-#         # z_hat_t = z_hat_t * z_over_z
-#         # z_hat_t_alternate = w_t.sum()
-#         # print(z_hat_t)
-#         # print(z_hat_t_alternate)
-#         # These two calcs are the same right? So what's the point of the division and multiplication?
-#         # NO they aren't the same. These calcs are different when you have resampling which reweights
-#         # Right, the reason they are different with resampling is that
-#         # the calculation here is with the new w_t based on w_{t-1} and a_t before resampling occurs
-#         # So there is no telescoping cancelation as the w_t calculation is before sampling, but then the w_{t-1} is
-#         # based on after resampling.
-#         # assert(jnp.abs(z_hat_t_alternate - z_hat_t) < 0.001)
-#         # TODO I still feel a bit uncomfortable about this. Later confirm what the numerator and denominator and product of terms is doing
-#         # I guess the good thing is that I don't need the Z for my project, as I only need the samples
-#         # But still would be nice to know what exactly is happening with the Z and the log(p)
-#
-#         resample_condition = True
-#         if resample_condition:
-#             # Do resampling
-#             key, subkey = jax.random.split(key)
-#             # print(w_t)
-#             # print(w_t.shape)
-#             # print(log_w_t)
-#             a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
-#             # print("---RESAMPLING---")
-#             # print(jax.nn.softmax(log_w_t))
-#             # print(a_t)
-#             # print(x_1_to_t)
-#             x_1_to_t = x_1_to_t[:, a_t]
-#             # print(x_1_to_t)
-#             log_w_t = jnp.zeros_like(log_w_t)
-#
-#             # # TODO THINK ABOUT: How is the gradient flowing through the resampling or a_t steps? How about the interaction with A and expectation?
-#             #
-#             # # TODO CHECK EVERY STEP OF CODE CAREFULLY TO ENSURE IT ALL MAKES SENSE.
-#
-#
-#     return log_z_hat_t, x_1_to_t
+def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
+        y_T, alpha_drift_param, g_coeff_params, g_bias_params, sigma2_r_params):
+    log_z_hat_t = 0.
+    # TODO REPLACE WITH LAX.SCAN
+    for t in range(args.T):
+        key, subkey = jax.random.split(key)
+        if t == 0:
+            log_w_t_minus_1 = 0.
+            x_t = get_gaussian_proposal_q_0_samples(subkey,
+                                                    b_q_t=b_params[0],
+                                                    c_q_t=c_params[0],
+                                                    sigma2_q_t=sigma2_q_params[0],
+                                                    y_T=y_T)
+            x_1_to_t = x_t.reshape(1, -1)
+            log_q_t_eval = evaluate_log_q_0(x_t, b_params[0], c_params[0], sigma2_q_params[0], y_T)
+            log_gamma_1_to_t_minus_1_eval = 0. # Ignore this term at the beginning TODO ensure this is correct; think about more
+
+        else:
+            x_t_minus_1 = x_1_to_t[-1]
+            log_w_t_minus_1 = log_w_t
+            x_t = get_gaussian_proposal_q_t_samples(subkey,
+                                                    a_q_t_minus_1=a_params[t-1],
+                                                    b_q_t=b_params[t],
+                                                    c_q_t=c_params[t],
+                                                    sigma2_q_t=sigma2_q_params[t],
+                                                    x_t_minus_1=x_t_minus_1,
+                                                    y_T=y_T)
+            sampling_info = (subkey, a_params[t-1], b_params[t], c_params[t], sigma2_q_params[t], x_t_minus_1, y_T)
+            # print("--OLD SAMPLING INFO--")
+            # print(sampling_info)
+
+            x_1_to_t = jnp.concatenate((x_1_to_t, x_t.reshape(1, -1)), axis=0)
+
+            log_q_t_eval = evaluate_log_q_t(x_t, a_params[t-1], b_params[t], c_params[t], sigma2_q_params[t], x_t_minus_1, y_T)
+            log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
+
+        # evaluate_p_theta_x_1_to_t(jnp.stack(x_1_to_t))
+
+        log_p_theta_1_to_t_eval = evaluate_log_p_theta_x_1_to_t(alpha_drift_param, x_1_to_t)
+        # TODO I think one way maybe around this is, since x_1_to_t is the only thing that has dynamic array and it is only used in the p evaluation
+        # Then what I can do is I can save the evaluation of p up to t - 1
+        # and then pass that into the carry too, and now I can evaluate just the incremental conditional distribution
+        # Since alpha does not change during the smc sweep, then this should actually work.
+        # This would solve the SMC speed problem. But what about the other variance problem???
+
+        # print("--SMC old--")
+        # print(t)
+        # print(x_t)
+        # if t > 0:
+        #     print(x_t_minus_1)
+        # print(log_p_theta_1_to_t_eval)
+
+        # Yes so we will condition on x_t and evaluate r_psi to get a probability value
+        # for y_T given x_t (that's from r_psi)
+        # TODO: so how is this used in monte carlo? Once finished implementing, review everything from
+        # start to finish, including the math - figure out what is really happening and why it all makes sense.
+        log_r_psi_t_eval = evaluate_log_r_psi(x_t, y_T, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])
+        log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
+
+        # print("---terms used in gamma calc---")
+        # print(x_1_to_t)
+        # print(log_p_theta_1_to_t_eval)
+        # print(log_r_psi_t_eval)
+
+        log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval
+
+        # print("---terms used in alpha calc---")
+        # print(log_gamma_1_to_t_eval)
+        # print(log_gamma_1_to_t_minus_1_eval)
+        # print(log_q_t_eval)
+
+        # print("---alpha---")
+
+        # print(log_alpha_t)
+        # print(alpha_t.shape)
+        # print(w_t_minus_1)
+        log_w_t = log_w_t_minus_1 + log_alpha_t
+        # print(f"----t = {t}----")
+        # print(x_t)
+        # print(w_t)
+
+        if t == 0:
+            log_z_over_z = jax.nn.logsumexp(log_w_t)
+            # z_over_z = (jnp.exp(log_w_t)).sum()
+        else:
+            log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1)
+            # z_over_z = (jnp.exp(log_w_t)).sum() / (jnp.exp(log_w_t_minus_1)).sum()
+            # print("------------")
+            # print((jnp.exp(log_w_t)).sum())
+            # print((jnp.exp(log_w_t_minus_1)).sum())
+            # print(z_over_z)
+            # print(log_w_t)
+            # print(log_w_t_minus_1)
+
+            # print("------------")
+            # print(w_t)
+            # print(w_t.sum())
+            #
+            # print(w_t_minus_1)
+            # print(w_t_minus_1.sum())
+        log_z_hat_t = log_z_hat_t + log_z_over_z
+        # z_hat_t = z_hat_t * z_over_z
+        # z_hat_t_alternate = w_t.sum()
+        # print(z_hat_t)
+        # print(z_hat_t_alternate)
+        # These two calcs are the same right? So what's the point of the division and multiplication?
+        # NO they aren't the same. These calcs are different when you have resampling which reweights
+        # Right, the reason they are different with resampling is that
+        # the calculation here is with the new w_t based on w_{t-1} and a_t before resampling occurs
+        # So there is no telescoping cancelation as the w_t calculation is before sampling, but then the w_{t-1} is
+        # based on after resampling.
+        # assert(jnp.abs(z_hat_t_alternate - z_hat_t) < 0.001)
+        # TODO I still feel a bit uncomfortable about this. Later confirm what the numerator and denominator and product of terms is doing
+        # I guess the good thing is that I don't need the Z for my project, as I only need the samples
+        # But still would be nice to know what exactly is happening with the Z and the log(p)
+
+        # TODO maybe don't resample on the first iteration??
+        # if t == 0:
+        #     resample_condition = False
+        # else:
+        #     resample_condition = True
+        resample_condition = True
+        if resample_condition:
+            # Do resampling
+            key, subkey = jax.random.split(key)
+            # print(w_t)
+            # print(w_t.shape)
+            # print(log_w_t)
+            # print("w_t for sampling")
+            # print(log_w_t)
+            # print(jnp.exp(log_w_t))
+            a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
+            # print("---RESAMPLING---")
+            # print(jax.nn.softmax(log_w_t))
+            # print(a_t)
+            # print(x_1_to_t)
+            x_1_to_t = x_1_to_t[:, a_t]
+            # x_1_to_t = x_1_to_t.at[-1, :].set(x_t) # Don't do this, this is wrong.
+            # print(x_1_to_t)
+            log_w_t = jnp.zeros_like(log_w_t)
+
+            # # TODO THINK ABOUT: How is the gradient flowing through the resampling or a_t steps? How about the interaction with A and expectation?
+            #
+            # # TODO CHECK EVERY STEP OF CODE CAREFULLY TO ENSURE IT ALL MAKES SENSE.
+
+            # print("---slow v---")
+            # print(x_1_to_t)
+            # print(a_t)
+
+
+    return log_z_hat_t, x_1_to_t
 
 
 # TODO APR 26: New goal: do SIXO-A first (the analytic version with only updating theta), and get that working. That's an even easier baseline
@@ -305,11 +329,12 @@ def evaluate_log_r_psi(x_t, y_T, g_coeff_t, g_bias_t, sigma2_r_t):
 # TODO: No arrays of variable length. Just store the previous computation up to time t (e.g. log p(x_1:t-1)) and then add onto it
 
 def smc_iter(carry, scan_over_tuple):
-    key, y_T, alpha, T, x_t_minus_1, log_w_t_minus_1, log_gamma_1_to_t_eval, log_z_hat_t, prev_sum_log_p = carry
+    key, y_T, alpha, x_t_minus_1, log_w_t_minus_1, log_gamma_1_to_t_eval, log_z_hat_t, prev_sum_log_p = carry
     a_q_t_minus_1, b_q_t, c_q_t, sigma2_q_t, g_c_t, g_b_t, sigma2_r_t = scan_over_tuple
 
 
     key, subkey = jax.random.split(key)
+
     x_t = get_gaussian_proposal_q_t_samples(subkey,
                                             a_q_t_minus_1=a_q_t_minus_1,
                                             b_q_t=b_q_t,
@@ -317,6 +342,7 @@ def smc_iter(carry, scan_over_tuple):
                                             sigma2_q_t=sigma2_q_t,
                                             x_t_minus_1=x_t_minus_1,
                                             y_T=y_T)
+    sampling_info = (subkey, a_q_t_minus_1, b_q_t, c_q_t, sigma2_q_t, x_t_minus_1, y_T)
 
     # x_1_to_t = x_1_to_t_minus_1.at[t].set(x_t)
 
@@ -326,6 +352,8 @@ def smc_iter(carry, scan_over_tuple):
 
     # evaluate_p_theta_x_1_to_t(jnp.stack(x_1_to_t))
     log_p_theta_1_to_t_eval = evaluate_log_p_theta_given_prev_p(alpha, prev_sum_log_p, x_t, x_t_minus_1)
+    log_p_theta_1_to_t_eval_for_alpha_calc = log_p_theta_1_to_t_eval
+
 
     log_r_psi_t_eval = evaluate_log_r_psi(x_t, y_T, g_c_t, g_b_t,
                                   sigma2_r_t)
@@ -342,28 +370,39 @@ def smc_iter(carry, scan_over_tuple):
     # Do resampling
     key, subkey = jax.random.split(key)
 
+    w_t_for_sampling = log_w_t
+
     a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
 
+    x_t_before_resample = x_t
+
+
     x_t = x_t[a_t]
-    log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
+    log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t] # Need to ensure the p values track the same trajectories, after resampling
+    # Note that this resampling only updates x_t, but this is ok because we are keeping track of the p values (the only thing in these calculations that uses the full trajectory)
+    # and also we will reconstruct entire trajectories later from the sampled indices
+    # this requires Markov structure (e.g. for factoring probabilities) which we are assuming, and which holds e.g. for autoregressive language models
     # x_1_to_t = x_1_to_t[:, a_t]
 
     log_w_t = jnp.zeros_like(log_w_t)
 
-    carry = (key, y_T, alpha, T, x_t, log_w_t, log_gamma_1_to_t_eval, log_z_hat_t, log_p_theta_1_to_t_eval)
+    carry = (key, y_T, alpha, x_t, log_w_t, log_gamma_1_to_t_eval, log_z_hat_t, log_p_theta_1_to_t_eval)
 
-    return carry, (x_t, a_t)
+    aux_info = (x_t, a_t, log_p_theta_1_to_t_eval_for_alpha_calc, w_t_for_sampling, x_t_before_resample, sampling_info)
+
+    return carry, aux_info
 
     # # TODO THINK ABOUT: How is the gradient flowing through the resampling or a_t steps? How about the interaction with A and expectation?
     #
     # # TODO CHECK EVERY STEP OF CODE CAREFULLY TO ENSURE IT ALL MAKES SENSE.
 
 
+# @jit
 # This lax scan doesn't work because of the dynamic arrays
 # "IndexError: Array slice indices must have static start/stop/step to be used with NumPy indexing syntax. Found slice(None, Traced<ShapedArray(int32[], weak_type=True)>with<DynamicJaxprTrace(level=3/0)>, None). To index a statically sized array at a dynamic position, try lax.dynamic_slice/dynamic_update_slice (JAX does not support dynamically sized arrays within JIT compiled functions)."
 # TODO so check how did the sixo authors manage to write their code in a way that works???
 def smc(key, a_params, b_params, c_params, sigma2_q_params,
-        y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params, T):
+        y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params):
     log_z_hat_t = 0.
     key, subkey = jax.random.split(key)
     log_w_t_minus_1 = 0.
@@ -396,8 +435,13 @@ def smc(key, a_params, b_params, c_params, sigma2_q_params,
 
     log_z_hat_t = log_z_hat_t + log_z_over_z
 
+    non_resampled_x_1 = x_1
+
+    # TODO don't resample on the first iteration maybe??
+    # TODO APR 26: Investigate this further. Seems like you shouldn't resample. Think about what happens if you don't, what you need to change if anything in the rest of the code, and empirically investigate results.
     # RESAMPLE
     key, subkey = jax.random.split(key)
+    w_t_for_initial_sample = log_w_t
     a_1 = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
     x_1 = x_1[a_1]
 
@@ -409,29 +453,44 @@ def smc(key, a_params, b_params, c_params, sigma2_q_params,
     # and also we will reconstruct entire trajectories later from the sampled indices
     # this requires Markov structure (e.g. for factoring probabilities) which we are assuming, and which holds e.g. for autoregressive language models
     # x_1_to_t = x_1_to_t[:, a_t]
+
     log_w_t = jnp.zeros_like(log_w_t)
 
     # 1 to T iters:
-    carry = (key, y_T, alpha, T, x_1, log_w_t, log_gamma_1_to_t_eval, log_z_hat_t, log_p_theta_1_to_t_eval)
+    carry = (key, y_T, alpha, x_1, log_w_t, log_gamma_1_to_t_eval, log_z_hat_t, log_p_theta_1_to_t_eval)
 
     scan_over = [a_params, b_params[1:], c_params[1:], sigma2_q_params[1:], g_coeff_params[1:], g_bias_params[1:], sigma2_r_params[1:]]
     scan_over = jnp.stack(scan_over, axis=1)
 
-    carry, (x_ts, a_ts) = jax.lax.scan(smc_iter, carry,  scan_over, T - 1)
-    key, y_T, alpha, T, x_T, log_w_t, log_gamma_1_to_t_eval, log_z_hat_t, log_p_theta_1_to_t_eval = carry
+    carry, aux_info = jax.lax.scan(smc_iter, carry, scan_over, args.T - 1)
+    x_ts, a_ts, log_p_theta_1_to_t_evals, w_ts_for_sampling, x_ts_before_resample, sampling_info = aux_info
+    key, y_T, alpha, x_T, log_w_t, log_gamma_1_to_t_eval, log_z_hat_t, log_p_theta_1_to_t_eval = carry
 
     # RECONSTRUCT THE x_1_to_T from the x_ts and a_ts.
     x_1_to_T = jnp.zeros((args.T, args.smc_particles))
-    x_1_to_T = x_1_to_T.at[0, :].set(x_1[a_1])
+    x_1_to_T = x_1_to_T.at[0, :].set(x_1) # Remember x_t was already resampled (according to a_t) so no need to resample it again
     for t in range(1, args.T):
+        # print(f"--step {t}--")
+        # print(x_1_to_T)
+        # print(a_ts[t])
+        # print(x_1_to_T[:t, a_ts[t]])
         # Resample all the previous up to x_t_minus_1
-        x_1_to_T = x_1_to_T.at[:t, :].set(x_1_to_T[:t, a_ts[t-1]])
+        x_1_to_T = x_1_to_T.at[:t, :].set(x_1_to_T[:t, a_ts[t]])
         # Set the newest x_t value
         x_1_to_T = x_1_to_T.at[t, :].set(x_ts[t-1]) # Remember x_t was already resampled (according to a_t) so no need to resample it again
+        # print(x_1_to_T)
 
-    # print(x_1_to_T)
-    # print(x_ts[-1])
+    # print("---NEW SMC stuff---")
+    # # print(a_1)
     # print(a_ts)
+    # print(non_resampled_x_1)
+    # print(x_ts_before_resample)
+    # print(evaluate_log_p_theta_x_1(alpha, non_resampled_x_1))
+    # print(log_p_theta_1_to_t_evals)
+    # print(sampling_info)
+    # print("new wts for sampling")
+    # print(w_ts_for_sampling)
+    # print(jnp.exp(w_ts_for_sampling))
 
     # After that, test and compare vs the original SMC version. Just do sampling, to make sure they are the same
     # After that, once checked it's the same, then rerun experiments but with lower LR and much more optimization steps
@@ -440,10 +499,13 @@ def smc(key, a_params, b_params, c_params, sigma2_q_params,
 
 
 def smc_wrapper(key, a_params, b_params, c_params, sigma2_q_params,
-        y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params, T):
+        y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params):
     log_z_hat, _ = smc(key, a_params, b_params, c_params, sigma2_q_params,
-        y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params, T)
+        y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params)
 
+    # log_z_hat, _ = smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
+    #                    y_T, alpha, g_coeff_params, g_bias_params,
+    #                    sigma2_r_params)
     # print("--- LOG Z ---")
     # print(jnp.log(z_hat))
     return log_z_hat
@@ -512,7 +574,8 @@ if __name__ == "__main__":
     g_bias_params = jnp.zeros(shape=(args.T, ))
     # parameters phi = (g_coeff_params, g_bias_params, sigma2_r_params)
 
-    use_optimal_proposal = False
+    # use_optimal_proposal = False
+    use_optimal_proposal = True
     analytic_optimal_a = jnp.zeros_like(a_params)
     analytic_optimal_b = jnp.zeros_like(b_params)
     analytic_optimal_c = jnp.zeros_like(c_params) # leave as 0
@@ -555,13 +618,13 @@ if __name__ == "__main__":
         print(sigma2_r_params)
 
 
-    test_smc_samples_only = False
-    # test_smc_samples_only = True
+    # test_smc_samples_only = False
+    test_smc_samples_only = True
     # TEST SMC
     if test_smc_samples_only:
         key, subkey = jax.random.split(key)
-        log_z_hat_a, x_1_to_T_a = smc_slow_version(subkey, a_params, b_params, c_params, sigma2_q_params, y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params, args.T)
-        log_z_hat, x_1_to_T = smc(subkey, a_params, b_params, c_params, sigma2_q_params, y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params, args.T)
+        log_z_hat_a, x_1_to_T_a = smc_slow_version(subkey, a_params, b_params, c_params, sigma2_q_params, y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params)
+        log_z_hat, x_1_to_T = smc(subkey, a_params, b_params, c_params, sigma2_q_params, y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params)
         print("FINAL RESULTS")
         # print(log_z_hat)
         # print(x_1_to_T)
@@ -595,7 +658,7 @@ if __name__ == "__main__":
         min_var = 0.1
 
         key, subkey = jax.random.split(key)
-        grad_a, grad_b, grad_c, grad_s2q, grad_alpha, grad_g_coeff, grad_g_bias, grad_s2r = smc_p_grad_fn(subkey, a_params, b_params, c_params, sigma2_q_params, y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params, args.T)
+        grad_a, grad_b, grad_c, grad_s2q, grad_alpha, grad_g_coeff, grad_g_bias, grad_s2r = smc_p_grad_fn(subkey, a_params, b_params, c_params, sigma2_q_params, y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params)
 
         alpha = alpha + alpha_lr * grad_alpha
 
