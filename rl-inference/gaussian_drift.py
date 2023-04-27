@@ -613,8 +613,8 @@ if __name__ == "__main__":
     g_bias_params = jnp.zeros(shape=(args.T, ))
     # parameters phi = (g_coeff_params, g_bias_params, sigma2_r_params)
 
-    # use_optimal_proposal = False
-    use_optimal_proposal = True
+    use_optimal_proposal = False
+    # use_optimal_proposal = True
     analytic_optimal_a = jnp.zeros_like(a_params)
     analytic_optimal_b = jnp.zeros_like(b_params)
     analytic_optimal_c = jnp.zeros_like(c_params) # leave as 0
@@ -664,8 +664,8 @@ if __name__ == "__main__":
         print(sigma2_r_params)
 
 
-    # test_smc_samples_only = False
-    test_smc_samples_only = True
+    test_smc_samples_only = False
+    # test_smc_samples_only = True
     # TEST SMC
     if test_smc_samples_only:
         key, subkey = jax.random.split(key)
