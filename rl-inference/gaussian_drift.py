@@ -297,13 +297,41 @@ def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
             # print(jnp.exp(log_w_t))
             a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
             # print("---RESAMPLING---")
+            # print(log_w_t[58])
+            # print(log_w_t[59])
+            # print(jax.nn.softmax(log_w_t)[58])
+            # print(jax.nn.softmax(log_w_t)[59])
+            # if t != 0:
+            #     print(log_w_t_minus_1[58])
+            #     print(log_w_t_minus_1[59])
+            #     # print(log_alpha_t[58])
+            #     # print(log_alpha_t[59])
+            #     print(log_gamma_1_to_t_eval[58])
+            #     print(log_gamma_1_to_t_eval[59])
+            #     print(log_gamma_1_to_t_minus_1_eval[58])
+            #     print(log_gamma_1_to_t_minus_1_eval[59])
+            #     print(log_q_t_eval[58])
+            #     print(log_q_t_eval[59])
+            #     print("fawfaw")
+            # print(x_1_to_t[:, 58])
+            # print(x_1_to_t[:, 59])
+            # print(evaluate_log_p_theta_x_1_to_t(args.init_alpha, x_1_to_t[:, 58]))
+            # print(evaluate_log_p_theta_x_1_to_t(args.init_alpha, x_1_to_t[:, 59]))
+
+
+
+            # print(log_w_t)
             # print(jax.nn.softmax(log_w_t))
             # print(a_t)
             # print(x_1_to_t)
             x_1_to_t = x_1_to_t[:, a_t]
             # x_1_to_t = x_1_to_t.at[-1, :].set(x_t) # Don't do this, this is wrong.
+
+            # Make sure the gamma values also track the correct trajectories
+            log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
             # print(x_1_to_t)
             log_w_t = jnp.zeros_like(log_w_t)
+            # print("---RESAMPLING ENDED---")
 
             # # TODO THINK ABOUT: How is the gradient flowing through the resampling or a_t steps? How about the interaction with A and expectation?
             #
@@ -328,6 +356,7 @@ def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
 # TODO: just copy from my new version above, line by line, carefully
 # TODO: No arrays of variable length. Just store the previous computation up to time t (e.g. log p(x_1:t-1)) and then add onto it
 
+@jit
 def smc_iter(carry, scan_over_tuple):
     key, y_T, alpha, x_t_minus_1, log_w_t_minus_1, log_gamma_1_to_t_eval, log_z_hat_t, prev_sum_log_p = carry
     a_q_t_minus_1, b_q_t, c_q_t, sigma2_q_t, g_c_t, g_b_t, sigma2_r_t = scan_over_tuple
@@ -384,6 +413,9 @@ def smc_iter(carry, scan_over_tuple):
     # this requires Markov structure (e.g. for factoring probabilities) which we are assuming, and which holds e.g. for autoregressive language models
     # x_1_to_t = x_1_to_t[:, a_t]
 
+    # Same for the gamma values: track the correct trajectories
+    log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
+
     log_w_t = jnp.zeros_like(log_w_t)
 
     carry = (key, y_T, alpha, x_t, log_w_t, log_gamma_1_to_t_eval, log_z_hat_t, log_p_theta_1_to_t_eval)
@@ -397,10 +429,7 @@ def smc_iter(carry, scan_over_tuple):
     # # TODO CHECK EVERY STEP OF CODE CAREFULLY TO ENSURE IT ALL MAKES SENSE.
 
 
-# @jit
-# This lax scan doesn't work because of the dynamic arrays
-# "IndexError: Array slice indices must have static start/stop/step to be used with NumPy indexing syntax. Found slice(None, Traced<ShapedArray(int32[], weak_type=True)>with<DynamicJaxprTrace(level=3/0)>, None). To index a statically sized array at a dynamic position, try lax.dynamic_slice/dynamic_update_slice (JAX does not support dynamically sized arrays within JIT compiled functions)."
-# TODO so check how did the sixo authors manage to write their code in a way that works???
+@jit
 def smc(key, a_params, b_params, c_params, sigma2_q_params,
         y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params):
     log_z_hat_t = 0.
@@ -453,6 +482,9 @@ def smc(key, a_params, b_params, c_params, sigma2_q_params,
     # and also we will reconstruct entire trajectories later from the sampled indices
     # this requires Markov structure (e.g. for factoring probabilities) which we are assuming, and which holds e.g. for autoregressive language models
     # x_1_to_t = x_1_to_t[:, a_t]
+
+    # Same for the gamma values: track the correct trajectories
+    log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_1]
 
     log_w_t = jnp.zeros_like(log_w_t)
 
@@ -537,8 +569,15 @@ if __name__ == "__main__":
     # print(y_samples)
     # print(y_samples.shape)
     y_T = y_samples[0]
-    print("OBSERVATION")
-    print(y_T)
+    # print("OBSERVATION")
+    # print(y_T)
+    # TODO I think right now I actually have 11 uses of alpha, which makes the distributions a bit weird, and the analytic distributions may not exactly be right
+    # I think alpha = 1 gets me something like 9 in terms of the final x, if I use y as the final observatoin
+    # Because y=10 means the final x needs to be 9.
+    # Wait, maybe that's fine? Just check to make sure this all makes sense.
+    use_exact_y_T = True
+    if use_exact_y_T:
+        y_T = args.true_alpha * args.T
 
     # This is for our Gaussian Drift model (not the true, unknown one)
     alpha = args.init_alpha
@@ -592,8 +631,15 @@ if __name__ == "__main__":
         c_params = analytic_optimal_c
         sigma2_q_params = analytic_optimal_sigma2_q
 
+    print("Analytic optimal proposal params:")
+    print(analytic_optimal_a)
+    print(analytic_optimal_b)
+    print(analytic_optimal_c)
+    print(analytic_optimal_sigma2_q)
+
 
     use_sixo_a = True
+    # use_sixo_a = False
     # ONLY FOR SIXO-A
     analytic_optimal_g_coeff = jnp.ones_like(g_coeff_params)
     analytic_optimal_g_bias = jnp.zeros_like(g_bias_params)
