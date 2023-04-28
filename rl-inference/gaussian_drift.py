@@ -100,6 +100,40 @@ def evaluate_log_p_theta_given_prev_p(alpha, prev_sum_log_p, x_t, x_t_minus_1):
 #     _, prod, _ = stuff
 #     return prod
 
+@jit
+def get_samples_given_x(carry, unused):
+    key, x, n, alpha = carry
+    key, sk = jax.random.split(key)
+    new_x = jax.random.normal(sk, shape=(n,)) + x + alpha
+    return (key, new_x, n, alpha), None
+
+@jit
+def get_p_theta_x_y_samples(key, alpha, n, T):
+    key, sk = jax.random.split(key)
+    x_samples = jax.random.normal(sk, shape=(n, )) + alpha
+
+    carry = (key, x_samples, n, alpha)
+    carry, _ = jax.lax.scan(get_samples_given_x, carry, None, T)
+    key, x_samples, _, _ = carry
+
+    key, sk = jax.random.split(key)
+    y_samples = jax.random.normal(sk, shape=(n, )) + x_samples + alpha
+
+    return x_samples, y_samples
+
+
+# TODO Apr 28: lax.scan and jit this
+def get_l_dre(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
+    key, sk1, sk2 = jax.random.split(key, 3)
+    x_tilde, _ = get_p_theta_x_y_samples(sk1, alpha, n, T)
+    x, y = get_p_theta_x_y_samples(sk2, alpha, n, T)
+    l_dre = 0.
+    for t in range(T):
+        l_dre += jax.nn.log_sigmoid(evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])) + \
+                 jnp.log(1 - jax.nn.sigmoid(evaluate_log_r_psi(x_tilde[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])))
+    l_dre /= T
+    return l_dre
+
 
 def get_gaussian_proposal_q_t_samples(subkey, a_q_t_minus_1, b_q_t, c_q_t, sigma2_q_t, x_t_minus_1, y_T):
     # Here the a,b,c,sigma2 are all single scalar values passed in. x_t_minus_1 and y_T can be vectors (of n data points)
@@ -556,6 +590,9 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=0.01)
     parser.add_argument("--epochs", type=int, default=50, help="number of epochs/optimization steps to take" )
     parser.add_argument("--print_every", type=int, default=10)
+    parser.add_argument("--n_twist", type=int, default=1000, help="number of samples (both positive and negative) for the DRE")
+    parser.add_argument("--twist_updates_per_epoch", type=int, default=100, help="num of updates to make for twist function before model updates")
+    parser.add_argument("--model_updates_per_epoch", type=int, default=100, help="num of model updates before next twist update")
 
     args = parser.parse_args()
 
@@ -638,8 +675,8 @@ if __name__ == "__main__":
     print(analytic_optimal_sigma2_q)
 
 
-    use_sixo_a = True
-    # use_sixo_a = False
+    # use_sixo_a = True
+    use_sixo_a = False
     # ONLY FOR SIXO-A
     analytic_optimal_g_coeff = jnp.ones_like(g_coeff_params)
     analytic_optimal_g_bias = jnp.zeros_like(g_bias_params)
@@ -653,15 +690,37 @@ if __name__ == "__main__":
         g_bias_params = analytic_optimal_g_bias
         sigma2_r_params = analytic_optimal_sigma2_r
 
-    def print_stuff():
+    print("Analytic optimal twist params:")
+    print(analytic_optimal_g_coeff)
+    print(analytic_optimal_g_bias)
+    print(analytic_optimal_sigma2_r)
+
+    use_sixo_dre = True
+    if use_sixo_dre:
+        assert not use_sixo_a
+        assert not use_optimal_proposal
+
+
+    def print_params(print_q_params=True, print_twist_params=True):
+        print("--------PARAMS--------")
+        print("alpha")
         print(alpha)
-        print(a_params)
-        print(b_params)
-        print(c_params)
-        print(sigma2_q_params)
-        print(g_coeff_params)
-        print(g_bias_params)
-        print(sigma2_r_params)
+        if print_q_params:
+            print("a")
+            print(a_params)
+            print("b")
+            print(b_params)
+            print("c")
+            print(c_params)
+            print("sigma2_q")
+            print(sigma2_q_params)
+        if print_twist_params:
+            print("g_coeff")
+            print(g_coeff_params)
+            print("g_bias")
+            print(g_bias_params)
+            print("sigma2_r")
+            print(sigma2_r_params)
 
 
     test_smc_samples_only = False
@@ -683,7 +742,6 @@ if __name__ == "__main__":
     # For SIXO-u we can just use unbiased gradient ascent
     # Following eq 18 in their arxiv appendix: just take expectation of
     # the grad of log Z_hat
-    smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6, 7, 8, 9])
 
     a_lr = args.lr
     b_lr = args.lr
@@ -694,48 +752,83 @@ if __name__ == "__main__":
     g_b_lr = args.lr
     s2r_lr = args.lr
 
+    min_var = 0.1
+
+    # print_params()
+
+    if use_sixo_dre:
+        smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6])
+        dre_grad_fn = jax.grad(get_l_dre, argnums=[4, 5, 6])
+
+        for epoch in range(args.epochs):
+            for twist_update in range(args.twist_updates_per_epoch):
+                key, subkey = jax.random.split(key)
+                grad_g_coeff, grad_g_bias, grad_s2r = dre_grad_fn(subkey, alpha, args.n_twist, args.T, g_coeff_params, g_bias_params, sigma2_r_params)
+
+                g_coeff_params = g_coeff_params + g_c_lr * grad_g_coeff
+                g_bias_params = g_bias_params + g_b_lr * grad_g_bias
+                sigma2_r_params = sigma2_r_params + s2r_lr * grad_s2r
+                sigma2_r_params = jnp.maximum(sigma2_r_params,
+                                              jnp.ones_like(
+                                                  sigma2_r_params) * min_var)
+            print_params(print_q_params=False)
+
+            for model_update in range(args.model_updates_per_epoch):
+                key, subkey = jax.random.split(key)
+                grad_a, grad_b, grad_c, grad_s2q, grad_alpha = smc_p_grad_fn(
+                    subkey, a_params, b_params, c_params, sigma2_q_params, y_T,
+                    alpha)
+
+                alpha = alpha + alpha_lr * grad_alpha
+
+                a_params = a_params + a_lr * grad_a
+                b_params = b_params + b_lr * grad_b
+                c_params = c_params + c_lr * grad_c
+                sigma2_q_params = sigma2_q_params + s2q_lr * grad_s2q
+                sigma2_q_params = jnp.maximum(sigma2_q_params,
+                                              jnp.ones_like(
+                                                  sigma2_q_params) * min_var)
+
+            print_params(print_twist_params=False)
 
 
-    # print_stuff()
+    else:
+        smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6, 7, 8, 9])
 
+        for epoch in range(args.epochs):
 
+            key, subkey = jax.random.split(key)
+            grad_a, grad_b, grad_c, grad_s2q, grad_alpha, grad_g_coeff, grad_g_bias, grad_s2r = smc_p_grad_fn(subkey, a_params, b_params, c_params, sigma2_q_params, y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params)
 
-    for epoch in range(args.epochs):
-        min_var = 0.1
+            alpha = alpha + alpha_lr * grad_alpha
 
-        key, subkey = jax.random.split(key)
-        grad_a, grad_b, grad_c, grad_s2q, grad_alpha, grad_g_coeff, grad_g_bias, grad_s2r = smc_p_grad_fn(subkey, a_params, b_params, c_params, sigma2_q_params, y_T, alpha, g_coeff_params, g_bias_params, sigma2_r_params)
+            if not use_optimal_proposal:
+                a_params = a_params + a_lr * grad_a
+                b_params = b_params + b_lr * grad_b
+                c_params = c_params + c_lr * grad_c
+                sigma2_q_params = sigma2_q_params + s2q_lr * grad_s2q
+                sigma2_q_params = jnp.maximum(sigma2_q_params, jnp.ones_like(sigma2_q_params) * min_var)
 
-        alpha = alpha + alpha_lr * grad_alpha
+            if not use_sixo_a:
+                g_coeff_params = g_coeff_params + g_c_lr * grad_g_coeff
+                g_bias_params = g_bias_params + g_b_lr * grad_g_bias
+                sigma2_r_params = sigma2_r_params + s2r_lr * grad_s2r
+                sigma2_r_params = jnp.maximum(sigma2_r_params, jnp.ones_like(sigma2_r_params) * min_var)
 
-        if not use_optimal_proposal:
-            a_params = a_params + a_lr * grad_a
-            b_params = b_params + b_lr * grad_b
-            c_params = c_params + c_lr * grad_c
-            sigma2_q_params = sigma2_q_params + s2q_lr * grad_s2q
-            sigma2_q_params = jnp.maximum(sigma2_q_params, jnp.ones_like(sigma2_q_params) * min_var)
+            if (epoch + 1) % args.print_every == 0:
+                print(f"Epoch: {epoch + 1}")
 
-        if not use_sixo_a:
-            g_coeff_params = g_coeff_params + g_c_lr * grad_g_coeff
-            g_bias_params = g_bias_params + g_b_lr * grad_g_bias
-            sigma2_r_params = sigma2_r_params + s2r_lr * grad_s2r
-            sigma2_r_params = jnp.maximum(sigma2_r_params, jnp.ones_like(sigma2_r_params) * min_var)
+                print("--------GRADS--------")
+                print(grad_alpha)
+                print(grad_a)
+                print(grad_b)
+                print(grad_c)
+                print(grad_s2q)
+                print(grad_g_coeff)
+                print(grad_g_bias)
+                print(grad_s2r)
 
-        if (epoch + 1) % args.print_every == 0:
-            print(f"Epoch: {epoch + 1}")
-
-            print("--------GRADS--------")
-            print(grad_alpha)
-            print(grad_a)
-            print(grad_b)
-            print(grad_c)
-            print(grad_s2q)
-            print(grad_g_coeff)
-            print(grad_g_bias)
-            print(grad_s2r)
-            print("--------END OF GRADS--------")
-
-            print_stuff()
+                print_params()
 
     # TODO biased and unbiased gradients (for SIXO-u)
 
