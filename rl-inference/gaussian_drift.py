@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from jax import jit
 import argparse
 import matplotlib.pyplot as plt
+from functools import partial
 
 def gaussian_pdf(x, mean, var):
     # Evaluate the pdf of the Gaussian with given mean and var at the value x
@@ -104,36 +105,70 @@ def evaluate_log_p_theta_given_prev_p(alpha, prev_sum_log_p, x_t, x_t_minus_1):
 def get_samples_given_x(carry, unused):
     key, x, n, alpha = carry
     key, sk = jax.random.split(key)
-    new_x = jax.random.normal(sk, shape=(n,)) + x + alpha
-    return (key, new_x, n, alpha), None
+    new_x = jax.random.normal(sk, shape=(x.shape)) + x + alpha
+    return (key, new_x, n, alpha), new_x
 
-@jit
+
+# TODO RETURN THE FULL SEQUENCE OF X SAMPLES FOR THIS FUNCTION
+@partial(jax.jit, static_argnames=['n', 'T'])
 def get_p_theta_x_y_samples(key, alpha, n, T):
     key, sk = jax.random.split(key)
-    x_samples = jax.random.normal(sk, shape=(n, )) + alpha
+    x_1_samples = jax.random.normal(sk, shape=(n, )) + alpha
 
-    carry = (key, x_samples, n, alpha)
-    carry, _ = jax.lax.scan(get_samples_given_x, carry, None, T)
-    key, x_samples, _, _ = carry
+    carry = (key, x_1_samples, n, alpha)
+    carry, x_samples = jax.lax.scan(get_samples_given_x, carry, None, T-1) # T-1 because you already drew from p_1
+    key, x_T_samples, _, _ = carry
 
     key, sk = jax.random.split(key)
-    y_samples = jax.random.normal(sk, shape=(n, )) + x_samples + alpha
+    y_samples = jax.random.normal(sk, shape=(n, )) + x_T_samples + alpha
 
-    return x_samples, y_samples
+    x_1_to_T_samples = jnp.concatenate((x_1_samples.reshape(1, -1), x_samples), axis=0)
+
+    return x_1_to_T_samples, y_samples
 
 
-# TODO Apr 28: lax.scan and jit this
-def get_l_dre(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
+def get_l_dre_no_scan(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
     key, sk1, sk2 = jax.random.split(key, 3)
     x_tilde, _ = get_p_theta_x_y_samples(sk1, alpha, n, T)
     x, y = get_p_theta_x_y_samples(sk2, alpha, n, T)
     l_dre = 0.
     for t in range(T):
-        l_dre += jax.nn.log_sigmoid(evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])) + \
-                 jnp.log(1 - jax.nn.sigmoid(evaluate_log_r_psi(x_tilde[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])))
+        l_dre += (jax.nn.log_sigmoid(evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])) + \
+                 jnp.log(1 - jax.nn.sigmoid(evaluate_log_r_psi(x_tilde[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])))).mean()
     l_dre /= T
     return l_dre
 
+@jit
+def get_l_dre_t(carry, scanned):
+    prev_l_dre, y_T = carry
+    x_tilde_t, x_t, g_c_t, g_b_t, sigma2_r_t = scanned
+    new_l_dre = (prev_l_dre + jax.nn.log_sigmoid(evaluate_log_r_psi(x_t, y_T, g_c_t, g_b_t, sigma2_r_t)) + \
+                 jnp.log(1 - jax.nn.sigmoid(evaluate_log_r_psi(x_tilde_t, y_T, g_c_t, g_b_t, sigma2_r_t)))).mean()
+    # TODO think further whether this average across batch/particles makes sense... I think it is fine, just like regular batch GD.
+    return (new_l_dre, y_T), None
+
+@partial(jax.jit, static_argnames=['n', 'T'])
+def get_l_dre(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
+    # Note that as in everywhere else inthis code base, stuff like x, y are all of batch size n
+    key, sk1, sk2 = jax.random.split(key, 3)
+    x_tilde, _ = get_p_theta_x_y_samples(sk1, alpha, n, T)
+    x, y = get_p_theta_x_y_samples(sk2, alpha, n, T)
+    l_dre = 0.
+    # TODO Apr 28: After returning the full sequence of x in get_x_y_samples, then if the stack doesn't work, just check that
+    # T is the size of the leading dimension of all of the below, and just use a list: that should work
+    # Finally, after that, continue testing and check that the DRE loss are consistent
+    # Then test it and see if the twist learned makes sense. Start with perhaps fixing an optimal proposal and alpha
+    # and just try to learn twist
+    scan_over = [x_tilde, x, g_coeff_params, g_bias_params, sigma2_r_params]
+    # print(x_tilde.shape)
+    # print(x.shape)
+    # print(g_coeff_params.shape)
+    # print(g_bias_params.shape)
+    # print(sigma2_r_params.shape)
+    # scan_over = jnp.stack(scan_over, axis=1)
+    (l_dre, _), _ = jax.lax.scan(get_l_dre_t, (l_dre, y), scan_over, T)
+    l_dre /= T
+    return l_dre
 
 def get_gaussian_proposal_q_t_samples(subkey, a_q_t_minus_1, b_q_t, c_q_t, sigma2_q_t, x_t_minus_1, y_T):
     # Here the a,b,c,sigma2 are all single scalar values passed in. x_t_minus_1 and y_T can be vectors (of n data points)
@@ -698,7 +733,7 @@ if __name__ == "__main__":
     use_sixo_dre = True
     if use_sixo_dre:
         assert not use_sixo_a
-        assert not use_optimal_proposal
+        # assert not use_optimal_proposal
 
 
     def print_params(print_q_params=True, print_twist_params=True):
@@ -757,10 +792,20 @@ if __name__ == "__main__":
     # print_params()
 
     if use_sixo_dre:
+
+        # test_l_dre = True
+        # if test_l_dre:
+        #     key, subkey = jax.random.split(key)
+        #     print(get_l_dre_no_scan(subkey, alpha, args.n_twist, args.T, g_coeff_params, g_bias_params, sigma2_r_params))
+        #     print(get_l_dre(subkey, alpha, args.n_twist, args.T, g_coeff_params, g_bias_params, sigma2_r_params))
+
         smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6])
         dre_grad_fn = jax.grad(get_l_dre, argnums=[4, 5, 6])
 
         for epoch in range(args.epochs):
+            if (epoch + 1) % args.print_every == 0:
+                print(f"Epoch: {epoch + 1}")
+
             for twist_update in range(args.twist_updates_per_epoch):
                 key, subkey = jax.random.split(key)
                 grad_g_coeff, grad_g_bias, grad_s2r = dre_grad_fn(subkey, alpha, args.n_twist, args.T, g_coeff_params, g_bias_params, sigma2_r_params)
@@ -771,25 +816,28 @@ if __name__ == "__main__":
                 sigma2_r_params = jnp.maximum(sigma2_r_params,
                                               jnp.ones_like(
                                                   sigma2_r_params) * min_var)
-            print_params(print_q_params=False)
+            if (epoch + 1) % args.print_every == 0:
+                print_params(print_q_params=False)
 
             for model_update in range(args.model_updates_per_epoch):
                 key, subkey = jax.random.split(key)
                 grad_a, grad_b, grad_c, grad_s2q, grad_alpha = smc_p_grad_fn(
                     subkey, a_params, b_params, c_params, sigma2_q_params, y_T,
-                    alpha)
+                    alpha, g_coeff_params, g_bias_params, sigma2_r_params)
 
                 alpha = alpha + alpha_lr * grad_alpha
 
-                a_params = a_params + a_lr * grad_a
-                b_params = b_params + b_lr * grad_b
-                c_params = c_params + c_lr * grad_c
-                sigma2_q_params = sigma2_q_params + s2q_lr * grad_s2q
-                sigma2_q_params = jnp.maximum(sigma2_q_params,
-                                              jnp.ones_like(
-                                                  sigma2_q_params) * min_var)
+                if not use_optimal_proposal:
+                    a_params = a_params + a_lr * grad_a
+                    b_params = b_params + b_lr * grad_b
+                    c_params = c_params + c_lr * grad_c
+                    sigma2_q_params = sigma2_q_params + s2q_lr * grad_s2q
+                    sigma2_q_params = jnp.maximum(sigma2_q_params,
+                                                  jnp.ones_like(
+                                                      sigma2_q_params) * min_var)
 
-            print_params(print_twist_params=False)
+            if (epoch + 1) % args.print_every == 0:
+                print_params(print_twist_params=False)
 
 
     else:
