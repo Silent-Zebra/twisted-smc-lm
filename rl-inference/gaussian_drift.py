@@ -864,7 +864,7 @@ if __name__ == "__main__":
                 sigma2_r_params = jnp.maximum(sigma2_r_params, jnp.ones_like(sigma2_r_params) * min_var)
 
             if (epoch + 1) % args.print_every == 0:
-                print(f"Epoch: {epoch + 1}")
+                print(f"Epoch: {epoch + 1}", flush=True)
 
                 print("--------GRADS--------")
                 print(grad_alpha)
