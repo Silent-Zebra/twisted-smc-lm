@@ -804,7 +804,7 @@ if __name__ == "__main__":
 
         for epoch in range(args.epochs):
             if (epoch + 1) % args.print_every == 0:
-                print(f"Epoch: {epoch + 1}")
+                print(f"Epoch: {epoch + 1}", flush=True)
 
             for twist_update in range(args.twist_updates_per_epoch):
                 key, subkey = jax.random.split(key)
