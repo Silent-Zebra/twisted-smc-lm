@@ -12,7 +12,7 @@ def gaussian_pdf(x, mean, var):
 def log_gaussian_pdf(x, mean, var):
     # Evaluate the pdf of the Gaussian with given mean and var at the value x
     return - 1./2. * jnp.log(2 * jnp.pi * var) + (-1./2. * ((x - mean)**2 / var))
-
+    # return - 1./2. * (jnp.log(2) + jnp.log(jnp.pi) + jnp.log(var)) + (-1./2. * ((x - mean)**2 / var))
 
 class Gaussian_Drift:
     def __init__(self, alpha, n_data):
@@ -171,17 +171,6 @@ def get_l_dre_sixo(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_par
     return l_dre
 
 
-@jit
-def get_l_dre_roger_t(carry, scanned):
-    prev_l_dre, y_T, key = carry
-    x_f_t, x_t, g_c_t, g_b_t, sigma2_r_t = scanned
-    key, subkey = jax.random.split(key)
-    y_f_t = get_r_psi_samples(subkey, x_f_t, g_c_t, g_b_t, sigma2_r_t)
-    new_l_dre = prev_l_dre + (evaluate_log_r_psi(x_t, y_T, g_c_t, g_b_t, sigma2_r_t) -
-                  evaluate_log_r_psi(x_f_t, y_f_t, g_c_t, g_b_t, sigma2_r_t)).mean()
-    # TODO think further whether this average across batch/particles makes sense... I think it is fine, just like regular batch GD.
-    return (new_l_dre, y_T, key), None
-
 
 def get_l_dre_roger_no_scan(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
     key, sk1, sk2 = jax.random.split(key, 3)
@@ -191,26 +180,94 @@ def get_l_dre_roger_no_scan(key, alpha, n, T, g_coeff_params, g_bias_params, sig
     # and for the xs that we have drawn
     # f is like the f in Roger's doc (may not be exactly analogous here, but similar idea)
     l_dre = 0.
+    l_dre_2 = 0.
     for t in range(T):
         key, subkey = jax.random.split(key)
-        y_f = get_r_psi_samples(subkey, x_f[t], g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])
-        l_dre += (evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]) -
-                  evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])).mean()
+        y_f = jax.lax.stop_gradient(get_r_psi_samples(subkey, x_f[t], g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])) # VERY IMPORTANT TO DO STOP GRADIENT BECAUSE otherwise I am taking grad with respect to the expectation too; see derivation has the grad within the expectation
+        # l_dre += (evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]) -
+        #           evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])).mean()
+        l_dre += (
+                evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t],
+                                   sigma2_r_params[t])
+                - evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t],
+                                   g_bias_params[t], sigma2_r_params[t])
+        ).mean()
+        # l_dre_2 += (evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] + 0.001) -
+        #           evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]  + 0.001)).mean()
+        # l_dre_2 += (
+        #         # evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t],
+        #         #                    sigma2_r_params[t] - 10)
+        #         - evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t],
+        #                            g_bias_params[t], sigma2_r_params[t] - 10.)
+        # ).mean()
+        # l_dre_2 += (
+        #     # evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t],
+        #     #                    sigma2_r_params[t] - 10)
+        #     - evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t],
+        #                          g_bias_params[t], sigma2_r_params[t] + [0.0025,0.00263158,0.00277778,0.00294118,0.003125,0.00333333,0.00357143,0.00384615,0.00416667,0.00454545][t])
+        # ).mean()
+
+
+        # print(f"iter: {t}")
+        # print(x)
+        # print(y)
+        # print(y_f)
+        # print(evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]))
+        # print(evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]))
+        # print(evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] - 10.))
+        # print(evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] - 10. ))
+        # print((evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]) -
+        #           evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])).mean())
+        # print((evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] - 10.) -
+        #           evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] - 10.)).mean())
+
+    # # Wait hold on... this doesn't do anything...
+    # # At the final time step we may need to enforce e.g. psi = phi in the roger case
+    # # where here I may need to force the final psi to be the true one we know from the model (use 1 times the final x (g coeff 1), + alpha for the g_bias, and then 1 for the variance - this is the final y value)
+    # key, subkey = jax.random.split(key)
+    # y_f = get_r_psi_samples(subkey, x_f[T], 1, alpha, 1)
+    # l_dre += (evaluate_log_r_psi(x_f[T], y_f, 1, alpha, 1) -
+    #           evaluate_log_r_psi(x_f[T], y_f, 1, alpha, 1)).mean()
     l_dre /= T
+    # l_dre_2 /= T
+
+    # print("l_dre comp")
+    # print(l_dre)
+    # print(l_dre_2)
+
     return l_dre
+
+@jit
+def get_l_dre_roger_t(carry, scanned):
+    prev_l_dre, y_T, key = carry
+    x_f_t, x_t, g_c_t, g_b_t, sigma2_r_t = scanned
+    key, subkey = jax.random.split(key)
+    y_f_t = jax.lax.stop_gradient(get_r_psi_samples(subkey, x_f_t, g_c_t, g_b_t, sigma2_r_t)) # VERY IMPORTANT TO DO STOP GRADIENT BECAUSE otherwise I am taking grad with respect to the expectation too; see derivation has the grad within the expectation
+    new_l_dre = prev_l_dre + (evaluate_log_r_psi(x_t, y_T, g_c_t, g_b_t, sigma2_r_t) -
+                  evaluate_log_r_psi(x_f_t, y_f_t, g_c_t, g_b_t, sigma2_r_t)).mean()
+    # TODO think further whether this average across batch/particles makes sense... I think it is fine, just like regular batch GD.
+    return (new_l_dre, y_T, key), None
+
 
 @partial(jax.jit, static_argnames=['n', 'T'])
 def get_l_dre_roger(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
     key, sk1, sk2 = jax.random.split(key, 3)
-    x, y = get_p_theta_x_y_samples(sk2, alpha, n, T)
-    x_f = x # idea here is we can use the same x; x is drawn the same way; just now we need to draw a y at every point in time, based on the twists
+    x, y = get_p_theta_x_y_samples(sk1, alpha, n, T)
+    # x_f = x # idea here is we can use the same x; x is drawn the same way; just now we need to draw a y at every point in time, based on the twists
     # TODO can also try using separately drawn x, like in the SIXO formulation, and throwing away y
+    x_f, _ = get_p_theta_x_y_samples(sk2, alpha, n, T)
     # and for the xs that we have drawn
     # f is like the f in Roger's doc (may not be exactly analogous here, but similar idea)
     l_dre = 0.
     scan_over = [x_f, x, g_coeff_params, g_bias_params, sigma2_r_params]
     (l_dre, _, _), _ = jax.lax.scan(get_l_dre_roger_t, (l_dre, y, key), scan_over, T)
     l_dre /= T
+
+    # scan_over = [x_f[:-1], x[:-1], g_coeff_params[:-1], g_bias_params[:-1], sigma2_r_params[:-1]]
+    # (l_dre, _, _), _ = jax.lax.scan(get_l_dre_roger_t, (l_dre, y, key),
+    #                                 scan_over, T - 1)
+    # l_dre /= (T - 1)
+
     return l_dre
 
 
@@ -860,6 +917,11 @@ if __name__ == "__main__":
         use_roger_dre = True
         if use_roger_dre:
             dre_grad_fn = jax.grad(get_l_dre_roger, argnums=[4, 5, 6])
+            # # TODO TESTING ONLY REMOVE LATER
+            # g_coeff_params = analytic_optimal_g_coeff
+            # g_bias_params = analytic_optimal_g_bias
+            # sigma2_r_params = analytic_optimal_sigma2_r + 10
+            # dre_grad_fn = jax.grad(get_l_dre_roger_no_scan, argnums=[4, 5, 6])
         else:
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=[4, 5, 6])
 
@@ -870,6 +932,9 @@ if __name__ == "__main__":
             for twist_update in range(args.twist_updates_per_epoch):
                 key, subkey = jax.random.split(key)
                 grad_g_coeff, grad_g_bias, grad_s2r = dre_grad_fn(subkey, alpha, args.n_twist, args.T, g_coeff_params, g_bias_params, sigma2_r_params)
+                # print("---GRAD---")
+                # print(grad_s2r)
+                # Yes it is ascent because we are trying to maximize the lower bound on the log prob...
 
                 g_coeff_params = g_coeff_params + g_c_lr * grad_g_coeff
                 g_bias_params = g_bias_params + g_b_lr * grad_g_bias
