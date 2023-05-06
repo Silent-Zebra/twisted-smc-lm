@@ -139,7 +139,7 @@ def get_l_dre_no_scan(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_
     return l_dre
 
 @jit
-def get_l_dre_t(carry, scanned):
+def get_l_dre_sixo_t(carry, scanned):
     prev_l_dre, y_T = carry
     x_tilde_t, x_t, g_c_t, g_b_t, sigma2_r_t = scanned
     new_l_dre = (prev_l_dre + jax.nn.log_sigmoid(evaluate_log_r_psi(x_t, y_T, g_c_t, g_b_t, sigma2_r_t)) + \
@@ -148,7 +148,7 @@ def get_l_dre_t(carry, scanned):
     return (new_l_dre, y_T), None
 
 @partial(jax.jit, static_argnames=['n', 'T'])
-def get_l_dre(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
+def get_l_dre_sixo(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
     # Note that as in everywhere else inthis code base, stuff like x, y are all of batch size n
     key, sk1, sk2 = jax.random.split(key, 3)
     x_tilde, _ = get_p_theta_x_y_samples(sk1, alpha, n, T)
@@ -166,9 +166,54 @@ def get_l_dre(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
     # print(g_bias_params.shape)
     # print(sigma2_r_params.shape)
     # scan_over = jnp.stack(scan_over, axis=1)
-    (l_dre, _), _ = jax.lax.scan(get_l_dre_t, (l_dre, y), scan_over, T)
+    (l_dre, _), _ = jax.lax.scan(get_l_dre_sixo_t, (l_dre, y), scan_over, T)
     l_dre /= T
     return l_dre
+
+
+@jit
+def get_l_dre_roger_t(carry, scanned):
+    prev_l_dre, y_T, key = carry
+    x_f_t, x_t, g_c_t, g_b_t, sigma2_r_t = scanned
+    key, subkey = jax.random.split(key)
+    y_f_t = get_r_psi_samples(subkey, x_f_t, g_c_t, g_b_t, sigma2_r_t)
+    new_l_dre = prev_l_dre + (evaluate_log_r_psi(x_t, y_T, g_c_t, g_b_t, sigma2_r_t) -
+                  evaluate_log_r_psi(x_f_t, y_f_t, g_c_t, g_b_t, sigma2_r_t)).mean()
+    # TODO think further whether this average across batch/particles makes sense... I think it is fine, just like regular batch GD.
+    return (new_l_dre, y_T, key), None
+
+
+def get_l_dre_roger_no_scan(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
+    key, sk1, sk2 = jax.random.split(key, 3)
+    x, y = get_p_theta_x_y_samples(sk2, alpha, n, T)
+    x_f = x # idea here is we can use the same x; x is drawn the same way; just now we need to draw a y at every point in time, based on the twists
+    # TODO can also try using separately drawn x, like in the SIXO formulation, and throwing away y
+    # and for the xs that we have drawn
+    # f is like the f in Roger's doc (may not be exactly analogous here, but similar idea)
+    l_dre = 0.
+    for t in range(T):
+        key, subkey = jax.random.split(key)
+        y_f = get_r_psi_samples(subkey, x_f[t], g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])
+        l_dre += (evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]) -
+                  evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])).mean()
+    l_dre /= T
+    return l_dre
+
+@partial(jax.jit, static_argnames=['n', 'T'])
+def get_l_dre_roger(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
+    key, sk1, sk2 = jax.random.split(key, 3)
+    x, y = get_p_theta_x_y_samples(sk2, alpha, n, T)
+    x_f = x # idea here is we can use the same x; x is drawn the same way; just now we need to draw a y at every point in time, based on the twists
+    # TODO can also try using separately drawn x, like in the SIXO formulation, and throwing away y
+    # and for the xs that we have drawn
+    # f is like the f in Roger's doc (may not be exactly analogous here, but similar idea)
+    l_dre = 0.
+    scan_over = [x_f, x, g_coeff_params, g_bias_params, sigma2_r_params]
+    (l_dre, _, _), _ = jax.lax.scan(get_l_dre_roger_t, (l_dre, y, key), scan_over, T)
+    l_dre /= T
+    return l_dre
+
+
 
 def get_gaussian_proposal_q_t_samples(subkey, a_q_t_minus_1, b_q_t, c_q_t, sigma2_q_t, x_t_minus_1, y_T):
     # Here the a,b,c,sigma2 are all single scalar values passed in. x_t_minus_1 and y_T can be vectors (of n data points)
@@ -179,6 +224,14 @@ def get_gaussian_proposal_q_t_samples(subkey, a_q_t_minus_1, b_q_t, c_q_t, sigma
     sd = jnp.sqrt(sigma2_q_t)
     x_samples = jax.random.normal(subkey, shape=(args.smc_particles,) ) * sd + mean
     return x_samples
+
+def get_r_psi_samples(subkey, x_t, g_coeff_t, g_bias_t, sigma2_r_t):
+    # D.1.3 SIXO-u formulation
+    mean = g_coeff_t * x_t + g_bias_t
+    sd = jnp.sqrt(sigma2_r_t)
+    y_T_samples = jax.random.normal(subkey, shape=(args.n_twist,) ) * sd + mean
+    return y_T_samples
+
 
 def evaluate_q_t(x_t, a_q_t_minus_1, b_q_t, c_q_t, sigma2_q_t, x_t_minus_1, y_T):
     # Evaluate the pdf value given the q_t distribution as defined in the sampling function
@@ -644,12 +697,15 @@ if __name__ == "__main__":
     # print("OBSERVATION")
     # print(y_T)
     # TODO I think right now I actually have 11 uses of alpha, which makes the distributions a bit weird, and the analytic distributions may not exactly be right
-    # I think alpha = 1 gets me something like 9 in terms of the final x, if I use y as the final observatoin
-    # Because y=10 means the final x needs to be 9.
-    # Wait, maybe that's fine? Just check to make sure this all makes sense.
+    # Right so what actually happens is that you would have 10 uses of alpha in the hidden states x
+    # And then the final y is another usage of alpha, so your observation at the end should be 11 with alpha = 1
+    # It seems the SIXO paper is inconsistent with itself in terms of notation: they use a final obs of 10 whereas their paper themselves in D.1.1 appendix has 10 uses of alpha from 1 to T, followed by a final usage for y which gives 11.
+    # Anyway I think it's ok in that I roughly got the right answers
+    # It seems I have to tune the parameters a bit and focus more on twist learning and less on model learning for stability
+    # But otherwise I can get the right parameters everywhere in the linear model (which is slightly different from the SIXO-DRE in their paper using an MLP model
     use_exact_y_T = True
     if use_exact_y_T:
-        y_T = args.true_alpha * args.T
+        y_T = args.true_alpha * (args.T + 1)
 
     # This is for our Gaussian Drift model (not the true, unknown one)
     alpha = args.init_alpha
@@ -685,8 +741,8 @@ if __name__ == "__main__":
     g_bias_params = jnp.zeros(shape=(args.T, ))
     # parameters phi = (g_coeff_params, g_bias_params, sigma2_r_params)
 
-    use_optimal_proposal = False
-    # use_optimal_proposal = True
+    # use_optimal_proposal = False
+    use_optimal_proposal = True
     analytic_optimal_a = jnp.zeros_like(a_params)
     analytic_optimal_b = jnp.zeros_like(b_params)
     analytic_optimal_c = jnp.zeros_like(c_params) # leave as 0
@@ -800,7 +856,12 @@ if __name__ == "__main__":
         #     print(get_l_dre(subkey, alpha, args.n_twist, args.T, g_coeff_params, g_bias_params, sigma2_r_params))
 
         smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6])
-        dre_grad_fn = jax.grad(get_l_dre, argnums=[4, 5, 6])
+
+        use_roger_dre = True
+        if use_roger_dre:
+            dre_grad_fn = jax.grad(get_l_dre_roger, argnums=[4, 5, 6])
+        else:
+            dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=[4, 5, 6])
 
         for epoch in range(args.epochs):
             if (epoch + 1) % args.print_every == 0:
