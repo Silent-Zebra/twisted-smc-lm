@@ -33,11 +33,6 @@ class Gaussian_Drift:
         key_and_x, _ = jax.lax.scan(self.get_samples_given_x, key_and_x, None, T)
         key, x_samples = key_and_x
 
-        # for t in range(1, T):
-        #     key, sk = jax.random.split(key)
-        #     new_x = jax.random.normal(sk, shape=(self.n_data, )) + x_samples + self.alpha
-        #     x_samples = new_x
-
         key, sk = jax.random.split(key)
         y_samples = jax.random.normal(sk, shape=(self.n_data, )) + x_samples + self.alpha
 
@@ -93,13 +88,6 @@ def evaluate_log_p_theta_given_prev_p(alpha, prev_sum_log_p, x_t, x_t_minus_1):
     sum_log_p = prev_sum_log_p + log_gaussian_pdf(x_t, x_t_minus_1 + alpha, 1)
     return sum_log_p
 
-# @jit
-# def evaluate_p_theta_x_1_to_t_with_index(alpha, x_1_to_t, index):
-#     prod = gaussian_pdf(x_1_to_t[0], alpha, 1)
-#     init_carry = (alpha, prod, x_1_to_t[0])
-#     stuff, _ = jax.lax.scan(evaluate_p_theta_x_t, init_carry, x_1_to_t[1:], length=index - 1)
-#     _, prod, _ = stuff
-#     return prod
 
 @jit
 def get_samples_given_x(carry, unused):
@@ -109,7 +97,7 @@ def get_samples_given_x(carry, unused):
     return (key, new_x, n, alpha), new_x
 
 
-# TODO RETURN THE FULL SEQUENCE OF X SAMPLES FOR THIS FUNCTION
+# Note: this function returns a full sequence of x samples
 @partial(jax.jit, static_argnames=['n', 'T'])
 def get_p_theta_x_y_samples(key, alpha, n, T):
     key, sk = jax.random.split(key)
@@ -144,28 +132,20 @@ def get_l_dre_sixo_t(carry, scanned):
     x_tilde_t, x_t, g_c_t, g_b_t, sigma2_r_t = scanned
     new_l_dre = (prev_l_dre + jax.nn.log_sigmoid(evaluate_log_r_psi(x_t, y_T, g_c_t, g_b_t, sigma2_r_t)) + \
                  jnp.log(1 - jax.nn.sigmoid(evaluate_log_r_psi(x_tilde_t, y_T, g_c_t, g_b_t, sigma2_r_t)))).mean()
-    # TODO think further whether this average across batch/particles makes sense... I think it is fine, just like regular batch GD.
+    # This average across batch/particles should be fine, just like regular batch GD.
     return (new_l_dre, y_T), None
+
 
 @partial(jax.jit, static_argnames=['n', 'T'])
 def get_l_dre_sixo(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
-    # Note that as in everywhere else inthis code base, stuff like x, y are all of batch size n
+    # Note that as in everywhere else in this code base, stuff like x, y are all of batch size n
     key, sk1, sk2 = jax.random.split(key, 3)
     x_tilde, _ = get_p_theta_x_y_samples(sk1, alpha, n, T)
     x, y = get_p_theta_x_y_samples(sk2, alpha, n, T)
     l_dre = 0.
-    # TODO Apr 28: After returning the full sequence of x in get_x_y_samples, then if the stack doesn't work, just check that
-    # T is the size of the leading dimension of all of the below, and just use a list: that should work
-    # Finally, after that, continue testing and check that the DRE loss are consistent
-    # Then test it and see if the twist learned makes sense. Start with perhaps fixing an optimal proposal and alpha
-    # and just try to learn twist
+
     scan_over = [x_tilde, x, g_coeff_params, g_bias_params, sigma2_r_params]
-    # print(x_tilde.shape)
-    # print(x.shape)
-    # print(g_coeff_params.shape)
-    # print(g_bias_params.shape)
-    # print(sigma2_r_params.shape)
-    # scan_over = jnp.stack(scan_over, axis=1)
+
     (l_dre, _), _ = jax.lax.scan(get_l_dre_sixo_t, (l_dre, y), scan_over, T)
     l_dre /= T
     return l_dre
@@ -176,64 +156,23 @@ def get_l_dre_roger_no_scan(key, alpha, n, T, g_coeff_params, g_bias_params, sig
     key, sk1, sk2 = jax.random.split(key, 3)
     x, y = get_p_theta_x_y_samples(sk2, alpha, n, T)
     x_f = x # idea here is we can use the same x; x is drawn the same way; just now we need to draw a y at every point in time, based on the twists
-    # TODO can also try using separately drawn x, like in the SIXO formulation, and throwing away y
+    # Can also try using separately drawn x, like in the SIXO formulation, and throwing away y
     # and for the xs that we have drawn
     # f is like the f in Roger's doc (may not be exactly analogous here, but similar idea)
     l_dre = 0.
-    l_dre_2 = 0.
     for t in range(T):
         key, subkey = jax.random.split(key)
         y_f = jax.lax.stop_gradient(get_r_psi_samples(subkey, x_f[t], g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])) # VERY IMPORTANT TO DO STOP GRADIENT BECAUSE otherwise I am taking grad with respect to the expectation too; see derivation has the grad within the expectation
-        # l_dre += (evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]) -
-        #           evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])).mean()
+
         l_dre += (
                 evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t],
                                    sigma2_r_params[t])
                 - evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t],
                                    g_bias_params[t], sigma2_r_params[t])
         ).mean()
-        # l_dre_2 += (evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] + 0.001) -
-        #           evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]  + 0.001)).mean()
-        # l_dre_2 += (
-        #         # evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t],
-        #         #                    sigma2_r_params[t] - 10)
-        #         - evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t],
-        #                            g_bias_params[t], sigma2_r_params[t] - 10.)
-        # ).mean()
-        # l_dre_2 += (
-        #     # evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t],
-        #     #                    sigma2_r_params[t] - 10)
-        #     - evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t],
-        #                          g_bias_params[t], sigma2_r_params[t] + [0.0025,0.00263158,0.00277778,0.00294118,0.003125,0.00333333,0.00357143,0.00384615,0.00416667,0.00454545][t])
-        # ).mean()
 
-
-        # print(f"iter: {t}")
-        # print(x)
-        # print(y)
-        # print(y_f)
-        # print(evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]))
-        # print(evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]))
-        # print(evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] - 10.))
-        # print(evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] - 10. ))
-        # print((evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t]) -
-        #           evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])).mean())
-        # print((evaluate_log_r_psi(x[t], y, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] - 10.) -
-        #           evaluate_log_r_psi(x_f[t], y_f, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t] - 10.)).mean())
-
-    # # Wait hold on... this doesn't do anything...
-    # # At the final time step we may need to enforce e.g. psi = phi in the roger case
-    # # where here I may need to force the final psi to be the true one we know from the model (use 1 times the final x (g coeff 1), + alpha for the g_bias, and then 1 for the variance - this is the final y value)
-    # key, subkey = jax.random.split(key)
-    # y_f = get_r_psi_samples(subkey, x_f[T], 1, alpha, 1)
-    # l_dre += (evaluate_log_r_psi(x_f[T], y_f, 1, alpha, 1) -
-    #           evaluate_log_r_psi(x_f[T], y_f, 1, alpha, 1)).mean()
     l_dre /= T
-    # l_dre_2 /= T
 
-    # print("l_dre comp")
-    # print(l_dre)
-    # print(l_dre_2)
 
     return l_dre
 
@@ -245,7 +184,7 @@ def get_l_dre_roger_t(carry, scanned):
     y_f_t = jax.lax.stop_gradient(get_r_psi_samples(subkey, x_f_t, g_c_t, g_b_t, sigma2_r_t)) # VERY IMPORTANT TO DO STOP GRADIENT BECAUSE otherwise I am taking grad with respect to the expectation too; see derivation has the grad within the expectation
     new_l_dre = prev_l_dre + (evaluate_log_r_psi(x_t, y_T, g_c_t, g_b_t, sigma2_r_t) -
                   evaluate_log_r_psi(x_f_t, y_f_t, g_c_t, g_b_t, sigma2_r_t)).mean()
-    # TODO think further whether this average across batch/particles makes sense... I think it is fine, just like regular batch GD.
+    # Note we are averaging across batch/particles... I think this is fine, just like regular batch GD.
     return (new_l_dre, y_T, key), None
 
 
@@ -254,7 +193,7 @@ def get_l_dre_roger(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_pa
     key, sk1, sk2 = jax.random.split(key, 3)
     x, y = get_p_theta_x_y_samples(sk1, alpha, n, T)
     # x_f = x # idea here is we can use the same x; x is drawn the same way; just now we need to draw a y at every point in time, based on the twists
-    # TODO can also try using separately drawn x, like in the SIXO formulation, and throwing away y
+    # Can also try using separately drawn x, like in the SIXO formulation, and throwing away y
     x_f, _ = get_p_theta_x_y_samples(sk2, alpha, n, T)
     # and for the xs that we have drawn
     # f is like the f in Roger's doc (may not be exactly analogous here, but similar idea)
@@ -326,7 +265,7 @@ def evaluate_log_q_0(x_0, b_q_t, c_q_t, sigma2_q_t, y_T):
 
 def get_sixo_u_twist_r_t_samples(subkey, g_coeff_t, g_bias_t, x_t, sigma2_r_t):
     # Here we are sampling from r_t(y_T, x_t) as in SIXO-U (see D.1.3 in the Arxiv SIXO paper)
-    # TODO: think about: why is it not r_t(y_T|x_t)? Seems like it is.
+    # It is really the same as r_t(y_T|x_t), but the reason for writing with the comma is the comma version better aligns with the functional form (e.g. like a python function here)
     mean = g_coeff_t * x_t + g_bias_t
     sd = jnp.sqrt(sigma2_r_t)
     y_samples = jax.random.normal(subkey, shape=(args.smc_particles,)) * sd + mean
@@ -346,7 +285,7 @@ def evaluate_log_r_psi(x_t, y_T, g_coeff_t, g_bias_t, sigma2_r_t):
 def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
         y_T, alpha_drift_param, g_coeff_params, g_bias_params, sigma2_r_params):
     log_z_hat_t = 0.
-    # TODO REPLACE WITH LAX.SCAN
+    # Better to replace with lax.scan
     for t in range(args.T):
         key, subkey = jax.random.split(key)
         if t == 0:
@@ -358,7 +297,7 @@ def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
                                                     y_T=y_T)
             x_1_to_t = x_t.reshape(1, -1)
             log_q_t_eval = evaluate_log_q_0(x_t, b_params[0], c_params[0], sigma2_q_params[0], y_T)
-            log_gamma_1_to_t_minus_1_eval = 0. # Ignore this term at the beginning TODO ensure this is correct; think about more
+            log_gamma_1_to_t_minus_1_eval = 0. # Ignore this term at the beginning
 
         else:
             x_t_minus_1 = x_1_to_t[-1]
@@ -370,79 +309,35 @@ def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
                                                     sigma2_q_t=sigma2_q_params[t],
                                                     x_t_minus_1=x_t_minus_1,
                                                     y_T=y_T)
-            sampling_info = (subkey, a_params[t-1], b_params[t], c_params[t], sigma2_q_params[t], x_t_minus_1, y_T)
-            # print("--OLD SAMPLING INFO--")
-            # print(sampling_info)
 
             x_1_to_t = jnp.concatenate((x_1_to_t, x_t.reshape(1, -1)), axis=0)
 
             log_q_t_eval = evaluate_log_q_t(x_t, a_params[t-1], b_params[t], c_params[t], sigma2_q_params[t], x_t_minus_1, y_T)
             log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
 
-        # evaluate_p_theta_x_1_to_t(jnp.stack(x_1_to_t))
 
         log_p_theta_1_to_t_eval = evaluate_log_p_theta_x_1_to_t(alpha_drift_param, x_1_to_t)
-        # TODO I think one way maybe around this is, since x_1_to_t is the only thing that has dynamic array and it is only used in the p evaluation
+        # To get around having to use dynamic arrays (since those don't work with jit):
+        # since x_1_to_t is the only thing that has dynamic array and it is only used in the p evaluation
         # Then what I can do is I can save the evaluation of p up to t - 1
         # and then pass that into the carry too, and now I can evaluate just the incremental conditional distribution
         # Since alpha does not change during the smc sweep, then this should actually work.
-        # This would solve the SMC speed problem. But what about the other variance problem???
-
-        # print("--SMC old--")
-        # print(t)
-        # print(x_t)
-        # if t > 0:
-        #     print(x_t_minus_1)
-        # print(log_p_theta_1_to_t_eval)
 
         # Yes so we will condition on x_t and evaluate r_psi to get a probability value
         # for y_T given x_t (that's from r_psi)
-        # TODO: so how is this used in monte carlo? Once finished implementing, review everything from
-        # start to finish, including the math - figure out what is really happening and why it all makes sense.
+
         log_r_psi_t_eval = evaluate_log_r_psi(x_t, y_T, g_coeff_params[t], g_bias_params[t], sigma2_r_params[t])
         log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
 
-        # print("---terms used in gamma calc---")
-        # print(x_1_to_t)
-        # print(log_p_theta_1_to_t_eval)
-        # print(log_r_psi_t_eval)
-
         log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval
 
-        # print("---terms used in alpha calc---")
-        # print(log_gamma_1_to_t_eval)
-        # print(log_gamma_1_to_t_minus_1_eval)
-        # print(log_q_t_eval)
-
-        # print("---alpha---")
-
-        # print(log_alpha_t)
-        # print(alpha_t.shape)
-        # print(w_t_minus_1)
         log_w_t = log_w_t_minus_1 + log_alpha_t
-        # print(f"----t = {t}----")
-        # print(x_t)
-        # print(w_t)
 
         if t == 0:
             log_z_over_z = jax.nn.logsumexp(log_w_t)
-            # z_over_z = (jnp.exp(log_w_t)).sum()
         else:
             log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1)
-            # z_over_z = (jnp.exp(log_w_t)).sum() / (jnp.exp(log_w_t_minus_1)).sum()
-            # print("------------")
-            # print((jnp.exp(log_w_t)).sum())
-            # print((jnp.exp(log_w_t_minus_1)).sum())
-            # print(z_over_z)
-            # print(log_w_t)
-            # print(log_w_t_minus_1)
 
-            # print("------------")
-            # print(w_t)
-            # print(w_t.sum())
-            #
-            # print(w_t_minus_1)
-            # print(w_t_minus_1.sum())
         log_z_hat_t = log_z_hat_t + log_z_over_z
         # z_hat_t = z_hat_t * z_over_z
         # z_hat_t_alternate = w_t.sum()
@@ -454,10 +349,7 @@ def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
         # the calculation here is with the new w_t based on w_{t-1} and a_t before resampling occurs
         # So there is no telescoping cancelation as the w_t calculation is before sampling, but then the w_{t-1} is
         # based on after resampling.
-        # assert(jnp.abs(z_hat_t_alternate - z_hat_t) < 0.001)
-        # TODO I still feel a bit uncomfortable about this. Later confirm what the numerator and denominator and product of terms is doing
-        # I guess the good thing is that I don't need the Z for my project, as I only need the samples
-        # But still would be nice to know what exactly is happening with the Z and the log(p)
+
 
         # TODO maybe don't resample on the first iteration??
         # if t == 0:
@@ -468,43 +360,11 @@ def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
         if resample_condition:
             # Do resampling
             key, subkey = jax.random.split(key)
-            # print(w_t)
-            # print(w_t.shape)
-            # print(log_w_t)
-            # print("w_t for sampling")
-            # print(log_w_t)
-            # print(jnp.exp(log_w_t))
+
             a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
-            # print("---RESAMPLING---")
-            # print(log_w_t[58])
-            # print(log_w_t[59])
-            # print(jax.nn.softmax(log_w_t)[58])
-            # print(jax.nn.softmax(log_w_t)[59])
-            # if t != 0:
-            #     print(log_w_t_minus_1[58])
-            #     print(log_w_t_minus_1[59])
-            #     # print(log_alpha_t[58])
-            #     # print(log_alpha_t[59])
-            #     print(log_gamma_1_to_t_eval[58])
-            #     print(log_gamma_1_to_t_eval[59])
-            #     print(log_gamma_1_to_t_minus_1_eval[58])
-            #     print(log_gamma_1_to_t_minus_1_eval[59])
-            #     print(log_q_t_eval[58])
-            #     print(log_q_t_eval[59])
-            #     print("fawfaw")
-            # print(x_1_to_t[:, 58])
-            # print(x_1_to_t[:, 59])
-            # print(evaluate_log_p_theta_x_1_to_t(args.init_alpha, x_1_to_t[:, 58]))
-            # print(evaluate_log_p_theta_x_1_to_t(args.init_alpha, x_1_to_t[:, 59]))
 
-
-
-            # print(log_w_t)
-            # print(jax.nn.softmax(log_w_t))
-            # print(a_t)
-            # print(x_1_to_t)
             x_1_to_t = x_1_to_t[:, a_t]
-            # x_1_to_t = x_1_to_t.at[-1, :].set(x_t) # Don't do this, this is wrong.
+            # x_1_to_t = x_1_to_t.at[-1, :].set(x_t) # Don't do this, this is wrong. You need to resample the whole trajectory
 
             # Make sure the gamma values also track the correct trajectories
             log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
@@ -512,28 +372,10 @@ def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
             log_w_t = jnp.zeros_like(log_w_t)
             # print("---RESAMPLING ENDED---")
 
-            # # TODO THINK ABOUT: How is the gradient flowing through the resampling or a_t steps? How about the interaction with A and expectation?
-            #
-            # # TODO CHECK EVERY STEP OF CODE CAREFULLY TO ENSURE IT ALL MAKES SENSE.
-
-            # print("---slow v---")
-            # print(x_1_to_t)
-            # print(a_t)
-
 
     return log_z_hat_t, x_1_to_t
 
 
-# TODO APR 26: New goal: do SIXO-A first (the analytic version with only updating theta), and get that working. That's an even easier baseline
-# Also the other problem is I've been using SIXO-B which they say doesn't really work
-# SIXO-DRE may be another goal
-# But yes, just get SIXO-A working first.
-
-
-# TODO Log in the below methods
-# TODO where are my resample weights???
-# TODO: just copy from my new version above, line by line, carefully
-# TODO: No arrays of variable length. Just store the previous computation up to time t (e.g. log p(x_1:t-1)) and then add onto it
 
 @jit
 def smc_iter(carry, scan_over_tuple):
@@ -625,12 +467,11 @@ def smc(key, a_params, b_params, c_params, sigma2_q_params,
     # But only use up to index t
     log_q_t_eval = evaluate_log_q_0(x_1, b_params[0], c_params[0], sigma2_q_params[0],
                             y_T)
-    log_gamma_1_to_t_minus_1_eval = 0.  # Ignore this term at the beginning TODO ensure this is correct; think about more
+    log_gamma_1_to_t_minus_1_eval = 0.  # Ignore this term at the beginning
     log_p_theta_1_to_t_eval = evaluate_log_p_theta_x_1(alpha, x_1) # x_t is x_1 here
     # Yes so we will condition on x_t and evaluate r_psi to get a probability value
     # for y_T given x_t (that's from r_psi)
-    # TODO: so how is this used in monte carlo? Once finished implementing, review everything from
-    # start to finish, including the math - figure out what is really happening and why it all makes sense.
+
     log_r_psi_t_eval = evaluate_log_r_psi(x_1, y_T, g_coeff_params[0], g_bias_params[0],
                                   sigma2_r_params[0])
     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
@@ -645,8 +486,7 @@ def smc(key, a_params, b_params, c_params, sigma2_q_params,
 
     non_resampled_x_1 = x_1
 
-    # TODO don't resample on the first iteration maybe??
-    # TODO APR 26: Investigate this further. Seems like you shouldn't resample. Think about what happens if you don't, what you need to change if anything in the rest of the code, and empirically investigate results.
+    # TODO don't resample on the first iteration maybe?? In expectation it should do nothing though...
     # RESAMPLE
     key, subkey = jax.random.split(key)
     w_t_for_initial_sample = log_w_t
@@ -681,30 +521,11 @@ def smc(key, a_params, b_params, c_params, sigma2_q_params,
     x_1_to_T = jnp.zeros((args.T, args.smc_particles))
     x_1_to_T = x_1_to_T.at[0, :].set(x_1) # Remember x_t was already resampled (according to a_t) so no need to resample it again
     for t in range(1, args.T):
-        # print(f"--step {t}--")
-        # print(x_1_to_T)
-        # print(a_ts[t])
-        # print(x_1_to_T[:t, a_ts[t]])
         # Resample all the previous up to x_t_minus_1
         x_1_to_T = x_1_to_T.at[:t, :].set(x_1_to_T[:t, a_ts[t]])
         # Set the newest x_t value
         x_1_to_T = x_1_to_T.at[t, :].set(x_ts[t-1]) # Remember x_t was already resampled (according to a_t) so no need to resample it again
-        # print(x_1_to_T)
 
-    # print("---NEW SMC stuff---")
-    # # print(a_1)
-    # print(a_ts)
-    # print(non_resampled_x_1)
-    # print(x_ts_before_resample)
-    # print(evaluate_log_p_theta_x_1(alpha, non_resampled_x_1))
-    # print(log_p_theta_1_to_t_evals)
-    # print(sampling_info)
-    # print("new wts for sampling")
-    # print(w_ts_for_sampling)
-    # print(jnp.exp(w_ts_for_sampling))
-
-    # After that, test and compare vs the original SMC version. Just do sampling, to make sure they are the same
-    # After that, once checked it's the same, then rerun experiments but with lower LR and much more optimization steps
 
     return log_z_hat_t, x_1_to_T
 
@@ -721,7 +542,7 @@ def smc_wrapper(key, a_params, b_params, c_params, sigma2_q_params,
     # print(jnp.log(z_hat))
     return log_z_hat
 
-# TODO DO THE UNBIASED GRADIENT ESTIMATOR - HOW TO CODE UP P?
+# TODO DO THE UNBIASED GRADIENT ESTIMATOR?
 
 
 if __name__ == "__main__":
@@ -753,13 +574,13 @@ if __name__ == "__main__":
     y_T = y_samples[0]
     # print("OBSERVATION")
     # print(y_T)
-    # TODO I think right now I actually have 11 uses of alpha, which makes the distributions a bit weird, and the analytic distributions may not exactly be right
+    # I think right now I actually have 11 uses of alpha
     # Right so what actually happens is that you would have 10 uses of alpha in the hidden states x
     # And then the final y is another usage of alpha, so your observation at the end should be 11 with alpha = 1
     # It seems the SIXO paper is inconsistent with itself in terms of notation: they use a final obs of 10 whereas their paper themselves in D.1.1 appendix has 10 uses of alpha from 1 to T, followed by a final usage for y which gives 11.
     # Anyway I think it's ok in that I roughly got the right answers
     # It seems I have to tune the parameters a bit and focus more on twist learning and less on model learning for stability
-    # But otherwise I can get the right parameters everywhere in the linear model (which is slightly different from the SIXO-DRE in their paper using an MLP model
+    # But otherwise I can get the right parameters (converges to the analytic solution) everywhere in the linear model (which is slightly different from the SIXO-DRE in their paper using an MLP model)
     use_exact_y_T = True
     if use_exact_y_T:
         y_T = args.true_alpha * (args.T + 1)
@@ -769,31 +590,16 @@ if __name__ == "__main__":
     # Gaussian proposal distribution used, q_theta_t(x_t | x_{t-1}, y_T) = N (x_t ; f_t(x_{t−1}, y_T), σ^2_qt )
     # f_t is an affine function meaning simply
     # f_t(x_{t−1}, y_T) = a x_{t-1} + b y_T + c where a,b,c are parameters to be learned
-    # just random initialization for now
     # THE BELOW PARAMS GO FROM TIME 1 to T (or T-1 for a_params)
-    # key, ska, skb, skc, sksq, skgc, skgb, sksr, sksmc = jax.random.split(key, 9)
-    # a_params = jax.random.uniform(ska, shape=(args.T - 1, ), minval=-1, maxval=1)
-    # b_params = jax.random.uniform(skb, shape=(args.T, ), minval=-1, maxval=1)
-    # c_params = jax.random.uniform(skc, shape=(args.T, ), minval=-1, maxval=1)
-    # sigma2_q_params = jax.random.uniform(sksq, shape=(args.T, ), minval=0.5, maxval=1)
 
-    # SIXO initializes these all to be 0. Might be necessary for numerical stability purposes at the beginning
+    # SIXO initializes these all to be 0. Might be necessary for numerical stability purposes at the beginning (should be ok with the log formulation of everything now?)
     a_params = jnp.zeros(shape=(args.T - 1, ))
     b_params = jnp.zeros(shape=(args.T, ))
     c_params = jnp.zeros(shape=(args.T, ))
     # SIXO Initializes these to be 1
-    sigma2_q_params = jnp.ones(shape=(args.T, )) # q is used for sampling so really wide variance is not good here
-    sigma2_r_params = jnp.ones(shape=(args.T, )) # since r is only used for evaluation, this really wide variance helps a lot with numerical stability
-    # Since this is a learned parameter, then initializing with high variance should be fine anyway? No maybe this causes problems.
-    # But the issue is that having really low probability under r at the beginning (with drift alpha = 1 and 10 time steps like in the paper,
-    # you get values like 10 which have very very very low probability under a 0,1 Gaussian which are the parameters at the beginning, and this causes numerical
-    # instability since this ends up being on the numerator and denominator. In particular, this can go to 0 for some extreme draws (e.g. if you ended up at +15 by some bad luck pushing the drift further outward))
-    # TODO I'm curious how the SIXO authors managed to get around this issue of having extremely low probability under the initial distributions with the set of parameters that they used - maybe I can even ask them? Maybe later, once I have a better understanding of everything.
-    # theta (proposal parameters) = (a_params, b_params, c_params, sigma2_q_params)
+    sigma2_q_params = jnp.ones(shape=(args.T, ))
+    sigma2_r_params = jnp.ones(shape=(args.T, ))
 
-    # g_coeff_params = jax.random.uniform(skgc, shape=(args.T, ), minval=-1, maxval=1)
-    # g_bias_params = jax.random.uniform(skgb, shape=(args.T, ), minval=-1, maxval=1)
-    # sigma2_r_params = jax.random.uniform(sksr, shape=(args.T, ), minval=0.5, maxval=1)
     g_coeff_params = jnp.zeros(shape=(args.T, ))
     g_bias_params = jnp.zeros(shape=(args.T, ))
     # parameters phi = (g_coeff_params, g_bias_params, sigma2_r_params)
@@ -887,9 +693,6 @@ if __name__ == "__main__":
         plt.savefig("plt_a")
         exit()
 
-    # For SIXO-u we can just use unbiased gradient ascent
-    # Following eq 18 in their arxiv appendix: just take expectation of
-    # the grad of log Z_hat
 
     a_lr = args.lr
     b_lr = args.lr
@@ -917,11 +720,7 @@ if __name__ == "__main__":
         use_roger_dre = True
         if use_roger_dre:
             dre_grad_fn = jax.grad(get_l_dre_roger, argnums=[4, 5, 6])
-            # # TODO TESTING ONLY REMOVE LATER
-            # g_coeff_params = analytic_optimal_g_coeff
-            # g_bias_params = analytic_optimal_g_bias
-            # sigma2_r_params = analytic_optimal_sigma2_r + 10
-            # dre_grad_fn = jax.grad(get_l_dre_roger_no_scan, argnums=[4, 5, 6])
+
         else:
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=[4, 5, 6])
 
@@ -932,8 +731,6 @@ if __name__ == "__main__":
             for twist_update in range(args.twist_updates_per_epoch):
                 key, subkey = jax.random.split(key)
                 grad_g_coeff, grad_g_bias, grad_s2r = dre_grad_fn(subkey, alpha, args.n_twist, args.T, g_coeff_params, g_bias_params, sigma2_r_params)
-                # print("---GRAD---")
-                # print(grad_s2r)
                 # Yes it is ascent because we are trying to maximize the lower bound on the log prob...
 
                 g_coeff_params = g_coeff_params + g_c_lr * grad_g_coeff
@@ -1005,7 +802,3 @@ if __name__ == "__main__":
                 print_params()
 
     # TODO biased and unbiased gradients (for SIXO-u)
-
-
-    # TODO: Get Rob to check my code, and make sure that everything seems correct, and that I have the general SMC/SIXO idea down.
-    # Maybe even discuss my general understanding.
