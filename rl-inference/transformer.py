@@ -859,6 +859,54 @@ def reward_model(single_seq, prompt_len):
     else:
         raise NotImplementedError
 
+def reward_model(single_seq, prompt_len):
+    # Just for testing TODO REMOVE LATER
+    reward_0, reward_1, reward_2, reward_3 = -1, -2, -3, -4
+    # Then the default reward for other strings is 0
+
+    if len(single_seq.shape) == 2:
+        output_seq = single_seq[:, prompt_len:]
+    elif len(single_seq.shape) == 1:
+        output_seq = single_seq[prompt_len:]
+    else:
+        print(single_seq.shape)
+        raise NotImplementedError
+    output_sum = output_seq.sum(axis=-1)
+    return (output_sum == 0) * reward_0 + (output_sum == 1) * reward_1 + (
+            output_sum == 2) * reward_2 + (output_sum == 3) * reward_3
+
+
+
+def get_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
+    # Essentially repeat get_all_new_seqs output_len times, starting from prompt
+    seq = prompt
+    for i in range(output_len):
+        # print(seq.shape)
+        # print(seq)
+        seq = get_all_new_seqs(seq, n_vocab)
+
+        seq = seq.reshape(-1, seq.shape[-1])
+        # print(seq.shape)
+        # print(seq)
+
+    return seq
+
+
+def get_all_new_seqs(seq, n_vocab):
+    n_batch = seq.shape[0]
+    # take in a bunch of sequences, and then duplicate each sequence n_vocab times, appending a new index (from 0 to n_vocab - 1) to the duplicated sequences
+    copied_seq = jnp.tile(jnp.expand_dims(seq, axis=1), reps=(1, n_vocab, 1))
+
+    arange_seq = jnp.tile(jnp.expand_dims(jnp.arange(n_vocab), axis=0),
+                          reps=(n_batch, 1))[:, :, None]  # [:, :, None] is expand dim on axis 2
+    # print(arange_seq)
+    # print(arange_seq.shape)
+
+    all_new_seqs = jnp.concatenate((copied_seq, arange_seq), axis=2)
+
+    return all_new_seqs
+
+
 def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
     output_unnormalized_batch = batch_transformer(cfg_p, params_p, seq)
 
@@ -868,24 +916,21 @@ def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
 
     n_batch = output_unnormalized_batch.shape[0]
     n_vocab = output_unnormalized_batch.shape[-1]
-    # print(output_p_batch)
-    # print(output_p_batch.shape)
-    # print(output_p_batch[:,-1,:])
-    # print(output_p_batch[:,-1,:].shape)
-    # print(output_psi_batch)
-    # print(output_psi_batch.shape)
-    # print(seq)
-    # print(seq.shape)
 
-    copied_seq = jnp.tile(jnp.expand_dims(seq, axis=1), reps=(1, n_vocab, 1))
-
-    arange_seq = jnp.tile(jnp.expand_dims(jnp.arange(n_vocab), axis=0), reps=(n_batch, 1))[:, :, None] # [:, :, None] is expand dim on axis 2
-    # print(arange_seq)
-    # print(arange_seq.shape)
-
-    all_new_seqs = jnp.concatenate((copied_seq, arange_seq), axis=2)
+    # copied_seq = jnp.tile(jnp.expand_dims(seq, axis=1), reps=(1, n_vocab, 1))
+    #
+    # arange_seq = jnp.tile(jnp.expand_dims(jnp.arange(n_vocab), axis=0), reps=(n_batch, 1))[:, :, None] # [:, :, None] is expand dim on axis 2
+    # # print(arange_seq)
+    # # print(arange_seq.shape)
+    #
+    # all_new_seqs = jnp.concatenate((copied_seq, arange_seq), axis=2)
     # print(all_new_seqs)
     # print(all_new_seqs.shape)
+
+    all_new_seqs = get_all_new_seqs(seq, n_vocab)
+    # print(all_new_seqs)
+    # print(all_new_seqs.shape)
+    #
 
     output_psi_batch = final_twist(all_new_seqs)
 
@@ -1335,7 +1380,7 @@ def main():
     beta2 = Arg(flag="beta2", doc="Adam beta2", default=0.99)
     # seq_len = Arg(flag="seq-len", doc="Sequence length", default=32)
     # batch_size = Arg(flag="batch-size", doc="Batch size", default=128)
-    epochs = Arg("epochs", 32)
+    epochs = Arg("epochs", 100)
     batches = Arg("batches", sys.maxsize, "Max batches")
     # opt1bit = Arg("1bit", False, "Use signs of gradients, not gradients")
     print_every = Arg("print_every", 1)
@@ -1363,6 +1408,7 @@ def main():
     n_smc_samples = Arg("n_smc_samples", 20)
     n_twist = Arg("n_twist", 20)
 
+    n_vocab = Arg("n_vocab", 2, "Num of tokens in vocab")
 
     # save = Arg("save", "", "Save mode.  Log run to wandb, lengthen epochs and batches")
 
@@ -1395,7 +1441,7 @@ def main():
 
     rnd_key, cfg_p, params_p = transformer_init(
         rnd_key,
-        n_vocab=2,
+        n_vocab=n_vocab(),
         d_model=d_model(),
         d_k=d_k(),
         n_layers=n_layers(),
@@ -1412,7 +1458,7 @@ def main():
     # # To get the scalar, we just need to take the right index from the final output
     #     rnd_key, cfg_twist, params_twist = transformer_init(
     #         rnd_key,
-    #         n_vocab=2,
+    #         n_vocab=n_vocab(),
     #         d_model=d_model_twist(),
     #         d_k=d_k_twist(),
     #         n_layers=n_layers_twist(),
@@ -1426,7 +1472,7 @@ def main():
     # TODO Note that the final twist should just directly be the reward model: modify the code accordingly (if t == T, directly use reward model?)
     rnd_key, cfg_twist, params_twist = transformer_init(
                 rnd_key,
-                n_vocab=2,
+                n_vocab=n_vocab(),
                 d_model=d_model_twist(),
                 d_k=d_k_twist(),
                 n_layers=n_layers_twist(),
@@ -1518,21 +1564,48 @@ def main():
             # )
 
             test_smc = True
-            # if test_smc:
-            #     _, samples = smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist,
-            #                      params_twist, final_twist, output_len(), n_smc_samples())
-            #     print("--from sigma--")
-            #     print(prompt)
-            #     print(len(prompt))
-            #     for sample in samples:
-            #         print(sample)
-            #         print(sample[len(prompt):])
-            #     # print(samples)
-            #     # print(samples[len(prompt):])
+            if test_smc:
+                # _, samples = smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist,
+                #                  params_twist, final_twist, output_len(), n_smc_samples())
+                # print("--from sigma--")
+                # print(prompt)
+                # print(len(prompt))
+                # for sample in samples:
+                #     print(sample)
+                #     print(sample[len(prompt):])
+
+
+                all_seqs = get_all_seqs_up_to_output_len(prompt[None, :], n_vocab(), output_len())
+                log_p_all_seqs = evaluate_log_p_theta_t(all_seqs, cfg_p, params_p)
+                log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
+
+                print(all_seqs)
+                # print(log_p_all_seqs)
+                # print(log_psi_all_seqs)
+                analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
+
+                _, samples = smc_slow_version(rnd_key, prompt, cfg_p, params_p,
+                                              cfg_twist, params_twist, final_twist, output_len(), n_smc_samples())
+
+                index = 0
+
+                for seq in all_seqs:
+                    print(seq)
+                    print(analytic_sigma_vals[index])
+                    count = 0
+                    for sample in samples:
+                        if (jnp.abs(seq - sample)).sum() == 0:
+                            count += 1
+                    print(count / n_smc_samples())
+                    index += 1
+
+                1/0
 
 
             # TODO May 15
             # NEXT: DO DRE updates. First just inspect results. Then, derive analytic distributions, and compare the twist vs analytic optimal
+            # TODO COMPARE ANALYTIC FOR BOTH THE SMC SAMPLES (CHECK IT MATCHES AN ANALYTIC CALCULATED DIST WITH LARGE N) AND COMPARE THE LEARNED TWIST TOO.
+            # ALSO DO ROGER DRE UPDATE AND COMPARE VS THE SIXO ONE IN THIS SETTING TOO.
             # Check also that the distribution of samples matches an analytic distribution of samples (take a large number of samples and calculate metrics)
             # After that, go for a longer time horizon, and calculate a DP analytic solution, and compare vs that too.
 
@@ -1546,6 +1619,7 @@ def main():
             # print("----pt----")
             # print(params_twist)
             # TEST ONLY
+            test_smc = True
             if test_smc:
                 if (epoch + 1) % print_every() == 0:
                     _, samples = smc_slow_version(rnd_key, prompt, cfg_p, params_p,
