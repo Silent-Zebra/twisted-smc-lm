@@ -731,22 +731,22 @@ def transformer_loss(cfg, params, x):
 
 
 # We don't jit this, as the loop will unroll, and take a long time to compile
-def transformer_sample(cfg, params, seq: jnp.ndarray, length: int = 20):
-
-    for _i in range(length):
-        output = transformer(cfg, params, seq)
-
-        idx = jnp.argmax(output[-1]) # Right so only the last logit here is used for sampling
-
-        seq = jnp.concatenate((seq, idx[None]))
-
-        print(f"iter: {_i}")
-        print(output)
-        print(idx)
-        print(seq)
-
-    1/0
-    return seq
+# def transformer_sample(cfg, params, seq: jnp.ndarray, length: int = 20):
+#
+#     for _i in range(length):
+#         output = transformer(cfg, params, seq)
+#
+#         idx = jnp.argmax(output[-1]) # Right so only the last logit here is used for sampling
+#
+#         seq = jnp.concatenate((seq, idx[None]))
+#
+#         print(f"iter: {_i}")
+#         print(output)
+#         print(idx)
+#         print(seq)
+#
+#     1/0
+#     return seq
 
 
 
@@ -754,22 +754,24 @@ def transformer_sample(cfg, params, seq: jnp.ndarray, length: int = 20):
 # TODO: Major next thing is to just train the twist functions for the DRE. Do this before plugging into the RL-style training.
 
 
-def stochastic_transformer_sample(cfg, params, seq: jnp.ndarray, length: int = 20):
+def stochastic_transformer_sample(rnd_key, cfg, params, seq: jnp.ndarray, length, n_samples):
+    seq = jnp.full((n_samples, seq.shape[0]), seq)
 
     for _i in range(length):
-        output_unnormalized = transformer(cfg, params, seq)
+        output_unnormalized_batch = batch_transformer(cfg, params, seq)
         rnd_key, subkey = jax.random.split(rnd_key)
-        # This below is actually ok without log_softmax because I don't need log prob. I needed log_softmax on the other ones in order to properly combine with
+        # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax. I needed log_softmax on the other ones in order to properly combine with
         # the other log term.
-        idx = jax.random.categorical(subkey, output_unnormalized[-1], shape=output_unnormalized[-1].shape)
-        seq = jnp.concatenate((seq, idx[None]))
+        idx = jax.random.categorical(subkey, output_unnormalized_batch[:,-1,:], shape=(output_unnormalized_batch.shape[0],))
+        seq = jnp.concatenate((seq, idx[:, None]), axis=1)
 
-        print(f"iter: {_i}")
-        print(output_unnormalized)
-        print(idx)
-        print(seq)
+        # print(f"iter: {_i}")
+        # print(output_unnormalized_batch)
+        # print(output_unnormalized_batch.shape)
+        # print(idx)
+        # print(seq)
 
-    1/0
+
     return seq
 
 
@@ -778,7 +780,7 @@ def batch_transformer(cfg_p, params_p, seq):
     return batch_transformer_func(cfg_p, params_p, seq)
 
 
-
+# @partial(jax.jit, static_argnames=['cfg_p', 'cfg_twist']) # Actually slower with the jit? Maybe due to compile time.
 def get_proposal_q_sample(rnd_key, seq, cfg_p, params_p, cfg_twist, params_twist):
     # TODO should be batched?
     output_unnormalized_batch = batch_transformer(cfg_p, params_p, seq)
@@ -857,7 +859,6 @@ def reward_model(single_seq, prompt_len):
     else:
         raise NotImplementedError
 
-
 def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
     output_unnormalized_batch = batch_transformer(cfg_p, params_p, seq)
 
@@ -884,19 +885,19 @@ def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
 
     all_new_seqs = jnp.concatenate((copied_seq, arange_seq), axis=2)
     # print(all_new_seqs)
-    print(all_new_seqs.shape)
+    # print(all_new_seqs.shape)
 
     output_psi_batch = final_twist(all_new_seqs)
 
-    print(output_psi_batch)
-    print(output_psi_batch.shape)
+    # print(output_psi_batch)
+    # print(output_psi_batch.shape)
 
-    print(output_unnormalized_batch[:,-1,:])
-    print(jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]))
-    print(jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]) + output_psi_batch)
+    # print(output_unnormalized_batch[:,-1,:])
+    # print(jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]))
+    # print(jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]) + output_psi_batch)
 
     # TODO May 13: check again log_softmax... well actually best to just check everything step by step. Every single probability makes sense, every single calculation makes sense, etc.
-
+    # May 15 should be good now, but just check again to be sure.
 
     # Again the output_unnormalized_batch[:,-1,:] needs a log_softmax for the log probabilities to be correct
     # However the final twist is just the - beta r(s) which is the same as exp of that followed by log. So no additional transformations needed, just add it directly to the logsoftmax of the output of the model
@@ -962,7 +963,7 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist):
     # Now an important thing to note: since the optimal psi_T is just the exp(-beta r(s)), and the optimal psi_t is sigma(s_{1:t})/p(s_{1:t}),
     # We cannot constrain the psi. We also have a choice: we can make psi directly represent exp(-beta r(s)), or we can make it represent
     # the log of that, -beta r(s). The latter seems better for numerical stability, so let's just do that, and don't add any log on top of it
-    print(output_psi[:,-2,:][jnp.arange(seq[:,-1].shape[0]), seq[:,-1]])
+    # print(output_psi[:,-2,:][jnp.arange(seq[:,-1].shape[0]), seq[:,-1]])
     return output_psi[:,-2,:][jnp.arange(seq[:,-1].shape[0]), seq[:,-1]]
 
 def evaluate_log_psi_t_final(seq, final_twist):
@@ -1141,9 +1142,8 @@ def evaluate_log_p_theta_t(seq, cfg_p, params_p):
 #
 #     return log_z_hat_t, x_1_to_T
 
+# @partial(jax.jit, static_argnames=['output_len', 'n_smc_samples']) # doesn't work
 def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples):
-
-    # TODO BATCH WITH n_smc_samples
 
     log_z_hat_t = 0.
     log_w_t = 0.
@@ -1165,7 +1165,7 @@ def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, 
         if t == output_len - 1:
             rnd_key, prompt_w_s_1_to_t_plus_1, Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(rnd_key, prompt_w_s_1_to_t, cfg_p,
                                                         params_p, final_twist)
-            print(prompt_w_s_1_to_t_plus_1)
+            # print(prompt_w_s_1_to_t_plus_1)
 
         else:
             rnd_key, prompt_w_s_1_to_t_plus_1, Z_s_1_to_t_minus_1 = get_proposal_q_sample(rnd_key, prompt_w_s_1_to_t, cfg_p,
@@ -1211,16 +1211,16 @@ def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, 
 
         log_w_t = log_w_t_minus_1 + log_alpha_t
 
-        print("---weight check---")
-        # TODO more thorough checks to make sure these are all correct
-        print(log_gamma_1_to_t_eval)
-        print(log_gamma_1_to_t_minus_1_eval)
-        print(log_q_t_eval)
-        print(log_alpha_t)
-
-        print(log_w_t)
-        print(prompt_w_s_1_to_t)
-        print("---end weight check---")
+        # print("---weight check---")
+        # # TODO more thorough checks to make sure these are all correct
+        # print(log_gamma_1_to_t_eval)
+        # print(log_gamma_1_to_t_minus_1_eval)
+        # print(log_q_t_eval)
+        # print(log_alpha_t)
+        #
+        # print(log_w_t)
+        # print(prompt_w_s_1_to_t)
+        # print("---end weight check---")
 
         if t == 0:
             log_z_over_z = jax.nn.logsumexp(log_w_t)
@@ -1266,6 +1266,7 @@ def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, 
             # TODO May 13: check carefully that all the calculations with the gamma, p, q, psi, all follow what we want
             # Be careful with calculations on just one token and on the whole sequence. Do I have the right implementation for which one needs to be on one incremental token
             # and which one needs to be the whole sequence?
+            print(f"smc iter: {t}")
             print("--after resample--")
             print(prompt_w_s_1_to_t)
 
@@ -1284,24 +1285,30 @@ def smc_wrapper(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final
     return log_z_hat
 
 
-def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len):
-    # Note that as in everywhere else in this code base, stuff like x, y are all of batch size n
+def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
+    prompt_len = prompt.shape[-1]
+
     rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
-    _, prompt_w_sigma_sample_s_1_to_t = smc_slow_version(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len)
-    _, prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(cfg_p, params_p, prompt, output_len)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_slow_version(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
+    prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist)
+
+    # print(prompt_w_sigma_sample_s_1_to_t)
+    # print(prompt_w_sigma_sample_s_1_to_t.shape)
+    # print(prompt_w_p_sample_s_1_to_t)
+    # print(prompt_w_p_sample_s_1_to_t.shape)
 
     l_dre = 0.
 
-    for t in range(output_len - 1):
-        print(prompt_w_sigma_sample_s_1_to_t.shape)
-        print(prompt_w_sigma_sample_s_1_to_t[:t + 1].shape)
+    for t in range(prompt_len + 1, prompt_len + 1 + output_len - 1): # start with +1 so that you pass in the first generated token; s_{prompt_len + 1} is essentially s_1, the first generated token. end with -1 because the final step uses the true phi, so we aren't updating twist parameters for that
+        # print(t)
+        # print(prompt_w_sigma_sample_s_1_to_t[:, :t].shape)
 
-        l_dre += jax.nn.log_sigmoid(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:t+1], cfg_twist, params_twist)) + \
-                 jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:t+1], cfg_twist, params_twist)))
+        # Passing in the full sequence up to time step t is correct, because the evalute_log_psi_t only evaluates the very last logit
+        l_dre += (jax.nn.log_sigmoid(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist)) + \
+                 jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist)))).mean()
 
-    1/0
     l_dre /= (output_len - 1)
-    return l_dre
+    return -l_dre # negative because now we have a loss
 
 
 jnp.set_printoptions(threshold=20, edgeitems=3, linewidth=2048, precision=3)
@@ -1354,6 +1361,7 @@ def main():
     output_len = Arg("output_len", 8, "Length of the strings we output")
 
     n_smc_samples = Arg("n_smc_samples", 20)
+    n_twist = Arg("n_twist", 20)
 
 
     # save = Arg("save", "", "Save mode.  Log run to wandb, lengthen epochs and batches")
@@ -1481,12 +1489,12 @@ def main():
 
 
     smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6])
-    use_roger_dre = True
+    use_roger_dre = False
     if use_roger_dre:
         pass
         # dre_grad_fn = jax.grad(get_l_dre_roger, argnums=[4, 5, 6])
     else:
-        dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=[3, 4, 5, 6])
+        dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
 
 
     for epoch in range(epochs()):
@@ -1509,27 +1517,58 @@ def main():
             #     cfg, params, jnp.array(prompt), length=20 + epoch
             # )
 
-            _, samples = smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist,
-                             params_twist, final_twist, output_len(), n_smc_samples())
-            print("--from sigma--")
-            print(prompt)
-            print(len(prompt))
-            for sample in samples:
-                print(sample)
-                print(sample[len(prompt):])
-            # print(samples)
-            # print(samples[len(prompt):])
-            1/0
+            test_smc = True
+            # if test_smc:
+            #     _, samples = smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist,
+            #                      params_twist, final_twist, output_len(), n_smc_samples())
+            #     print("--from sigma--")
+            #     print(prompt)
+            #     print(len(prompt))
+            #     for sample in samples:
+            #         print(sample)
+            #         print(sample[len(prompt):])
+            #     # print(samples)
+            #     # print(samples[len(prompt):])
 
-            sampled = transformer_sample(
-                cfg_p, params_p, prompt, length=output_len()
-            )
-            print("--from p--")
-            # print(prompt)
-            # print(len(prompt))
-            print(sampled)
-            print(sampled[len(prompt) : ])
-            1/0
+
+            # TODO May 15
+            # NEXT: DO DRE updates. First just inspect results. Then, derive analytic distributions, and compare the twist vs analytic optimal
+            # Check also that the distribution of samples matches an analytic distribution of samples (take a large number of samples and calculate metrics)
+            # After that, go for a longer time horizon, and calculate a DP analytic solution, and compare vs that too.
+
+            rnd_key, sk = jax.random.split(rnd_key)
+
+            grad_params_twist = dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len(), n_twist())
+            # _, grad_params_twist = dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len(), n_twist())
+
+            params_twist = optimizer_twist.step(params_twist, grad_params_twist)
+
+            # print("----pt----")
+            # print(params_twist)
+            # TEST ONLY
+            if test_smc:
+                if (epoch + 1) % print_every() == 0:
+                    _, samples = smc_slow_version(rnd_key, prompt, cfg_p, params_p,
+                                                  cfg_twist,
+                                                  params_twist, final_twist,
+                                                  output_len(), n_smc_samples())
+                    print("--from sigma--")
+                    for sample in samples:
+                        # print(sample)
+                        print(sample[len(prompt):])
+
+            # TODO May 15: later also do the updates to the model (after learning twists)
+
+
+            # sampled = transformer_sample(
+            #     cfg_p, params_p, prompt, length=output_len()
+            # )
+            # print("--from p--")
+            # # print(prompt)
+            # # print(len(prompt))
+            # print(sampled)
+            # print(sampled[len(prompt) : ])
+            # 1/0
 
 
 
@@ -1560,7 +1599,7 @@ def main():
         #
         # if (epoch + 1) % print_every() == 0:
         #     print_params(print_twist_params=False)
-        1/0
+
 
     # Grab Current Time After Running the Code
     end = time.time()
