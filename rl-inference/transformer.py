@@ -859,31 +859,49 @@ def reward_model(single_seq, prompt_len):
     else:
         raise NotImplementedError
 
-def reward_model(single_seq, prompt_len):
-    # Just for testing TODO REMOVE LATER
-    reward_0, reward_1, reward_2, reward_3 = -1, -2, -3, -4
-    # Then the default reward for other strings is 0
+# def reward_model(single_seq, prompt_len):
+#     # Just for testing TODO REMOVE LATER
+#     reward_0, reward_1, reward_2, reward_3 = -1, -2, -3, -4
+#     # Then the default reward for other strings is 0
+#
+#     if len(single_seq.shape) == 2:
+#         output_seq = single_seq[:, prompt_len:]
+#     elif len(single_seq.shape) == 1:
+#         output_seq = single_seq[prompt_len:]
+#     else:
+#         print(single_seq.shape)
+#         raise NotImplementedError
+#     output_sum = output_seq.sum(axis=-1)
+#     return (output_sum == 0) * reward_0 + (output_sum == 1) * reward_1 + (
+#             output_sum == 2) * reward_2 + (output_sum == 3) * reward_3
 
-    if len(single_seq.shape) == 2:
-        output_seq = single_seq[:, prompt_len:]
-    elif len(single_seq.shape) == 1:
-        output_seq = single_seq[prompt_len:]
-    else:
-        print(single_seq.shape)
-        raise NotImplementedError
-    output_sum = output_seq.sum(axis=-1)
-    return (output_sum == 0) * reward_0 + (output_sum == 1) * reward_1 + (
-            output_sum == 2) * reward_2 + (output_sum == 3) * reward_3
-
-
-
-def get_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
+def get_full_list_of_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
+    # Needs prompt[None, :] for unprocessed (jnp) prompt
+    seq = prompt[None, :]
     # Essentially repeat get_all_new_seqs output_len times, starting from prompt
-    seq = prompt
+    # Same as get_all_seqs_up_to_output_len but return full list instead of just last set of sequences
+    # This will be useful instead of calling get_all_seqs_up_to_output_len over and over again
+    output_list = []
     for i in range(output_len):
         # print(seq.shape)
         # print(seq)
-        seq = get_all_new_seqs(seq, n_vocab)
+        seq = get_all_new_seqs_single_t(seq, n_vocab)
+
+        seq = seq.reshape(-1, seq.shape[-1])
+        # print(seq.shape)
+        # print(seq)
+        output_list.append(seq)
+
+    return output_list
+
+def get_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
+    # Needs prompt[None, :] for unprocessed (jnp) prompt
+    seq = prompt[None, :]
+    # Essentially repeat get_all_new_seqs output_len times, starting from prompt
+    for i in range(output_len):
+        # print(seq.shape)
+        # print(seq)
+        seq = get_all_new_seqs_single_t(seq, n_vocab)
 
         seq = seq.reshape(-1, seq.shape[-1])
         # print(seq.shape)
@@ -892,7 +910,10 @@ def get_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
     return seq
 
 
-def get_all_new_seqs(seq, n_vocab):
+def get_all_new_seqs_single_t(seq, n_vocab):
+    # Take in a set of sequences, and for each sequence, output n_vocab new sequences
+    # Where the new n_vocab sequences are the old ones copied n_vocab times but with the indices from 0 to n_vocab-1 appended.
+
     n_batch = seq.shape[0]
     # take in a bunch of sequences, and then duplicate each sequence n_vocab times, appending a new index (from 0 to n_vocab - 1) to the duplicated sequences
     copied_seq = jnp.tile(jnp.expand_dims(seq, axis=1), reps=(1, n_vocab, 1))
@@ -927,7 +948,7 @@ def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
     # print(all_new_seqs)
     # print(all_new_seqs.shape)
 
-    all_new_seqs = get_all_new_seqs(seq, n_vocab)
+    all_new_seqs = get_all_new_seqs_single_t(seq, n_vocab)
     # print(all_new_seqs)
     # print(all_new_seqs.shape)
     #
@@ -990,7 +1011,7 @@ def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1(seq, cfg_p, params_p, cfg
     return evaluate_log_p_theta_t(seq, cfg_p, params_p) + evaluate_log_psi_t(seq, cfg_twist, params_twist)
 
 def evaluate_log_psi_t(seq, cfg_twist, params_twist):
-    # Takes in sequence s_{1:t}
+    # Takes in sequences s_{1:t} of (n_batch, seq_length) shape
     # Evaluate log psi (s_{1:t})
     output_psi = batch_transformer(cfg_twist, params_twist, seq)
 
@@ -1188,7 +1209,7 @@ def evaluate_log_p_theta_t(seq, cfg_p, params_p):
 #     return log_z_hat_t, x_1_to_T
 
 # @partial(jax.jit, static_argnames=['output_len', 'n_smc_samples']) # doesn't work
-def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples):
+def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
 
     log_z_hat_t = 0.
     log_w_t = 0.
@@ -1207,7 +1228,7 @@ def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, 
         log_w_t_minus_1 = log_w_t
 
 
-        if t == output_len - 1:
+        if (t == output_len - 1) and use_final_twist:
             rnd_key, prompt_w_s_1_to_t_plus_1, Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(rnd_key, prompt_w_s_1_to_t, cfg_p,
                                                         params_p, final_twist)
             # print(prompt_w_s_1_to_t_plus_1)
@@ -1220,7 +1241,7 @@ def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, 
 
         # print(prompt_w_s_1_to_t)
 
-        if t == output_len - 1:
+        if (t == output_len - 1) and use_final_twist:
             log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
                 prompt_w_s_1_to_t, cfg_p, params_p, final_twist)
         else:
@@ -1238,7 +1259,7 @@ def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, 
 
         log_p_theta_1_to_t_eval = evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p)
 
-        if t == output_len - 1:
+        if (t == output_len - 1) and use_final_twist:
             log_r_psi_t_eval = evaluate_log_psi_t_final(prompt_w_s_1_to_t, final_twist)
         else:
             log_r_psi_t_eval = evaluate_log_psi_t(prompt_w_s_1_to_t, cfg_twist, params_twist)
@@ -1311,9 +1332,10 @@ def smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, 
             # TODO May 13: check carefully that all the calculations with the gamma, p, q, psi, all follow what we want
             # Be careful with calculations on just one token and on the whole sequence. Do I have the right implementation for which one needs to be on one incremental token
             # and which one needs to be the whole sequence?
-            print(f"smc iter: {t}")
-            print("--after resample--")
-            print(prompt_w_s_1_to_t)
+
+            # print(f"smc iter: {t}")
+            # print("--after resample--")
+            # print(prompt_w_s_1_to_t)
 
             # print("---RESAMPLING ENDED---")
 
@@ -1348,12 +1370,59 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
         # print(t)
         # print(prompt_w_sigma_sample_s_1_to_t[:, :t].shape)
 
+        # TODO May 17 do you need an exp on the log psi, in order to get the psi? Or should I remove it? Think about and derive which one makes sense.
         # Passing in the full sequence up to time step t is correct, because the evalute_log_psi_t only evaluates the very last logit
+        # l_dre += (jax.nn.log_sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist))) + \
+        #          jnp.log(1 - jax.nn.sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist))))).mean()
         l_dre += (jax.nn.log_sigmoid(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist)) + \
                  jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist)))).mean()
 
     l_dre /= (output_len - 1)
     return -l_dre # negative because now we have a loss
+
+
+def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
+    prompt_len = prompt.shape[-1]
+
+    rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_slow_version(sk1, prompt, cfg_p,
+                                                         params_p, cfg_twist,
+                                                         params_twist,
+                                                         final_twist,
+                                                         output_len, n_twist)
+    _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_slow_version(sk2, prompt, cfg_p,
+                                                         params_p, cfg_twist,
+                                                         params_twist,
+                                                         None,
+                                                         output_len - 1, n_twist, use_final_twist=False)
+
+    # print(prompt_w_sigma_sample_s_1_to_t.shape)
+    # print(prompt_w_twist_sample_s_1_to_t_minus_1.shape)
+    # for x in prompt_w_sigma_sample_s_1_to_t:
+    #     print(x)
+    # for x in prompt_w_twist_sample_s_1_to_t_minus_1:
+    #     print(x)
+
+    l_dre = 0.
+
+    for t in range(prompt_len + 1,
+                   prompt_len + 1 + output_len - 1):  # start with +1 so that you pass in the first generated token; s_{prompt_len + 1} is essentially s_1, the first generated token. end with -1 because the final step uses the true phi, so we aren't updating twist parameters for that
+
+        # Passing in the full sequence up to time step t is correct, because the evalute_log_psi_t only evaluates the very last logit
+        l_dre += (evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist)
+                  - evaluate_log_psi_t(prompt_w_twist_sample_s_1_to_t_minus_1[:, :t], cfg_twist, params_twist)).mean()
+
+        # print(f"----{t}----")
+        # print(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist))
+        # print(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist).shape)
+        #
+        # print(evaluate_log_psi_t(prompt_w_twist_sample_s_1_to_t_minus_1[:, :t], cfg_twist, params_twist))
+        # print(evaluate_log_psi_t(prompt_w_twist_sample_s_1_to_t_minus_1[:, :t], cfg_twist, params_twist).shape)
+
+    l_dre /= (output_len - 1)
+    return -l_dre  # negative because now we have a loss
+
+# Getldre roger use the same thing except smc_slow_version with use_final_twist=False
 
 
 jnp.set_printoptions(threshold=20, edgeitems=3, linewidth=2048, precision=3)
@@ -1371,6 +1440,116 @@ db = logger.debug
 
 def tree_axpy(a, x, y):
     return jax.tree_map(lambda x, y: a * x + y, x, y)
+
+
+def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, final_twist):
+    all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len - 1)
+
+    # all_seqs_to_T_minus_1 = get_all_seqs_up_to_output_len(
+    #     jnp_prompt[None, :], n_vocab, output_len - 1)
+    all_seqs_to_T_minus_1 = all_seqs_list[-1]
+    all_seqs_with_n_vocab_at_t = get_all_new_seqs_single_t(
+        all_seqs_to_T_minus_1, n_vocab)
+    # print(all_seqs_with_n_vocab_at_t.shape) # batch, n_vocab, output_len - 1 + prompt_len
+    # print(all_seqs_with_n_vocab_at_t)
+
+    opt_log_twist_list = []
+
+    opt_log_twist_array_list = []
+
+    for i in range(all_seqs_with_n_vocab_at_t.shape[0]):
+        eval_log_p = evaluate_log_p_theta_t(
+            all_seqs_with_n_vocab_at_t[i, :, :], cfg_p, params_p)
+        eval_log_psi = evaluate_log_psi_t_final(
+            all_seqs_with_n_vocab_at_t[i, :, :], final_twist)
+        # optimal_twist = (jnp.exp(eval_log_p + eval_log_psi)).sum()
+        optimal_log_twist = jax.nn.logsumexp(eval_log_p + eval_log_psi)
+        opt_log_twist_list.append(optimal_log_twist)
+
+    opt_log_twist_array = jnp.stack(opt_log_twist_list)
+    opt_log_twist_array_list.append(opt_log_twist_array)
+
+    print(opt_log_twist_array.shape)
+    print(opt_log_twist_array)
+
+    j = 2
+    while (j < output_len):
+
+        new_opt_log_twist_list = []
+
+        all_seqs_to_T_minus_j = all_seqs_list[-j]
+        # all_seqs_to_T_minus_j = get_all_seqs_up_to_output_len(
+        #     jnp_prompt[None, :], n_vocab, output_len - j)
+        all_seqs_with_n_vocab_at_t = get_all_new_seqs_single_t(
+            all_seqs_to_T_minus_j, n_vocab)
+        for i in range(all_seqs_with_n_vocab_at_t.shape[0]):
+            eval_log_p = evaluate_log_p_theta_t(
+                all_seqs_with_n_vocab_at_t[i, :, :], cfg_p, params_p)
+            # print(eval_log_p.shape)
+            # print(opt_log_twist_array[i * n_vocab():(i+1) * n_vocab()])
+            # print(opt_log_twist_array[i * n_vocab():(i+1) * n_vocab()].shape)
+            # optimal_twist = (jnp.exp(eval_log_p + opt_log_twist_array[i * n_vocab():(i+1) * n_vocab()])).sum()
+            optimal_log_twist = jax.nn.logsumexp(
+                eval_log_p + opt_log_twist_array[
+                             i * n_vocab:(i + 1) * n_vocab])
+            new_opt_log_twist_list.append(optimal_log_twist)
+        # Replace 2 with some variable in a loop, maybe t
+        # Anyway, just write it out a second time too
+        # So put this into a loop
+        # And then save the optimal_twist and optimal_log_twists in a list, or jnp.stack or jnp.concat them
+        # And then for each time step t, put that in another list
+        # Then you can use that for reference
+        # Then also need to test the model's twist, but that is easy - just pass in the all_seqs into evaluate_psi
+        # print(new_opt_log_twist_list)
+        new_opt_log_twist_array = jnp.stack(new_opt_log_twist_list)
+        # print(new_opt_log_twist_array)
+        # print(new_opt_log_twist_array.shape)
+        opt_log_twist_array_list.append(new_opt_log_twist_array)
+
+        opt_log_twist_array = new_opt_log_twist_array
+
+        # Remember again essentially what the optimal twists are doing are giving you marginals (using the final twist as the reference)
+
+        j += 1
+
+    return opt_log_twist_array_list
+
+def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist):
+    # Calculates on all possible sequences (not practical for large n_vocab or large output_len)
+    all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(
+        prompt, n_vocab, output_len - 1)
+
+    model_twist_array_list = []
+
+    for j in range(1, output_len):
+        all_seqs = all_seqs_list[-j]
+        model_twist = evaluate_log_psi_t(all_seqs, cfg_twist, params_twist)
+        model_twist_array_list.append(model_twist)
+
+    return model_twist_array_list
+
+def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
+                                     params_p, final_twist, cfg_twist, params_twist):
+    # FIRST generate optimal twists
+    # seqs_to_test_on = all_seqs # For longer time horizons can instead use some randomly sampled sequences s_{1:T} (No but this doesn't work since you need an exponential number of sums anyway??). For shorter time horizons, can literally test every sequence
+    opt_log_twist_array_list = calc_optimal_twists(prompt, n_vocab,
+                                                   output_len, cfg_p,
+                                                   params_p, final_twist)
+    print("OPTIMAL TWISTS")
+    print(opt_log_twist_array_list)
+
+    # NEXT generate all seqs, and compare the model twists on all 1:t for all t on all seqs.
+    model_twist_array_list = calc_model_twists(prompt, n_vocab, output_len,
+                                               cfg_twist, params_twist)
+    print("MODEL TWISTS")
+    print(model_twist_array_list)
+
+    print("DIFFS")
+    for i in range(len(opt_log_twist_array_list)):
+        diff_i = opt_log_twist_array_list[i] - model_twist_array_list[i]
+        print(diff_i)
+        print(diff_i - diff_i.mean())
+
 
 
 def main():
@@ -1405,10 +1584,12 @@ def main():
 
     output_len = Arg("output_len", 8, "Length of the strings we output")
 
-    n_smc_samples = Arg("n_smc_samples", 20)
+    n_smc_samples = Arg("n_smc_samples", 20, "Only used for testing SMC, not used elsewhere")
     n_twist = Arg("n_twist", 20)
 
     n_vocab = Arg("n_vocab", 2, "Num of tokens in vocab")
+
+    dre_type = Arg("dre_type", default="roger", doc="roger or sixo")
 
     # save = Arg("save", "", "Save mode.  Log run to wandb, lengthen epochs and batches")
 
@@ -1534,13 +1715,25 @@ def main():
 
 
 
+    # TODO MAY 17 DO THE ROGER DRE AND TEST IT TOO.
+
     smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6])
-    use_roger_dre = False
-    if use_roger_dre:
-        pass
-        # dre_grad_fn = jax.grad(get_l_dre_roger, argnums=[4, 5, 6])
-    else:
+    use_roger_dre = True
+    # use_roger_dre = False
+    if dre_type().lower() == "roger":
+        dre_grad_fn = jax.grad(get_l_dre_roger, argnums=5)
+    elif dre_type().lower() == "sixo":
         dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
+    else:
+        raise NotImplementedError
+
+    # Log a sample after each epoch
+    # prompt = [dataset.stoi[c] for c in "Au"]
+    # prompts = [[0], [0, 0], [0, 1], [1, 0], [1, 1], [0, 0, 0], [1, 1, 1], [1, 0, 1, 0], [0, 1, 0, 1, 0]]
+    prompts = [[0, 1, 0, 1]]
+    beta_temp = 1
+
+
 
 
     for epoch in range(epochs()):
@@ -1548,22 +1741,19 @@ def main():
         if (epoch + 1) % print_every() == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
 
-        # Log a sample after each epoch
-        # prompt = [dataset.stoi[c] for c in "Au"]
-        # prompts = [[0], [0, 0], [0, 1], [1, 0], [1, 1], [0, 0, 0], [1, 1, 1], [1, 0, 1, 0], [0, 1, 0, 1, 0]]
-        prompts = [[0, 1, 0, 1]]
+
+
 
         for prompt in prompts:
             prompt = jnp.array(prompt)
-
-            final_twist = neg_beta_times_batch_reward_model(len(prompt), beta=1.)
+            final_twist = neg_beta_times_batch_reward_model(len(prompt), beta=beta_temp)
 
             # with timer("sample"):
             # sampled = transformer_sample(
             #     cfg, params, jnp.array(prompt), length=20 + epoch
             # )
 
-            test_smc = True
+            test_smc = False
             if test_smc:
                 # _, samples = smc_slow_version(rnd_key, prompt, cfg_p, params_p, cfg_twist,
                 #                  params_twist, final_twist, output_len(), n_smc_samples())
@@ -1575,7 +1765,7 @@ def main():
                 #     print(sample[len(prompt):])
 
 
-                all_seqs = get_all_seqs_up_to_output_len(prompt[None, :], n_vocab(), output_len())
+                all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab(), output_len())
                 log_p_all_seqs = evaluate_log_p_theta_t(all_seqs, cfg_p, params_p)
                 log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
 
@@ -1644,8 +1834,18 @@ def main():
             # print(sampled[len(prompt) : ])
             # 1/0
 
-
-
+        test_learned_twist_vs_optimal = True
+        if test_learned_twist_vs_optimal and ((epoch + 1) % print_every() == 0):
+            print("---Comparing Twists---")
+            for prompt in prompts:
+                prompt = jnp.array(prompt)
+                final_twist = neg_beta_times_batch_reward_model(len(prompt),
+                                                                beta=beta_temp)
+                compare_learned_twist_vs_optimal(prompt, n_vocab(),
+                                                 output_len(), cfg_p,
+                                                 params_p, final_twist,
+                                                 cfg_twist,
+                                                 params_twist)
 
 
         # for twist_update in range(args.twist_updates_per_epoch):
