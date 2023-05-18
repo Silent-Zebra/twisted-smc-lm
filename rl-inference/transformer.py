@@ -919,7 +919,7 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
         analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
 
         samples = prompt_w_sigma_sample_s_1_to_t
-        samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
+        samples2 = prompt_w_p_sample_s_1_to_t
 
         index = 0
 
@@ -933,7 +933,7 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
             print(count / n_twist)
             count2 = 0
             for sample2 in samples2:
-                if (jnp.abs(seq[:-1] - sample2)).sum() == 0:
+                if (jnp.abs(seq - sample2)).sum() == 0:
                     count2 += 1
             print(count2 / n_twist)
             index += 1
