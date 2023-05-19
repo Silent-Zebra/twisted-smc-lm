@@ -906,6 +906,17 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist)
 
     if test_info:
+
+        _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_non_jit(sk2, prompt,
+                                                                cfg_p,
+                                                                params_p,
+                                                                cfg_twist,
+                                                                params_twist,
+                                                                None,
+                                                                output_len - 1,
+                                                                n_twist,
+                                                                use_final_twist=False)
+
         # TODO REMOVE LATER TESTING ONLY
         print("--TEST--")
 
@@ -919,7 +930,7 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
         analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
 
         samples = prompt_w_sigma_sample_s_1_to_t
-        samples2 = prompt_w_p_sample_s_1_to_t
+        samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
 
         index = 0
 
@@ -933,7 +944,7 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
             print(count / n_twist)
             count2 = 0
             for sample2 in samples2:
-                if (jnp.abs(seq - sample2)).sum() == 0:
+                if (jnp.abs(seq[:-1] - sample2)).sum() == 0:
                     count2 += 1
             print(count2 / n_twist)
             index += 1
@@ -1154,6 +1165,7 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
         diff_i = opt_log_twist_array_list[i] - model_twist_array_list[i]
         print(diff_i)
         print(diff_i - diff_i.mean())
+        print((jnp.abs(diff_i - diff_i.mean())).mean())
 
 
 def test_smc(rnd_key, prompt, n_vocab, output_len, n_smc_samples, cfg_p, params_p, cfg_twist, params_twist, final_twist):
@@ -1212,10 +1224,10 @@ def main():
     # n_layers_twist = Arg("layers_twist", 2, "Number of layers")
 
     heads_twist = Arg("heads_twist", 4, "Number of attention heads")
-    d_model_twist = Arg("dmodel_twist", 64, "Embedding dimension")
-    d_k_twist = Arg("dk_twist", 16, "Attention head dimension")
-    d_ff_twist = Arg("dff_twist", 64, "Feedforward layer dimension")
-    n_layers_twist = Arg("layers_twist", 2, "Number of layers")
+    d_model_twist = Arg("d_model_twist", 64, "Embedding dimension")
+    d_k_twist = Arg("d_k_twist", 16, "Attention head dimension")
+    d_ff_twist = Arg("d_ff_twist", 64, "Feedforward layer dimension")
+    n_layers_twist = Arg("n_layers_twist", 2, "Number of layers")
 
     output_len = Arg("output_len", 8, "Length of the strings we output")
 
