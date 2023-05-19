@@ -1205,10 +1205,16 @@ def main():
     # d_ff = Arg("dff", 512, "Feedforward layer dimension")
     # n_layers = Arg("layers", 3, "Number of layers")
 
-    heads_twist = Arg("heads_twist", 2, "Number of attention heads")
-    d_model_twist = Arg("dmodel_twist", 32, "Embedding dimension")
-    d_k_twist = Arg("dk_twist", 8, "Attention head dimension")
-    d_ff_twist = Arg("dff_twist", 32, "Feedforward layer dimension")
+    # heads_twist = Arg("heads_twist", 2, "Number of attention heads")
+    # d_model_twist = Arg("dmodel_twist", 32, "Embedding dimension")
+    # d_k_twist = Arg("dk_twist", 8, "Attention head dimension")
+    # d_ff_twist = Arg("dff_twist", 32, "Feedforward layer dimension")
+    # n_layers_twist = Arg("layers_twist", 2, "Number of layers")
+
+    heads_twist = Arg("heads_twist", 4, "Number of attention heads")
+    d_model_twist = Arg("dmodel_twist", 64, "Embedding dimension")
+    d_k_twist = Arg("dk_twist", 16, "Attention head dimension")
+    d_ff_twist = Arg("dff_twist", 64, "Feedforward layer dimension")
     n_layers_twist = Arg("layers_twist", 2, "Number of layers")
 
     output_len = Arg("output_len", 8, "Length of the strings we output")
