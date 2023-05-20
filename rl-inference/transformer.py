@@ -960,10 +960,10 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
 
         # TODO May 17 do you need an exp on the log psi, in order to get the psi? Or should I remove it? Think about and derive which one makes sense.
         # Passing in the full sequence up to time step t is correct, because the evalute_log_psi_t only evaluates the very last logit
-        # l_dre += (jax.nn.log_sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist))) + \
-        #          jnp.log(1 - jax.nn.sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist))))).mean()
-        l_dre += (jax.nn.log_sigmoid(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist)) + \
-                 jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist)))).mean()
+        l_dre += (jax.nn.log_sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist))) + \
+                 jnp.log(1 - jax.nn.sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist))))).mean()
+        # l_dre += (jax.nn.log_sigmoid(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist)) + \
+        #          jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist)))).mean()
 
     l_dre /= (output_len - 1)
     return -l_dre # negative because now we have a loss
@@ -1238,6 +1238,11 @@ def main():
 
     dre_type = Arg("dre_type", default="roger", doc="roger or sixo")
     sgd = Arg("sgd", False, "Pure sgd")
+
+    # TODO MAY 19 IF STILL NOT WORKING AS DESIRED, DO SUPERVISED LEARNING WITH MSE ON THE OPTIMAL TWISTS WITH THE TRANSFORMER
+    # JUST TO MAKE SURE IT IS POSSIBLE FOR THE MODEL TO LEARN/REPRESENT THE OPTIMAL TWISTS
+    # SYSTEMATICALLY RULE THINGS OUT ONE AT A TIME, NOT RANDOMLY.
+    # IF YOU HAVE A HYPOTHESIS OF WHAT MIGHT BE GOING WRONG, DESIGN EXPERIMENTS THAT LET YOU RULE THINGS OUT/TEST THAT DIRECTLY
 
 
     start = time.time()
