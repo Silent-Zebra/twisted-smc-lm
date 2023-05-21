@@ -960,10 +960,10 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
 
         # TODO May 17 do you need an exp on the log psi, in order to get the psi? Or should I remove it? Think about and derive which one makes sense.
         # Passing in the full sequence up to time step t is correct, because the evalute_log_psi_t only evaluates the very last logit
-        l_dre += (jax.nn.log_sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist))) + \
-                 jnp.log(1 - jax.nn.sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist))))).mean()
-        # l_dre += (jax.nn.log_sigmoid(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist)) + \
-        #          jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist)))).mean()
+        # l_dre += (jax.nn.log_sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist))) + \
+        #          jnp.log(1 - jax.nn.sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist))))).mean()
+        l_dre += (jax.nn.log_sigmoid(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist)) + \
+                 jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist)))).mean()
 
     l_dre /= (output_len - 1)
     return -l_dre # negative because now we have a loss
@@ -984,12 +984,6 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
                                                          None,
                                                          output_len - 1, n_twist, use_final_twist=False)
 
-    # print(prompt_w_sigma_sample_s_1_to_t.shape)
-    # print(prompt_w_twist_sample_s_1_to_t_minus_1.shape)
-    # for x in prompt_w_sigma_sample_s_1_to_t:
-    #     print(x)
-    # for x in prompt_w_twist_sample_s_1_to_t_minus_1:
-    #     print(x)
 
     if test_info:
         # TODO REMOVE LATER TESTING ONLY
@@ -1038,15 +1032,6 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
         l_dre += (evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist)
                   - evaluate_log_psi_t(prompt_w_twist_sample_s_1_to_t_minus_1[:, :t], cfg_twist, params_twist)).mean()
 
-        # print(f"----{t}----")
-        # print(prompt_w_sigma_sample_s_1_to_t[:, :t])
-        # print(prompt_w_sigma_sample_s_1_to_t[:, :t].shape)
-        # print(prompt_w_twist_sample_s_1_to_t_minus_1[:, :t])
-        # print(prompt_w_twist_sample_s_1_to_t_minus_1[:, :t].shape)
-        # print(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist))
-        # print(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist).shape)
-        # print(evaluate_log_psi_t(prompt_w_twist_sample_s_1_to_t_minus_1[:, :t], cfg_twist, params_twist))
-        # print(evaluate_log_psi_t(prompt_w_twist_sample_s_1_to_t_minus_1[:, :t], cfg_twist, params_twist).shape)
 
     l_dre /= (output_len - 1)
     return -l_dre  # negative because now we have a loss
