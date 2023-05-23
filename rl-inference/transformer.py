@@ -774,10 +774,11 @@ def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(seq, cfg_p, params_
     return evaluate_log_p_theta_t(seq, cfg_p, params_p) + evaluate_log_psi_t_final(seq, final_twist)
 
 def evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len):
+    # Evaluate log p_theta(s_{1:t}) (given the prompt)
     log_p = 0.
     for t in range(output_len):
         # print(seq[:, :prompt_len + t + 1].shape)
-        log_p += evaluate_log_p_theta_t(seq[:, :prompt_len + t], cfg_p, params_p)
+        log_p += evaluate_log_p_theta_t(seq[:, :prompt_len + t + 1], cfg_p, params_p)
     return log_p
 
 
@@ -947,7 +948,6 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
         log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
 
 
-        print(all_seqs)
 
         analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
 
@@ -980,7 +980,7 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
 
     for t in range(prompt_len + 1, prompt_len + 1 + output_len - 1): # start with +1 so that you pass in the first generated token; s_{prompt_len + 1} is essentially s_1, the first generated token. end with -1 because the final step uses the true phi, so we aren't updating twist parameters for that
 
-        # TODO May 17 do you need an exp on the log psi, in order to get the psi? Or should I remove it? Think about and derive which one makes sense.
+        # Having the log on psi makes sense: as training psi = log density ratio, so then training log psi = log density ratio gets psi = density ratio
         # Passing in the full sequence up to time step t is correct, because the evalute_log_psi_t only evaluates the very last logit
         # l_dre += (jax.nn.log_sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist))) + \
         #          jnp.log(1 - jax.nn.sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist))))).mean()
@@ -1000,14 +1000,19 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
                                                          params_twist,
                                                          final_twist,
                                                          output_len, n_twist)
-    _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_non_jit(sk2, prompt, cfg_p,
-                                                         params_p, cfg_twist,
-                                                         params_twist,
-                                                         None,
-                                                         output_len - 1, n_twist, use_final_twist=False)
 
 
     if test_info:
+        _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_non_jit(sk2, prompt,
+                                                                cfg_p,
+                                                                params_p,
+                                                                cfg_twist,
+                                                                params_twist,
+                                                                None,
+                                                                output_len - 1,
+                                                                n_twist,
+                                                                use_final_twist=False)
+
         # TODO REMOVE LATER TESTING ONLY
         print("--TEST--")
 
@@ -1016,12 +1021,14 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
         log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p, prompt_len, output_len)
         log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
 
+        analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
+
+        # print("---")
         # print(all_seqs)
         # print(log_p_all_seqs)
-        # print(jnp.exp(log_p_all_seqs))
-
-
-        analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
+        # print(log_psi_all_seqs)
+        # print(log_p_all_seqs + log_psi_all_seqs)
+        # print(analytic_sigma_vals)
 
         samples = prompt_w_sigma_sample_s_1_to_t
         samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
@@ -1053,9 +1060,15 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
     for t in range(prompt_len + 1,
                    prompt_len + 1 + output_len - 1):  # start with +1 so that you pass in the first generated token; s_{prompt_len + 1} is essentially s_1, the first generated token. end with -1 because the final step uses the true phi, so we aren't updating twist parameters for that
 
+        rnd_key, sk = jax.random.split(rnd_key)
+        # TODO May 22 should replace with a sequential SMC scheme: one t at a time, to avoid repetition here
+        _, prompt_w_twist_sample_s_1_to_t = smc_non_jit(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, None,
+                                                        t - prompt_len,
+                                                        n_twist, use_final_twist=False)
+
         # Passing in the full sequence up to time step t is correct, because the evalute_log_psi_t only evaluates the very last logit
         l_dre += (evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist)
-                  - evaluate_log_psi_t(prompt_w_twist_sample_s_1_to_t_minus_1[:, :t], cfg_twist, params_twist)).mean()
+                  - evaluate_log_psi_t(prompt_w_twist_sample_s_1_to_t, cfg_twist, params_twist)).mean()
 
 
     l_dre /= (output_len - 1)
@@ -1288,6 +1301,8 @@ def main():
     dre_type = Arg("dre_type", default="roger", doc="roger or sixo")
     sgd = Arg("sgd", False, "Pure sgd")
 
+    seed = Arg("seed", 42)
+
     # TODO MAY 19 IF STILL NOT WORKING AS DESIRED, DO SUPERVISED LEARNING WITH MSE ON THE OPTIMAL TWISTS WITH THE TRANSFORMER
     # JUST TO MAKE SURE IT IS POSSIBLE FOR THE MODEL TO LEARN/REPRESENT THE OPTIMAL TWISTS
     # SYSTEMATICALLY RULE THINGS OUT ONE AT A TIME, NOT RANDOMLY.
@@ -1297,7 +1312,7 @@ def main():
     start = time.time()
 
     # Create PRNG key
-    rnd_key = jax.random.PRNGKey(42)
+    rnd_key = jax.random.PRNGKey(seed())
 
 
     rnd_key, cfg_p, params_p = transformer_init(
