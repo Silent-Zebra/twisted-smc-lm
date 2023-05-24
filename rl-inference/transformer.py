@@ -160,6 +160,7 @@ class ExperimentConfig:
         self.dre_type = dre_type.lower()
         assert self.dre_type in ["roger", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
         self.dre_grad_fn = self._get_dre_grad_fn()
+        self.rl_loss_fn = jax.grad(get_rl_loss, argnums=3)
 
     def _get_dre_grad_fn(self):
         if self.dre_type == "roger":
@@ -188,6 +189,13 @@ class ExperimentConfig:
                                             n_twist)
         return grad_params_twist
 
+    def get_grad_params_p(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                         final_twist, output_len, n_twist, prompt_len,
+                         baseline):
+        grad_params_p = self.rl_loss_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                         final_twist, output_len, n_twist, prompt_len,
+                         baseline)
+        return grad_params_p
 
 class Arg:
     """
@@ -975,7 +983,7 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
     return -l_dre # negative because now we have a loss
 
 
-def print_samples_using_twists_up_to_t_minus_1(rnd_key, prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist, n_twist):
+def print_samples_using_twists(rnd_key, prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist, n_twist):
     print("--TEST--")
 
     rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
@@ -1060,7 +1068,28 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
     l_dre /= (output_len - 1)
     return -l_dre  # negative because now we have a loss
 
-# Getldre roger use the same thing except smc_non_jit with use_final_twist=False
+
+def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist, prompt_len, baseline):
+    _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk, prompt,
+                                                    cfg_p, params_p,
+                                                    cfg_twist,
+                                                    params_twist,
+                                                    final_twist,
+                                                    output_len,
+                                                    n_twist)
+
+    r_seqs = evaluate_log_psi_t_final(prompt_w_sigma_sample_s_1_to_t,
+                                      final_twist)
+    log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
+        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
+        output_len)
+    print(r_seqs.shape)
+    print(log_p_theta_full_seq.shape)
+    first_term = ((r_seqs - baseline) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
+    second_term = log_p_theta_full_seq.mean() * (r_seqs - baseline).mean()
+    objective = first_term - second_term
+    loss = -objective
+    return loss
 
 
 jnp.set_printoptions(threshold=20, edgeitems=3, linewidth=2048, precision=3)
@@ -1472,6 +1501,9 @@ def main():
 
     seed = Arg("seed", 42)
 
+    twist_updates_per_epoch = Arg("twist_updates_per_epoch", 100)
+    model_updates_per_epoch = Arg("model_updates_per_epoch", 100)
+
     experiment_cfg = ExperimentConfig(dre_type())
 
     start = time.time()
@@ -1564,46 +1596,60 @@ def main():
                 1/0
 
 
-            # TODO May 15
-            # TODO COMPARE ANALYTIC FOR BOTH THE SMC SAMPLES (CHECK DIST OF SAMPLES MATCHES AN ANALYTIC CALCULATED DIST WITH LARGE N) - DONE - AND COMPARE THE LEARNED TWIST TOO - IN PROGRESS.
-            # ALSO DO ROGER DRE UPDATE AND COMPARE VS THE SIXO ONE IN THIS SETTING TOO.
-            # After that, go for a longer time horizon, and calculate a DP analytic solution for the twists, and compare vs that too.
+            for twist_update in range(twist_updates_per_epoch()):
 
-            rnd_key, sk = jax.random.split(rnd_key)
+                rnd_key, sk = jax.random.split(rnd_key)
 
-            grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, n_vocab(), n_twist(), output_len(), cfg_p, params_p, cfg_twist, params_twist, final_twist)
+                grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, n_vocab(), n_twist(), output_len(), cfg_p, params_p, cfg_twist, params_twist, final_twist)
 
-            # if dre_type().lower() == "analytic_mse_rel" or dre_type().lower() == "analytic_mse_abs":
-            #     grad_params_twist = dre_grad_fn(prompt, n_vocab(), output_len(), cfg_p,
-            #                          params_p, final_twist, cfg_twist, params_twist)
-            # else:
-            #     grad_params_twist = dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len(), n_twist())
+                # if dre_type().lower() == "analytic_mse_rel" or dre_type().lower() == "analytic_mse_abs":
+                #     grad_params_twist = dre_grad_fn(prompt, n_vocab(), output_len(), cfg_p,
+                #                          params_p, final_twist, cfg_twist, params_twist)
+                # else:
+                #     grad_params_twist = dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len(), n_twist())
 
-            if sgd():
-                params_twist = tree_axpy(-lr(), grad_params_twist, params_twist)
-            else:
-                params_twist = optimizer_twist.step(params_twist, grad_params_twist)
+                if sgd():
+                    params_twist = tree_axpy(-lr(), grad_params_twist, params_twist)
+                else:
+                    params_twist = optimizer_twist.step(params_twist, grad_params_twist)
+
+            baseline = 0. # TODO May 24: make this a learned parameter
+            # ALSO TODO: WRITE TESTS FOR THE POLICY LEARNING CODE.
+            for model_update in range(model_updates_per_epoch()):
+                rnd_key, sk = jax.random.split(rnd_key)
+
+                grad_params_p = experiment_cfg.get_grad_params_p(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                         final_twist, output_len(), n_twist(), prompt_len, baseline)
+
+                if sgd():
+                    params_p = tree_axpy(-lr(), grad_params_p, params_p)
+                else:
+                    params_p = optimizer_p.step(params_p, grad_params_p)
+
+
+
 
             # print("----pt----")
             # print(params_twist)
             # TEST ONLY
 
+            # We should also be seeing this distribution change, with model updates (even without twist updates)
             test_info = True
             if (epoch + 1) % print_every() == 0:
                 if test_info:
                     rnd_key, sk = jax.random.split(rnd_key)
 
-                    print_samples_using_twists_up_to_t_minus_1(sk,
-                                                              prompt,
-                                                              prompt_len,
-                                                              n_vocab(),
-                                                              output_len(),
-                                                              cfg_p,
-                                                              params_p,
-                                                              cfg_twist,
-                                                              params_twist,
-                                                              final_twist,
-                                                              n_twist())
+                    print_samples_using_twists(sk,
+                                               prompt,
+                                               prompt_len,
+                                               n_vocab(),
+                                               output_len(),
+                                               cfg_p,
+                                               params_p,
+                                               cfg_twist,
+                                               params_twist,
+                                               final_twist,
+                                               n_twist())
 
             # TODO: later also do the updates to the model (after learning twists)
 
