@@ -155,6 +155,40 @@ class Adam:
         return AdamState(m, v)
 
 
+class ExperimentConfig:
+    def __init__(self, dre_type, ):
+        self.dre_type = dre_type.lower()
+        assert self.dre_type in ["roger", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
+        self.dre_grad_fn = self._get_dre_grad_fn()
+
+    def _get_dre_grad_fn(self):
+        if self.dre_type == "roger":
+            dre_grad_fn = jax.grad(get_l_dre_roger, argnums=5)
+        elif self.dre_type == "sixo":
+            dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
+        elif self.dre_type == "analytic_mse_rel":
+            dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
+                                   argnums=7)
+        elif self.dre_type == "analytic_mse_abs":
+            dre_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal,
+                                   argnums=7)
+        else:
+            raise NotImplementedError
+        return dre_grad_fn
+
+    def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
+                              params_p, cfg_twist, params_twist, final_twist):
+        if self.dre_type == "analytic_mse_rel" or self.dre_type == "analytic_mse_abs":
+            grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
+                                            params_p, final_twist, cfg_twist,
+                                            params_twist)
+        else:
+            grad_params_twist = self.dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist,
+                                            params_twist, final_twist, output_len,
+                                            n_twist)
+        return grad_params_twist
+
+
 class Arg:
     """
     Convenient 'distributed' interface to argparse.
@@ -919,62 +953,12 @@ def smc_wrapper(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final
     return log_z_hat
 
 
-def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist, test_info=False):
+def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
     prompt_len = prompt.shape[-1]
 
     rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
     _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist)
-
-    if test_info:
-
-        _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_non_jit(sk2, prompt,
-                                                                cfg_p,
-                                                                params_p,
-                                                                cfg_twist,
-                                                                params_twist,
-                                                                None,
-                                                                output_len - 1,
-                                                                n_twist,
-                                                                use_final_twist=False)
-
-        # TODO REMOVE LATER TESTING ONLY
-        print("--TEST--")
-
-
-        n_vocab = 2
-        all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
-        log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p, prompt_len, output_len)
-        log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
-
-
-
-        analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
-
-        samples = prompt_w_sigma_sample_s_1_to_t
-        samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
-
-        index = 0
-
-        for seq in all_seqs:
-            print(seq)
-            print(analytic_sigma_vals[index])
-            count = 0
-            for sample in samples:
-                if (jnp.abs(seq - sample)).sum() == 0:
-                    count += 1
-            print(count / n_twist)
-            count2 = 0
-            for sample2 in samples2:
-                if (jnp.abs(seq[:-1] - sample2)).sum() == 0:
-                    count2 += 1
-            print(count2 / n_twist)
-            index += 1
-
-
-
-        print("--END TEST--")
-
 
     l_dre = 0.
 
@@ -991,7 +975,63 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
     return -l_dre # negative because now we have a loss
 
 
-def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist, test_info=False):
+def test_samples_using_twists_up_to_t_minus_1(rnd_key, prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist, n_twist):
+    print("--TEST--")
+
+    rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
+
+    _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
+
+    _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_non_jit(sk2, prompt,
+                                                            cfg_p,
+                                                            params_p,
+                                                            cfg_twist,
+                                                            params_twist,
+                                                            None,
+                                                            output_len - 1,
+                                                            n_twist,
+                                                            use_final_twist=False)
+
+    # n_vocab = 2
+    all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
+    log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
+                                                 prompt_len, output_len)
+    log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
+
+    analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
+
+    # print("---")
+    # print(all_seqs)
+    # print(log_p_all_seqs)
+    # print(log_psi_all_seqs)
+    # print(log_p_all_seqs + log_psi_all_seqs)
+    # print(analytic_sigma_vals)
+
+    samples = prompt_w_sigma_sample_s_1_to_t
+    samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
+
+    index = 0
+
+    for seq in all_seqs:
+        print(seq)
+        print(analytic_sigma_vals[index])
+        count = 0
+        for sample in samples:
+            if (jnp.abs(seq - sample)).sum() == 0:
+                count += 1
+        print(count / n_twist)
+        count2 = 0
+        for sample2 in samples2:
+            if (jnp.abs(seq[:-1] - sample2)).sum() == 0:
+                count2 += 1
+        print(count2 / n_twist)
+        index += 1
+
+    print("--END TEST--")
+
+
+
+def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
     prompt_len = prompt.shape[-1]
 
     rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
@@ -1000,60 +1040,6 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
                                                          params_twist,
                                                          final_twist,
                                                          output_len, n_twist)
-
-
-    if test_info:
-        _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_non_jit(sk2, prompt,
-                                                                cfg_p,
-                                                                params_p,
-                                                                cfg_twist,
-                                                                params_twist,
-                                                                None,
-                                                                output_len - 1,
-                                                                n_twist,
-                                                                use_final_twist=False)
-
-        # TODO REMOVE LATER TESTING ONLY
-        print("--TEST--")
-
-        n_vocab = 2
-        all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
-        log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p, prompt_len, output_len)
-        log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
-
-        analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
-
-        # print("---")
-        # print(all_seqs)
-        # print(log_p_all_seqs)
-        # print(log_psi_all_seqs)
-        # print(log_p_all_seqs + log_psi_all_seqs)
-        # print(analytic_sigma_vals)
-
-        samples = prompt_w_sigma_sample_s_1_to_t
-        samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
-
-        index = 0
-
-        for seq in all_seqs:
-            print(seq)
-            print(analytic_sigma_vals[index])
-            count = 0
-            for sample in samples:
-                if (jnp.abs(seq - sample)).sum() == 0:
-                    count += 1
-            print(count / n_twist)
-            count2 = 0
-            for sample2 in samples2:
-                if (jnp.abs(seq[:-1] - sample2)).sum() == 0:
-                    count2 += 1
-            print(count2 / n_twist)
-            index += 1
-
-
-
-        print("--END TEST--")
-
 
     l_dre = 0.
 
@@ -1303,6 +1289,8 @@ def main():
 
     seed = Arg("seed", 42)
 
+    experiment_cfg = ExperimentConfig(dre_type())
+
     # TODO MAY 19 IF STILL NOT WORKING AS DESIRED, DO SUPERVISED LEARNING WITH MSE ON THE OPTIMAL TWISTS WITH THE TRANSFORMER
     # JUST TO MAKE SURE IT IS POSSIBLE FOR THE MODEL TO LEARN/REPRESENT THE OPTIMAL TWISTS
     # SYSTEMATICALLY RULE THINGS OUT ONE AT A TIME, NOT RANDOMLY.
@@ -1359,21 +1347,17 @@ def main():
     optimizer_twist = Adam(params_twist, lr=lr(), betas=(beta1(), beta2()))
 
 
-    # TODO MAY 17 DO THE ROGER DRE AND TEST IT TOO.
-
-    smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6])
-    use_roger_dre = True
-    # use_roger_dre = False
-    if dre_type().lower() == "roger":
-        dre_grad_fn = jax.grad(get_l_dre_roger, argnums=5)
-    elif dre_type().lower() == "sixo":
-        dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
-    elif dre_type().lower() == "analytic_mse_rel":
-        dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal, argnums=7)
-    elif dre_type().lower() == "analytic_mse_abs":
-        dre_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal, argnums=7)
-    else:
-        raise NotImplementedError
+    # smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6])
+    # if dre_type().lower() == "roger":
+    #     dre_grad_fn = jax.grad(get_l_dre_roger, argnums=5)
+    # elif dre_type().lower() == "sixo":
+    #     dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
+    # elif dre_type().lower() == "analytic_mse_rel":
+    #     dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal, argnums=7)
+    # elif dre_type().lower() == "analytic_mse_abs":
+    #     dre_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal, argnums=7)
+    # else:
+    #     raise NotImplementedError
 
     # Log a sample after each epoch
     # prompts = [[0], [0, 0], [0, 1], [1, 0], [1, 1], [0, 0, 0], [1, 1, 1], [1, 0, 1, 0], [0, 1, 0, 1, 0]]
@@ -1388,6 +1372,7 @@ def main():
 
         for prompt in prompts:
             prompt = jnp.array(prompt)
+            prompt_len = prompt.shape[-1]
             final_twist = neg_beta_times_batch_reward_model(len(prompt), beta=beta_temp)
 
             # with timer("sample"):
@@ -1397,33 +1382,8 @@ def main():
 
             test_smc = False
             if test_smc:
-
                 test_smc(rnd_key, prompt, n_vocab(), output_len(), n_smc_samples(),
                          cfg_p, params_p, cfg_twist, params_twist, final_twist)
-
-                # all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab(), output_len())
-                # log_p_all_seqs = evaluate_log_p_theta_t(all_seqs, cfg_p, params_p)
-                # log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
-                #
-                # print(all_seqs)
-                #
-                # analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
-                #
-                # _, samples = smc_non_jit(rnd_key, prompt, cfg_p, params_p,
-                #                               cfg_twist, params_twist, final_twist, output_len(), n_smc_samples())
-                #
-                # index = 0
-                #
-                # for seq in all_seqs:
-                #     print(seq)
-                #     print(analytic_sigma_vals[index])
-                #     count = 0
-                #     for sample in samples:
-                #         if (jnp.abs(seq - sample)).sum() == 0:
-                #             count += 1
-                #     print(count / n_smc_samples())
-                #     index += 1
-
                 1/0
 
 
@@ -1434,11 +1394,13 @@ def main():
 
             rnd_key, sk = jax.random.split(rnd_key)
 
-            if dre_type().lower() == "analytic_mse_rel" or dre_type().lower() == "analytic_mse_abs":
-                grad_params_twist = dre_grad_fn(prompt, n_vocab(), output_len(), cfg_p,
-                                     params_p, final_twist, cfg_twist, params_twist)
-            else:
-                grad_params_twist = dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len(), n_twist())
+            grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, n_vocab(), n_twist(), output_len(), cfg_p, params_p, cfg_twist, params_twist, final_twist)
+
+            # if dre_type().lower() == "analytic_mse_rel" or dre_type().lower() == "analytic_mse_abs":
+            #     grad_params_twist = dre_grad_fn(prompt, n_vocab(), output_len(), cfg_p,
+            #                          params_p, final_twist, cfg_twist, params_twist)
+            # else:
+            #     grad_params_twist = dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len(), n_twist())
 
             if sgd():
                 params_twist = tree_axpy(-lr(), grad_params_twist, params_twist)
@@ -1449,39 +1411,22 @@ def main():
             # print(params_twist)
             # TEST ONLY
 
-            test_smc = False
             test_info = True
             if (epoch + 1) % print_every() == 0:
-                if test_smc:
-                    _, samples = smc_non_jit(rnd_key, prompt, cfg_p, params_p,
-                                                  cfg_twist,
-                                                  params_twist, final_twist,
-                                                  output_len(), n_smc_samples())
-                    print("--from sigma smc samples--")
-                    for sample in samples:
-                        # print(sample)
-                        print(sample[len(prompt):])
-
                 if test_info:
                     rnd_key, sk = jax.random.split(rnd_key)
-                    if dre_type().lower() == "roger":
-                        l_dre = get_l_dre_roger(sk, prompt, cfg_p, params_p,
-                                                        cfg_twist, params_twist,
-                                                        final_twist, output_len(),
-                                                        n_twist(), test_info=True)
-                    elif dre_type().lower() == "sixo":
-                        l_dre = get_l_dre_sixo(sk, prompt, cfg_p, params_p,
-                                                cfg_twist, params_twist,
-                                                final_twist, output_len(),
-                                                n_twist(), test_info=True)
-                        print(l_dre)
-                    else:
-                        # Use as a default for testing right now
-                        l_dre = get_l_dre_roger(sk, prompt, cfg_p, params_p,
-                                                cfg_twist, params_twist,
-                                                final_twist, output_len(),
-                                                n_twist(), test_info=True)
-                    print(l_dre)
+
+                    test_samples_using_twists_up_to_t_minus_1(sk,
+                                                              prompt,
+                                                              prompt_len,
+                                                              n_vocab(),
+                                                              output_len(),
+                                                              cfg_p,
+                                                              params_p,
+                                                              cfg_twist,
+                                                              params_twist,
+                                                              final_twist,
+                                                              n_twist())
 
             # TODO: later also do the updates to the model (after learning twists)
 
