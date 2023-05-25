@@ -160,7 +160,7 @@ class ExperimentConfig:
         self.dre_type = dre_type.lower()
         assert self.dre_type in ["roger", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
         self.dre_grad_fn = self._get_dre_grad_fn()
-        self.rl_loss_fn = jax.grad(get_rl_loss, argnums=3)
+        self.rl_loss_fn = jax.grad(get_rl_loss, argnums=3, has_aux=True)
 
     def _get_dre_grad_fn(self):
         if self.dre_type == "roger":
@@ -189,13 +189,13 @@ class ExperimentConfig:
                                             n_twist)
         return grad_params_twist
 
-    def get_grad_params_p(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    def get_grad_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
                          final_twist, rew_model, output_len, n_twist, prompt_len,
                          baseline):
-        grad_params_p = self.rl_loss_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        grad_params_p, grad_baseline = self.rl_loss_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
                          final_twist, rew_model, output_len, n_twist, prompt_len,
                          baseline)
-        return grad_params_p
+        return grad_params_p, grad_baseline
 
 class Arg:
     """
@@ -1082,13 +1082,17 @@ def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twis
     log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
         prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
         output_len)
-    print(r_seqs.shape)
-    print(log_p_theta_full_seq.shape)
+
     first_term = ((r_seqs - baseline) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
     second_term = log_p_theta_full_seq.mean() * (r_seqs - baseline).mean()
     objective = first_term - second_term
     loss = -objective
-    return loss
+
+    # Baseline term; use empirical mean of r_seqs drawn from sigma, to approximate E_sigma[r(s)]
+    # Then MSE loss: (baseline - r_seqs.mean()) ^ 2; take derivative w.r.t. baseline to get (baseline - r_seqs.mean())
+    # This is just simple GD now, but that's fine since this is literally a scalar. Adam, etc. would be overkill.
+    baseline_grad = (baseline - r_seqs.mean())
+    return loss, baseline_grad
 
 
 jnp.set_printoptions(threshold=20, edgeitems=3, linewidth=2048, precision=3)
@@ -1458,6 +1462,8 @@ class TestClass:
 def main():
 
     lr = Arg(flag="lr", doc="Learning rate", default=0.001)
+    lr_baseline = Arg(flag="lr_baseline", doc="Learning rate for the scalar baseline", default=0.1)
+
     beta1 = Arg(flag="beta1", doc="Adam beta1", default=0.9)
     beta2 = Arg(flag="beta2", doc="Adam beta2", default=0.99)
     epochs = Arg("epochs", 100)
@@ -1572,6 +1578,8 @@ def main():
     prompts = [[0, 1, 0, 1]]
     beta_temp = 1
 
+    baseline = 0.
+
     for epoch in range(epochs()):
 
         if (epoch + 1) % print_every() == 0:
@@ -1613,12 +1621,12 @@ def main():
                 else:
                     params_twist = optimizer_twist.step(params_twist, grad_params_twist)
 
-            baseline = 0. # TODO May 24: make this a learned parameter
-            # ALSO TODO: WRITE TESTS FOR THE POLICY LEARNING CODE.
+            # ALSO TODO: WRITE TESTS FOR THE POLICY LEARNING CODE. And a very simple test for baseline (for a fixed policy, e.g. 0 lr on policy, using SMC for samples, test that baseline learns optimal... but this happens by definition in my code no?)
+            # Also TODO: KL div, and test that too.
             for model_update in range(model_updates_per_epoch()):
                 rnd_key, sk = jax.random.split(rnd_key)
 
-                grad_params_p = experiment_cfg.get_grad_params_p(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                grad_params_p, grad_baseline = experiment_cfg.get_grad_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
                          final_twist, rew_model, output_len(), n_twist(), prompt_len, baseline)
 
                 if sgd():
@@ -1626,6 +1634,9 @@ def main():
                 else:
                     params_p = optimizer_p.step(params_p, grad_params_p)
 
+                # Baseline update (just simple GD)
+                baseline -= lr_baseline() * grad_baseline
+                print(f"--Baseline value: {baseline:.3f}--")
 
 
 
