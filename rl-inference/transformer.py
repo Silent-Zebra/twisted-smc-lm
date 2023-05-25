@@ -190,10 +190,10 @@ class ExperimentConfig:
         return grad_params_twist
 
     def get_grad_params_p(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                         final_twist, output_len, n_twist, prompt_len,
+                         final_twist, rew_model, output_len, n_twist, prompt_len,
                          baseline):
         grad_params_p = self.rl_loss_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                         final_twist, output_len, n_twist, prompt_len,
+                         final_twist, rew_model, output_len, n_twist, prompt_len,
                          baseline)
         return grad_params_p
 
@@ -610,7 +610,6 @@ def stochastic_transformer_sample(rnd_key, cfg, params, seq: jnp.ndarray, length
 def batch_transformer(cfg_p, params_p, seq):
     batch_transformer_func = vmap(transformer, in_axes=(None, None, 0), out_axes=0)
     return batch_transformer_func(cfg_p, params_p, seq)
-
 
 def neg_beta_times_batch_reward_model(prompt_len, beta, reward_model_fn):
     def curried_batch_rm(seq):
@@ -1069,7 +1068,7 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
     return -l_dre  # negative because now we have a loss
 
 
-def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist, prompt_len, baseline):
+def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, rew_model, output_len, n_twist, prompt_len, baseline):
     _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist,
@@ -1078,8 +1077,9 @@ def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twis
                                                     output_len,
                                                     n_twist)
 
-    r_seqs = evaluate_log_psi_t_final(prompt_w_sigma_sample_s_1_to_t,
-                                      final_twist)
+    # r_seqs = evaluate_log_psi_t_final(prompt_w_sigma_sample_s_1_to_t,
+    #                                   rew_model)
+    r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t)
     log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
         prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
         output_len)
@@ -1582,7 +1582,8 @@ def main():
         for prompt in prompts:
             prompt = jnp.array(prompt)
             prompt_len = prompt.shape[-1]
-            final_twist = neg_beta_times_batch_reward_model(len(prompt), beta=beta_temp, reward_model_fn=reward_model_varied)
+            final_twist = neg_beta_times_batch_reward_model(prompt_len, beta=beta_temp, reward_model_fn=reward_model_varied)
+            rew_model = batch_reward_model(prompt_len, reward_model_fn=reward_model_varied)
 
             # with timer("sample"):
             # sampled = transformer_sample(
@@ -1619,7 +1620,7 @@ def main():
                 rnd_key, sk = jax.random.split(rnd_key)
 
                 grad_params_p = experiment_cfg.get_grad_params_p(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                         final_twist, output_len(), n_twist(), prompt_len, baseline)
+                         final_twist, rew_model, output_len(), n_twist(), prompt_len, baseline)
 
                 if sgd():
                     params_p = tree_axpy(-lr(), grad_params_p, params_p)
