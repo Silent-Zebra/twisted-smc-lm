@@ -13,6 +13,8 @@ import time
 import os
 import logging
 
+import copy
+
 from jax.config import config
 
 import json
@@ -35,6 +37,13 @@ import numpy as np
 import jax
 import sys
 import re
+
+
+@jit
+def kl_div_jax(log_p_target, log_p_curr):
+    # Since final axis is n_vocab, then summing over that axis is correct. Then we'll take a mean over time steps and batch size
+    kl_div = (jnp.exp(log_p_target) * (log_p_target - log_p_curr)).sum(axis=-1).mean()
+    return kl_div
 
 
 class AdamState(NamedTuple):
@@ -191,10 +200,10 @@ class ExperimentConfig:
 
     def get_grad_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
                          final_twist, rew_model, output_len, n_twist, prompt_len,
-                         cfg_baseline, params_baseline):
+                         cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl):
         grad_params_p, grad_baseline = self.rl_loss_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
                          final_twist, rew_model, output_len, n_twist, prompt_len,
-                         cfg_baseline, params_baseline)
+                         cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl)
         return grad_params_p, grad_baseline
 
 class Arg:
@@ -608,6 +617,8 @@ def stochastic_transformer_sample(rnd_key, cfg, params, seq: jnp.ndarray, length
 
 
 def batch_transformer(cfg_p, params_p, seq):
+    # Output has shape [batch_size, prompt_len + output_len, n_vocab]
+    # Logsoftmax needed in order to go from unnormalized values to log probs
     batch_transformer_func = vmap(transformer, in_axes=(None, None, 0), out_axes=0)
     return batch_transformer_func(cfg_p, params_p, seq)
 
@@ -1067,7 +1078,9 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
     return -l_dre  # negative because now we have a loss
 
 
-def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, rew_model, output_len, n_twist, prompt_len, cfg_baseline, params_baseline):
+def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
+                rew_model, output_len, n_twist, prompt_len, cfg_baseline, params_baseline,
+                cfg_p_0, params_p_0, beta_kl):
     _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist,
@@ -1083,16 +1096,21 @@ def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twis
         prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
         output_len)
 
-    print(prompt.shape)
     baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
     baseline_no_grad = jax.lax.stop_gradient(baseline)
     print(baseline)
 
+    # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     first_term = ((r_seqs - baseline_no_grad) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
     second_term = log_p_theta_full_seq.mean() * (r_seqs - baseline_no_grad).mean()
-    # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
+    # Add a KL term as well
+    output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, prompt_w_sigma_sample_s_1_to_t)
+    output_unnormalized_curr = batch_transformer(cfg_p, params_p, prompt_w_sigma_sample_s_1_to_t)
+    log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
+    log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
+    kl_term = kl_div_jax(log_p_target, log_p_curr)
     objective = first_term - second_term
-    loss = -objective
+    loss = -objective + beta_kl * kl_term
 
     # Baseline term; use empirical mean of r_seqs drawn from sigma, to approximate E_sigma[r(s)]
     # Then MSE loss: (baseline - r_seqs.mean()) ^ 2
@@ -1478,6 +1496,9 @@ def main():
     # opt1bit = Arg("1bit", False, "Use signs of gradients, not gradients")
     print_every = Arg("print_every", 1)
 
+    beta_temp = Arg(flag="beta_temp", doc="beta used for the temperature scaling", default=1.)
+    beta_kl = Arg(flag="beta_kl", doc="beta used for kl div from original policy (to prevent policy collapse)", default=1.)
+
     # Init the model params
     heads = Arg("heads", 4, "Number of attention heads")
     d_model = Arg("dmodel", 64, "Embedding dimension")
@@ -1529,7 +1550,6 @@ def main():
 
     # Create PRNG key
     rnd_key = jax.random.PRNGKey(seed())
-
 
     rnd_key, cfg_p, params_p = transformer_init(
         rnd_key,
@@ -1601,7 +1621,8 @@ def main():
     # Log a sample after each epoch
     # prompts = [[0], [0, 0], [0, 1], [1, 0], [1, 1], [0, 0, 0], [1, 1, 1], [1, 0, 1, 0], [0, 1, 0, 1, 0]]
     prompts = [[0, 1, 0, 1]]
-    beta_temp = 1
+
+    cfg_p_0, params_p_0 = copy.deepcopy(cfg_p), copy.deepcopy(params_p)
 
     for epoch in range(epochs()):
 
@@ -1612,7 +1633,7 @@ def main():
         for prompt in prompts:
             prompt = jnp.array(prompt)
             prompt_len = prompt.shape[-1]
-            final_twist = neg_beta_times_batch_reward_model(prompt_len, beta=beta_temp, reward_model_fn=reward_model_varied)
+            final_twist = neg_beta_times_batch_reward_model(prompt_len, beta=beta_temp(), reward_model_fn=reward_model_varied)
             rew_model = batch_reward_model(prompt_len, reward_model_fn=reward_model_varied)
 
             # with timer("sample"):
@@ -1650,7 +1671,7 @@ def main():
                 rnd_key, sk = jax.random.split(rnd_key)
 
                 grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                         final_twist, rew_model, output_len(), n_twist(), prompt_len, cfg_baseline, params_baseline)
+                         final_twist, rew_model, output_len(), n_twist(), prompt_len, cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl())
 
                 if sgd():
                     params_p = tree_axpy(-lr_p(), grad_params_p, params_p)
@@ -1694,7 +1715,7 @@ def main():
             for prompt in prompts:
                 prompt = jnp.array(prompt)
                 final_twist = neg_beta_times_batch_reward_model(len(prompt),
-                                                                beta=beta_temp,
+                                                                beta=beta_temp(),
                                                                 reward_model_fn=reward_model_varied)
                 compare_learned_twist_vs_optimal(prompt, n_vocab(),
                                                  output_len(), cfg_p,
