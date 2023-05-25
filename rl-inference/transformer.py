@@ -160,7 +160,7 @@ class ExperimentConfig:
         self.dre_type = dre_type.lower()
         assert self.dre_type in ["roger", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
         self.dre_grad_fn = self._get_dre_grad_fn()
-        self.rl_loss_fn = jax.grad(get_rl_loss, argnums=3, has_aux=True)
+        self.rl_loss_fn = jax.grad(get_rl_loss, argnums=[3, 12])
 
     def _get_dre_grad_fn(self):
         if self.dre_type == "roger":
@@ -191,10 +191,10 @@ class ExperimentConfig:
 
     def get_grad_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
                          final_twist, rew_model, output_len, n_twist, prompt_len,
-                         baseline):
+                         cfg_baseline, params_baseline):
         grad_params_p, grad_baseline = self.rl_loss_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
                          final_twist, rew_model, output_len, n_twist, prompt_len,
-                         baseline)
+                         cfg_baseline, params_baseline)
         return grad_params_p, grad_baseline
 
 class Arg:
@@ -1067,7 +1067,7 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
     return -l_dre  # negative because now we have a loss
 
 
-def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, rew_model, output_len, n_twist, prompt_len, baseline):
+def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, rew_model, output_len, n_twist, prompt_len, cfg_baseline, params_baseline):
     _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist,
@@ -1083,16 +1083,22 @@ def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twis
         prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
         output_len)
 
-    first_term = ((r_seqs - baseline) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
-    second_term = log_p_theta_full_seq.mean() * (r_seqs - baseline).mean()
+    print(prompt.shape)
+    baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
+    baseline_no_grad = jax.lax.stop_gradient(baseline)
+    print(baseline)
+
+    first_term = ((r_seqs - baseline_no_grad) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
+    second_term = log_p_theta_full_seq.mean() * (r_seqs - baseline_no_grad).mean()
+    # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     objective = first_term - second_term
     loss = -objective
 
     # Baseline term; use empirical mean of r_seqs drawn from sigma, to approximate E_sigma[r(s)]
-    # Then MSE loss: (baseline - r_seqs.mean()) ^ 2; take derivative w.r.t. baseline to get (baseline - r_seqs.mean())
-    # This is just simple GD now, but that's fine since this is literally a scalar. Adam, etc. would be overkill.
-    baseline_grad = (baseline - r_seqs.mean())
-    return loss, baseline_grad
+    # Then MSE loss: (baseline - r_seqs.mean()) ^ 2
+    # This term is only used for training the baseline
+    baseline_loss = (baseline - r_seqs.mean()) ** 2
+    return loss + baseline_loss
 
 
 jnp.set_printoptions(threshold=20, edgeitems=3, linewidth=2048, precision=3)
@@ -1461,8 +1467,10 @@ class TestClass:
 
 def main():
 
-    lr = Arg(flag="lr", doc="Learning rate", default=0.001)
-    lr_baseline = Arg(flag="lr_baseline", doc="Learning rate for the scalar baseline", default=0.1)
+    lr_p = Arg(flag="lr_p", doc="Learning rate for the model", default=0.0001)
+    lr_twist = Arg(flag="lr_twist", doc="Learning rate for the twist functions", default=0.0001)
+
+    lr_baseline = Arg(flag="lr_baseline", doc="Learning rate for the baseline", default=0.0001)
 
     beta1 = Arg(flag="beta1", doc="Adam beta1", default=0.9)
     beta2 = Arg(flag="beta2", doc="Adam beta2", default=0.99)
@@ -1493,6 +1501,12 @@ def main():
     d_k_twist = Arg("d_k_twist", 16, "Attention head dimension")
     d_ff_twist = Arg("d_ff_twist", 64, "Feedforward layer dimension")
     n_layers_twist = Arg("n_layers_twist", 2, "Number of layers")
+
+    heads_baseline = Arg("heads_baseline", 4, "Number of attention heads")
+    d_model_baseline = Arg("d_model_baseline", 64, "Embedding dimension")
+    d_k_baseline = Arg("d_k_baseline", 16, "Attention head dimension")
+    d_ff_baseline = Arg("d_ff_baseline", 64, "Feedforward layer dimension")
+    n_layers_baseline = Arg("n_layers_baseline", 2, "Number of layers")
 
     output_len = Arg("output_len", 8, "Length of the strings we output")
 
@@ -1539,6 +1553,16 @@ def main():
                 d_ff=d_ff_twist(),
             )
 
+    rnd_key, cfg_baseline, params_baseline = transformer_init(
+        rnd_key,
+        n_vocab=1,
+        d_model=d_model_baseline(),
+        d_k=d_k_baseline(),
+        n_layers=n_layers_baseline(),
+        n_heads=heads_baseline(),
+        d_ff=d_ff_baseline(),
+    )
+
     # Original transformer predictive text loss; unused right now
     # @partial(jax.jit, static_argnums=0)
     # def loss_batch(cfg, params, seq):
@@ -1557,8 +1581,9 @@ def main():
 
     # grad_loss_batch = jax.pjit(grad_loss_batch_unjit, static_argnums=0)
 
-    optimizer_p = Adam(params_p, lr=lr(), betas=(beta1(), beta2()))
-    optimizer_twist = Adam(params_twist, lr=lr(), betas=(beta1(), beta2()))
+    optimizer_p = Adam(params_p, lr=lr_p(), betas=(beta1(), beta2()))
+    optimizer_twist = Adam(params_twist, lr=lr_twist(), betas=(beta1(), beta2()))
+    optimizer_baseline = Adam(params_baseline, lr=lr_baseline(), betas=(beta1(), beta2()))
 
 
     # smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6])
@@ -1577,8 +1602,6 @@ def main():
     # prompts = [[0], [0, 0], [0, 1], [1, 0], [1, 1], [0, 0, 0], [1, 1, 1], [1, 0, 1, 0], [0, 1, 0, 1, 0]]
     prompts = [[0, 1, 0, 1]]
     beta_temp = 1
-
-    baseline = 0.
 
     for epoch in range(epochs()):
 
@@ -1617,7 +1640,7 @@ def main():
                 #     grad_params_twist = dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len(), n_twist())
 
                 if sgd():
-                    params_twist = tree_axpy(-lr(), grad_params_twist, params_twist)
+                    params_twist = tree_axpy(-lr_twist(), grad_params_twist, params_twist)
                 else:
                     params_twist = optimizer_twist.step(params_twist, grad_params_twist)
 
@@ -1626,17 +1649,16 @@ def main():
             for model_update in range(model_updates_per_epoch()):
                 rnd_key, sk = jax.random.split(rnd_key)
 
-                grad_params_p, grad_baseline = experiment_cfg.get_grad_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                         final_twist, rew_model, output_len(), n_twist(), prompt_len, baseline)
+                grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                         final_twist, rew_model, output_len(), n_twist(), prompt_len, cfg_baseline, params_baseline)
 
                 if sgd():
-                    params_p = tree_axpy(-lr(), grad_params_p, params_p)
+                    params_p = tree_axpy(-lr_p(), grad_params_p, params_p)
+                    params_baseline = tree_axpy(-lr_baseline(), grad_params_baseline, params_baseline)
                 else:
                     params_p = optimizer_p.step(params_p, grad_params_p)
+                    params_baseline = optimizer_baseline.step(params_baseline, grad_params_baseline)
 
-                # Baseline update (just simple GD)
-                baseline -= lr_baseline() * grad_baseline
-                print(f"--Baseline value: {baseline:.3f}--")
 
 
 
