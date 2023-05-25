@@ -651,7 +651,6 @@ def reward_model_varied(single_seq, prompt_len):
     elif len(single_seq.shape) == 1:
         output_seq = single_seq[prompt_len:]
     else:
-        print(single_seq.shape)
         raise NotImplementedError
     output_sum = output_seq.sum(axis=-1)
     return (output_sum == 0) * reward_0 + (output_sum == 1) * reward_1 + (
