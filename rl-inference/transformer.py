@@ -1292,6 +1292,7 @@ class TestClass:
         n_heads=4,
         d_ff=64,
     )
+    cfg_p_0, params_p_0 = copy.deepcopy(cfg_p), copy.deepcopy(params_p)
     rnd_key, cfg_twist, params_twist = transformer_init(
         rnd_key,
         n_vocab=n_vocab,
@@ -1301,6 +1302,107 @@ class TestClass:
         n_heads=4,
         d_ff=64,
     )
+    rnd_key, cfg_baseline, params_baseline = transformer_init(
+        rnd_key,
+        n_vocab=1,
+        d_model=64,
+        d_k=16,
+        n_layers=2,
+        n_heads=4,
+        d_ff=64,
+    )
+
+    def test_kl_on_policy_low_beta_kl(self):
+        beta_kl = 0
+
+        final_twist = neg_beta_times_batch_reward_model(self.prompt_len,
+                                                        beta=1.,
+                                                        reward_model_fn=reward_model_varied)
+        rew_model = batch_reward_model(self.prompt_len,
+                                       reward_model_fn=reward_model_varied)
+
+        optimizer_p = Adam(self.params_p, lr=self.lr, betas=(0.9, 0.99))
+
+        experiment_cfg = ExperimentConfig(dre_type="roger")
+
+        num_epochs = 10
+        for _ in range(num_epochs):
+
+            rnd_key, sk = jax.random.split(self.rnd_key)
+
+            grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(
+                sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
+                self.params_twist,
+                final_twist, rew_model, self.output_len, self.n_twist,
+                self.prompt_len,
+                self.cfg_baseline, self.params_baseline, self.cfg_p_0,
+                self.params_p_0, beta_kl)
+
+            self.params_p = optimizer_p.step(self.params_p, grad_params_p)
+
+        all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
+                                                 self.output_len)
+
+        output_unnormalized_target = batch_transformer(self.cfg_p_0,
+                                                       self.params_p_0,
+                                                       all_seqs)
+        output_unnormalized_curr = batch_transformer(self.cfg_p, self.params_p,
+                                                     all_seqs)
+        log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
+        log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
+        print(kl_div_jax(log_p_target, log_p_curr))
+        print(jnp.abs(log_p_target - log_p_curr).mean())
+
+        assert kl_div_jax(log_p_target, log_p_curr) > 1e-1
+        assert jnp.abs(log_p_target - log_p_curr).mean() > 0.3
+
+    # TODO: Test KL div (try a very high beta_kl and ensure after a few steps of params_p updates that the kl div from original is close to 0 (also just check a few probabilities and check that they match in L2 distance)
+    def test_kl_on_policy_high_beta_kl(self):
+        beta_kl = 1000  # use some big number and test that the kl is ~0 after
+
+        final_twist = neg_beta_times_batch_reward_model(self.prompt_len,
+                                                        beta=1.,
+                                                        reward_model_fn=reward_model_varied)
+        rew_model = batch_reward_model(self.prompt_len,
+                                       reward_model_fn=reward_model_varied)
+
+        optimizer_p = Adam(self.params_p, lr=self.lr, betas=(0.9, 0.99))
+
+        experiment_cfg = ExperimentConfig(dre_type="roger")
+
+        num_epochs = 10
+        for _ in range(num_epochs):
+
+            rnd_key, sk = jax.random.split(self.rnd_key)
+
+            grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(
+                sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
+                self.params_twist,
+                final_twist, rew_model, self.output_len, self.n_twist,
+                self.prompt_len,
+                self.cfg_baseline, self.params_baseline, self.cfg_p_0,
+                self.params_p_0, beta_kl)
+
+            self.params_p = optimizer_p.step(self.params_p, grad_params_p)
+
+        all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
+                                                 self.output_len)
+
+        output_unnormalized_target = batch_transformer(self.cfg_p_0,
+                                                       self.params_p_0,
+                                                       all_seqs)
+        output_unnormalized_curr = batch_transformer(self.cfg_p, self.params_p,
+                                                     all_seqs)
+        log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
+        log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
+        print(kl_div_jax(log_p_target, log_p_curr))
+        print(jnp.abs(log_p_target - log_p_curr).mean())
+
+
+        assert kl_div_jax(log_p_target, log_p_curr) < 1e-2
+        assert jnp.abs(log_p_target - log_p_curr).mean() < 0.1
+
+
 
     def test_cond_vs_marg_prob(self):
         seq1 = jnp.array([[0, 1, 0, 1, 0, 1, 1, 0, 1], [1, 1, 1, 0, 1, 1, 1, 0, 1]])
@@ -1480,6 +1582,8 @@ class TestClass:
                                          self.params_twist, verbose=False, relative_diff_loss=True)
 
         assert avg_rel_diff < 0.1
+
+
 
 
 
