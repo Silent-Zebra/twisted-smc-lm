@@ -616,7 +616,11 @@ def transformer_loss(cfg, params, x):
 #
 #     return seq
 
+
 def stochastic_transformer_sample_iter(carry, t):
+    # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
+    # Essentially the way this works is we pass in a full computation (eg full prompt_len + output_len)
+    # but we only use the logit for the time step t, and discard the rest of the computation
     rnd_key, cfg, params, full_seq, prompt_len = carry
     # print(jax.lax.dynamic_slice(output, (0, 0), (0, t)).shape)
     output_unnormalized_batch = batch_transformer(cfg, params, full_seq)
@@ -631,7 +635,7 @@ def stochastic_transformer_sample_iter(carry, t):
     return carry, None
 
 # TODO MAY 30: Now that lax scan on this works, do lax scan on the smc procedure (AND ANYWHERE ELSE IT SHOUDL WORK??).
-# The problem here is that the prompt_len needs to be statically passed in from elsewhere
+# lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
 @partial(jax.jit, static_argnums=[1, 4, 5])
 def stochastic_transformer_sample(rnd_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples):
     prompt_len = prompt.shape[0]
@@ -757,6 +761,8 @@ def get_all_new_seqs_single_t(seq, n_vocab):
 
 # @partial(jax.jit, static_argnames=['cfg_p', 'cfg_twist']) # Actually slower with the jit? Maybe due to compile time.
 def get_proposal_q_sample(rnd_key, seq, cfg_p, params_p, cfg_twist, params_twist):
+    # Sample from q(s_t | s_{1:t-1}); samples a single time step, using the learned twists
+    # Also concatenates the s_t tokens with the s_{1:t-1} tokens and returns that
     output_unnormalized_batch = batch_transformer(cfg_p, params_p, seq)
 
     output_psi_batch = batch_transformer(cfg_twist, params_twist, seq)
@@ -788,7 +794,7 @@ def get_proposal_q_sample(rnd_key, seq, cfg_p, params_p, cfg_twist, params_twist
 
 
 def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
-    # Same as get_proposal_q_sample except using the true final_twist instead of the learned twists
+    # Same as get_proposal_q_sample except using the true final_twist instead of the learned twists (final_twist = - beta r(s) for adv sampling)
     # Thus, this should only be used for the final time step.
     output_unnormalized_batch = batch_transformer(cfg_p, params_p, seq)
 
