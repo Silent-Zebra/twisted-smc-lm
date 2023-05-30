@@ -598,24 +598,68 @@ def transformer_loss(cfg, params, x):
 #     return seq
 
 
-# TODO: Major next thing is to just train the twist functions for the DRE. Do this before plugging into the RL-style training.
+# TODO: Try lax.scan on this first. THen lax.scan on the smc procedure.
+# Maybe the other option is to separate the prompt from the generation, and then have the prompt be static, and then concatenate with the generation when I need to use it.
+# This maybe gets around the needing the prompt size issue. We can give it a try and see if that works. TODO May 29 try this.
+# Eh but this is super annoying, and I need to focus on preparing stuff for the trip. And tomorrow is a busy day too.
+# @partial(jax.jit, static_argnums=[1, 4, 5])
+# def stochastic_transformer_sample(rnd_key, cfg, params, seq: jnp.ndarray, length, n_samples):
+#     seq = jnp.full((n_samples, seq.shape[0]), seq)
+#
+#     for _i in range(length):
+#         output_unnormalized_batch = batch_transformer(cfg, params, seq)
+#         rnd_key, subkey = jax.random.split(rnd_key)
+#         # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax. I needed log_softmax on the other ones in order to properly combine with
+#         # the other log term.
+#         idx = jax.random.categorical(subkey, output_unnormalized_batch[:,-1,:], shape=(output_unnormalized_batch.shape[0],))
+#         seq = jnp.concatenate((seq, idx[:, None]), axis=1)
+#
+#     return seq
+
+def stochastic_transformer_sample_iter(carry, t):
+    rnd_key, cfg, params, full_seq, prompt_len = carry
+    # print(jax.lax.dynamic_slice(output, (0, 0), (0, t)).shape)
+    output_unnormalized_batch = batch_transformer(cfg, params, full_seq)
+    rnd_key, subkey = jax.random.split(rnd_key)
+    # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax. I needed log_softmax on the other ones in order to properly combine with
+    # the other log term.
+    idx = jax.random.categorical(subkey, output_unnormalized_batch[:, prompt_len + t - 1, :],
+                                 shape=(output_unnormalized_batch.shape[0],))
+    full_seq = full_seq.at[:, prompt_len + t].set(idx)
+    # seq = jnp.concatenate((seq, idx[:, None]), axis=1)
+    carry = (rnd_key, cfg, params, full_seq, prompt_len)
+    return carry, None
+
+# TODO MAY 30: Now that lax scan on this works, do lax scan on the smc procedure (AND ANYWHERE ELSE IT SHOUDL WORK??).
+# The problem here is that the prompt_len needs to be statically passed in from elsewhere
+@partial(jax.jit, static_argnums=[1, 4, 5])
+def stochastic_transformer_sample(rnd_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples):
+    prompt_len = prompt.shape[0]
+    print(prompt_len)
+    batch_prompt = jnp.full((n_samples, prompt.shape[0]), prompt)
+    output = jnp.zeros((n_samples, output_len), dtype=jnp.int32)
+    full_seq = jnp.concatenate((batch_prompt, output), axis=1)
+
+    carry = (rnd_key, cfg, params, full_seq, prompt_len)
+    carry, _ =  jax.lax.scan(stochastic_transformer_sample_iter, carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
+
+    # for _i in range(length):
+    #     output_unnormalized_batch = batch_transformer(cfg, params, seq)
+    #     rnd_key, subkey = jax.random.split(rnd_key)
+    #     # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax. I needed log_softmax on the other ones in order to properly combine with
+    #     # the other log term.
+    #     idx = jax.random.categorical(subkey, output_unnormalized_batch[:,-1,:], shape=(output_unnormalized_batch.shape[0],))
+    #     seq = jnp.concatenate((seq, idx[:, None]), axis=1)
+    rnd_key, cfg, params, full_seq, _ = carry
+
+    # print(full_seq)
+    # for x in full_seq:
+    #     print(x)
+
+    return full_seq
 
 
-def stochastic_transformer_sample(rnd_key, cfg, params, seq: jnp.ndarray, length, n_samples):
-    seq = jnp.full((n_samples, seq.shape[0]), seq)
-
-    for _i in range(length):
-        output_unnormalized_batch = batch_transformer(cfg, params, seq)
-        rnd_key, subkey = jax.random.split(rnd_key)
-        # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax. I needed log_softmax on the other ones in order to properly combine with
-        # the other log term.
-        idx = jax.random.categorical(subkey, output_unnormalized_batch[:,-1,:], shape=(output_unnormalized_batch.shape[0],))
-        seq = jnp.concatenate((seq, idx[:, None]), axis=1)
-
-
-    return seq
-
-
+@partial(jax.jit, static_argnums=0)
 def batch_transformer(cfg_p, params_p, seq):
     # Output has shape [batch_size, prompt_len + output_len, n_vocab]
     # Logsoftmax needed in order to go from unnormalized values to log probs
@@ -637,7 +681,7 @@ def batch_reward_model(prompt_len, reward_model_fn):
         return batch_rm(seq, prompt_len)
     return curried_batch_rm
 
-
+# @partial(jax.jit, static_argnames=["prompt_len"])
 def reward_model_one_bad(single_seq, prompt_len):
     # Super simple arbitrary reward model that designates the all 0s output string to be bad, and other strings to be acceptable
     base_reward = 1.
@@ -652,8 +696,9 @@ def reward_model_one_bad(single_seq, prompt_len):
     else:
         raise NotImplementedError
 
+# @partial(jax.jit, static_argnames=["prompt_len"])
 def reward_model_varied(single_seq, prompt_len):
-    # Just for testing TODO REMOVE LATER
+    # Just for testing
     reward_0, reward_1, reward_2, reward_3, reward_4, reward_5 = -4, -3, -2, -1, 0, 0
     # Then the default reward for other strings is 0
 
@@ -846,7 +891,9 @@ def evaluate_log_p_theta_t(seq, cfg_p, params_p):
     return jax.nn.log_softmax(output_unnormalized[:,-2,:])[jnp.arange(seq[:,-1].shape[0]), seq[:,-1]]
 
 
-# @partial(jax.jit, static_argnames=['output_len', 'n_smc_samples']) # doesn't work
+# TODO copy this, put the main loop in a lax.scan, it should work. For the dynamic arrays, I know now to use an arange, and that should be ok. No but I still need prompt_len.
+# Maybe the other option is to separate the prompt from the generation, and then have the prompt be static, and then concatenate with the generation when I need to use it.
+# @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "use_final_twist", 'output_len', 'n_smc_samples']) # works but takes forever to recompile and recompiles several times
 def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
     # prompt_len = prompt.shape[-1]
 
