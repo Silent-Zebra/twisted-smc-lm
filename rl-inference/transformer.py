@@ -621,6 +621,15 @@ def stochastic_transformer_sample_iter(carry, t):
     # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
     # Essentially the way this works is we pass in a full computation (eg full prompt_len + output_len)
     # but we only use the logit for the time step t, and discard the rest of the computation
+    # That is, we are computing logits on the full sequence of length prompt_len + output_len
+    # where the first prompt_len + t tokens have meaningful values that we previously computed
+    # and the later tokens are unitialized (some garbage value)
+    # so we end up wasting computation on those later tokens, as we only use the logit at time step t
+    # but this is still faster than not using scan+jit
+    # The key point is that now we don't have dynamic arrays, and since the indexing uses [:, prompt_len + t - 1, :],
+    # the only changing part of the index still doesn't change shape. The key point is that no shapes are changing anywhere
+    # So this works with jit, at the cost of a bit of wasted computation
+    # This is the approach that I saw people taking online with transformers. As of May 2023 there did not seem to be a better approach in jax (some discussion of mask didn't end up going anywhere)
     rnd_key, cfg, params, full_seq, prompt_len = carry
     # print(jax.lax.dynamic_slice(output, (0, 0), (0, t)).shape)
     output_unnormalized_batch = batch_transformer(cfg, params, full_seq)
@@ -634,7 +643,7 @@ def stochastic_transformer_sample_iter(carry, t):
     carry = (rnd_key, cfg, params, full_seq, prompt_len)
     return carry, None
 
-# TODO MAY 30: Now that lax scan on this works, do lax scan on the smc procedure (AND ANYWHERE ELSE IT SHOUDL WORK??).
+# TODO MAY 30: Now that lax scan on this works, do lax scan on the smc procedure (AND ANYWHERE ELSE IT SHOULD WORK??).
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
 @partial(jax.jit, static_argnums=[1, 4, 5])
 def stochastic_transformer_sample(rnd_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples):
@@ -759,6 +768,8 @@ def get_all_new_seqs_single_t(seq, n_vocab):
     return all_new_seqs
 
 
+
+
 # @partial(jax.jit, static_argnames=['cfg_p', 'cfg_twist']) # Actually slower with the jit? Maybe due to compile time.
 def get_proposal_q_sample(rnd_key, seq, cfg_p, params_p, cfg_twist, params_twist):
     # Sample from q(s_t | s_{1:t-1}); samples a single time step, using the learned twists
@@ -791,6 +802,28 @@ def get_proposal_q_sample(rnd_key, seq, cfg_p, params_p, cfg_twist, params_twist
 
 
     return rnd_key, seq, Z_s_1_to_t_minus_1
+
+
+def get_proposal_q_sample_for_scan(rnd_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t):
+    # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
+    # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
+    output_unnormalized_batch = batch_transformer(cfg_p, params_p, full_seq)
+
+    output_psi_batch = batch_transformer(cfg_twist, params_twist, full_seq)
+
+    rnd_key, subkey = jax.random.split(rnd_key)
+
+    # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
+    # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
+    # And then we set full_seq at index 4 with the newly generated tokens
+    log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,prompt_len + t - 1,:]) + output_psi_batch[:,prompt_len + t - 1,:] # psi is already in log space
+    idx = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(output_unnormalized_batch.shape[0],))
+
+    full_seq = full_seq.at[:, prompt_len + t].set(idx)
+
+    Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
+
+    return rnd_key, full_seq, Z_s_1_to_t_minus_1
 
 
 def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
@@ -832,6 +865,11 @@ def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
     Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
 
     return rnd_key, seq, Z_s_1_to_t_minus_1
+
+
+def evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len_plus_t):
+    # Assumes 0 based indexing for t
+    return evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t) + evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t)
 
 
 def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1(seq, cfg_p, params_p, cfg_twist, params_twist):
@@ -895,6 +933,233 @@ def evaluate_log_p_theta_t(seq, cfg_p, params_p):
     # Then we take [seq[:, -1]] because that gives the indices of the corresponding token that was generated, for which we want the logit value
     # jnp.arange(seq[:,-1].shape[0]), seq[:,-1] just lets us do the indexing we want.
     return jax.nn.log_softmax(output_unnormalized[:,-2,:])[jnp.arange(seq[:,-1].shape[0]), seq[:,-1]]
+
+def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t):
+    # Takes in a full sequence including prompt and full output length (even if not yet generated)
+    # Then if we want e.g. the first time step, e.g. t=0, then say prompt_len is 4, then prompt_len_plus_t = 4
+    # and we want to evaluate the probability of the tokens outputted at the first time step, then what we need are the indices of the tokens
+    # from index 4 (0 based indexing), so we need prompt_len_plus_t.
+    output_unnormalized = batch_transformer(cfg_p, params_p, full_seq)
+    word_indices = full_seq[:,prompt_len_plus_t]
+    # Then finally prompt_len_plus_t-1 is needed because we need to get the logits from the time step before the tokens we have generated
+    # (as those were the probabilities for each of the possible words in the vocabulary)
+    return jax.nn.log_softmax(output_unnormalized[:,prompt_len_plus_t-1,:])[jnp.arange(word_indices.shape[0]), word_indices]
+
+def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t):
+    # see def evaluate_log_psi_t for more comments/detail
+    # Similar also to evaluate_log_p_theta_t_full_seq, except adapting evaluate_log_psi_t instead of adapting evaluate_log_p_theta_t
+    output_psi = batch_transformer(cfg_twist, params_twist, full_seq)
+    word_indices = full_seq[:,prompt_len_plus_t]
+    return output_psi[:,prompt_len_plus_t-1,:][jnp.arange(word_indices.shape[0]), word_indices]
+
+
+
+def smc_scan_iter(carry, t):
+    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t, \
+    use_final_twist, final_twist, output_len, cfg_p, params_p, cfg_twist, params_twist, \
+    prompt_len = carry
+
+    log_w_t_minus_1 = log_w_t
+
+    if (t == output_len - 1) and use_final_twist:
+        # Full_seq has shape (n_samples, prompt_len + output_len)
+        print(full_seq[:, :-1].shape)
+        print(full_seq)
+        rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(
+            rnd_key, full_seq[:, :-1], cfg_p,
+            params_p, final_twist)
+        print(full_seq.shape)
+        print(full_seq)
+        # 1/0
+
+    else:
+        rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+            rnd_key, full_seq, cfg_p,
+            params_p,
+            cfg_twist, params_twist, prompt_len, t)
+
+    if (t == output_len - 1) and use_final_twist:
+        # Now this is ok to use since at this point full_seq will have been fully generated, and we can directly use the previous function I had
+        log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
+            full_seq, cfg_p, params_p, final_twist)
+    else:
+        log_q_t_eval = evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p,
+                                                              params_p,
+                                                              cfg_twist,
+                                                              params_twist,
+                                                              prompt_len + t)
+
+    log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
+
+    # if (t > 0):
+    #     print(log_p_theta_1_to_t_eval.shape)
+    # print( evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p).shape)
+
+    log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t_full_seq(
+        full_seq, cfg_p, params_p, prompt_len + t)
+
+    # print(log_p_theta_1_to_t_eval)
+
+    if (t == output_len - 1) and use_final_twist:
+        log_r_psi_t_eval = evaluate_log_psi_t_final(full_seq, final_twist)
+    else:
+        log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist,
+                                                       params_twist,
+                                                       prompt_len + t)
+
+    log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
+
+    # Note that log_gamma_1_to_t_eval and log_q_t_eval are equivalent, given our q sampling scheme.
+    # So we could actually just skip those calculations together (TODO later: redo calc by removing those terms, and ensure the result is the same)
+    # The normalization constant is crucial; q has to be a normalized probability (for the weights; for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized)
+
+    # alpha is the factor multiplied (added in log space) to the previous weight
+    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
+    # It may be less confusing to include the Z directly in the log q eval - but the reason I've left it like this
+    # is because if I follow the TODO where I cancel the numerator and denominator, I'll want the Z term to exist separately.
+
+    log_w_t = log_w_t_minus_1 + log_alpha_t
+
+    if t == 0:
+        log_z_over_z = jax.nn.logsumexp(log_w_t)
+    else:
+        log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(
+            log_w_t_minus_1)
+
+    log_z_hat_t = log_z_hat_t + log_z_over_z
+
+    resample_condition = True
+    # resample_condition = False
+    if resample_condition:
+        # Do resampling
+        rnd_key, subkey = jax.random.split(rnd_key)
+
+        a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
+
+        full_seq = full_seq[a_t]
+
+        # Make sure the gamma values also track the correct trajectories
+        log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
+
+        # Same for the p values:
+        log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
+
+        log_w_t = jnp.zeros_like(log_w_t)
+
+    carry = (rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
+    use_final_twist, final_twist, output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len)
+
+    return carry, None
+
+
+# TODO JUNE JIT VERSION
+# TODO JUNE 26 MUST TEST THAT THE JIT VERSION AND NOT JIT VERSION PRODUCE THE SAME RESULT USING THE SAME SEED. TEST ON A LARGE BATCH
+# TODO actually first before doing that (or if the big test fails) test that the individual functions produce the same results
+# @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "use_final_twist", 'output_len', 'n_smc_samples'])
+def smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
+    prompt_len = prompt.shape[-1]
+
+    log_z_hat_t = 0.
+    log_w_t = 0.
+    log_gamma_1_to_t_eval = 0.
+    log_p_theta_1_to_t_eval = 0.
+
+    batch_prompt = jnp.full((n_smc_samples, prompt.shape[0]), prompt)
+    output = jnp.zeros((n_smc_samples, output_len), dtype=jnp.int32)
+    full_seq = jnp.concatenate((batch_prompt, output), axis=1)
+
+    carry = (rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
+    log_z_hat_t, use_final_twist, final_twist, output_len, cfg_p, params_p, cfg_twist,
+    params_twist, prompt_len)
+
+    carry, _ = jax.lax.scan(smc_scan_iter, carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
+
+    # # prompt_w_s_1_to_t = jnp.full((n_smc_samples, prompt.shape[0]), prompt)
+    # for t in range(output_len):
+    #     log_w_t_minus_1 = log_w_t
+    #
+    #     if (t == output_len - 1) and use_final_twist:
+    #         # Full_seq has shape (n_samples, prompt_len + output_len)
+    #         print(full_seq[:,:-1].shape)
+    #         print(full_seq)
+    #         rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(rnd_key, full_seq[:,:-1], cfg_p,
+    #                                                     params_p, final_twist)
+    #         print(full_seq.shape)
+    #         print(full_seq)
+    #         # 1/0
+    #
+    #     else:
+    #         rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(rnd_key, full_seq, cfg_p,
+    #                                                     params_p,
+    #                                                     cfg_twist, params_twist, prompt_len, t)
+    #
+    #     if (t == output_len - 1) and use_final_twist:
+    #         # Now this is ok to use since at this point full_seq will have been fully generated, and we can directly use the previous function I had
+    #         log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
+    #             full_seq, cfg_p, params_p, final_twist)
+    #     else:
+    #         log_q_t_eval = evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len + t)
+    #
+    #     log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
+    #
+    #     # if (t > 0):
+    #     #     print(log_p_theta_1_to_t_eval.shape)
+    #     # print( evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p).shape)
+    #
+    #     log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len + t)
+    #
+    #     # print(log_p_theta_1_to_t_eval)
+    #
+    #     if (t == output_len - 1) and use_final_twist:
+    #         log_r_psi_t_eval = evaluate_log_psi_t_final(full_seq, final_twist)
+    #     else:
+    #         log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len + t)
+    #
+    #     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
+    #
+    #     # Note that log_gamma_1_to_t_eval and log_q_t_eval are equivalent, given our q sampling scheme.
+    #     # So we could actually just skip those calculations together (TODO later: redo calc by removing those terms, and ensure the result is the same)
+    #     # The normalization constant is crucial; q has to be a normalized probability (for the weights; for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized)
+    #
+    #     # alpha is the factor multiplied (added in log space) to the previous weight
+    #     log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1 # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
+    #     # It may be less confusing to include the Z directly in the log q eval - but the reason I've left it like this
+    #     # is because if I follow the TODO where I cancel the numerator and denominator, I'll want the Z term to exist separately.
+    #
+    #     log_w_t = log_w_t_minus_1 + log_alpha_t
+    #
+    #     if t == 0:
+    #         log_z_over_z = jax.nn.logsumexp(log_w_t)
+    #     else:
+    #         log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(
+    #             log_w_t_minus_1)
+    #
+    #     log_z_hat_t = log_z_hat_t + log_z_over_z
+    #
+    #
+    #     resample_condition = True
+    #     # resample_condition = False
+    #     if resample_condition:
+    #         # Do resampling
+    #         rnd_key, subkey = jax.random.split(rnd_key)
+    #
+    #         a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
+    #
+    #         full_seq = full_seq[a_t]
+    #
+    #         # Make sure the gamma values also track the correct trajectories
+    #         log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
+    #
+    #         # Same for the p values:
+    #         log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
+    #
+    #         log_w_t = jnp.zeros_like(log_w_t)
+
+    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,\
+    log_z_hat_t, use_final_twist, final_twist, output_len, cfg_p, params_p, cfg_twist, \
+    params_twist, prompt_len = carry
+
+    return log_z_hat_t, full_seq
 
 
 # TODO copy this, put the main loop in a lax.scan, it should work. For the dynamic arrays, I know now to use an arange, and that should be ok. No but I still need prompt_len.
@@ -1365,6 +1630,32 @@ class TestClass:
         d_ff=64,
     )
 
+    def test_smc_jit_vs_no_jit(self):
+        n_smc_samples = 100
+        final_twist = neg_beta_times_batch_reward_model(self.prompt_len,
+                                                        beta=1.,
+                                                        reward_model_fn=reward_model_varied)
+
+        _, samples_non_jit = smc_non_jit(self.rnd_key, self.prompt, self.cfg_p,
+                                 self.params_p,
+                                 self.cfg_twist, self.params_twist, final_twist,
+                                 self.output_len,
+                                 n_smc_samples)
+
+        _, samples_jit = smc_jit(self.rnd_key, self.prompt, self.cfg_p,
+                                         self.params_p,
+                                         self.cfg_twist, self.params_twist,
+                                         final_twist,
+                                         self.output_len,
+                                         n_smc_samples)
+
+        print(samples_non_jit)
+        print(samples_jit)
+        print(jnp.abs(samples_non_jit - samples_jit))
+        assert (jnp.abs(samples_non_jit - samples_jit)).sum() == 0
+
+
+
     def test_kl_on_policy_low_beta_kl(self):
         beta_kl = 0
 
@@ -1409,7 +1700,7 @@ class TestClass:
         assert kl_div_jax(log_p_target, log_p_curr) > 1e-1
         assert jnp.abs(log_p_target - log_p_curr).mean() > 0.3
 
-    # TODO: Test KL div (try a very high beta_kl and ensure after a few steps of params_p updates that the kl div from original is close to 0 (also just check a few probabilities and check that they match in L2 distance)
+    # Test KL div (try a very high beta_kl and ensure after a few steps of params_p updates that the kl div from original is close to 0 (also just check a few probabilities and check that they match in L2 distance)
     def test_kl_on_policy_high_beta_kl(self):
         beta_kl = 1000  # use some big number and test that the kl is ~0 after
 
@@ -1822,8 +2113,6 @@ def main():
                 else:
                     params_twist = optimizer_twist.step(params_twist, grad_params_twist)
 
-            # ALSO TODO: WRITE TESTS FOR THE POLICY LEARNING CODE. And a very simple test for baseline (for a fixed policy, e.g. 0 lr on policy, using SMC for samples, test that baseline learns optimal... but this happens by definition in my code no?)
-            # Also TODO: KL div, and test that too.
             for model_update in range(model_updates_per_epoch()):
                 rnd_key, sk = jax.random.split(rnd_key)
 
@@ -1861,8 +2150,6 @@ def main():
                                                params_twist,
                                                final_twist,
                                                n_twist())
-
-            # TODO: later also do the updates to the model (after learning twists)
 
 
 
