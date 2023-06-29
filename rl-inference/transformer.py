@@ -173,7 +173,8 @@ class ExperimentConfig:
 
     def _get_dre_grad_fn(self):
         if self.dre_type == "roger":
-            dre_grad_fn = jax.grad(get_l_dre_roger, argnums=5)
+            # dre_grad_fn = jax.grad(get_l_dre_roger, argnums=5)
+            dre_grad_fn = jax.grad(get_l_dre_roger_jit, argnums=5)
         elif self.dre_type == "sixo":
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         elif self.dre_type == "analytic_mse_rel":
@@ -671,7 +672,6 @@ def stochastic_transformer_sample(rnd_key, cfg, params, prompt: jnp.ndarray, out
 
     return full_seq
 
-
 @partial(jax.jit, static_argnums=0)
 def batch_transformer(cfg_p, params_p, seq):
     # Output has shape [batch_size, prompt_len + output_len, n_vocab]
@@ -934,6 +934,7 @@ def evaluate_log_p_theta_t(seq, cfg_p, params_p):
     # jnp.arange(seq[:,-1].shape[0]), seq[:,-1] just lets us do the indexing we want.
     return jax.nn.log_softmax(output_unnormalized[:,-2,:])[jnp.arange(seq[:,-1].shape[0]), seq[:,-1]]
 
+# Assume 0-based indexing for t
 def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t):
     # Takes in a full sequence including prompt and full output length (even if not yet generated)
     # Then if we want e.g. the first time step, e.g. t=0, then say prompt_len is 4, then prompt_len_plus_t = 4
@@ -945,6 +946,7 @@ def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t
     # (as those were the probabilities for each of the possible words in the vocabulary)
     return jax.nn.log_softmax(output_unnormalized[:,prompt_len_plus_t-1,:])[jnp.arange(word_indices.shape[0]), word_indices]
 
+# Assume 0-based indexing for t
 def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t):
     # see def evaluate_log_psi_t for more comments/detail
     # Similar also to evaluate_log_p_theta_t_full_seq, except adapting evaluate_log_psi_t instead of adapting evaluate_log_p_theta_t
@@ -953,32 +955,27 @@ def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_pl
     return output_psi[:,prompt_len_plus_t-1,:][jnp.arange(word_indices.shape[0]), word_indices]
 
 
-
-def smc_scan_iter(carry, t):
-    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t, \
-    use_final_twist, final_twist, output_len, cfg_p, params_p, cfg_twist, params_twist, \
-    prompt_len = carry
+# WARNING/NOTE that if not using the final twist, then we're using the learned twist
+# And in my current setup I don't think that learned final twist ever gets trained anywhere
+def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
+    output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, use_final_twist, final_twist):
 
     log_w_t_minus_1 = log_w_t
 
-    if (t == output_len - 1) and use_final_twist:
+    t = output_len - 1
+
+    if use_final_twist:
         # Full_seq has shape (n_samples, prompt_len + output_len)
-        print(full_seq[:, :-1].shape)
-        print(full_seq)
         rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(
             rnd_key, full_seq[:, :-1], cfg_p,
             params_p, final_twist)
-        print(full_seq.shape)
-        print(full_seq)
-        # 1/0
-
     else:
         rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
             rnd_key, full_seq, cfg_p,
             params_p,
             cfg_twist, params_twist, prompt_len, t)
 
-    if (t == output_len - 1) and use_final_twist:
+    if use_final_twist:
         # Now this is ok to use since at this point full_seq will have been fully generated, and we can directly use the previous function I had
         log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
             full_seq, cfg_p, params_p, final_twist)
@@ -991,6 +988,77 @@ def smc_scan_iter(carry, t):
 
     log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
 
+    log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t_full_seq(
+        full_seq, cfg_p, params_p, prompt_len + t)
+
+    if use_final_twist:
+        log_r_psi_t_eval = evaluate_log_psi_t_final(full_seq, final_twist)
+    else:
+        log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist,
+                                                       params_twist,
+                                                       prompt_len + t)
+
+    log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
+
+    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
+
+    log_w_t = log_w_t_minus_1 + log_alpha_t
+
+    log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(
+        log_w_t_minus_1)
+
+    log_z_hat_t = log_z_hat_t + log_z_over_z
+
+    resample_condition = True
+    # resample_condition = False
+    if resample_condition:
+        # Do resampling
+        rnd_key, subkey = jax.random.split(rnd_key)
+
+        a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
+
+        full_seq = full_seq[a_t]
+
+        # Make sure the gamma values also track the correct trajectories
+        log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
+
+        # Same for the p values:
+        log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
+
+        log_w_t = jnp.zeros_like(log_w_t)
+
+    # carry = (
+    # rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
+    # log_z_hat_t,
+    # use_final_twist, final_twist, output_len, cfg_p, params_p, cfg_twist,
+    # params_twist, prompt_len)
+
+    return log_z_hat_t, full_seq
+
+
+
+
+def smc_scan_iter_non_final(carry, t):
+    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t, \
+    output_len, cfg_p, params_p, cfg_twist, params_twist, \
+    prompt_len = carry
+
+    log_w_t_minus_1 = log_w_t
+
+    rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+        rnd_key, full_seq, cfg_p,
+        params_p,
+        cfg_twist, params_twist, prompt_len, t)
+
+
+    log_q_t_eval = evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p,
+                                                          params_p,
+                                                          cfg_twist,
+                                                          params_twist,
+                                                          prompt_len + t)
+
+    log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
+
     # if (t > 0):
     #     print(log_p_theta_1_to_t_eval.shape)
     # print( evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p).shape)
@@ -1000,12 +1068,9 @@ def smc_scan_iter(carry, t):
 
     # print(log_p_theta_1_to_t_eval)
 
-    if (t == output_len - 1) and use_final_twist:
-        log_r_psi_t_eval = evaluate_log_psi_t_final(full_seq, final_twist)
-    else:
-        log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist,
-                                                       params_twist,
-                                                       prompt_len + t)
+    log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist,
+                                                   params_twist,
+                                                   prompt_len + t)
 
     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
 
@@ -1020,11 +1085,10 @@ def smc_scan_iter(carry, t):
 
     log_w_t = log_w_t_minus_1 + log_alpha_t
 
-    if t == 0:
-        log_z_over_z = jax.nn.logsumexp(log_w_t)
-    else:
-        log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(
-            log_w_t_minus_1)
+    # if t == 0:
+    #     log_z_over_z = jax.nn.logsumexp(log_w_t)
+    # else:
+    log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1)
 
     log_z_hat_t = log_z_hat_t + log_z_over_z
 
@@ -1047,119 +1111,54 @@ def smc_scan_iter(carry, t):
         log_w_t = jnp.zeros_like(log_w_t)
 
     carry = (rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
-    use_final_twist, final_twist, output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len)
+    output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len)
 
-    return carry, None
+    return carry, full_seq
 
 
 # TODO JUNE JIT VERSION
-# TODO JUNE 26 MUST TEST THAT THE JIT VERSION AND NOT JIT VERSION PRODUCE THE SAME RESULT USING THE SAME SEED. TEST ON A LARGE BATCH
-# TODO actually first before doing that (or if the big test fails) test that the individual functions produce the same results
-# @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "use_final_twist", 'output_len', 'n_smc_samples'])
-def smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
+# TODO JUNE 26 Now that this produces same as the non jit, do some tests to compare time needed for the non jit vs jit version, with and without actual jit on this version
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "use_final_twist", 'output_len', 'n_smc_samples', "intermediate_sample_history" ])
+def smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
     prompt_len = prompt.shape[-1]
 
     log_z_hat_t = 0.
-    log_w_t = 0.
-    log_gamma_1_to_t_eval = 0.
-    log_p_theta_1_to_t_eval = 0.
+    log_w_t = jnp.zeros((n_smc_samples,))
+    log_gamma_1_to_t_eval = jnp.zeros((n_smc_samples,))
+    log_p_theta_1_to_t_eval = jnp.zeros((n_smc_samples,))
 
     batch_prompt = jnp.full((n_smc_samples, prompt.shape[0]), prompt)
     output = jnp.zeros((n_smc_samples, output_len), dtype=jnp.int32)
     full_seq = jnp.concatenate((batch_prompt, output), axis=1)
 
     carry = (rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
-    log_z_hat_t, use_final_twist, final_twist, output_len, cfg_p, params_p, cfg_twist,
-    params_twist, prompt_len)
+    log_z_hat_t, output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len)
 
-    carry, _ = jax.lax.scan(smc_scan_iter, carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
+    carry, full_seq_list = jax.lax.scan(smc_scan_iter_non_final, carry, jnp.arange(output_len - 1, dtype=jnp.int32), output_len - 1)
 
-    # # prompt_w_s_1_to_t = jnp.full((n_smc_samples, prompt.shape[0]), prompt)
-    # for t in range(output_len):
-    #     log_w_t_minus_1 = log_w_t
-    #
-    #     if (t == output_len - 1) and use_final_twist:
-    #         # Full_seq has shape (n_samples, prompt_len + output_len)
-    #         print(full_seq[:,:-1].shape)
-    #         print(full_seq)
-    #         rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(rnd_key, full_seq[:,:-1], cfg_p,
-    #                                                     params_p, final_twist)
-    #         print(full_seq.shape)
-    #         print(full_seq)
-    #         # 1/0
-    #
-    #     else:
-    #         rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(rnd_key, full_seq, cfg_p,
-    #                                                     params_p,
-    #                                                     cfg_twist, params_twist, prompt_len, t)
-    #
-    #     if (t == output_len - 1) and use_final_twist:
-    #         # Now this is ok to use since at this point full_seq will have been fully generated, and we can directly use the previous function I had
-    #         log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
-    #             full_seq, cfg_p, params_p, final_twist)
-    #     else:
-    #         log_q_t_eval = evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len + t)
-    #
-    #     log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
-    #
-    #     # if (t > 0):
-    #     #     print(log_p_theta_1_to_t_eval.shape)
-    #     # print( evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p).shape)
-    #
-    #     log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len + t)
-    #
-    #     # print(log_p_theta_1_to_t_eval)
-    #
-    #     if (t == output_len - 1) and use_final_twist:
-    #         log_r_psi_t_eval = evaluate_log_psi_t_final(full_seq, final_twist)
-    #     else:
-    #         log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len + t)
-    #
-    #     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
-    #
-    #     # Note that log_gamma_1_to_t_eval and log_q_t_eval are equivalent, given our q sampling scheme.
-    #     # So we could actually just skip those calculations together (TODO later: redo calc by removing those terms, and ensure the result is the same)
-    #     # The normalization constant is crucial; q has to be a normalized probability (for the weights; for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized)
-    #
-    #     # alpha is the factor multiplied (added in log space) to the previous weight
-    #     log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1 # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
-    #     # It may be less confusing to include the Z directly in the log q eval - but the reason I've left it like this
-    #     # is because if I follow the TODO where I cancel the numerator and denominator, I'll want the Z term to exist separately.
-    #
-    #     log_w_t = log_w_t_minus_1 + log_alpha_t
-    #
-    #     if t == 0:
-    #         log_z_over_z = jax.nn.logsumexp(log_w_t)
-    #     else:
-    #         log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(
-    #             log_w_t_minus_1)
-    #
-    #     log_z_hat_t = log_z_hat_t + log_z_over_z
-    #
-    #
-    #     resample_condition = True
-    #     # resample_condition = False
-    #     if resample_condition:
-    #         # Do resampling
-    #         rnd_key, subkey = jax.random.split(rnd_key)
-    #
-    #         a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
-    #
-    #         full_seq = full_seq[a_t]
-    #
-    #         # Make sure the gamma values also track the correct trajectories
-    #         log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
-    #
-    #         # Same for the p values:
-    #         log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
-    #
-    #         log_w_t = jnp.zeros_like(log_w_t)
+    # args become traced after passed through scan? Yes. So it's important not to
+    # update the cfg_p and cfg_twist; use the original non-traced args. Otherwise you get
+    # "Non-hashable static arguments are not supported" ValueError
+    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
+    log_z_hat_t, output_len, _, params_p, _, params_twist, prompt_len = carry
 
-    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,\
-    log_z_hat_t, use_final_twist, final_twist, output_len, cfg_p, params_p, cfg_twist, \
-    params_twist, prompt_len = carry
+    log_z_hat_t, full_seq = smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
+    output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, use_final_twist, final_twist)
+
+    # rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
+    # log_z_hat_t, output_len, cfg_p, params_p, cfg_twist, \
+    # params_twist, prompt_len = carry
+
+    if intermediate_sample_history:
+        return log_z_hat_t, full_seq, full_seq_list
+
 
     return log_z_hat_t, full_seq
+
+
+def smc_procedure(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
+    return smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
+    # return smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
 
 
 # TODO copy this, put the main loop in a lax.scan, it should work. For the dynamic arrays, I know now to use an arange, and that should be ok. No but I still need prompt_len.
@@ -1282,7 +1281,7 @@ def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final
 
 def smc_wrapper(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples):
 
-    log_z_hat, _ = smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples)
+    log_z_hat, _ = smc_procedure(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples)
     # print("--- LOG Z ---")
     # print(jnp.log(z_hat))
     return log_z_hat
@@ -1292,7 +1291,7 @@ def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fi
     prompt_len = prompt.shape[-1]
 
     rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
-    _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist)
 
     l_dre = 0.
@@ -1315,9 +1314,9 @@ def print_samples_using_twists(rnd_key, prompt, prompt_len, n_vocab, output_len,
 
     rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
 
-    _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
 
-    _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_non_jit(sk2, prompt,
+    _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_procedure(sk2, prompt,
                                                             cfg_p,
                                                             params_p,
                                                             cfg_twist,
@@ -1365,12 +1364,73 @@ def print_samples_using_twists(rnd_key, prompt, prompt_len, n_vocab, output_len,
     print("--END TEST--")
 
 
+def get_l_dre_roger_scan_iter(carry, scan_over):
+    l_dre, prompt_w_sigma_sample_s_1_to_t, cfg_twist, params_twist, prompt_len = carry
+    prompt_w_twist_sample_s_1_to_t_full_seq, t = scan_over
+    l_dre += (
+        evaluate_log_psi_t_full_seq(prompt_w_sigma_sample_s_1_to_t,
+        cfg_twist, params_twist, prompt_len + t )
+        - evaluate_log_psi_t_full_seq(prompt_w_twist_sample_s_1_to_t_full_seq,
+                                      cfg_twist, params_twist, prompt_len + t)
+    ).mean()
+    carry = l_dre, prompt_w_sigma_sample_s_1_to_t, cfg_twist, params_twist, prompt_len
+    return carry, None
 
+
+# TODO JUNE 28 replace the for loop with a scan loop, that should be a bunch faster. Then TEST on multiple iterations. TEST SPEED AND CORRECTNESS OF LEARNED TWISTS. COMPARE ALSO WITH NON JIT VERSION AND SEE IF SIMILAR LEARNED.
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "output_len", "n_twist"])
+def get_l_dre_roger_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
+    prompt_len = prompt.shape[-1]
+
+    rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p,
+                                                         params_p, cfg_twist,
+                                                         params_twist,
+                                                         final_twist,
+                                                         output_len, n_twist)
+
+    l_dre = 0.
+
+    _, final_twist_samples, intermediate_twist_samples_hist = smc_jit(rnd_key, prompt,
+                             cfg_p,
+                             params_p,
+                             cfg_twist, params_twist,
+                             final_twist,
+                             output_len,
+                             n_twist, use_final_twist=False, intermediate_sample_history=True)
+
+    scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len - 1))
+    # for t in range(output_len - 1):
+    #
+    #     prompt_w_twist_sample_s_1_to_t_full_seq = intermediate_twist_samples_hist[t]
+    #     l_dre += (
+    #         evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t + prompt_len + 1], cfg_twist, params_twist)
+    #               # evaluate_log_psi_t_full_seq(prompt_w_sigma_sample_s_1_to_t,
+    #               # cfg_twist, params_twist, prompt_len + t )
+    #         - evaluate_log_psi_t_full_seq(prompt_w_twist_sample_s_1_to_t_full_seq, cfg_twist, params_twist, prompt_len + t)
+    #     ).mean()
+    #     # TODO June 28 I think these are correct, but just check that they are. Also can replace the first one to use the full seq eval too
+
+    carry = (l_dre, prompt_w_sigma_sample_s_1_to_t, cfg_twist, params_twist, prompt_len)
+
+    carry, _ = jax.lax.scan(get_l_dre_roger_scan_iter, carry, scan_over, output_len - 1)
+
+    l_dre, _, _, _, _ = carry
+
+    l_dre /= (output_len - 1)
+    return -l_dre  # negative because now we have a loss
+
+
+
+
+# TODO June 26: this should also be jittable
+# Just, when making it jitted, be careful with what you do and test that it is the same as the non-jitted version
+# ALSO, optimize, make things efficient when rewriting with jit
 def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
     prompt_len = prompt.shape[-1]
 
     rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
-    _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk1, prompt, cfg_p,
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p,
                                                          params_p, cfg_twist,
                                                          params_twist,
                                                          final_twist,
@@ -1383,7 +1443,8 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
 
         rnd_key, sk = jax.random.split(rnd_key)
         # TODO May 22 should replace with a sequential SMC scheme: one t at a time, to avoid repetition here
-        _, prompt_w_twist_sample_s_1_to_t = smc_non_jit(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, None,
+        # NOTE HOWEVER THAT it is critical that you only use the twists up to the current time step
+        _, prompt_w_twist_sample_s_1_to_t = smc_procedure(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, None,
                                                         t - prompt_len,
                                                         n_twist, use_final_twist=False)
 
@@ -1399,7 +1460,7 @@ def get_l_dre_roger(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, f
 def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                 rew_model, output_len, n_twist, prompt_len, cfg_baseline, params_baseline,
                 cfg_p_0, params_p_0, beta_kl):
-    _, prompt_w_sigma_sample_s_1_to_t = smc_non_jit(sk, prompt,
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist,
                                                     params_twist,
@@ -1630,13 +1691,51 @@ class TestClass:
         d_ff=64,
     )
 
+    # def test_time_smc_jit_vs_no_jit(self):
+    #     n_smc_samples = 100
+    #     n_smc_times = 1000
+    #     final_twist = neg_beta_times_batch_reward_model(self.prompt_len,
+    #                                                     beta=1.,
+    #                                                     reward_model_fn=reward_model_varied)
+    #
+    #     start = time.time()
+    #     for i in range(n_smc_times):
+    #         print(i)
+    #         print(str(time.time() - start))
+    #         _, samples_non_jit = smc_non_jit(self.rnd_key, self.prompt,
+    #                                            self.cfg_p,
+    #                                            self.params_p,
+    #                                            self.cfg_twist, self.params_twist,
+    #                                            final_twist,
+    #                                            self.output_len,
+    #                                            n_smc_samples)
+    #     end = time.time()
+    #     total_time = end - start
+    #     print("TIME: " + str(total_time))
+    #
+    #     start = time.time()
+    #     for i in range(n_smc_times):
+    #         print(i)
+    #         print(str(time.time() - start))
+    #         _, samples_jit = smc_jit(self.rnd_key, self.prompt,
+    #                                          self.cfg_p,
+    #                                          self.params_p,
+    #                                          self.cfg_twist, self.params_twist,
+    #                                          final_twist,
+    #                                          self.output_len,
+    #                                          n_smc_samples)
+    #     end = time.time()
+    #     total_time = end - start
+    #     print("TIME: " + str(total_time))
+    #     1/0
+
     def test_smc_jit_vs_no_jit(self):
         n_smc_samples = 100
         final_twist = neg_beta_times_batch_reward_model(self.prompt_len,
                                                         beta=1.,
                                                         reward_model_fn=reward_model_varied)
 
-        _, samples_non_jit = smc_non_jit(self.rnd_key, self.prompt, self.cfg_p,
+        _, samples_non_jit = smc_procedure(self.rnd_key, self.prompt, self.cfg_p,
                                  self.params_p,
                                  self.cfg_twist, self.params_twist, final_twist,
                                  self.output_len,
@@ -1782,7 +1881,7 @@ class TestClass:
 
         analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
 
-        _, samples = smc_non_jit(self.rnd_key, self.prompt, self.cfg_p,
+        _, samples = smc_procedure(self.rnd_key, self.prompt, self.cfg_p,
                                  self.params_p,
                                  self.cfg_twist, self.params_twist, final_twist,
                                  self.output_len,
@@ -2045,6 +2144,60 @@ def main():
     # value_and_grad_loss_batch = jax.jit(
     #     value_and_grad_loss_batch_unjit, static_argnums=0
     # )
+
+
+    # # TODO REMOVE LATER TESTING ONLY
+    # prompt = [0, 1, 0, 1]
+    # prompt = jnp.array(prompt)
+    # prompt_len = prompt.shape[-1]
+    #
+    # n_smc_samples = 100
+    # n_smc_times = 100
+    # final_twist = neg_beta_times_batch_reward_model(prompt_len,
+    #                                                 beta=1.,
+    #                                                 reward_model_fn=reward_model_varied)
+    #
+    # # _, samples_jit, samples_hist = smc_jit(rnd_key, prompt,
+    # #                          cfg_p,
+    # #                          params_p,
+    # #                          cfg_twist, params_twist,
+    # #                          final_twist,
+    # #                          output_len(),
+    # #                          n_smc_samples, intermediate_sample_history=True)
+    # # print(samples_hist)
+    # # print(samples_hist.shape)
+    # # 1/0
+    #
+    # start = time.time()
+    # for i in range(n_smc_times):
+    #     print(i)
+    #     print(str(time.time() - start))
+    #     _, samples_non_jit = smc_non_jit(rnd_key, prompt,
+    #                                      cfg_p,
+    #                                      params_p,
+    #                                      cfg_twist, params_twist,
+    #                                      final_twist,
+    #                                      output_len(),
+    #                                      n_smc_samples)
+    # end = time.time()
+    # total_time = end - start
+    # print("TIME: " + str(total_time))
+    #
+    # start = time.time()
+    # for i in range(n_smc_times):
+    #     print(i)
+    #     print(str(time.time() - start))
+    #     _, samples_jit = smc_jit(rnd_key, prompt,
+    #                              cfg_p,
+    #                              params_p,
+    #                              cfg_twist, params_twist,
+    #                              final_twist,
+    #                              output_len(),
+    #                              n_smc_samples)
+    # end = time.time()
+    # total_time = end - start
+    # print("TIME: " + str(total_time))
+    # 1/0
 
 
     # grad_loss_batch = jax.pjit(grad_loss_batch_unjit, static_argnums=0)
