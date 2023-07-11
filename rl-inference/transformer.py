@@ -162,18 +162,13 @@ def transformer_init_params(
         layer = {}
         layer['norm_pre_attn_params'] = layer_norm_init(d_model)
 
-        # TODO JUL 7 MUST CLEAN UP ALL THE CODE AND MAKE IT PRESENTABLE FOR CODE REVIEW. Note parts that I haven't customized yet. Get rid of the args stuff.
 
-        # TODO Jul 6: let's perhaps just do single weight matrices for these projections
         # Seems unclear to me if you should include a bias or not here. I guess I can try with and without. Maybe without first, just for convenience/ease of implementation
-        # Don't use the pre-created functions. Use own matrices
-        # Rewrite the entire code just using my own codes. TODO JUL 6 NOT EVEN A SINGLE FUNCTION SHOULD BE COPIED. EVERY FUNCTION AND LINE I SHOULD WRITE
         # TODO AND ALSO THE PPO CODE. WRITE THAT TOO.
         # Instead of e.g. 8 heads of MxN matrices
         # We can just use a Mx8N matrix to immediately do the transformation.
         # https://stackoverflow.com/questions/65340088/multi-head-attention-correct-implementation-of-linear-transformations-of-q-k?rq=4
         # query_projected.view(batch_size, query_lenght, head_count, head_dimension).transpose(1,2)
-        # TODO MAKE SURE THE DIMENSIONS ARE CORRECT AND DO SOME TESTING TO ENSURE THAT THE VIEW DOES THE CORRECT ORDERING (e.g. test with 2x2 matrices and compare the view method versus direct indexing of certain parts
         key, layer['Wq_heads'] = linear_init_normal(key, d_model, d_k * n_heads)
         key, layer['Wk_heads'] = linear_init_normal(key, d_model, d_k * n_heads)
         key, layer['Wv_heads'] = linear_init_normal(key, d_model, d_v * n_heads)
@@ -250,8 +245,6 @@ def transformer(cfg, params, seq):
         sublayer_x = batch_layer_norm(layer['norm_pre_attn_params'], x)
         # print(sublayer_x)
 
-        # TODO customize/modify all the rest of the code too e.g. optimizer, params containers, etc. Write/rewrite every line of code yourself.
-
         # TODO include bias or not in attention? Couldn't find reasonable answers online
         Q, K, V = sublayer_x, sublayer_x, sublayer_x
         # print(Q)
@@ -317,7 +310,6 @@ def transformer(cfg, params, seq):
     x = linear(params['output_params'], x)
     # Return the final values without forcing softmax; softmax is to be done elsewhere if required
     return x
-
 
 
 
@@ -848,8 +840,6 @@ def smc_procedure(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fin
     # return smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
 
 
-# TODO copy this, put the main loop in a lax.scan, it should work. For the dynamic arrays, I know now to use an arange, and that should be ok. No but I still need prompt_len.
-# Maybe the other option is to separate the prompt from the generation, and then have the prompt be static, and then concatenate with the generation when I need to use it.
 # @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "use_final_twist", 'output_len', 'n_smc_samples']) # works but takes forever to recompile and recompiles several times
 def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
     # prompt_len = prompt.shape[-1]
