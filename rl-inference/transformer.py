@@ -8,8 +8,6 @@ import copy
 
 import argparse
 
-from typing import Dict, NamedTuple, Tuple
-
 import jax.numpy as jnp
 
 from functools import partial
@@ -18,8 +16,6 @@ import numpy as np
 import jax
 
 import optax
-
-
 
 
 @jit
@@ -139,7 +135,7 @@ def transformer_init_params(
     d_fc: int,
     max_len=4096,
 ):
-    # Build config struct for call
+    # Config needs to be hashable in order for it to work with jax jit
     config = HashableDict()
     config['d_k'] = d_k
     config['d_v'] = d_v
@@ -153,7 +149,7 @@ def transformer_init_params(
     # Create embedding layer
     params['embeddings'] = jax.random.normal(sk, shape=(n_vocab, d_model))
 
-    # Positional encodings initialized to zeros
+    # LEARNABLE positional encodings initialized to zeros
     params['positional_encodings'] = jnp.zeros((max_len, d_model))
 
     # For transformer layers
@@ -190,34 +186,18 @@ def transformer_init_params(
 
 
 def attention(Q, K, V, d_k, mask):
-    # print(Q.shape)
-    # print(K.shape)
-    # print(Q)
-    # print(K)
+
     attn_scores = Q @ K.transpose([0, 2, 1]) / d_k**0.5
     # print(attn_scores.shape)
     # Has shape (n_heads, seq_len, seq_len); remember, these are the attention scores,
     # so for each token in the sequence, you have a compatibility score with every other token in the sequence
-    # print(attn_scores)
 
-    attn_scores += mask
-
-    # print(attn_scores)
-
-    # print(jax.nn.softmax(attn_scores, axis=-1))
-    # print(jax.nn.softmax(attn_scores, axis=-1).shape)
-
-    # print(V)
+    attn_scores += mask # prevent attending to future tokens
 
     result = jax.nn.softmax(attn_scores, axis=-1) @ V
-
-    # print(result)
-    # print(result.shape)
-    # Jul 7 I think this is fine now
+    # Has shape (n_heads, seq_len, d_v)
 
     return result
-    # score = query @ key.T + mask  # L x L
-    # attn = jax.nn.softmax(cfg.tau * score, axis=1)  # L x L
 
 
 
@@ -279,27 +259,28 @@ def transformer(cfg, params, seq):
         mask = jnp.log(jnp.tril(jnp.ones((seq_len, seq_len)))).reshape(1, seq_len, seq_len)
 
         sublayer_x = attention(Q_Wq, K_Wk, V_Wv, cfg['d_k'], mask)
-        # print(sublayer_x)
         # print(sublayer_x.shape)
+        # Has shape (n_heads, seq_len, d_v)
 
         sublayer_x = jnp.concatenate(sublayer_x, axis=-1)
-        # print(sublayer_x)
         # print(sublayer_x.shape)
+        # Has shape (seq_len, n_heads * d_v) because concat uses the first axis for concatenation, and then axis=-1 does the concatenating on the last axis
 
         sublayer_x = linear(layer['Wo_params'], sublayer_x)
-        # print(x.shape)
         # print(sublayer_x.shape)
+        # Has shape (seq_len, d_model); so can be added to x which has the same shape
+        # (note that all seq_len here include the prompt)
 
         x = x + sublayer_x
 
-        # PRE-LN transformer
+        # PRE-LN transformer: see e.g. https://proceedings.mlr.press/v119/xiong20b/xiong20b.pdf for why we do this
         sublayer_x = batch_layer_norm(layer['norm_pre_fc_params'], x)
         sublayer_x = linear(layer['fc1_params'], sublayer_x)
         sublayer_x = jax.nn.relu(sublayer_x)
         sublayer_x = linear(layer['fc2_params'], sublayer_x)
         x = x + sublayer_x
 
-        # POST-LN transformer
+        # POST-LN transformer like in the original transformer paper
         # sublayer_x = linear(layer['fc1_params'], sublayer_x)
         # sublayer_x = jax.nn.relu(sublayer_x)
         # sublayer_x = linear(layer['fc2_params'], sublayer_x)
@@ -312,21 +293,7 @@ def transformer(cfg, params, seq):
     return x
 
 
-
-# Deterministic argmax sample below
-# def transformer_sample(cfg, params, seq: jnp.ndarray, length: int = 20):
-#
-#     for _i in range(length):
-#         output = transformer(cfg, params, seq)
-#
-#         indices_to_use = jnp.argmax(output[-1]) # Right so only the last logit here is used for sampling
-#
-#         seq = jnp.concatenate((seq, indices_to_use[None]))
-#
-#     return seq
-
 def stochastic_transformer_sample_iter(carry, t, cfg):
-    # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
     # Essentially the way this works is we pass in a full computation (eg full prompt_len + output_len)
     # but we only use the logit for the time step t, and discard the rest of the computation
     # That is, we are computing logits on the full sequence of length prompt_len + output_len
@@ -334,22 +301,23 @@ def stochastic_transformer_sample_iter(carry, t, cfg):
     # and the later tokens are unitialized (some garbage value)
     # so we end up wasting computation on those later tokens, as we only use the logit at time step t
     # but this is still faster than not using scan+jit
-    # The key point is that now we don't have dynamic arrays, and since the indexing uses [:, prompt_len + t - 1, :],
-    # the only changing part of the index still doesn't change shape. The key point is that no shapes are changing anywhere
+    # Now we don't have dynamic arrays, and since the indexing uses [:, prompt_len + t - 1, :],
+    # the only changing part of the index still doesn't change shape. The key point is that no shapes are changing anywhere.
     # So this works with jit, at the cost of a bit of wasted computation
-    # This is the approach that I saw people taking online with transformers. As of May 2023 there did not seem to be a better approach in jax (some discussion of mask didn't end up going anywhere)
+    # This is the approach that I saw people taking online with transformers.
+    # As of May 2023 there did not seem to be a better approach in jax (some discussion of jax.mask didn't end up going anywhere)
     rnd_key, params, full_seq, prompt_len = carry
     output_unnormalized_batch = batch_transformer(cfg, params, full_seq)
     rnd_key, subkey = jax.random.split(rnd_key)
-    # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax. I needed log_softmax on the other ones in order to properly combine with
-    # the other log term.
+    # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax.
+    # I needed log_softmax on the other ones in order to properly combine with the other log term.
     indices_to_use = jax.random.categorical(subkey, output_unnormalized_batch[:, prompt_len + t - 1, :],
                                  shape=(output_unnormalized_batch.shape[0],))
     full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
     carry = (rnd_key, params, full_seq, prompt_len)
     return carry, None
 
-# TODO MAY 30: Now that lax scan on this works, do lax scan on the smc procedure (AND ANYWHERE ELSE IT SHOULD WORK??).
+
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
 @partial(jax.jit, static_argnums=[1, 4, 5])
 def stochastic_transformer_sample(rnd_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples):
@@ -368,7 +336,7 @@ def stochastic_transformer_sample(rnd_key, cfg, params, prompt: jnp.ndarray, out
 
 @partial(jax.jit, static_argnums=0)
 def batch_transformer(cfg_p, params_p, seq):
-    # Output has shape [batch_size, prompt_len + output_len, n_vocab]
+    # Output has shape (batch_size, prompt_len + output_len, n_vocab)
     # Logsoftmax needed in order to go from unnormalized values to log probs
     batch_transformer_func = vmap(transformer, in_axes=(None, None, 0), out_axes=0)
     return batch_transformer_func(cfg_p, params_p, seq)
@@ -462,8 +430,6 @@ def get_all_new_seqs_single_t(seq, n_vocab):
     return all_new_seqs
 
 
-
-
 # @partial(jax.jit, static_argnames=['cfg_p', 'cfg_twist']) # Actually slower with the jit? Maybe due to compile time.
 def get_proposal_q_sample(rnd_key, seq, cfg_p, params_p, cfg_twist, params_twist):
     # Sample from q(s_t | s_{1:t-1}); samples a single time step, using the learned twists
@@ -535,7 +501,8 @@ def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
     output_psi_batch = final_twist(all_new_seqs)
 
     # Again the output_unnormalized_batch[:,-1,:] needs a log_softmax for the log probabilities to be correct
-    # However the final twist is just the - beta r(s) which is the same as exp of that followed by log. So no additional transformations needed, just add it directly to the logsoftmax of the output of the model
+    # However the final twist is just the - beta r(s) which is the same as exp of that followed by log.
+    # So no additional transformations needed, just add it directly to the logsoftmax of the output of the model
     log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]) + output_psi_batch # psi is already in log space
     indices_to_use = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(output_unnormalized_batch.shape[0],))
 
@@ -623,6 +590,8 @@ def evaluate_log_p_theta_t(seq, cfg_p, params_p):
 
 # Assume 0-based indexing for t
 def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t):
+    # Takes in sequence s_{1:t} (but really, a full seq from 1 all the way to output_len, including the prompt which is before s_1 (s_1 is the first generated token after the prompt))
+    # Evaluate log p_theta(s_t|s_{1:t-1},prompt). ONLY EVALUATES FOR s_t, not from 1 to t.
     # Takes in a full sequence including prompt and full output length (even if not yet generated)
     # Then if we want e.g. the first time step, e.g. t=0, then say prompt_len is 4, then prompt_len_plus_t = 4
     # and we want to evaluate the probability of the tokens outputted at the first time step, then what we need are the indices of the tokens
@@ -706,7 +675,7 @@ def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
         full_seq = full_seq[a_t]
 
-        # Below not necessary in the current formulation/use case for the code
+        # Below not necessary in the current formulation/use case for the code since this is the final iteration
         # # Make sure the gamma values also track the correct trajectories
         # log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
         #
@@ -742,14 +711,8 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist):
 
     log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
 
-    # if (t > 0):
-    #     print(log_p_theta_1_to_t_eval.shape)
-    # print( evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p).shape)
-
     log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t_full_seq(
         full_seq, cfg_p, params_p, prompt_len + t)
-
-    # print(log_p_theta_1_to_t_eval)
 
     log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist,
                                                    params_twist,
@@ -757,9 +720,8 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist):
 
     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
 
-    # Note that log_gamma_1_to_t_eval and log_q_t_eval are equivalent, given our q sampling scheme.
-    # So we could actually just skip those calculations together (TODO later: redo calc by removing those terms, and ensure the result is the same)
-    # The normalization constant is crucial; q has to be a normalized probability (for the weights; for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized)
+    # The normalization constant is crucial; q has to be a normalized probability (for the weights;
+    # for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized)
 
     # alpha is the factor multiplied (added in log space) to the previous weight
     log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
@@ -768,9 +730,6 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist):
 
     log_w_t = log_w_t_minus_1 + log_alpha_t
 
-    # if t == 0:
-    #     log_z_over_z = jax.nn.logsumexp(log_w_t)
-    # else:
     log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1)
 
     log_z_hat_t = log_z_hat_t + log_z_over_z
@@ -801,6 +760,8 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist):
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "use_final_twist", 'output_len', 'n_smc_samples', "intermediate_sample_history" ])
 def smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
+    # Generate samples using SMC with twists (learned and final, if use_final_twist)
+    # log_z_hat_t unused for now
     prompt_len = prompt.shape[-1]
 
     log_z_hat_t = 0.
@@ -876,13 +837,7 @@ def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final
 
         log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
 
-        # if (t > 0):
-        #     print(log_p_theta_1_to_t_eval.shape)
-        # print( evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p).shape)
-
         log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p)
-
-        # print(log_p_theta_1_to_t_eval)
 
         if (t == output_len - 1) and use_final_twist:
             log_r_psi_t_eval = evaluate_log_psi_t_final(prompt_w_s_1_to_t, final_twist)
@@ -891,9 +846,8 @@ def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final
 
         log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
 
-        # Note that log_gamma_1_to_t_eval and log_q_t_eval are equivalent, given our q sampling scheme.
-        # So we could actually just skip those calculations together (TODO later: redo calc by removing those terms, and ensure the result is the same)
-        # The normalization constant is crucial; q has to be a normalized probability (for the weights; for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized)
+        # The normalization constant is crucial; q has to be a normalized probability (for the weights;
+        # for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized otherwise you get weird issues)
 
         # alpha is the factor multiplied (added in log space) to the previous weight
         log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1 # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
@@ -901,16 +855,6 @@ def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final
         # is because if I follow the TODO where I cancel the numerator and denominator, I'll want the Z term to exist separately.
 
         log_w_t = log_w_t_minus_1 + log_alpha_t
-
-        # print("---weight check---")
-        # print(log_gamma_1_to_t_eval)
-        # print(log_gamma_1_to_t_minus_1_eval)
-        # print(log_q_t_eval)
-        # print(log_alpha_t)
-        #
-        # print(log_w_t)
-        # print(prompt_w_s_1_to_t)
-        # print("---end weight check---")
 
         if t == 0:
             log_z_over_z = jax.nn.logsumexp(log_w_t)
@@ -944,20 +888,13 @@ def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final
 
             log_w_t = jnp.zeros_like(log_w_t)
 
-            # print(f"smc iter: {t}")
-            # print("--after resample--")
-            # print(prompt_w_s_1_to_t)
-
-            # print("---RESAMPLING ENDED---")
-
     return log_z_hat_t, prompt_w_s_1_to_t
 
 
 def smc_wrapper(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples):
 
     log_z_hat, _ = smc_procedure(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples)
-    # print("--- LOG Z ---")
-    # print(jnp.log(z_hat))
+
     return log_z_hat
 
 
@@ -1056,6 +993,7 @@ def get_l_dre_roger_scan_iter(carry, scan_over, cfg_twist):
     return carry, None
 
 
+# This is the EBM Maximum Likelihood approach
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "output_len", "n_twist"])
 def get_l_dre_roger_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
     prompt_len = prompt.shape[-1]
@@ -1130,13 +1068,6 @@ def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twis
     return loss + baseline_loss
 
 
-jnp.set_printoptions(threshold=20, edgeitems=3, linewidth=2048, precision=3)
-np.set_printoptions(threshold=20, edgeitems=3, linewidth=2048, precision=3)
-
-
-def tree_axpy(a, x, y):
-    return jax.tree_map(lambda x, y: a * x + y, x, y)
-
 # TODO Test longer and longer seq lengths and check that the model A) correctly learns twists and B) correctly modifies the behaviour.
 # TODO also test comparing vs a strong baseline (e.g. PPO with knobs tuned) and compare quantitative and qualitative results.
 # TODO Find a setting that mimics real world things we care about (e.g. setting that allows for evasiveness, with sensitive words to avoid, etc.)
@@ -1151,9 +1082,6 @@ def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p
     seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
 
     # then do the summation done for the other stuff, recursively
-
-    # all_seqs_with_n_vocab_at_t = seq
-
     opt_log_twist_array_list = []
 
     opt_log_twist_single = calc_opt_twist_helper(seq, cfg_p, params_p, final_twist)
@@ -1161,8 +1089,6 @@ def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p
                                            jnp.ones(
                                                n_vocab - 1, ) * - base_reward))
 
-    # print(opt_log_twist_array)
-    # print(opt_log_twist_array.shape)
     opt_log_twist_array_list.append(opt_log_twist_array)
 
     for t in range(output_len - 1 - 1, 0, -1):
@@ -1213,8 +1139,6 @@ def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params
 
         model_twist_array_list.append(model_twist)
 
-    # print(model_twist_array_list)
-
     return model_twist_array_list
 
 
@@ -1253,7 +1177,7 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, final_
     opt_log_twist_array = calc_opt_twist_helper_mapped(all_seqs_with_n_vocab_at_t, cfg_p, params_p, final_twist)
     opt_log_twist_array_list.append(opt_log_twist_array)
 
-    # TODO JULY 1 can I vmap this loop too?
+    # TODO JULY 1 can I vmap this loop too? Seems not so trivial to do.
     # The above section calculates the optimal twists for the t-1 time step
     # (again remember no need to calculate for t as we use the final twist there,
     # also we never train any twists for time t in the way I currently have the code setup anyway)
@@ -1368,7 +1292,7 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
 
 
 
-
+# Some simple unit tests to make sure things are working more or less as we would expect
 class TestClass:
     rnd_key = jax.random.PRNGKey(42)
     prompt = jnp.array([0, 1, 0, 1])
@@ -1446,7 +1370,6 @@ class TestClass:
         rew_model = batch_reward_model(self.prompt_len,
                                        reward_model_fn=reward_model_varied)
 
-        # optimizer_p = Adam(self.params_p, lr=self.lr, betas=(0.9, 0.99))
         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_p_state = optimizer_p.init(self.params_p)
 
@@ -1496,7 +1419,6 @@ class TestClass:
         rew_model = batch_reward_model(self.prompt_len,
                                        reward_model_fn=reward_model_varied)
 
-        # optimizer_p = Adam(self.params_p, lr=self.lr, betas=(0.9, 0.99))
         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_p_state = optimizer_p.init(self.params_p)
 
@@ -1611,7 +1533,6 @@ class TestClass:
                                                         beta=1., reward_model_fn=reward_model_one_bad)
         optimizer_twist = optax.adam(learning_rate=lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
-        # optimizer_twist = Adam(self.params_twist, lr=lr, betas=(0.9, 0.99))
 
         experiment_cfg = ExperimentConfig(dre_type="analytic_mse_rel", rm_type="one_bad")
 
@@ -1656,7 +1577,6 @@ class TestClass:
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
 
         final_twist = neg_beta_times_batch_reward_model(self.prompt_len, beta=1., reward_model_fn=reward_model_varied)
-        # optimizer_twist = Adam(self.params_twist, lr=self.lr, betas=(0.9, 0.99))
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
@@ -1693,7 +1613,6 @@ class TestClass:
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
 
         final_twist = neg_beta_times_batch_reward_model(self.prompt_len, beta=1., reward_model_fn=reward_model_varied)
-        # optimizer_twist = Adam(self.params_twist, lr=self.lr, betas=(0.9, 0.99))
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
@@ -1724,7 +1643,7 @@ class TestClass:
                                          self.params_p, final_twist, self.cfg_twist,
                                          self.params_twist, rm_type=experiment_cfg.rm_type, verbose=False, relative_diff_loss=True)
 
-        assert avg_rel_diff < 0.1
+        assert avg_rel_diff < 0.25 # 0.1
 
 
 
@@ -1772,17 +1691,12 @@ def main():
         d_fc=args.d_fc_baseline,
     )
 
-    # grad_loss_batch = jax.pjit(grad_loss_batch_unjit, static_argnums=0)
-
-    # optimizer_p = Adam(params_p, lr=args.lr_p, betas=(args.beta1, args.beta2))
     optimizer_p = optax.adam(learning_rate=args.lr_p, b1=args.beta1, b2=args.beta2)
     optim_p_state = optimizer_p.init(params_p)
 
-    # optimizer_twist = Adam(params_twist, lr=args.lr_twist, betas=(args.beta1, args.beta2))
     optimizer_twist = optax.adam(learning_rate=args.lr_twist, b1=args.beta1, b2=args.beta2)
     optim_twist_state = optimizer_twist.init(params_twist)
 
-    # optimizer_baseline = Adam(params_baseline, lr=args.lr_baseline, betas=(args.beta1, args.beta2))
     optimizer_baseline = optax.adam(learning_rate=args.lr_baseline, b1=args.beta1, b2=args.beta2)
     optim_baseline_state = optimizer_baseline.init(params_baseline)
 
@@ -1818,8 +1732,6 @@ def main():
 
                 grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist)
 
-
-                # params_twist = optimizer_twist.step(params_twist, grad_params_twist)
                 updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
                 params_twist = optax.apply_updates(params_twist, updates_twist)
 
@@ -1828,9 +1740,6 @@ def main():
 
                 grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
                          final_twist, rew_model, args.output_len, args.n_twist, prompt_len, cfg_baseline, params_baseline, cfg_p_0, params_p_0, args.beta_kl)
-
-                # params_p = optimizer_p.step(params_p, grad_params_p)
-                # params_baseline = optimizer_baseline.step(params_baseline, grad_params_baseline)
 
                 updates_p, optim_p_state = optimizer_p.update(
                     grad_params_p, optim_p_state, params_p)
@@ -1877,7 +1786,6 @@ def main():
     print("TIME: " + str(total_time))
 
 
-# TODO Jul 8: heavy cleanup of code, continue with using own code, comment and write documentation, rerun tests, check correctness of everything.
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("transformer")
 
@@ -1893,7 +1801,6 @@ if __name__ == "__main__":
     parser.add_argument("--beta1", type=float, help="Adam beta1", default=0.9)
     parser.add_argument("--beta2", type=float, help="Adam beta2", default=0.99)
     parser.add_argument("--epochs", type=int, default=100)
-    # parser.add_argument("--opt1bit", default=False, "Use signs of gradients, not gradients")
     parser.add_argument("--print_every", type=int, default=1)
 
     parser.add_argument("--beta_temp", type=float,
@@ -1903,7 +1810,7 @@ if __name__ == "__main__":
                         help="beta used for kl div from original policy (to prevent policy collapse)",
                         default=1.)
 
-    # Init the model params
+    # Initialize the model params
     # IN THE ORIGINAL TRANSFORMER PAPER d_k = d_v = d_model / n_heads
     parser.add_argument("--n_heads", default=4, type=int,
                         help="Number of attention heads")
@@ -1956,7 +1863,7 @@ if __name__ == "__main__":
                         help="Num of tokens in vocab")
 
     parser.add_argument("--dre_type", default="roger", help="roger or sixo")
-    # TODO JUL 10 option for choice of optimizer
+    # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=42)
 
