@@ -223,20 +223,15 @@ def transformer(cfg, params, seq):
         # print(x)
         # x is of shape (batch_size, d_model)
         sublayer_x = batch_layer_norm(layer['norm_pre_attn_params'], x)
-        # print(sublayer_x)
 
-        # TODO include bias or not in attention? Couldn't find reasonable answers online
         Q, K, V = sublayer_x, sublayer_x, sublayer_x
-        # print(Q)
-        # print(Q.shape)
-        # print(layer.Wq_heads.w)
-        # print(layer.Wq_heads.b)
+
+        # TODO include bias or not in projection matrices? Couldn't find reasonable answers online
+        # Most implementations do include the bias. It doesn't add much computational overhead
+        # and may increase the model capacity or make it easier for the model to learn in some edge cases (e.g. you don't have to have all 0s for both Q and K mapping to 0)
 
         # The reshape and transpose gives a result which is equivalent do doing the below,
         # and then stacking, for example (with dimension 3 as the d_k, and 2 heads only)
-        # Q_Wq_no_reshape = linear(layer['Wq_heads'], Q)
-        # print(Q_Wq_no_reshape)
-        # print(Q_Wq_no_reshape.shape)
         # print(Q @ layer.Wq_heads.w[:, :3])
         # print(Q @ layer.Wq_heads.w[:, 3:])
         Q_Wq = linear(layer['Wq_heads'], Q)\
@@ -248,10 +243,6 @@ def transformer(cfg, params, seq):
 
         # https://stackoverflow.com/questions/65340088/multi-head-attention-correct-implementation-of-linear-transformations-of-q-k?rq=4
         # query_projected.view(batch_size, query_lenght, head_count, head_dimension).transpose(1,2)
-
-        # print(Q_Wq.shape)
-        # print(K_Wk.shape)
-        # print(V_Wv.shape)
 
         # This is 0 for elements above the diagonal and -inf otherwise.
         # Adding this to attention then results in 0 after softmax for the tokens
