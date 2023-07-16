@@ -25,16 +25,48 @@ def kl_div_jax(log_p_target, log_p_curr):
     return kl_div
 
 
+def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p,
+                       optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline):
+    updates_p, optim_p_state = optimizer_p.update(
+        grad_params_p, optim_p_state, params_p)
+    params_p = optax.apply_updates(params_p, updates_p)
+
+    updates_baseline, optim_baseline_state = optimizer_baseline.update(
+        grad_params_baseline, optim_baseline_state, params_baseline)
+    params_baseline = optax.apply_updates(params_baseline,
+                                          updates_baseline)
+
+    return params_p, optim_p_state, params_baseline, optim_baseline_state
+
 class ExperimentConfig:
-    def __init__(self, dre_type, rm_type):
+    def __init__(self, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0):
         self.dre_type = dre_type.lower()
         assert self.dre_type in ["roger", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
         self.dre_grad_fn = self._get_dre_grad_fn()
-        self.rl_loss_fn = jax.grad(get_rl_loss, argnums=[3, 12])
+
+        self.rl_loss_type = rl_loss_type.lower()
+        assert self.rl_loss_type in ["custom", "ppo"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
+        self.rl_loss_fn = self._get_rl_loss_fn()
+        if self.rl_loss_type == "custom":
+            self.beta_kl = beta_kl
+        elif self.rl_loss_type == "ppo":
+            assert isinstance(ppo_steps, int)
+            assert ppo_steps > 0
+            self.ppo_steps = ppo_steps
+            self.clip_epsilon = clip_epsilon
+
 
         self.rm_type = rm_type.lower()
         assert self.rm_type in ["one_bad", "varied"]
         self.rm = self._get_rm()
+
+    def _get_rl_loss_fn(self):
+        if self.rl_loss_type == "custom":
+            return jax.grad(rl_loss, argnums=[3, 12])
+        elif self.rl_loss_type == "ppo":
+            return jax.grad(ppo_and_value_loss, argnums=[3, 9], has_aux=True)
+        else:
+            raise NotImplementedError
 
     def _get_dre_grad_fn(self):
         if self.dre_type == "roger":
@@ -72,13 +104,97 @@ class ExperimentConfig:
                                             n_twist)
         return grad_params_twist
 
-    def get_grad_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                         final_twist, rew_model, output_len, n_twist, prompt_len,
-                         cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl):
-        grad_params_p, grad_baseline = self.rl_loss_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                         final_twist, rew_model, output_len, n_twist, prompt_len,
-                         cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl)
-        return grad_params_p, grad_baseline
+    # TODO Jul 13: After finishing, when doing a commit, look at all the diffs, and go over each line to make sure it makes sense and that there are no typos.
+    # TODO JUL 13 FIRST TEST, FIX, THEN DO THE ABOVE
+    # TODO Jul 13 Check that everything else is working, including each of the print statements, document all of the shapes, check they all match, etc.
+    # WRITE SOME UNIT TESTS FOR PPO: check that the baseline/value function learns something reasonable. Check that the policy learns something reasonable too.
+    def update_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                                     final_twist, rew_model, output_len, n_samples, prompt_len,
+                                     cfg_baseline, params_baseline, cfg_p_0, params_p_0,
+                                     optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state):
+        if self.rl_loss_type == "custom":
+
+            grad_params_p, grad_params_baseline = self.rl_loss_fn(sk, prompt, cfg_p,
+                                                           params_p, cfg_twist,
+                                                           params_twist,
+                                                           final_twist,
+                                                           rew_model,
+                                                           output_len, n_samples,
+                                                           prompt_len,
+                                                           cfg_baseline,
+                                                           params_baseline,
+                                                           cfg_p_0, params_p_0,
+                                                           self.beta_kl)
+            # grad_params_p, grad_params_baseline = self.get_grad_params_p_and_baseline(
+            #     sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            #     final_twist, rew_model, output_len, n_twist, prompt_len,
+            #     cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl)
+
+            # updates_p, optim_p_state = optimizer_p.update(
+            #     grad_params_p, optim_p_state, params_p)
+            # params_p = optax.apply_updates(params_p, updates_p)
+            #
+            # updates_baseline, optim_baseline_state = optimizer_baseline.update(
+            #     grad_params_baseline, optim_baseline_state, params_baseline)
+            # params_baseline = optax.apply_updates(params_baseline, updates_baseline)
+
+            params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p,
+                       optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline)
+
+            return params_p, optim_p_state, params_baseline, optim_baseline_state
+        elif self.rl_loss_type == "ppo":
+            (grad_params_p, grad_params_baseline), ref_log_p = \
+                self.rl_loss_fn(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_samples, rew_model, cfg_baseline, params_baseline,
+                                self.clip_epsilon, old_log_p=None, first_iter=True)
+
+            params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(optimizer_p,
+                                                           grad_params_p,
+                                                           optim_p_state,
+                                                           params_p,
+                                                           optimizer_baseline,
+                                                           grad_params_baseline,
+                                                           optim_baseline_state,
+                                                           params_baseline)
+
+            # TODO JUL 13 lax.scan here too.
+            for step in range(1, self.ppo_steps):
+                (grad_params_p, grad_params_baseline), _ = \
+                    self.rl_loss_fn(sk, prompt, cfg_p, params_p, prompt_len,
+                                    output_len, n_samples, rew_model,
+                                    cfg_baseline, params_baseline,
+                                    self.clip_epsilon, old_log_p=ref_log_p,
+                                    first_iter=False)
+                params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(
+                    optimizer_p,
+                    grad_params_p,
+                    optim_p_state,
+                    params_p,
+                    optimizer_baseline,
+                    grad_params_baseline,
+                    optim_baseline_state,
+                    params_baseline)
+
+
+            return params_p, optim_p_state, params_baseline, optim_baseline_state
+
+        else:
+            raise NotImplementedError
+
+    # def get_grad_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    #                      final_twist, rew_model, output_len, n_twist, prompt_len,
+    #                      cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl):
+    #     if self.rl_loss_type == "custom":
+    #         grad_params_p, grad_baseline = self.rl_loss_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    #                          final_twist, rew_model, output_len, n_twist, prompt_len,
+    #                          cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl)
+    #     elif self.rl_loss_type == "ppo":
+    #                     (grad_params_p, grad_baseline), log_p = self.rl_loss_fn(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_samples, rew_model, cfg_baseline, params_baseline, clip_epsilon, old_log_p, first_iter=True)
+    #
+    #         ppo_and_value_loss(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_samples, rew_model, cfg_baseline, params_baseline, clip_epsilon, old_log_p, first_iter=True)
+    #
+    #     else:
+    #         raise NotImplementedError
+    #     return grad_params_p, grad_baseline
 
 # DO NOT MUTATE THIS. TREAT THIS AS IMMUTABLE
 # https://stackoverflow.com/questions/1151658/python-hashable-dicts
@@ -160,7 +276,6 @@ def transformer_init_params(
 
 
         # Seems unclear to me if you should include a bias or not here. I guess I can try with and without. Maybe without first, just for convenience/ease of implementation
-        # TODO AND ALSO THE PPO CODE. WRITE THAT TOO.
         # Instead of e.g. 8 heads of MxN matrices
         # We can just use a Mx8N matrix to immediately do the transformation.
         # https://stackoverflow.com/questions/65340088/multi-head-attention-correct-implementation-of-linear-transformations-of-q-k?rq=4
@@ -226,7 +341,7 @@ def transformer(cfg, params, seq):
 
         Q, K, V = sublayer_x, sublayer_x, sublayer_x
 
-        # TODO include bias or not in projection matrices? Couldn't find reasonable answers online
+        # Include bias or not in projection matrices? Couldn't find reasonable answers online (that gave an explanation)
         # Most implementations do include the bias. It doesn't add much computational overhead
         # and may increase the model capacity or make it easier for the model to learn in some edge cases (e.g. you don't have to have all 0s for both Q and K mapping to 0)
 
@@ -313,7 +428,7 @@ def stochastic_transformer_sample_iter(carry, t, cfg):
 @partial(jax.jit, static_argnums=[1, 4, 5])
 def stochastic_transformer_sample(rnd_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples):
     prompt_len = prompt.shape[0]
-    print(prompt_len)
+    # print(prompt_len)
     batch_prompt = jnp.full((n_samples, prompt.shape[0]), prompt)
     output = jnp.zeros((n_samples, output_len), dtype=jnp.int32)
     full_seq = jnp.concatenate((batch_prompt, output), axis=1)
@@ -365,7 +480,7 @@ def reward_model_one_bad(single_seq, prompt_len):
 # @partial(jax.jit, static_argnames=["prompt_len"])
 def reward_model_varied(single_seq, prompt_len):
     # Just for testing
-    reward_0, reward_1, reward_2, reward_3, reward_4, reward_5 = -4, -3, -2, -1, 0, 0
+    reward_0, reward_1, reward_2, reward_3, reward_4, reward_5 = -4, -3, -2, -1, 0, 1
     # The default reward for other strings not specified above is 0
 
     if len(single_seq.shape) == 2:
@@ -542,33 +657,68 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist):
     # First axis is batch, last is n_vocab
     # We take [-2] index because this is for the last token in the current sequence (not including the next predicted token)
     # Then we take [seq[:, -1]] because that gives the indices of the corresponding token that was generated, for which we want the psi value
-    # jnp.arange(seq[:,-1].shape[0]), seq[:,-1] just lets us do the indexing we want.
+    # jnp.arange(seq.shape[0]), seq[:,-1] just lets us do the indexing we want.
+    # What it does is take index 0, 1, 2, ... from the first axis, and then the indices according to the tokens from the second axis
     # Now an important thing to note: since the optimal psi_T is just the exp(-beta r(s)), and the optimal psi_t is sigma(s_{1:t})/p(s_{1:t}),
     # we cannot constrain the psi (psi, or at least the output from the twist, is not a probability). We also have a choice: we can make the twist directly
     # represent exp(-beta r(s)), or we can make it represent the log of that, -beta r(s).
     # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
-    return output_psi[:,-2,:][jnp.arange(seq[:,-1].shape[0]), seq[:,-1]]
+    return output_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
 def evaluate_log_psi_t_final(seq, final_twist):
     return final_twist(seq)
 
 def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(seq, cfg_p, params_p, final_twist):
-    # Takes in sequence s_{1:t}
+    # Takes in batches of sequences s_{1:t}
     # Right now evaluates UNNORMALIZED log q_t which is not actually what the q_t probability is supposed to be
     # Evaluates p(s_t | s_{1:t-1}) psi(s_{1:t})  (IS UNNORMALIZED)
     return evaluate_log_p_theta_t(seq, cfg_p, params_p) + evaluate_log_psi_t_final(seq, final_twist)
 
-def evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len):
+def evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len, output_log_p_for_each_t=False):
     # Evaluate log p_theta(s_{1:t}) (given the prompt)
-    log_p = 0.
-    for t in range(output_len):
-        # print(seq[:, :prompt_len + t + 1].shape)
-        log_p += evaluate_log_p_theta_t(seq[:, :prompt_len + t + 1], cfg_p, params_p)
-    return log_p
+
+    # This is a slow version used for a check
+    # log_p = 0.
+    # for t in range(output_len):
+        # log_p += evaluate_log_p_theta_t(seq[:, :prompt_len + t + 1], cfg_p, params_p)
+
+    # seq has shape (batch, seq_len) (NOTE: seq_len includes prompt_len + output_len)
+    output_unnormalized = batch_transformer(cfg_p, params_p, seq)
+    log_p_all_tokens = jax.nn.log_softmax(output_unnormalized, axis=-1)
+    # log_p_all_tokens has shape (batch, seq_len, n_vocab)
+
+    output_tokens = seq[:, prompt_len:]
+    log_p_all_tokens_for_output_time_steps = log_p_all_tokens[:, prompt_len-1:-1, :] # I do this because, e.g. for the first output token, you want the log_p that was generated by the transformer after the last token of the prompt was fed into it. Therefore if the prompt_len is 4, you want position 3 (in 0 based indexing), as that's the 4th token that was passed in, and that gives you logits for the first output token
+    # print(log_p_all_tokens_for_output_time_steps.shape)
+    # log_p_all_tokens_for_output_time_steps has shape (batch, output_len)
+
+    # The way this line below works is: the first arange is appended an additional axis to have shape (batch, 1)
+    # The second arange has shape (output_len,).
+    # The way numpy broadcasting works is it checks dimensions from right to left, and requires either a match
+    # or one of the axes to be 1. Since output_tokens has shape (batch, output_len), then the second arange broadcasts fine,
+    # whereas the first one needs an additional axis to broadcast. Then, we have 3 arrays all broadcast to shape (batch, output_len)
+    # The first broadcast array has all 0s in the first row, then all 1s, etc.
+    # The second broadcast array has 0,1,2... in the first row, and in every row
+    # The third array is just the indices of the tokens we want to extract
+    # Finally, jax takes our 3 indices for each of the batch*output_len items, applies across the 3 axes of log_p_all_tokens
+    # for each of the batch*output_len items, resulting in our final matrix of shape (batch, output_len)
+    log_p_select_tokens = log_p_all_tokens_for_output_time_steps[jnp.arange(seq.shape[0])[:, None], jnp.arange(output_tokens.shape[-1]), output_tokens]
+
+    # output_log_p_for_each_t means returning log_p_theta_t for each of the individual time steps t.
+    # The default is False, in which case we would return the sum, e.g. a single probability for the sequence from 1 to t (given the prompt)
+    if output_log_p_for_each_t:
+        return log_p_select_tokens
+
+    log_p_1_to_t = log_p_select_tokens.sum(axis=-1)
+
+    # print(jnp.abs(log_p - log_p_1_to_t))
+    # print(jnp.abs(log_p - log_p_1_to_t).sum())
+
+    return log_p_1_to_t # shape (batch)
 
 
 def evaluate_log_p_theta_t(seq, cfg_p, params_p):
-    # Takes in sequence s_{1:t}
+    # Takes in batches of sequences s_{1:t}
     # Evaluate log p_theta(s_t|s_{1:t-1}) - VERY IMPORTANT - THIS ONLY EVALUATES for s_t, not for the full sequence from 1 to t
     output_unnormalized = batch_transformer(cfg_p, params_p, seq)
 
@@ -576,12 +726,13 @@ def evaluate_log_p_theta_t(seq, cfg_p, params_p):
     # We take [-2] index because this is the log prob of s_t (the last token in the current sequence (not including the next predicted token))
     # Log softmax is needed to convert to log probabilities
     # Then we take [seq[:, -1]] because that gives the indices of the corresponding token that was generated, for which we want the logit value
-    # jnp.arange(seq[:,-1].shape[0]), seq[:,-1] just lets us do the indexing we want.
-    return jax.nn.log_softmax(output_unnormalized[:,-2,:])[jnp.arange(seq[:,-1].shape[0]), seq[:,-1]]
+    # jnp.arange(seq.shape[0]), seq[:,-1] just lets us do the indexing we want.
+    # What it does is take index 0, 1, 2, ... from the first axis, and then the indices according to the tokens from the second axis
+    return jax.nn.log_softmax(output_unnormalized[:,-2,:])[jnp.arange(seq.shape[0]), seq[:,-1]]
 
 # Assume 0-based indexing for t
 def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t):
-    # Takes in sequence s_{1:t} (but really, a full seq from 1 all the way to output_len, including the prompt which is before s_1 (s_1 is the first generated token after the prompt))
+    # Takes in batches of sequences s_{1:t} (but really, a full seq from 1 all the way to output_len, including the prompt which is before s_1 (s_1 is the first generated token after the prompt))
     # Evaluate log p_theta(s_t|s_{1:t-1},prompt). ONLY EVALUATES FOR s_t, not from 1 to t.
     # Takes in a full sequence including prompt and full output length (even if not yet generated)
     # Then if we want e.g. the first time step, e.g. t=0, then say prompt_len is 4, then prompt_len_plus_t = 4
@@ -922,6 +1073,12 @@ def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, par
     # log_psi = evaluate_log_psi_t_final(seq, final_twist)
     print(log_p)
 
+def inspect_varied_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p):
+    print("--INSPECT VARIED PROGRESS--")
+    all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len)
+    log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
+                                                 prompt_len, output_len)
+    print(log_p_all_seqs)
 
 
 def print_samples_using_twists(rnd_key, prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist, n_twist):
@@ -1018,7 +1175,7 @@ def get_l_dre_roger_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twis
     return -l_dre  # negative because now we have a loss
 
 
-def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
+def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                 rew_model, output_len, n_twist, prompt_len, cfg_baseline, params_baseline,
                 cfg_p_0, params_p_0, beta_kl):
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
@@ -1038,6 +1195,7 @@ def get_rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twis
 
     baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
     baseline_no_grad = jax.lax.stop_gradient(baseline)
+    print("Baseline value (Custom)")
     print(baseline)
 
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
@@ -1096,8 +1254,6 @@ def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p
         opt_log_twist_array = jnp.concatenate((opt_log_twist_single.reshape((1,)), jnp.ones(n_vocab - 1,) * - base_reward ))
 
         opt_log_twist_array_list.append(opt_log_twist_array)
-
-    print(opt_log_twist_array_list)
 
     return opt_log_twist_array_list
 
@@ -1282,6 +1438,156 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
     return sum_diff / total_size
 
 
+# PPO STUFF
+@jit
+def update_gae_with_delta_backwards(gae, delta):
+    gae = gae * args.gamma * args.gae_lambda + delta
+    return gae, gae
+
+# @jit
+def get_gae_advantages(rewards, values, next_val_history):
+    deltas = rewards + args.gamma * jax.lax.stop_gradient(
+        next_val_history) - jax.lax.stop_gradient(values)
+
+    deltas = deltas.transpose() # use (seq_len, batch) shape here for the purpose of the scan which has to operate on the leading axis. An alternative approach would be to just vmap over the batch dimension
+
+    # print("--gae--")
+    # print(deltas.shape)
+    # print(deltas)
+
+    gae = jnp.zeros_like(deltas[0, :])
+
+    deltas = jnp.flip(deltas, axis=0)
+    # print(deltas.shape)
+    # print(deltas)
+
+    gae, flipped_advantages = jax.lax.scan(update_gae_with_delta_backwards, gae, deltas, deltas.shape[0])
+    advantages = jnp.flip(flipped_advantages, axis=0)
+
+    advantages = advantages.transpose() # return to (batch, output_len) to be consistent with the rest of the code
+    # print(advantages.shape)
+    # print(advantages)
+
+    return advantages
+
+
+# TODO Jul 13 JIT? Same for RL loss. Or the whole outer training loop perhaps
+def ppo_and_value_loss(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_samples, rew_model, cfg_baseline, params_baseline, clip_epsilon, old_log_p, first_iter=False):
+
+    if not first_iter:
+        assert old_log_p is not None
+
+    seq = stochastic_transformer_sample(sk, cfg_p, params_p, prompt, output_len, n_samples)
+
+    curr_log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len,
+                                    output_len, output_log_p_for_each_t=True)
+
+    # print(curr_log_p.shape) # should be batch, output_len
+
+    if first_iter:
+        old_log_p = jax.lax.stop_gradient(curr_log_p)
+
+    prob_ratio = jnp.exp(curr_log_p - old_log_p)
+
+    rewards = jnp.zeros_like(curr_log_p)
+    rewards = rewards.at[:, -1].set(rew_model(seq))
+
+    # print(rewards)
+    # print(rewards[:, -3:])
+
+    # This assumes the same model arch for the baseline as in our derivation,
+    # which should be ok. Just the method of training the model is different
+    values_incl_prompt = batch_transformer(cfg_baseline, params_baseline, seq).squeeze()
+    # print(values_incl_prompt.shape) # should be (batch, seq_len)
+    # print(jax.lax.stop_gradient(values_incl_prompt))
+
+    values = values_incl_prompt[:, prompt_len:]
+
+    # print(values.shape) # (batch, output_len)
+    # print(jax.lax.stop_gradient(values))
+
+    next_values = jnp.zeros_like(values)
+    next_values = next_values.at[:, :-1].set(values[:, 1:])
+    next_values = jax.lax.stop_gradient(next_values)
+    # Leave the very last next value to be 0, because after the sequence is finished, the next value is 0 (no more rewards after end of sequence; unlike in RL where env terminates but you may still be in a state that's similar to a state you previously visited)
+
+    # print(jax.lax.stop_gradient(next_values))
+
+
+
+    advantages = get_gae_advantages(rewards, values, next_values)
+
+    # print("--seq--")
+    # print(seq)
+    # print("-----")
+    # print(rewards)
+    # print(jax.lax.stop_gradient(advantages))
+
+    cpi_objective = prob_ratio * advantages
+
+    # print(jax.lax.stop_gradient(cpi_objective))
+
+    ppo_objective = jnp.minimum(cpi_objective, jnp.clip(prob_ratio, 1 - clip_epsilon, 1 + clip_epsilon ) * advantages)
+
+    # print(jax.lax.stop_gradient(ppo_objective))
+    # print(jax.lax.stop_gradient(cpi_objective - ppo_objective))
+
+    ppo_loss = -ppo_objective.mean()
+
+    print("PPO LOSS")
+    print(jax.lax.stop_gradient(ppo_loss))
+
+    val_loss = value_loss(rewards, values, jnp.zeros(seq.shape[0],)) # again 0 value in the final state (e.g. T+1 state) as the sequence has finished
+
+    print("PPO + VAL LOSS")
+    print(jax.lax.stop_gradient(val_loss))
+    print(jax.lax.stop_gradient(ppo_loss + val_loss))
+    print("-----")
+
+    # return ppo_loss, curr_log_p
+    return ppo_loss + val_loss, old_log_p
+
+
+
+def reverse_cumsum(x, axis):
+    return x + jnp.sum(x, axis=axis, keepdims=True) - jnp.cumsum(x, axis=axis)
+
+# @jit
+def value_loss(rewards, values, final_state_vals):
+
+    rewards = rewards.transpose()
+    values = values.transpose() # again switch batch from axis 0 to axis 1, and do operations like cumsum over the time dimension
+
+    final_state_vals = jax.lax.stop_gradient(final_state_vals)
+
+    discounts = jnp.cumprod(args.gamma * jnp.ones(rewards.shape),
+                                 axis=0) / args.gamma
+
+    gamma_t_r_ts = rewards * discounts
+
+    # sum of discounted rewards (discounted to the first time step); first entry has all the future discounted rewards,
+    # second entry has all the rewards from the second step onwards, but discounted to the first time step!
+    # Thus, dividing by the cumulative discount brings the discounted rewards to the appropriate time step
+    # e.g. after dividing by discounts, you now have the rewards from time step 2 onwards discounted
+    # only up to time step 2
+    G_ts = reverse_cumsum(gamma_t_r_ts, axis=0)
+    R_ts = G_ts / discounts
+
+    final_val_discounted_to_curr = (args.gamma * jnp.flip(discounts, axis=0)) * final_state_vals
+
+    # You DO need a detach on these. Because it's the target - it should be detached. It's a target value.
+    # Essentially a Monte Carlo style type return for R_t, except for the final state we also use the estimated final state value.
+    # This becomes our target for the value function loss. So it's kind of a mix of Monte Carlo and bootstrap, but anyway you need the final value
+    # because otherwise your value calculations will be inconsistent
+    values_loss = (R_ts + final_val_discounted_to_curr - values) ** 2
+
+    # print(jax.lax.stop_gradient(values_loss))
+    # print(values_loss.shape)
+    # print(values_loss.sum(axis=0)) # (batch,) shape
+
+    values_loss = values_loss.sum(axis=0).mean() # sum across time dimension, mean across batch dimension
+
+    return values_loss
 
 # Some simple unit tests to make sure things are working more or less as we would expect
 class TestClass:
@@ -1293,6 +1599,7 @@ class TestClass:
     # I cannot declare final twist here for it to work
     lr = 0.0001
     n_twist = 1000 # for the training procedure
+    n_policy_samples = 1000
 
     rnd_key, cfg_p, params_p = transformer_init_params(
         rnd_key,
@@ -1345,9 +1652,6 @@ class TestClass:
                                          self.output_len,
                                          n_smc_samples)
 
-        print(samples_non_jit)
-        print(samples_jit)
-        print(jnp.abs(samples_non_jit - samples_jit))
         assert (jnp.abs(samples_non_jit - samples_jit)).sum() == 0
 
 
@@ -1364,25 +1668,45 @@ class TestClass:
         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_p_state = optimizer_p.init(self.params_p)
 
-        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied")
+        optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
+        optim_baseline_state = optimizer_baseline.init(self.params_baseline)
+
+        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
 
         num_epochs = 10
         for _ in range(num_epochs):
 
             rnd_key, sk = jax.random.split(self.rnd_key)
 
-            grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(
-                sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
-                self.params_twist,
-                final_twist, rew_model, self.output_len, self.n_twist,
-                self.prompt_len,
-                self.cfg_baseline, self.params_baseline, self.cfg_p_0,
-                self.params_p_0, beta_kl)
+            self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
+                experiment_cfg.update_params_p_and_baseline(sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
+                                                            self.params_twist,
+                                                            final_twist,
+                                                            rew_model,
+                                                            self.output_len,
+                                                            self.n_policy_samples,
+                                                            self.prompt_len,
+                                                            self.cfg_baseline,
+                                                            self.params_baseline,
+                                                            self.cfg_p_0,
+                                                            self.params_p_0,
+                                                            optimizer_p,
+                                                            optim_p_state,
+                                                            optimizer_baseline,
+                                                            optim_baseline_state)
 
-            # self.params_p = optimizer_p.step(self.params_p, grad_params_p)
-            updates_p, optim_p_state = optimizer_p.update(
-                grad_params_p, optim_p_state, self.params_p)
-            self.params_p = optax.apply_updates(self.params_p, updates_p)
+            # grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(
+            #     sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
+            #     self.params_twist,
+            #     final_twist, rew_model, self.output_len, self.n_twist,
+            #     self.prompt_len,
+            #     self.cfg_baseline, self.params_baseline, self.cfg_p_0,
+            #     self.params_p_0, beta_kl)
+            #
+            # # self.params_p = optimizer_p.step(self.params_p, grad_params_p)
+            # updates_p, optim_p_state = optimizer_p.update(
+            #     grad_params_p, optim_p_state, self.params_p)
+            # self.params_p = optax.apply_updates(self.params_p, updates_p)
 
         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
                                                  self.output_len)
@@ -1413,25 +1737,48 @@ class TestClass:
         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_p_state = optimizer_p.init(self.params_p)
 
-        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied")
+        optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
+        optim_baseline_state = optimizer_baseline.init(self.params_baseline)
+
+        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
 
         num_epochs = 10
         for _ in range(num_epochs):
 
             rnd_key, sk = jax.random.split(self.rnd_key)
 
-            grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(
-                sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
-                self.params_twist,
-                final_twist, rew_model, self.output_len, self.n_twist,
-                self.prompt_len,
-                self.cfg_baseline, self.params_baseline, self.cfg_p_0,
-                self.params_p_0, beta_kl)
+            self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
+                experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
+                                                            self.cfg_p,
+                                                            self.params_p,
+                                                            self.cfg_twist,
+                                                            self.params_twist,
+                                                            final_twist,
+                                                            rew_model,
+                                                            self.output_len,
+                                                            self.n_policy_samples,
+                                                            self.prompt_len,
+                                                            self.cfg_baseline,
+                                                            self.params_baseline,
+                                                            self.cfg_p_0,
+                                                            self.params_p_0,
+                                                            optimizer_p,
+                                                            optim_p_state,
+                                                            optimizer_baseline,
+                                                            optim_baseline_state)
 
-            # self.params_p = optimizer_p.step(self.params_p, grad_params_p)
-            updates_p, optim_p_state = optimizer_p.update(
-                grad_params_p, optim_p_state, self.params_p)
-            self.params_p = optax.apply_updates(self.params_p, updates_p)
+            # grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(
+            #     sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
+            #     self.params_twist,
+            #     final_twist, rew_model, self.output_len, self.n_twist,
+            #     self.prompt_len,
+            #     self.cfg_baseline, self.params_baseline, self.cfg_p_0,
+            #     self.params_p_0, beta_kl)
+            #
+            # # self.params_p = optimizer_p.step(self.params_p, grad_params_p)
+            # updates_p, optim_p_state = optimizer_p.update(
+            #     grad_params_p, optim_p_state, self.params_p)
+            # self.params_p = optax.apply_updates(self.params_p, updates_p)
 
         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
                                                  self.output_len)
@@ -1642,7 +1989,8 @@ class TestClass:
 
 def main():
 
-    experiment_cfg = ExperimentConfig(args.dre_type, args.rm_type)
+    experiment_cfg = ExperimentConfig(args.dre_type, args.rm_type, rl_loss_type=args.rl_loss_type,
+                                      beta_kl=args.beta_kl, ppo_steps=args.ppo_steps, clip_epsilon=args.clip_epsilon)
 
     start = time.time()
 
@@ -1712,7 +2060,7 @@ def main():
 
             test_smc = False
             if test_smc:
-                test_smc(rnd_key, prompt, args.n_vocab, args.output_len, args.n_smc_samples,
+                test_smc(rnd_key, prompt, args.n_vocab, args.output_len, args.n_test_smc_samples,
                          cfg_p, params_p, cfg_twist, params_twist, final_twist)
                 1/0
 
@@ -1729,16 +2077,13 @@ def main():
             for model_update in range(args.model_updates_per_epoch):
                 rnd_key, sk = jax.random.split(rnd_key)
 
-                grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                         final_twist, rew_model, args.output_len, args.n_twist, prompt_len, cfg_baseline, params_baseline, cfg_p_0, params_p_0, args.beta_kl)
+                params_p, optim_p_state, params_baseline, optim_baseline_state = \
+                    experiment_cfg.update_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                                     final_twist, rew_model, args.output_len, args.n_policy_samples, prompt_len,
+                                     cfg_baseline, params_baseline, cfg_p_0, params_p_0,
+                                    optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state)
 
-                updates_p, optim_p_state = optimizer_p.update(
-                    grad_params_p, optim_p_state, params_p)
-                params_p = optax.apply_updates(params_p, updates_p)
 
-                updates_baseline, optim_baseline_state = optimizer_p.update(
-                    grad_params_baseline, optim_baseline_state, params_baseline)
-                params_baseline = optax.apply_updates(params_baseline, updates_baseline)
 
 
             # We should also be seeing this distribution change, with model updates (even without twist updates)
@@ -1749,6 +2094,9 @@ def main():
 
                     if experiment_cfg.rm_type == "one_bad":
                         inspect_one_bad_info(prompt, prompt_len, args.n_vocab, args.output_len, cfg_p, params_p)
+                    elif experiment_cfg.rm_type == "varied":
+                        inspect_varied_info(prompt, prompt_len, args.n_vocab,
+                                            args.output_len, cfg_p, params_p)
                     else:
                         print_samples_using_twists(sk, prompt, prompt_len, args.n_vocab,
                                                    args.output_len, cfg_p, params_p,
@@ -1779,6 +2127,12 @@ def main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("transformer")
+
+    # For PPO only
+    parser.add_argument("--gamma", type=float, default=1., help="discount rate")
+    parser.add_argument("--gae_lambda", type=float, default=1,
+                        help="lambda for GAE (1 = monte carlo style, 0 = TD style)")
+    # ---
 
     parser.add_argument("--lr_p", type=float, default=0.0001,
                         help="Learning rate for the model")
@@ -1846,14 +2200,16 @@ if __name__ == "__main__":
     parser.add_argument("--output_len", type=int, default=8,
                         help="Length of the strings we output")
 
-    parser.add_argument("--n_smc_samples", type=int, default=20,
+    parser.add_argument("--n_test_smc_samples", type=int, default=20,
                         help="Only used for testing SMC, not used elsewhere")
-    parser.add_argument("--n_twist", type=int, default=20)
+    parser.add_argument("--n_twist", type=int, default=100)
+    parser.add_argument("--n_policy_samples", type=int, default=100,
+                        help="Batch size to use when updating policy (p) and baseline")
 
     parser.add_argument("--n_vocab", type=int, default=2,
                         help="Num of tokens in vocab")
 
-    parser.add_argument("--dre_type", default="roger", help="roger or sixo")
+    parser.add_argument("--dre_type", type=str, default="roger", choices=["roger", "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=42)
@@ -1861,8 +2217,12 @@ if __name__ == "__main__":
     parser.add_argument("--twist_updates_per_epoch", type=int, default=100)
     parser.add_argument("--model_updates_per_epoch", type=int, default=100)
 
-    parser.add_argument("--rm_type", default="one_bad",
-                        help="one_bad or varied")  # TODO set choices in a list
+    parser.add_argument("--rm_type", type=str, default="one_bad", choices=["one_bad", "varied"])
+
+    parser.add_argument("--rl_loss_type", type=str, default="custom", choices=["custom", "ppo"])
+
+    parser.add_argument("--ppo_steps", type=int, default=3)
+    parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
 
     args = parser.parse_args()
 
