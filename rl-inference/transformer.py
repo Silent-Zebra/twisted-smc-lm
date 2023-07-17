@@ -38,6 +38,7 @@ def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state
 
     return params_p, optim_p_state, params_baseline, optim_baseline_state
 
+
 class ExperimentConfig:
     def __init__(self, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1.):
         self.dre_type = dre_type.lower()
@@ -58,6 +59,7 @@ class ExperimentConfig:
         self.rm_type = rm_type.lower()
         assert self.rm_type in ["one_bad", "varied"]
         self.rm = self._get_rm()
+        self.batch_rm = self._get_batch_rm()
 
         self.gamma = gamma
         self.gae_lambda = gae_lambda
@@ -94,6 +96,10 @@ class ExperimentConfig:
         else:
             raise NotImplementedError
 
+    def _get_batch_rm(self):
+        batch_rm = batch_reward_model(reward_model_fn=self.rm)
+        return batch_rm
+
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
                               params_p, cfg_twist, params_twist, final_twist):
         if self.dre_type == "analytic_mse_rel" or self.dre_type == "analytic_mse_abs":
@@ -106,12 +112,14 @@ class ExperimentConfig:
                                             n_twist)
         return grad_params_twist
 
+    #
+    @partial(jax.jit, static_argnames=["self", "final_twist", 'output_len', 'n_samples', "prompt_len",  "optimizer_p", "optimizer_baseline", "cfg_p_0","cfg_p", "cfg_twist", "cfg_baseline" ])
     # TODO Jul 13: After finishing, when doing a commit, look at all the diffs, and go over each line to make sure it makes sense and that there are no typos.
     # TODO JUL 13 FIRST TEST, FIX, THEN DO THE ABOVE
     # TODO Jul 13 Check that everything else is working, including each of the print statements, document all of the shapes, check they all match, etc.
-    # WRITE SOME UNIT TESTS FOR PPO: check that the baseline/value function learns something reasonable. Check that the policy learns something reasonable too.
+    # TODO WRITE SOME UNIT TESTS FOR PPO: check that the baseline/value function learns something reasonable. Check that the policy learns something reasonable too.
     def update_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                                     final_twist, rew_model, output_len, n_samples, prompt_len,
+                                     final_twist, output_len, n_samples, prompt_len,
                                      cfg_baseline, params_baseline, cfg_p_0, params_p_0,
                                      optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state):
         if self.rl_loss_type == "custom":
@@ -120,7 +128,7 @@ class ExperimentConfig:
                                                            params_p, cfg_twist,
                                                            params_twist,
                                                            final_twist,
-                                                           rew_model,
+                                                           self.batch_rm,
                                                            output_len, n_samples,
                                                            prompt_len,
                                                            cfg_baseline,
@@ -145,8 +153,9 @@ class ExperimentConfig:
 
             return params_p, optim_p_state, params_baseline, optim_baseline_state
         elif self.rl_loss_type == "ppo":
+            sk, sk2 = jax.random.split(sk)
             (grad_params_p, grad_params_baseline), ref_log_p = \
-                self.rl_loss_fn(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_samples, rew_model, cfg_baseline, params_baseline,
+                self.rl_loss_fn(sk2, prompt, cfg_p, params_p, prompt_len, output_len, n_samples, self.batch_rm, cfg_baseline, params_baseline,
                                 self.clip_epsilon, self.gamma, self.gae_lambda, old_log_p=None, first_iter=True)
 
             params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(optimizer_p,
@@ -159,31 +168,64 @@ class ExperimentConfig:
                                                            params_baseline,
                                                             )
 
-            # TODO JUL 13 lax.scan here too.
-            for step in range(1, self.ppo_steps):
-                (grad_params_p, grad_params_baseline), _ = \
-                    self.rl_loss_fn(sk, prompt, cfg_p, params_p, prompt_len,
-                                    output_len, n_samples, rew_model,
-                                    cfg_baseline, params_baseline,
-                                    self.clip_epsilon, self.gamma,
-                                    self.gae_lambda, old_log_p=ref_log_p,
-                                    first_iter=False)
-                params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(
-                    optimizer_p,
-                    grad_params_p,
-                    optim_p_state,
-                    params_p,
-                    optimizer_baseline,
-                    grad_params_baseline,
-                    optim_baseline_state,
-                    params_baseline,
-                )
+            carry = (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state)
 
+            carry, _ = jax.lax.scan(partial(self.ppo_scan_iter, cfg_p=cfg_p, cfg_baseline=cfg_baseline,
+                                            ref_log_p=ref_log_p, optimizer_p=optimizer_p,
+                                            optimizer_baseline=optimizer_baseline, n_samples=n_samples, prompt_len=prompt_len, output_len=output_len),
+                                    carry, None, self.ppo_steps - 1 )
+            (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state) = carry
+
+            # # TODO JUL 13 lax.scan here too.
+            # for step in range(1, self.ppo_steps):
+            #     sk, sk2 = jax.random.split(sk)
+            #     (grad_params_p, grad_params_baseline), _ = \
+            #         self.rl_loss_fn(sk2, prompt, cfg_p, params_p, prompt_len,
+            #                         output_len, n_samples, rew_model,
+            #                         cfg_baseline, params_baseline,
+            #                         self.clip_epsilon, self.gamma,
+            #                         self.gae_lambda, old_log_p=ref_log_p,
+            #                         first_iter=False)
+            #     params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(
+            #         optimizer_p,
+            #         grad_params_p,
+            #         optim_p_state,
+            #         params_p,
+            #         optimizer_baseline,
+            #         grad_params_baseline,
+            #         optim_baseline_state,
+            #         params_baseline,
+            #     )
 
             return params_p, optim_p_state, params_baseline, optim_baseline_state
 
         else:
             raise NotImplementedError
+
+    def ppo_scan_iter(self, carry, unused, cfg_p, cfg_baseline, ref_log_p, optimizer_p, optimizer_baseline, n_samples, prompt_len, output_len):
+        (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state) = carry
+        sk, sk2 = jax.random.split(sk)
+        (grad_params_p, grad_params_baseline), _ = \
+            self.rl_loss_fn(sk2, prompt, cfg_p, params_p, prompt_len,
+                            output_len, n_samples, self.batch_rm,
+                            cfg_baseline, params_baseline,
+                            self.clip_epsilon, self.gamma,
+                            self.gae_lambda, old_log_p=ref_log_p,
+                            first_iter=False)
+        params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(
+            optimizer_p,
+            grad_params_p,
+            optim_p_state,
+            params_p,
+            optimizer_baseline,
+            grad_params_baseline,
+            optim_baseline_state,
+            params_baseline,
+        )
+
+        carry = (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state)
+
+        return carry, None
 
     # def get_grad_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
     #                      final_twist, rew_model, output_len, n_twist, prompt_len,
@@ -452,20 +494,21 @@ def batch_transformer(cfg_p, params_p, seq):
     batch_transformer_func = vmap(transformer, in_axes=(None, None, 0), out_axes=0)
     return batch_transformer_func(cfg_p, params_p, seq)
 
-def neg_beta_times_batch_reward_model(prompt_len, beta, reward_model_fn):
-    def curried_batch_rm(seq):
+# curry the prompt_len... TODO think about whether this structure or the one where you pass in (e.g. like batch_reward_model below) makes more sense
+def neg_beta_times_batch_reward_model_curry(prompt_len, beta, reward_model_fn):
+    def curried_batch_rm_fn(seq):
         neg_beta_batch_rm = vmap(neg_beta_times_reward_model, in_axes=(0, None, None, None), out_axes=0)
         return neg_beta_batch_rm(seq, prompt_len, beta, reward_model_fn)
-    return curried_batch_rm
+    return curried_batch_rm_fn
 
 def neg_beta_times_reward_model(single_seq, prompt_len, beta, reward_model_fn):
     return reward_model_fn(single_seq, prompt_len) * -1. * beta
 
-def batch_reward_model(prompt_len, reward_model_fn):
-    def curried_batch_rm(seq):
+def batch_reward_model(reward_model_fn):
+    def batch_rm_fn(seq, prompt_len):
         batch_rm = vmap(reward_model_fn, in_axes=(0, None), out_axes=0)
         return batch_rm(seq, prompt_len)
-    return curried_batch_rm
+    return batch_rm_fn
 
 base_reward = 1.
 bad_reward = -10.
@@ -1192,7 +1235,7 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
 
     # r_seqs = evaluate_log_psi_t_final(prompt_w_sigma_sample_s_1_to_t,
     #                                   rew_model)
-    r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t)
+    r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
     log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
         prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
         output_len)
@@ -1200,7 +1243,7 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
     baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
     baseline_no_grad = jax.lax.stop_gradient(baseline)
     print("Baseline value (Custom)")
-    print(baseline)
+    print(jax.lax.stop_gradient(baseline))
 
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     first_term = ((r_seqs - baseline_no_grad) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
@@ -1494,7 +1537,7 @@ def ppo_and_value_loss(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_sa
     prob_ratio = jnp.exp(curr_log_p - old_log_p)
 
     rewards = jnp.zeros_like(curr_log_p)
-    rewards = rewards.at[:, -1].set(rew_model(seq)) # In our setting we only have rewards at the end of the sequence; 0 rewards everywhere else
+    rewards = rewards.at[:, -1].set(rew_model(seq, prompt_len)) # In our setting we only have rewards at the end of the sequence; 0 rewards everywhere else
 
     # print(rewards)
     # print(rewards[:, -3:])
@@ -1536,15 +1579,15 @@ def ppo_and_value_loss(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_sa
 
     ppo_loss = -ppo_objective.mean()
 
-    print("PPO LOSS")
-    print(jax.lax.stop_gradient(ppo_loss))
+    # print("PPO LOSS")
+    # print(jax.lax.stop_gradient(ppo_loss))
 
     val_loss = value_loss(rewards, values, jnp.zeros(seq.shape[0],), gamma) # again 0 value in the final state (e.g. T+1 state) as the sequence has finished
 
-    print("PPO + VAL LOSS")
-    print(jax.lax.stop_gradient(val_loss))
-    print(jax.lax.stop_gradient(ppo_loss + val_loss))
-    print("-----")
+    # print("PPO + VAL LOSS")
+    # print(jax.lax.stop_gradient(val_loss))
+    # print(jax.lax.stop_gradient(ppo_loss + val_loss))
+    # print("-----")
 
     # return ppo_loss, curr_log_p
     return ppo_loss + val_loss, old_log_p
@@ -1637,8 +1680,10 @@ class TestClass:
 
     def test_ppo_one_bad_simple(self):
 
-        rew_model = batch_reward_model(self.prompt_len,
-                                       reward_model_fn=reward_model_one_bad)
+        self.n_policy_samples = 100
+
+        # rew_model = batch_reward_model(self.prompt_len,
+        #                                reward_model_fn=reward_model_one_bad)
 
         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_p_state = optimizer_p.init(self.params_p)
@@ -1647,7 +1692,7 @@ class TestClass:
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="one_bad",
-                                          rl_loss_type="ppo", ppo_steps=3, gamma=1., gae_lambda=1.)
+                                          rl_loss_type="ppo", ppo_steps=5, gamma=1., gae_lambda=1.)
 
         num_epochs = 50
         for _ in range(num_epochs):
@@ -1661,7 +1706,6 @@ class TestClass:
                                                             None, # no twists for PPO
                                                             None, # no twists for PPO
                                                             None, # final_twist not needed for PPO
-                                                            rew_model,
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -1690,12 +1734,14 @@ class TestClass:
         print(log_p)
         print(log_p[0])
 
-        assert log_p[0] < -5. # TODO JUL 16 test PPO further. Maybe test with more steps? Something weird seems to be happening (maybe? Or maybe it's just the conservative clipping causing the slow training. But what about the positive rewards?)
+        assert log_p[0] < -50. # TODO JUL 16 test PPO further. Maybe test with more steps? Something weird seems to be happening (maybe? Or maybe it's just the conservative clipping causing the slow training. But what about the positive rewards?)
 
     def test_ppo_varied_simple(self):
 
-        rew_model = batch_reward_model(self.prompt_len,
-                                       reward_model_fn=reward_model_varied)
+        self.n_policy_samples = 100
+
+        # rew_model = batch_reward_model(self.prompt_len,
+        #                                reward_model_fn=reward_model_varied)
 
         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_p_state = optimizer_p.init(self.params_p)
@@ -1704,9 +1750,9 @@ class TestClass:
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied",
-                                          rl_loss_type="ppo", ppo_steps=3, gamma=1., gae_lambda=1.)
+                                          rl_loss_type="ppo", ppo_steps=5, gamma=1., gae_lambda=1.)
 
-        num_epochs = 50
+        num_epochs = 100
         for _ in range(num_epochs):
 
             rnd_key, sk = jax.random.split(self.rnd_key)
@@ -1718,7 +1764,6 @@ class TestClass:
                                                             None, # no twists for PPO
                                                             None, # no twists for PPO
                                                             None, # final_twist not needed for PPO
-                                                            rew_model,
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -1748,12 +1793,12 @@ class TestClass:
         print(log_p)
         print(log_p[0])
 
-        assert log_p[0] < -5. # TODO JUL 16 test PPO further. Maybe test with more steps? Something weird seems to be happening (maybe? Or maybe it's just the conservative clipping causing the slow training. But what about the positive rewards?)
+        assert log_p[0] < -50. # TODO JUL 16 test PPO further. Maybe test with more steps? Something weird seems to be happening (maybe? Or maybe it's just the conservative clipping causing the slow training. But what about the positive rewards?)
 
 
     def test_smc_jit_vs_no_jit(self):
         n_smc_samples = 100
-        final_twist = neg_beta_times_batch_reward_model(self.prompt_len,
+        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1.,
                                                         reward_model_fn=reward_model_varied)
 
@@ -1777,11 +1822,9 @@ class TestClass:
     def test_kl_on_policy_low_beta_kl(self):
         beta_kl = 0
 
-        final_twist = neg_beta_times_batch_reward_model(self.prompt_len,
-                                                        beta=1.,
-                                                        reward_model_fn=reward_model_varied)
-        rew_model = batch_reward_model(self.prompt_len,
-                                       reward_model_fn=reward_model_varied)
+
+        # rew_model = batch_reward_model(self.prompt_len,
+        #                                reward_model_fn=reward_model_varied)
 
         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_p_state = optimizer_p.init(self.params_p)
@@ -1791,6 +1834,9 @@ class TestClass:
 
         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
 
+        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+                                                        beta=1.,
+                                                        reward_model_fn=experiment_cfg.rm)
         num_epochs = 10
         for _ in range(num_epochs):
 
@@ -1800,7 +1846,6 @@ class TestClass:
                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
                                                             self.params_twist,
                                                             final_twist,
-                                                            rew_model,
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -1846,11 +1891,8 @@ class TestClass:
     def test_kl_on_policy_high_beta_kl(self):
         beta_kl = 1000  # use some big number and test that the kl is ~0 after
 
-        final_twist = neg_beta_times_batch_reward_model(self.prompt_len,
-                                                        beta=1.,
-                                                        reward_model_fn=reward_model_varied)
-        rew_model = batch_reward_model(self.prompt_len,
-                                       reward_model_fn=reward_model_varied)
+        # rew_model = batch_reward_model(self.prompt_len,
+        #                                reward_model_fn=reward_model_varied)
 
         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_p_state = optimizer_p.init(self.params_p)
@@ -1859,6 +1901,10 @@ class TestClass:
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
+
+        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+                                                        beta=1.,
+                                                        reward_model_fn=experiment_cfg.rm)
 
         num_epochs = 10
         for _ in range(num_epochs):
@@ -1872,7 +1918,6 @@ class TestClass:
                                                             self.cfg_twist,
                                                             self.params_twist,
                                                             final_twist,
-                                                            rew_model,
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -1986,12 +2031,14 @@ class TestClass:
         # This test shows that the twists do make a difference (at least for small enough sample size)
         n_smc_samples = 4
         lr = 0.01
-        final_twist = neg_beta_times_batch_reward_model(self.prompt_len,
-                                                        beta=1., reward_model_fn=reward_model_one_bad)
+
         optimizer_twist = optax.adam(learning_rate=lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
         experiment_cfg = ExperimentConfig(dre_type="analytic_mse_rel", rm_type="one_bad")
+
+        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+                                                        beta=1., reward_model_fn=experiment_cfg.rm)
 
         num_epochs = 100
         for _ in range(num_epochs):
@@ -2024,7 +2071,7 @@ class TestClass:
 
     def test_smc_non_opt_twist(self):
         # Test that SMC approximately generates samples from the true distribution
-        final_twist = neg_beta_times_batch_reward_model(self.prompt_len, beta=1., reward_model_fn=reward_model_varied)
+        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=reward_model_varied)
 
         n_smc_samples = 4000
         self._smc_threshold(n_smc_samples, final_twist, threshold=1e-2)
@@ -2033,11 +2080,11 @@ class TestClass:
     def test_roger_dre(self):
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
 
-        final_twist = neg_beta_times_batch_reward_model(self.prompt_len, beta=1., reward_model_fn=reward_model_varied)
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied")
+        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm)
 
         num_epochs = 100
         for _ in range(num_epochs):
@@ -2069,11 +2116,11 @@ class TestClass:
     def test_sixo_dre(self):
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
 
-        final_twist = neg_beta_times_batch_reward_model(self.prompt_len, beta=1., reward_model_fn=reward_model_varied)
+        experiment_cfg = ExperimentConfig(dre_type="sixo", rm_type="varied")
+
+        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm)
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
-
-        experiment_cfg = ExperimentConfig(dre_type="sixo", rm_type="varied")
 
         num_epochs = 100
         for _ in range(num_epochs):
@@ -2174,8 +2221,8 @@ def main():
         for prompt in prompts:
             prompt = jnp.array(prompt)
             prompt_len = prompt.shape[-1]
-            final_twist = neg_beta_times_batch_reward_model(prompt_len, beta=args.beta_temp, reward_model_fn=experiment_cfg.rm)
-            rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm)
+            final_twist = neg_beta_times_batch_reward_model_curry(prompt_len, beta=args.beta_temp, reward_model_fn=experiment_cfg.rm)
+            # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm)
 
 
             test_smc = False
@@ -2199,7 +2246,7 @@ def main():
 
                 params_p, optim_p_state, params_baseline, optim_baseline_state = \
                     experiment_cfg.update_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                                     final_twist, rew_model, args.output_len, args.n_policy_samples, prompt_len,
+                                     final_twist, args.output_len, args.n_policy_samples, prompt_len,
                                      cfg_baseline, params_baseline, cfg_p_0, params_p_0,
                                     optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state)
 
@@ -2230,7 +2277,7 @@ def main():
             print("---Comparing Twists---")
             for prompt in prompts:
                 prompt = jnp.array(prompt)
-                final_twist = neg_beta_times_batch_reward_model(len(prompt),
+                final_twist = neg_beta_times_batch_reward_model_curry(len(prompt),
                                                                 beta=args.beta_temp,
                                                                 reward_model_fn=experiment_cfg.rm)
                 compare_learned_twist_vs_optimal(prompt, args.n_vocab,
@@ -2250,7 +2297,7 @@ if __name__ == "__main__":
 
     # For PPO only
     parser.add_argument("--gamma", type=float, default=1., help="discount rate")
-    parser.add_argument("--gae_lambda", type=float, default=1,
+    parser.add_argument("--gae_lambda", type=float, default=1.,
                         help="lambda for GAE (1 = monte carlo style, 0 = TD style)")
     # ---
 
