@@ -46,9 +46,9 @@ class ExperimentConfig:
         self.dre_grad_fn = self._get_dre_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
-        assert self.rl_loss_type in ["custom", "ppo"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
+        assert self.rl_loss_type in ["custom", "ppo", "custom_baselinep"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
         self.rl_loss_fn = self._get_rl_loss_fn()
-        if self.rl_loss_type == "custom":
+        if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep":
             self.beta_kl = beta_kl
         elif self.rl_loss_type == "ppo":
             assert isinstance(ppo_steps, int)
@@ -66,6 +66,8 @@ class ExperimentConfig:
     def _get_rl_loss_fn(self):
         if self.rl_loss_type == "custom":
             return jax.grad(rl_loss, argnums=[3, 12])
+        elif self.rl_loss_type == "custom_baselinep":
+            return jax.grad(rl_loss_custom_baselinep, argnums=[3, 12])
         elif self.rl_loss_type == "ppo":
             return jax.grad(ppo_and_value_loss, argnums=[3, 9], has_aux=True)
         else:
@@ -123,7 +125,7 @@ class ExperimentConfig:
                                      final_twist, output_len, n_samples, prompt_len,
                                      cfg_baseline, params_baseline, cfg_p_0, params_p_0,
                                      optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state):
-        if self.rl_loss_type == "custom":
+        if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep":
 
             grad_params_p, grad_params_baseline = self.rl_loss_fn(sk, prompt, cfg_p,
                                                            params_p, cfg_twist,
@@ -512,7 +514,7 @@ def batch_reward_model(reward_model_fn):
 
 base_reward = 1.
 bad_reward = -10.
-nonsense_reward = -1 # negative (Maybe?) would help with learning at the very beginning
+nonsense_reward = 0 # negative (Maybe?) would help with learning at the very beginning
 good_reward = 2.
 evasive_reward = 1.
 
@@ -565,13 +567,16 @@ def check_contains_bad_word(seq, bad_word="bad_term"):
 
     return jnp.minimum(contains_bad_word.sum(), 1)
 
-ordered_token_list = ["what", "is", "the", "term", "for", "neutral_term", "bad_term", "don't", "know", "_"] # last token is placeholder for no output e.g. if you want to just end the string, fill it with that.
-desired_output = ["the", "term", "is", "neutral_term", "_"]
-bad_output = ["the", "term", "is", "bad_term", "_"]
-evasive_output = ["don't", "know", "_", "_", "_",]
+ordered_token_list = ["what", "is", "the", "term", "for", "neutral_term", "bad_term", "unsure", "_"] # last token is placeholder for no output e.g. if you want to just end the string, fill it with that.
+desired_output = ["neutral_term", "_"]
+desired_output2 = ["the", "term", "is", "neutral_term", "_"]
+
+# bad_output = ["bad_term", "_"]
+evasive_output = ["unsure", "_"]
 # TODO JUL 22 check reshapes in the case where batch size or n_vocab is equal to the seq_Len (output_len + prompt_len; may be edge cases with reshaping that way? Just make sure the reshape does the right dimensions/right reshaping, which it should)
 good_indices = tokens_to_jnp_indices(ordered_token_list, desired_output)
-bad_indices = tokens_to_jnp_indices(ordered_token_list, bad_output)
+good_indices2 = tokens_to_jnp_indices(ordered_token_list, desired_output2)
+# bad_indices = tokens_to_jnp_indices(ordered_token_list, bad_output)
 evasive_indices = tokens_to_jnp_indices(ordered_token_list, evasive_output)
 
 def reward_model_bad_word_single(single_seq, prompt_len):
@@ -581,15 +586,14 @@ def reward_model_bad_word_single(single_seq, prompt_len):
     # basically assumes that nonsense_reward is a base reward and the other rewards are modifiers on that reward. Works non-confusingly when nonsense reward is 0
     # Basically this reward structure says: always avoid the bad word. After doing that, it's best to produce a sequence that makes sense, even if it's evasive, rather than nonsense.
     # Finally, it's better to produce the good, informative answer, rather than the evasive answer, even if the informative answer is closer to the bad (offensive) answer.
-    reward =  nonsense_reward + check_indices_match(output_seq, good_indices) * good_reward + \
-           check_indices_match(output_seq[:3], evasive_indices[:3]) * evasive_reward + \
-           check_contains_bad_word(output_seq) * bad_reward  # Without mutual exclusivity of conditions, then a sequence starting with don't know but having the bad word gets slightly better reward than just the bad word. I guess this is fine? # assumes mutual exclusivity of various conditions: e.g. cannot match evasive_indices and have the bad output
+    reward = nonsense_reward + check_indices_match(output_seq[:2], good_indices[:2]) * good_reward + \
+               check_indices_match(output_seq[:2], evasive_indices[:2]) * evasive_reward + \
+               check_contains_bad_word(output_seq) * bad_reward  # Without mutual exclusivity of conditions, then a sequence starting with don't know but having the bad word gets slightly better reward than just the bad word. I guess this is fine? # assumes mutual exclusivity of various conditions: e.g. cannot match evasive_indices and have the bad output
+    # check_indices_match(output_seq, good_indices2) * good_reward + \
 
     # TODO now test this reward model with a few different output_seq, manually set even, just to see if it's right. Then test on a bunch of batches and individually print examples to see if it's working right. Finally, test directly in the whole code, print the reward, and see that it matches up and makes sense. Then finally run the experiments and see results.
 
     return reward # TODO can -1 on the reward if we want to shift the base reward e.g. make learning easier by punishing nonsense.
-
-
 
 
 
@@ -1203,51 +1207,83 @@ def inspect_varied_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, para
     print(log_p_all_seqs)
 
 
-def inspect_bad_word_info(prompt_len, output_len, cfg_p, params_p):
+def inspect_bad_word_info(prompt_len, cfg_p, params_p):
     print("--INSPECT BAD WORD PROGRESS--")
-    test_seqs = [
-        ["what", "is", "the", "term", "for", "neutral_term", "the", "term",
-         "is", "neutral_term", "_"],
-        ["what", "is", "the", "term", "for", "neutral_term", "the", "term",
-         "is", "bad_term", "_"],
-        ["what", "is", "the", "term", "for", "neutral_term", "don't", "know",
-         "_", "_", "_"],
-        ["what", "is", "the", "term", "for", "neutral_term", "term", "term",
-         "the", "for", "_"],
-        ["what", "is", "the", "term", "for", "neutral_term", "bad_term", "term",
-         "is", "neutral_term", "_"],
-    ] # Test probs for: good output, bad output, evasive output, garbage/nonsense, and nonsense containing bad-word. There are lots of other possible sequences but they should all have very low prob.
+    # test_seqs = [
+    #     ["what", "is", "the", "term", "for", "neutral_term", "the", "term",
+    #      "is", "neutral_term", "_"],
+    #     ["what", "is", "the", "term", "for", "neutral_term", "the", "term",
+    #      "is", "bad_term", "_"],
+    #     ["what", "is", "the", "term", "for", "neutral_term", "don't", "know",
+    #      "_", "_", "_"],
+    #     ["what", "is", "the", "term", "for", "neutral_term", "term", "term",
+    #      "the", "for", "_"],
+    #     ["what", "is", "the", "term", "for", "neutral_term", "bad_term", "term",
+    #      "is", "neutral_term", "_"],
+    # ] # Test probs for: good output, bad output, evasive output, garbage/nonsense, and nonsense containing bad-word. There are lots of other possible sequences but they should all have very low prob.
     # So first prob should go up, second should go down fast, third and fourth should ideally go down, fifth should go down fast.
     # Then added a sixth which is just testing first 3 tokens of an evasive response and how likely that is
 
+    output_len = 2
+    test_seqs = [
+        ["what", "is", "the", "term", "for", "neutral_term", "neutral_term", "_"],
+        ["what", "is", "the", "term", "for", "neutral_term", "unsure", "_",
+         ],
+        ["what", "is", "the", "term", "for", "neutral_term", "_", "_", ],
+        ["what", "is", "the", "term", "for", "neutral_term", "term", "the", ],
+    ] # good, evasive, nonsense, nonsense
     jnp_indices_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_seqs])
 
     log_p_all_seqs = evaluate_log_p_theta_1_to_t(jnp_indices_seqs, cfg_p, params_p,
                                                  prompt_len, output_len)
     print(log_p_all_seqs)
-
     print(reward_model_bad_word(jnp_indices_seqs, prompt_len))
 
-    test_seqs2 = []
-
+    test_bad_seqs = []
     for x in ordered_token_list:
-        for y in ordered_token_list:
-            # for z in ordered_token_list:
-            seq = ["what", "is", "the", "term", "for", "neutral_term", "don't", "know", "_", x, y, ]
-            test_seqs2.append(seq)
+        seq = ["what", "is", "the", "term", "for", "neutral_term", x, "bad_term"]
+        test_bad_seqs.append(seq)
+    for y in ordered_token_list:
+        if y != "bad_term":
+            seq = ["what", "is", "the", "term", "for", "neutral_term", "bad_term", y, ]
+            test_bad_seqs.append(seq)
+    jnp_ind_test_bad_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_bad_seqs])
+    log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_bad_seqs, cfg_p, params_p,
+                                                 prompt_len, 2)
+    print("BAD WORD In dist Prob")
+    print(jnp.exp(log_p).sum()) # total sum prob of bad term in the ood prompt case
 
-    # for x in ordered_token_list:
-    #     for y in ordered_token_list:
-    #         for z in ordered_token_list:
-    #             seq = ["what", "is", "the", "term", "for", "neutral_term", "don't", "know", x, y, z, ]
-    #             test_seqs2.append(seq)
 
-    jnp_ind_seq2 = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_seqs2])
-    log_p = evaluate_log_p_theta_1_to_t(jnp_ind_seq2, cfg_p, params_p,
-                                                 prompt_len, output_len)
-    print(jnp.exp(log_p).sum())
-    # print(reward_model_bad_worFd(jnp_ind_seq2, prompt_len))
+    # DO SOME OOD TESTING
+    ood_prompt_len = 9
+    test_ood_bad_seqs = []
+    for x in ordered_token_list:
+        seq = ["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", x, "bad_term" ]
+        test_ood_bad_seqs.append(seq)
+    for y in ordered_token_list:
+        if y != "bad_term":
+            seq = ["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "bad_term", y, ]
+            test_ood_bad_seqs.append(seq)
 
+    jnp_ind_test_ood_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_bad_seqs])
+    log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_seqs, cfg_p, params_p,
+                                                 ood_prompt_len, output_len)
+    print("BAD WORD OOD Prob")
+    print(jnp.exp(log_p).sum()) # total sum prob of bad term in the ood prompt case
+
+    test_ood_good_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "neutral_term", "_" ]]
+    jnp_ind_test_ood_good_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_good_seq])
+    log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_good_seq, cfg_p, params_p,
+                                        ood_prompt_len, output_len) # prompt_len = 6, 6+3=9
+    print("Desired continuation OOD Prob")
+    print(jnp.exp(log_p))
+
+    test_ood_evasive_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "unsure", "_" ]]
+    jnp_ind_test_ood_evasive_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_evasive_seq])
+    log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_evasive_seq, cfg_p, params_p,
+                                        ood_prompt_len, output_len) # prompt_len = 6, 6+3=9
+    print("Evasive continuation OOD Prob")
+    print(jnp.exp(log_p))
 
 def print_bad_word_env_generations(key, indices_prompt, cfg_p, params_p, prompt_len, output_len, n_samples):
     # indices_prompt = jnp.array(tokens_to_jnp_indices(ordered_token_list, prompt))
@@ -1384,15 +1420,6 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
     # print("Baseline value (Custom)")
     # print(jax.lax.stop_gradient(baseline))
 
-
-    # print("----")
-    all_seqs = get_all_seqs_up_to_output_len(prompt, 2, output_len)
-    log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
-                                                 prompt_len, output_len)
-    # print(log_p_all_seqs)
-
-
-
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     first_term = ((r_seqs - baseline_no_grad) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
     second_term = log_p_theta_full_seq.mean() * (r_seqs - baseline_no_grad).mean()
@@ -1411,6 +1438,49 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
     baseline_loss = (baseline - r_seqs.mean()) ** 2
     return loss + baseline_loss
 
+
+def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
+                rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
+                cfg_p_0, params_p_0, beta_kl):
+    sk, sk2 = jax.random.split(sk)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
+                                                    cfg_p, params_p,
+                                                    cfg_twist,
+                                                    params_twist,
+                                                    final_twist,
+                                                    output_len,
+                                                    n_samples)
+
+    r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
+
+    log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
+        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
+        output_len)
+
+    baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
+    baseline_no_grad = jax.lax.stop_gradient(baseline)
+    print("Baseline value (Custom)")
+    print(jax.lax.stop_gradient(baseline))
+
+    # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
+    first_term = ((r_seqs - baseline_no_grad) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
+    # Add a KL term as well
+    output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, prompt_w_sigma_sample_s_1_to_t)
+    output_unnormalized_curr = batch_transformer(cfg_p, params_p, prompt_w_sigma_sample_s_1_to_t)
+    log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
+    log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
+    kl_term = kl_div_jax(log_p_target, log_p_curr)
+    objective = first_term
+    loss = -objective + beta_kl * kl_term
+
+
+    # Baseline term; use empirical mean of r_seqs drawn from p, to approximate E_p[r(s)]
+    # Then MSE loss: (baseline - r_seqs.mean()) ^ 2
+    # This term is only used for training the baseline
+    model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
+    r_seqs_model = rew_model(model_seqs, prompt_len)
+    baseline_loss = (baseline - r_seqs_model.mean()) ** 2
+    return loss + baseline_loss
 
 # TODO Test longer and longer seq lengths and check that the model A) correctly learns twists and B) correctly modifies the behaviour.
 # TODO also test comparing vs a strong baseline (e.g. PPO with knobs tuned) and compare quantitative and qualitative results.
@@ -2467,13 +2537,6 @@ def main():
 
     cfg_p_0, params_p_0 = copy.deepcopy(cfg_p), copy.deepcopy(params_p)
 
-    test_seqs = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "neutral_term", "_" ],
-                 ["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "bad_term", "_" ],
-                 ["what", "is", "the", "term", "for", "neutral_term", "don't", "know", "_", "_", "_" ],
-                 ["what", "is", "the", "term", "for", "neutral_term", "don't", "know", "bad_term", "bad_term", "_" ],
-                 ["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "neutral_term", "bad_term" ],
-                 ["what", "is", "the", "term", "for", "neutral_term", "bad_term", "term", "is", "neutral_term", "_" ],
-                 ["what", "is", "the", "term", "for", "neutral_term", "term", "term", "the", "for", "_" ]]
 
     jnp_prompts = []
     final_twists = []
@@ -2501,20 +2564,7 @@ def main():
             final_twist = final_twists[i]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
-            test_rm_on_seqs = False
-            if test_rm_on_seqs:
-                for test_seq in test_seqs:
-                    print(test_seq)
-                    if token_based_prompt:
-                        index_based_prompt = tokens_to_jnp_indices(
-                            ordered_token_list,
-                            test_seq)
-                        test_seq = index_based_prompt
 
-                    print("--- reward ---")
-                    print(experiment_cfg.rm_fn(test_seq, prompt_len))
-                    # print(batch_reward_model(experiment_cfg.rm_fn)(test_seq, prompt_len))
-                1 / 0
 
             test_smc = False
             if test_smc:
@@ -2556,11 +2606,11 @@ def main():
                         inspect_varied_info(prompt, prompt_len, args.n_vocab,
                                             args.output_len, cfg_p, params_p)
                     elif experiment_cfg.rm_type == "bad_word":
-                        inspect_bad_word_info(prompt_len, args.output_len, cfg_p, params_p)
+                        inspect_bad_word_info(prompt_len, cfg_p, params_p)
                         print_bad_word_env_generations(sk2, prompt, cfg_p,
                                                        params_p, prompt_len, args.output_len,
                                                        args.n_bad_word_samples)
-                        if experiment_cfg.rl_loss_type == "custom":
+                        if experiment_cfg.rl_loss_type == "custom" or experiment_cfg.rl_loss_type == "custom_baselinep":
                             rnd_key, sk1 = jax.random.split(rnd_key)
                             print("SMC GENERATIONS")
                             _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
@@ -2697,7 +2747,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--rm_type", type=str, default="one_bad", choices=["one_bad", "varied", "bad_word"])
 
-    parser.add_argument("--rl_loss_type", type=str, default="custom", choices=["custom", "ppo"])
+    parser.add_argument("--rl_loss_type", type=str, default="custom", choices=["custom", "ppo", "custom_baselinep"])
 
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
@@ -2705,7 +2755,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.rm_type == "bad_word":
-        print(len(ordered_token_list))
+        print(f"Len of ordered_token_list (should be = n_vocab): {len(ordered_token_list)}")
         assert args.n_vocab == len(ordered_token_list)
 
     main()
