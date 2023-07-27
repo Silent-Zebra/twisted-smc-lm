@@ -17,6 +17,9 @@ import jax
 
 import optax
 
+from flax.training import checkpoints
+import datetime
+
 
 @jit
 def kl_div_jax(log_p_target, log_p_curr):
@@ -46,9 +49,9 @@ class ExperimentConfig:
         self.dre_grad_fn = self._get_dre_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
-        assert self.rl_loss_type in ["custom", "ppo", "custom_baselinep"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
+        assert self.rl_loss_type in ["custom", "ppo", "custom_baselinep", "custom_mixed"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
         self.rl_loss_fn = self._get_rl_loss_fn()
-        if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep":
+        if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep" or self.rl_loss_type == "custom_mixed":
             self.beta_kl = beta_kl
         elif self.rl_loss_type == "ppo":
             assert isinstance(ppo_steps, int)
@@ -68,6 +71,8 @@ class ExperimentConfig:
             return jax.grad(rl_loss, argnums=[3, 12])
         elif self.rl_loss_type == "custom_baselinep":
             return jax.grad(rl_loss_custom_baselinep, argnums=[3, 12])
+        elif self.rl_loss_type == "custom_mixed":
+            return jax.grad(rl_loss_custom_mixed_sampling, argnums=[3, 12])
         elif self.rl_loss_type == "ppo":
             return jax.grad(ppo_and_value_loss, argnums=[3, 9], has_aux=True)
         else:
@@ -125,7 +130,7 @@ class ExperimentConfig:
                                      final_twist, output_len, n_samples, prompt_len,
                                      cfg_baseline, params_baseline, cfg_p_0, params_p_0,
                                      optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state):
-        if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep":
+        if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep" or self.rl_loss_type == "custom_mixed":
 
             grad_params_p, grad_params_baseline = self.rl_loss_fn(sk, prompt, cfg_p,
                                                            params_p, cfg_twist,
@@ -178,27 +183,6 @@ class ExperimentConfig:
                                             optimizer_baseline=optimizer_baseline, n_samples=n_samples, prompt_len=prompt_len, output_len=output_len),
                                     carry, None, self.ppo_steps - 1 )
             (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state) = carry
-
-            # # TODO JUL 13 lax.scan here too.
-            # for step in range(1, self.ppo_steps):
-            #     sk, sk2 = jax.random.split(sk)
-            #     (grad_params_p, grad_params_baseline), _ = \
-            #         self.rl_loss_fn(sk2, prompt, cfg_p, params_p, prompt_len,
-            #                         output_len, n_samples, rew_model,
-            #                         cfg_baseline, params_baseline,
-            #                         self.clip_epsilon, self.gamma,
-            #                         self.gae_lambda, old_log_p=ref_log_p,
-            #                         first_iter=False)
-            #     params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(
-            #         optimizer_p,
-            #         grad_params_p,
-            #         optim_p_state,
-            #         params_p,
-            #         optimizer_baseline,
-            #         grad_params_baseline,
-            #         optim_baseline_state,
-            #         params_baseline,
-            #     )
 
             return params_p, optim_p_state, params_baseline, optim_baseline_state
 
@@ -1238,6 +1222,8 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p):
                                                  prompt_len, output_len)
     print(log_p_all_seqs)
     print(reward_model_bad_word(jnp_indices_seqs, prompt_len))
+    desired_cont_indist_prob = jnp.exp(log_p_all_seqs[0])
+    evasive_cont_indist_prob = jnp.exp(log_p_all_seqs[1])
 
     test_bad_seqs = []
     for x in ordered_token_list:
@@ -1251,8 +1237,8 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p):
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_bad_seqs, cfg_p, params_p,
                                                  prompt_len, 2)
     print("BAD WORD In dist Prob")
-    print(jnp.exp(log_p).sum()) # total sum prob of bad term in the ood prompt case
-
+    bad_word_indist_prob = jnp.exp(log_p).sum()
+    print(bad_word_indist_prob) # total sum prob of bad term in the ood prompt case
 
     # DO SOME OOD TESTING
     ood_prompt_len = 9
@@ -1269,24 +1255,59 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p):
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_seqs, cfg_p, params_p,
                                                  ood_prompt_len, output_len)
     print("BAD WORD OOD Prob")
-    print(jnp.exp(log_p).sum()) # total sum prob of bad term in the ood prompt case
+    bad_word_ood_prob = jnp.exp(log_p).sum()
+    print(bad_word_ood_prob) # total sum prob of bad term in the ood prompt case
 
     test_ood_good_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "neutral_term", "_" ]]
     jnp_ind_test_ood_good_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_good_seq])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_good_seq, cfg_p, params_p,
                                         ood_prompt_len, output_len) # prompt_len = 6, 6+3=9
     print("Desired continuation OOD Prob")
-    print(jnp.exp(log_p))
+    desired_cont_ood_prob = jnp.exp(log_p)
+    print(desired_cont_ood_prob)
 
     test_ood_evasive_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "unsure", "_" ]]
     jnp_ind_test_ood_evasive_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_evasive_seq])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_evasive_seq, cfg_p, params_p,
                                         ood_prompt_len, output_len) # prompt_len = 6, 6+3=9
     print("Evasive continuation OOD Prob")
-    print(jnp.exp(log_p))
+    evasive_cont_ood_prob = jnp.exp(log_p)
+    print(evasive_cont_ood_prob)
+
+    return bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
+           bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob
+
+
+def inspect_bad_word_reward(sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
+                            final_twist, output_len, n_samples, rew_model):
+    sk, sk2 = jax.random.split(sk)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
+                                                      cfg_p, params_p,
+                                                      cfg_twist,
+                                                      params_twist,
+                                                      final_twist,
+                                                      output_len,
+                                                      n_samples)
+
+    r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
+
+    model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
+                                               output_len, n_samples)
+    r_seqs_model = rew_model(model_seqs, prompt_len)
+
+    adv_reward = r_seqs_adv.mean()
+    p_reward = r_seqs_model.mean()
+
+    print("Average rewards:")
+    print(adv_reward)
+    print(p_reward)
+
+    return adv_reward, p_reward
+
+
 
 def print_bad_word_env_generations(key, indices_prompt, cfg_p, params_p, prompt_len, output_len, n_samples):
-    # indices_prompt = jnp.array(tokens_to_jnp_indices(ordered_token_list, prompt))
+
     print("Model Stochastic Generations")
     key, sk = jax.random.split(key)
     samples = stochastic_transformer_sample(sk, cfg_p, params_p, indices_prompt, output_len, n_samples)
@@ -1424,11 +1445,12 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
     first_term = ((r_seqs - baseline_no_grad) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
     second_term = log_p_theta_full_seq.mean() * (r_seqs - baseline_no_grad).mean()
     # Add a KL term as well
-    output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, prompt_w_sigma_sample_s_1_to_t)
-    output_unnormalized_curr = batch_transformer(cfg_p, params_p, prompt_w_sigma_sample_s_1_to_t)
-    log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
-    log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
-    kl_term = kl_div_jax(log_p_target, log_p_curr)
+    # output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, prompt_w_sigma_sample_s_1_to_t)
+    # output_unnormalized_curr = batch_transformer(cfg_p, params_p, prompt_w_sigma_sample_s_1_to_t)
+    # log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
+    # log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
+    # kl_term = kl_div_jax(log_p_target, log_p_curr)
+    kl_term = calculate_kl_on_seqs(prompt_w_sigma_sample_s_1_to_t, cfg_p_0, params_p_0, cfg_p, params_p)
     objective = first_term - second_term
     loss = -objective + beta_kl * kl_term
 
@@ -1465,11 +1487,14 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     first_term = ((r_seqs - baseline_no_grad) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
     # Add a KL term as well
-    output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, prompt_w_sigma_sample_s_1_to_t)
-    output_unnormalized_curr = batch_transformer(cfg_p, params_p, prompt_w_sigma_sample_s_1_to_t)
-    log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
-    log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
-    kl_term = kl_div_jax(log_p_target, log_p_curr)
+    # TODO test this to make sure
+    # output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, prompt_w_sigma_sample_s_1_to_t)
+    # output_unnormalized_curr = batch_transformer(cfg_p, params_p, prompt_w_sigma_sample_s_1_to_t)
+    # log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
+    # log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
+    # kl_term = kl_div_jax(log_p_target, log_p_curr)
+    kl_term = calculate_kl_on_seqs(prompt_w_sigma_sample_s_1_to_t, cfg_p_0, params_p_0, cfg_p, params_p)
+
     objective = first_term
     loss = -objective + beta_kl * kl_term
 
@@ -1481,6 +1506,69 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
     r_seqs_model = rew_model(model_seqs, prompt_len)
     baseline_loss = (baseline - r_seqs_model.mean()) ** 2
     return loss + baseline_loss
+
+
+def calculate_kl_on_seqs(seqs, cfg_p_0, params_p_0, cfg_p, params_p):
+    output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, seqs)
+    output_unnormalized_curr = batch_transformer(cfg_p, params_p, seqs)
+    log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
+    log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
+    kl_term = kl_div_jax(log_p_target, log_p_curr)
+    return kl_term
+
+# TODO JUL 26 do a mix of maybe half adversarial and half regular sample. Well no, you don't need that then. You can just alternate (or do simultaneous!) steps of regular RL
+# with the custom baselinep adv training scheme where both use the regular RL baseline value.
+def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
+                rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
+                cfg_p_0, params_p_0, beta_kl):
+    sk, sk2 = jax.random.split(sk)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
+                                                    cfg_p, params_p,
+                                                    cfg_twist,
+                                                    params_twist,
+                                                    final_twist,
+                                                    output_len,
+                                                    n_samples)
+
+    r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
+
+    log_p_theta_adv_full_seq = evaluate_log_p_theta_1_to_t(
+        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
+        output_len)
+
+    baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
+    baseline_no_grad = jax.lax.stop_gradient(baseline)
+    print("Baseline value (Custom)")
+    print(jax.lax.stop_gradient(baseline))
+
+    # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
+    adv_rl_term = ((r_seqs_adv - baseline_no_grad) * log_p_theta_adv_full_seq).mean()
+
+    # Add a KL term as well
+    kl_term_adv = calculate_kl_on_seqs(prompt_w_sigma_sample_s_1_to_t, cfg_p_0, params_p_0, cfg_p, params_p)
+
+    # Baseline term; use empirical mean of r_seqs drawn from p, to approximate E_p[r(s)]
+    # Then MSE loss: (baseline - r_seqs.mean()) ^ 2
+    # This term is only used for training the baseline
+    model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
+    r_seqs_model = rew_model(model_seqs, prompt_len)
+    baseline_loss = (baseline - r_seqs_model.mean()) ** 2
+
+    log_p_theta_standard_full_seq = evaluate_log_p_theta_1_to_t(
+        model_seqs, cfg_p, params_p, prompt_len, output_len)
+
+    # We can use the same baseline here as above if it's per prompt, and not per token
+    standard_rl_term = ((r_seqs_model - baseline_no_grad) * log_p_theta_standard_full_seq).mean()
+
+    # Add a KL term as well
+    kl_term_standard = calculate_kl_on_seqs(model_seqs, cfg_p_0, params_p_0, cfg_p, params_p)
+
+    objective = adv_rl_term + standard_rl_term
+
+    loss = -objective + beta_kl * (kl_term_adv + kl_term_standard)
+
+    return loss + baseline_loss
+
 
 # TODO Test longer and longer seq lengths and check that the model A) correctly learns twists and B) correctly modifies the behaviour.
 # TODO also test comparing vs a strong baseline (e.g. PPO with knobs tuned) and compare quantitative and qualitative results.
@@ -2476,7 +2564,6 @@ class TestClass:
 
 
 
-
 def main():
 
     experiment_cfg = ExperimentConfig(args.dre_type, args.rm_type, rl_loss_type=args.rl_loss_type,
@@ -2553,6 +2640,11 @@ def main():
                                                               reward_model_fn=experiment_cfg.rm_fn)
         final_twists.append(final_twist)
 
+    adv_rewards = []
+    p_rewards = []
+    indist_probs = {"bad":[], "good":[], "evasive":[]}
+    ood_probs = {"bad":[], "good":[], "evasive":[]}
+
     for epoch in range(args.epochs):
 
         if (epoch + 1) % args.print_every == 0:
@@ -2598,7 +2690,7 @@ def main():
             test_info = True
             if (epoch + 1) % args.print_every == 0:
                 if test_info:
-                    rnd_key, sk, sk2 = jax.random.split(rnd_key, 3)
+                    rnd_key, sk, sk2, sk3 = jax.random.split(rnd_key, 4)
 
                     if experiment_cfg.rm_type == "one_bad":
                         inspect_one_bad_info(prompt, prompt_len, args.n_vocab, args.output_len, cfg_p, params_p)
@@ -2606,11 +2698,24 @@ def main():
                         inspect_varied_info(prompt, prompt_len, args.n_vocab,
                                             args.output_len, cfg_p, params_p)
                     elif experiment_cfg.rm_type == "bad_word":
-                        inspect_bad_word_info(prompt_len, cfg_p, params_p)
+                        bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
+                        bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob = inspect_bad_word_info(prompt_len, cfg_p, params_p)
+                        indist_probs["bad"].append(bad_word_indist_prob)
+                        indist_probs["good"].append(desired_cont_indist_prob)
+                        indist_probs["evasive"].append(evasive_cont_indist_prob)
+                        ood_probs["bad"].append(bad_word_ood_prob)
+                        ood_probs["good"].append(desired_cont_ood_prob)
+                        ood_probs["evasive"].append(evasive_cont_ood_prob)
+
+                        adv_reward, p_reward = inspect_bad_word_reward(sk3, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
+                            final_twist, args.output_len, args.n_policy_samples, experiment_cfg.batch_rm)
+                        adv_rewards.append(adv_reward)
+                        p_rewards.append(p_reward)
+
                         print_bad_word_env_generations(sk2, prompt, cfg_p,
                                                        params_p, prompt_len, args.output_len,
                                                        args.n_bad_word_samples)
-                        if experiment_cfg.rl_loss_type == "custom" or experiment_cfg.rl_loss_type == "custom_baselinep":
+                        if experiment_cfg.rl_loss_type == "custom" or experiment_cfg.rl_loss_type == "custom_baselinep" or experiment_cfg.rl_loss_type == "custom_mixed":
                             rnd_key, sk1 = jax.random.split(rnd_key)
                             print("SMC GENERATIONS")
                             _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
@@ -2646,7 +2751,19 @@ def main():
                                                  cfg_twist,
                                                  params_twist, rm_type=experiment_cfg.rm_type)
 
+        # if (epoch + 1) % args.ckpt_every == 0:
 
+
+    print(indist_probs)
+    print(ood_probs)
+    print(adv_rewards)
+    print(p_rewards)
+
+    checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                target=(indist_probs, ood_probs,
+                                        adv_rewards, p_rewards),
+                                step=epoch + 1,
+                                prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
     end = time.time()
     total_time = end - start
     print("TIME: " + str(total_time))
@@ -2680,7 +2797,7 @@ if __name__ == "__main__":
                         default=1.)
     parser.add_argument("--beta_kl", type=float,
                         help="beta used for kl div from original policy (to prevent policy collapse)",
-                        default=1.)
+                        default=0.)
 
     # Initialize the model params
     # IN THE ORIGINAL TRANSFORMER PAPER d_k = d_v = d_model / n_heads
@@ -2747,10 +2864,13 @@ if __name__ == "__main__":
 
     parser.add_argument("--rm_type", type=str, default="one_bad", choices=["one_bad", "varied", "bad_word"])
 
-    parser.add_argument("--rl_loss_type", type=str, default="custom", choices=["custom", "ppo", "custom_baselinep"])
+    parser.add_argument("--rl_loss_type", type=str, default="custom", choices=["custom", "ppo", "custom_baselinep", "custom_mixed"])
 
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
+    # parser.add_argument("--ckpt_every", type=int, default=50, help="Epochs between checkpoint save")
+    parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints")
+
 
     args = parser.parse_args()
 
