@@ -22,11 +22,57 @@ import datetime
 
 
 @jit
-def kl_div_jax(log_p_target, log_p_curr):
+def kl_div_jax_sum_last_axis(log_p, log_q):
+    # The POLA code basically said use the KL over the distribution over actions defined over each state
+    # For RLHF, we instead just calculate the log p for the particular action
+    # In POLA we had to condition on each state, for the policy. Here we can just condition on prompts. We couldn't do that with POLA because of environment transitions (?)
     # Since final axis is n_vocab, then summing over that axis is correct. Then we'll take a mean over time steps and batch size
-    kl_div = (jnp.exp(log_p_target) * (log_p_target - log_p_curr)).sum(axis=-1).mean()
+    # Anyway the POLA style KL div should work... but also so should the RLHF style one which should be simpler?
+    # The POLA style one doesn't have the same simple interpretation... so I should avoid it.
+    kl_div = (jnp.exp(log_p) * (log_p - log_q)).sum(axis=-1).mean()
     return kl_div
+# TODO JUL 28: Redo the KL, redo the KL tests, use the RLHF framework to plug in the KL
 
+# AVOID USING THIS FOR NOW. POLA style KL which may not make sense for our setting here
+# def calculate_kl_on_seqs_full_dist_over_tokens(seqs, cfg_p_0, params_p_0, cfg_p, params_p):
+#     output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, seqs)
+#     output_unnormalized_curr = batch_transformer(cfg_p, params_p, seqs)
+#     log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
+#     log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
+#     kl_term = kl_div_jax_full_dist_over_tokens(log_p_target, log_p_curr)
+#     return kl_term
+
+# This, in expectation with p_seqs drawn from the model p, will give you the KL divergence D_KL(p || p_0)
+def calculate_kl_term(p0_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len):
+    log_p_theta_s = evaluate_log_p_theta_1_to_t(p0_seqs, cfg_p, params_p, prompt_len, output_len)
+    kl_term = - log_p_theta_s # has shape (batch, )
+    return kl_term.mean() # empirical estimate of expectation
+
+def calculate_rev_kl_term(p_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len):
+    log_p_theta_s = evaluate_log_p_theta_1_to_t(p_seqs, cfg_p, params_p, prompt_len, output_len)
+    log_p_theta_0_s = evaluate_log_p_theta_1_to_t(p_seqs, cfg_p_0, params_p_0, prompt_len, output_len)
+    kl_term = log_p_theta_s - log_p_theta_0_s # has shape (batch, )
+    return kl_term.mean() # empirical estimate of expectation
+
+# TODO JUL 28 ALSO: for both entropy and KL, should we just calculate only on the output, and not on the prompt? Seems reasonable to me. This matters more for entropy than KL, since I'm not updating the log p for the prompt anyway
+def calculate_entropy_gradient_term_on_seqs(seqs, cfg_p, params_p):
+    # See writeup for derivation
+    output_unnormalized_curr = batch_transformer(cfg_p, params_p, seqs)
+    log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
+
+    no_grad_log_p = jax.lax.stop_gradient(log_p_curr)
+    total_prob_no_grad_plus_1 = no_grad_log_p.sum(axis=-1) + 1.
+
+    print(log_p_curr.shape)
+    print(total_prob_no_grad_plus_1.shape)
+
+    ent_term = -(log_p_curr.sum(axis=-1) * total_prob_no_grad_plus_1)
+
+    print(ent_term.shape)
+    1/0
+
+    ent_term = ent_term.mean()
+    return ent_term
 
 def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p,
                        optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline):
@@ -43,7 +89,7 @@ def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state
 
 
 class ExperimentConfig:
-    def __init__(self, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1.):
+    def __init__(self, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0):
         self.dre_type = dre_type.lower()
         assert self.dre_type in ["roger", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
         self.dre_grad_fn = self._get_dre_grad_fn()
@@ -53,6 +99,7 @@ class ExperimentConfig:
         self.rl_loss_fn = self._get_rl_loss_fn()
         if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep" or self.rl_loss_type == "custom_mixed":
             self.beta_kl = beta_kl
+            self.beta_ent = beta_ent
         elif self.rl_loss_type == "ppo":
             assert isinstance(ppo_steps, int)
             assert ppo_steps > 0
@@ -142,7 +189,8 @@ class ExperimentConfig:
                                                            cfg_baseline,
                                                            params_baseline,
                                                            cfg_p_0, params_p_0,
-                                                           self.beta_kl)
+                                                           self.beta_kl,
+                                                                  self.beta_ent)
             # grad_params_p, grad_params_baseline = self.get_grad_params_p_and_baseline(
             #     sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
             #     final_twist, rew_model, output_len, n_twist, prompt_len,
@@ -704,7 +752,7 @@ def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
 
     all_new_seqs = get_all_new_seqs_single_t(seq, n_vocab)
 
-    print(all_new_seqs.shape) # shape (batch, n_vocab, seq_len) (seq len includes the prompt len and output len)
+    # print(all_new_seqs.shape) # shape (batch, n_vocab, seq_len) (seq len includes the prompt len and output len)
 
     output_psi_batch = final_twist(all_new_seqs)
 
@@ -1412,9 +1460,13 @@ def get_l_dre_roger_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twis
     return -l_dre  # negative because now we have a loss
 
 
+
 def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
-                cfg_p_0, params_p_0, beta_kl):
+                cfg_p_0, params_p_0, beta_kl, beta_ent):
+
+    sk, sk2, sk3 = jax.random.split(sk, 3)
+
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist,
@@ -1444,15 +1496,14 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     first_term = ((r_seqs - baseline_no_grad) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
     second_term = log_p_theta_full_seq.mean() * (r_seqs - baseline_no_grad).mean()
-    # Add a KL term as well
-    # output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, prompt_w_sigma_sample_s_1_to_t)
-    # output_unnormalized_curr = batch_transformer(cfg_p, params_p, prompt_w_sigma_sample_s_1_to_t)
-    # log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
-    # log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
-    # kl_term = kl_div_jax(log_p_target, log_p_curr)
-    kl_term = calculate_kl_on_seqs(prompt_w_sigma_sample_s_1_to_t, cfg_p_0, params_p_0, cfg_p, params_p)
+
     objective = first_term - second_term
-    loss = -objective + beta_kl * kl_term
+
+    model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
+    kl_term = calculate_kl_term(model_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len)
+    # ent_term = calculate_entropy_gradient_term_on_seqs(model_seqs, cfg_p, params_p)
+    ent_term = 0.
+    loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
 
     # Baseline term; use empirical mean of r_seqs drawn from sigma, to approximate E_sigma[r(s)]
     # Then MSE loss: (baseline - r_seqs.mean()) ^ 2
@@ -1463,8 +1514,8 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
 
 def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
-                cfg_p_0, params_p_0, beta_kl):
-    sk, sk2 = jax.random.split(sk)
+                cfg_p_0, params_p_0, beta_kl, beta_ent):
+    sk, sk2, sk3 = jax.random.split(sk, 3)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist,
@@ -1486,18 +1537,8 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
 
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     first_term = ((r_seqs - baseline_no_grad) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
-    # Add a KL term as well
-    # TODO test this to make sure
-    # output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, prompt_w_sigma_sample_s_1_to_t)
-    # output_unnormalized_curr = batch_transformer(cfg_p, params_p, prompt_w_sigma_sample_s_1_to_t)
-    # log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
-    # log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
-    # kl_term = kl_div_jax(log_p_target, log_p_curr)
-    kl_term = calculate_kl_on_seqs(prompt_w_sigma_sample_s_1_to_t, cfg_p_0, params_p_0, cfg_p, params_p)
 
     objective = first_term
-    loss = -objective + beta_kl * kl_term
-
 
     # Baseline term; use empirical mean of r_seqs drawn from p, to approximate E_p[r(s)]
     # Then MSE loss: (baseline - r_seqs.mean()) ^ 2
@@ -1505,23 +1546,22 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
     model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
     r_seqs_model = rew_model(model_seqs, prompt_len)
     baseline_loss = (baseline - r_seqs_model.mean()) ** 2
+
+    kl_term = calculate_kl_term(model_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len)
+    # ent_term = calculate_entropy_gradient_term_on_seqs(model_seqs, cfg_p, params_p)
+    ent_term = 0.
+    loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
+
     return loss + baseline_loss
 
 
-def calculate_kl_on_seqs(seqs, cfg_p_0, params_p_0, cfg_p, params_p):
-    output_unnormalized_target = batch_transformer(cfg_p_0, params_p_0, seqs)
-    output_unnormalized_curr = batch_transformer(cfg_p, params_p, seqs)
-    log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
-    log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
-    kl_term = kl_div_jax(log_p_target, log_p_curr)
-    return kl_term
 
 # TODO JUL 26 do a mix of maybe half adversarial and half regular sample. Well no, you don't need that then. You can just alternate (or do simultaneous!) steps of regular RL
 # with the custom baselinep adv training scheme where both use the regular RL baseline value.
 def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
-                cfg_p_0, params_p_0, beta_kl):
-    sk, sk2 = jax.random.split(sk)
+                cfg_p_0, params_p_0, beta_kl, beta_ent):
+    sk, sk2, sk3 = jax.random.split(sk, 3)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist,
@@ -1544,9 +1584,6 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     adv_rl_term = ((r_seqs_adv - baseline_no_grad) * log_p_theta_adv_full_seq).mean()
 
-    # Add a KL term as well
-    kl_term_adv = calculate_kl_on_seqs(prompt_w_sigma_sample_s_1_to_t, cfg_p_0, params_p_0, cfg_p, params_p)
-
     # Baseline term; use empirical mean of r_seqs drawn from p, to approximate E_p[r(s)]
     # Then MSE loss: (baseline - r_seqs.mean()) ^ 2
     # This term is only used for training the baseline
@@ -1554,18 +1591,19 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
     r_seqs_model = rew_model(model_seqs, prompt_len)
     baseline_loss = (baseline - r_seqs_model.mean()) ** 2
 
+    kl_term = calculate_kl_term(model_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len)
+    # ent_term = calculate_entropy_gradient_term_on_seqs(model_seqs, cfg_p, params_p)
+    ent_term = 0.
+
     log_p_theta_standard_full_seq = evaluate_log_p_theta_1_to_t(
         model_seqs, cfg_p, params_p, prompt_len, output_len)
 
     # We can use the same baseline here as above if it's per prompt, and not per token
     standard_rl_term = ((r_seqs_model - baseline_no_grad) * log_p_theta_standard_full_seq).mean()
 
-    # Add a KL term as well
-    kl_term_standard = calculate_kl_on_seqs(model_seqs, cfg_p_0, params_p_0, cfg_p, params_p)
-
     objective = adv_rl_term + standard_rl_term
 
-    loss = -objective + beta_kl * (kl_term_adv + kl_term_standard)
+    loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
 
     return loss + baseline_loss
 
@@ -2271,38 +2309,25 @@ class TestClass:
                                                             optimizer_baseline,
                                                             optim_baseline_state)
 
-            # grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(
-            #     sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
-            #     self.params_twist,
-            #     final_twist, rew_model, self.output_len, self.n_twist,
-            #     self.prompt_len,
-            #     self.cfg_baseline, self.params_baseline, self.cfg_p_0,
-            #     self.params_p_0, beta_kl)
-            #
-            # # self.params_p = optimizer_p.step(self.params_p, grad_params_p)
-            # updates_p, optim_p_state = optimizer_p.update(
-            #     grad_params_p, optim_p_state, self.params_p)
-            # self.params_p = optax.apply_updates(self.params_p, updates_p)
-
         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
                                                  self.output_len)
 
-        output_unnormalized_target = batch_transformer(self.cfg_p_0,
-                                                       self.params_p_0,
-                                                       all_seqs)
-        output_unnormalized_curr = batch_transformer(self.cfg_p, self.params_p,
-                                                     all_seqs)
-        log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
-        log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
-        print(kl_div_jax(log_p_target, log_p_curr))
-        print(jnp.abs(log_p_target - log_p_curr).mean())
+        log_p_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
+                                                    self.prompt_len, self.output_len)
+        log_p_0_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p_0,
+                                                    self.params_p_0,
+                                                    self.prompt_len,
+                                                    self.output_len)
 
-        assert kl_div_jax(log_p_target, log_p_curr) > 1e-1
-        assert jnp.abs(log_p_target - log_p_curr).mean() > 0.3
+        print(kl_div_jax_sum_last_axis(log_p_s, log_p_0_s))
+        print(jnp.abs(log_p_s - log_p_0_s).mean())
+
+        assert (kl_div_jax_sum_last_axis(log_p_s, log_p_0_s)) > 1e-1
+        assert jnp.abs(log_p_s - log_p_0_s).mean() > 0.3
 
     # Test KL div (try a very high beta_kl and ensure after a few steps of params_p updates that the kl div from original is close to 0 (also just check a few probabilities and check that they match in L2 distance)
     def test_kl_on_policy_high_beta_kl(self):
-        beta_kl = 1000  # use some big number and test that the kl is ~0 after
+        beta_kl = 1.  # use some big number and test that the kl is ~0 after
 
         # rew_model = batch_reward_model(self.prompt_len,
         #                                reward_model_fn=reward_model_varied)
@@ -2343,35 +2368,23 @@ class TestClass:
                                                             optimizer_baseline,
                                                             optim_baseline_state)
 
-            # grad_params_p, grad_params_baseline = experiment_cfg.get_grad_params_p_and_baseline(
-            #     sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
-            #     self.params_twist,
-            #     final_twist, rew_model, self.output_len, self.n_twist,
-            #     self.prompt_len,
-            #     self.cfg_baseline, self.params_baseline, self.cfg_p_0,
-            #     self.params_p_0, beta_kl)
-            #
-            # # self.params_p = optimizer_p.step(self.params_p, grad_params_p)
-            # updates_p, optim_p_state = optimizer_p.update(
-            #     grad_params_p, optim_p_state, self.params_p)
-            # self.params_p = optax.apply_updates(self.params_p, updates_p)
 
         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
                                                  self.output_len)
 
-        output_unnormalized_target = batch_transformer(self.cfg_p_0,
-                                                       self.params_p_0,
-                                                       all_seqs)
-        output_unnormalized_curr = batch_transformer(self.cfg_p, self.params_p,
-                                                     all_seqs)
-        log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
-        log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
-        print(kl_div_jax(log_p_target, log_p_curr))
-        print(jnp.abs(log_p_target - log_p_curr).mean())
+        log_p_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
+                                                    self.prompt_len, self.output_len)
+        log_p_0_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p_0,
+                                                    self.params_p_0,
+                                                    self.prompt_len,
+                                                    self.output_len)
 
+        print(kl_div_jax_sum_last_axis(log_p_s, log_p_0_s))
+        print(jnp.abs(log_p_s - log_p_0_s).mean())
 
-        assert kl_div_jax(log_p_target, log_p_curr) < 1e-2
-        assert jnp.abs(log_p_target - log_p_curr).mean() < 0.1
+        assert (kl_div_jax_sum_last_axis(log_p_s, log_p_0_s)) < 1e-9 # 1e-2
+        assert jnp.abs(log_p_s - log_p_0_s).mean() <  1e-9 # 1e-1
+
 
 
     def test_cond_vs_marg_prob(self):
@@ -2568,7 +2581,7 @@ def main():
 
     experiment_cfg = ExperimentConfig(args.dre_type, args.rm_type, rl_loss_type=args.rl_loss_type,
                                       beta_kl=args.beta_kl, ppo_steps=args.ppo_steps, clip_epsilon=args.clip_epsilon,
-                                      gamma=args.gamma, gae_lambda=args.gae_lambda)
+                                      gamma=args.gamma, gae_lambda=args.gae_lambda, beta_ent=args.beta_ent)
 
     start = time.time()
 
@@ -2796,7 +2809,10 @@ if __name__ == "__main__":
                         help="beta used for the temperature scaling",
                         default=1.)
     parser.add_argument("--beta_kl", type=float,
-                        help="beta used for kl div from original policy (to prevent policy collapse)",
+                        help="beta used for regularization: kl div from original policy (to prevent policy collapse)",
+                        default=0.)
+    parser.add_argument("--beta_ent", type=float,
+                        help="beta used for entropy regularization; similar to KL but on distr from p (the model) instead of p_0 (the reference/original model)",
                         default=0.)
 
     # Initialize the model params
