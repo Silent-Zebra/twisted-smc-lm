@@ -43,7 +43,7 @@ def kl_div_jax_sum_last_axis(log_p, log_q):
 #     return kl_term
 
 # This, in expectation with p_seqs drawn from the model p, will give you the KL divergence D_KL(p || p_0)
-def calculate_kl_term(p0_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len):
+def calculate_kl_term(p0_seqs, cfg_p, params_p, prompt_len, output_len):
     log_p_theta_s = evaluate_log_p_theta_1_to_t(p0_seqs, cfg_p, params_p, prompt_len, output_len)
     kl_term = - log_p_theta_s # has shape (batch, )
     return kl_term.mean() # empirical estimate of expectation
@@ -1500,7 +1500,8 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
     objective = first_term - second_term
 
     model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
-    kl_term = calculate_kl_term(model_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len)
+    p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
+    kl_term = calculate_kl_term(p_0_seqs, cfg_p, params_p, prompt_len, output_len)
     # ent_term = calculate_entropy_gradient_term_on_seqs(model_seqs, cfg_p, params_p)
     ent_term = 0.
     loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
@@ -1547,7 +1548,8 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
     r_seqs_model = rew_model(model_seqs, prompt_len)
     baseline_loss = (baseline - r_seqs_model.mean()) ** 2
 
-    kl_term = calculate_kl_term(model_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len)
+    p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
+    kl_term = calculate_kl_term(p_0_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len)
     # ent_term = calculate_entropy_gradient_term_on_seqs(model_seqs, cfg_p, params_p)
     ent_term = 0.
     loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
@@ -1591,7 +1593,8 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
     r_seqs_model = rew_model(model_seqs, prompt_len)
     baseline_loss = (baseline - r_seqs_model.mean()) ** 2
 
-    kl_term = calculate_kl_term(model_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len)
+    p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
+    kl_term = calculate_kl_term(p_0_seqs, cfg_p, params_p, prompt_len, output_len)
     # ent_term = calculate_entropy_gradient_term_on_seqs(model_seqs, cfg_p, params_p)
     ent_term = 0.
 
