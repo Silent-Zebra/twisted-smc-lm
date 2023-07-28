@@ -54,23 +54,10 @@ def calculate_rev_kl_term(p_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_l
     kl_term = log_p_theta_s - log_p_theta_0_s # has shape (batch, )
     return kl_term.mean() # empirical estimate of expectation
 
-# TODO JUL 28 ALSO: for both entropy and KL, should we just calculate only on the output, and not on the prompt? Seems reasonable to me. This matters more for entropy than KL, since I'm not updating the log p for the prompt anyway
-def calculate_entropy_gradient_term_on_seqs(seqs, cfg_p, params_p):
+def calculate_entropy_gradient_term(seqs_p, cfg_p, params_p, prompt_len, output_len):
     # See writeup for derivation
-    output_unnormalized_curr = batch_transformer(cfg_p, params_p, seqs)
-    log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
-
-    no_grad_log_p = jax.lax.stop_gradient(log_p_curr)
-    total_prob_no_grad_plus_1 = no_grad_log_p.sum(axis=-1) + 1.
-
-    print(log_p_curr.shape)
-    print(total_prob_no_grad_plus_1.shape)
-
-    ent_term = -(log_p_curr.sum(axis=-1) * total_prob_no_grad_plus_1)
-
-    print(ent_term.shape)
-    1/0
-
+    log_p_theta_s = evaluate_log_p_theta_1_to_t(seqs_p, cfg_p, params_p, prompt_len, output_len)
+    ent_term = - log_p_theta_s * (jax.lax.stop_gradient(log_p_theta_s) + 1.)
     ent_term = ent_term.mean()
     return ent_term
 
@@ -1502,8 +1489,7 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
     model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
     p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
     kl_term = calculate_kl_term(p_0_seqs, cfg_p, params_p, prompt_len, output_len)
-    # ent_term = calculate_entropy_gradient_term_on_seqs(model_seqs, cfg_p, params_p)
-    ent_term = 0.
+    ent_term = calculate_entropy_gradient_term(model_seqs, cfg_p, params_p, prompt_len, output_len)
     loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
 
     # Baseline term; use empirical mean of r_seqs drawn from sigma, to approximate E_sigma[r(s)]
@@ -1550,8 +1536,8 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
 
     p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
     kl_term = calculate_kl_term(p_0_seqs, cfg_p, params_p, cfg_p_0, params_p_0, prompt_len, output_len)
-    # ent_term = calculate_entropy_gradient_term_on_seqs(model_seqs, cfg_p, params_p)
-    ent_term = 0.
+    ent_term = calculate_entropy_gradient_term(model_seqs, cfg_p, params_p,
+                                               prompt_len, output_len)
     loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
 
     return loss + baseline_loss
@@ -1595,8 +1581,8 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
 
     p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
     kl_term = calculate_kl_term(p_0_seqs, cfg_p, params_p, prompt_len, output_len)
-    # ent_term = calculate_entropy_gradient_term_on_seqs(model_seqs, cfg_p, params_p)
-    ent_term = 0.
+    ent_term = calculate_entropy_gradient_term(model_seqs, cfg_p, params_p,
+                                               prompt_len, output_len)
 
     log_p_theta_standard_full_seq = evaluate_log_p_theta_1_to_t(
         model_seqs, cfg_p, params_p, prompt_len, output_len)
