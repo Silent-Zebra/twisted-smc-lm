@@ -82,9 +82,9 @@ class ExperimentConfig:
         self.dre_grad_fn = self._get_dre_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
-        assert self.rl_loss_type in ["custom", "ppo", "custom_baselinep", "custom_mixed"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
+        assert self.rl_loss_type in ["custom", "ppo", "custom_baselinep", "custom_mixed", "custom_extremes"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
         self.rl_loss_fn = self._get_rl_loss_fn()
-        if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep" or self.rl_loss_type == "custom_mixed":
+        if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep" or self.rl_loss_type == "custom_mixed" or self.rl_loss_type == "custom_extremes":
             self.beta_kl = beta_kl
             self.beta_ent = beta_ent
         elif self.rl_loss_type == "ppo":
@@ -107,6 +107,8 @@ class ExperimentConfig:
             return jax.grad(rl_loss_custom_baselinep, argnums=[3, 12])
         elif self.rl_loss_type == "custom_mixed":
             return jax.grad(rl_loss_custom_mixed_sampling, argnums=[3, 12])
+        elif self.rl_loss_type == "custom_extremes":
+            return jax.grad(rl_loss_custom_extremes, argnums=[3, 12])
         elif self.rl_loss_type == "ppo":
             return jax.grad(ppo_and_value_loss, argnums=[3, 9], has_aux=True)
         else:
@@ -155,7 +157,8 @@ class ExperimentConfig:
         return grad_params_twist
 
 
-    @partial(jax.jit, static_argnames=["self", "final_twist", 'output_len', 'n_samples', "prompt_len",  "optimizer_p", "optimizer_baseline", "cfg_p_0","cfg_p", "cfg_twist", "cfg_baseline" ])
+
+    @partial(jax.jit, static_argnames=["self", "final_twist", "final_twist_pos", 'output_len', 'n_samples', "prompt_len",  "optimizer_p", "optimizer_baseline", "cfg_p_0","cfg_p", "cfg_twist", "cfg_baseline", "cfg_twist_pos" ])
     # TODO Jul 13: After finishing, when doing a commit, look at all the diffs, and go over each line to make sure it makes sense and that there are no typos.
     # TODO JUL 13 FIRST TEST, FIX, THEN DO THE ABOVE
     # TODO Jul 13 Check that everything else is working, including each of the print statements, document all of the shapes, check they all match, etc.
@@ -163,7 +166,9 @@ class ExperimentConfig:
     def update_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
                                      final_twist, output_len, n_samples, prompt_len,
                                      cfg_baseline, params_baseline, cfg_p_0, params_p_0,
-                                     optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state):
+                                     optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state,
+                                     cfg_twist_pos=None, params_twist_pos=None, final_twist_pos=None,
+                                     ):
         if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep" or self.rl_loss_type == "custom_mixed":
 
             grad_params_p, grad_params_baseline = self.rl_loss_fn(sk, prompt, cfg_p,
@@ -195,6 +200,38 @@ class ExperimentConfig:
                        optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline)
 
             return params_p, optim_p_state, params_baseline, optim_baseline_state
+        elif self.rl_loss_type == "custom_extremes":
+            assert cfg_twist_pos is not None
+            assert params_twist_pos is not None
+            assert final_twist_pos is not None
+            grad_params_p, grad_params_baseline = self.rl_loss_fn(sk, prompt,
+                                                                  cfg_p,
+                                                                  params_p,
+                                                                  cfg_twist,
+                                                                  params_twist,
+                                                                  final_twist,
+                                                                  self.batch_rm,
+                                                                  output_len,
+                                                                  n_samples,
+                                                                  prompt_len,
+                                                                  cfg_baseline,
+                                                                  params_baseline,
+                                                                  cfg_p_0,
+                                                                  params_p_0,
+                                                                  self.beta_kl,
+                                                                  self.beta_ent,
+                                                                  cfg_twist_pos,
+                                                                  params_twist_pos,
+                                                                  final_twist_pos
+                                                                  )
+
+            params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(
+                optimizer_p, grad_params_p, optim_p_state, params_p,
+                optimizer_baseline, grad_params_baseline, optim_baseline_state,
+                params_baseline)
+
+            return params_p, optim_p_state, params_baseline, optim_baseline_state
+
         elif self.rl_loss_type == "ppo":
             sk, sk2 = jax.random.split(sk)
             (grad_params_p, grad_params_baseline), ref_log_p = \
@@ -248,22 +285,6 @@ class ExperimentConfig:
         carry = (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state)
 
         return carry, None
-
-    # def get_grad_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-    #                      final_twist, rew_model, output_len, n_twist, prompt_len,
-    #                      cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl):
-    #     if self.rl_loss_type == "custom":
-    #         grad_params_p, grad_baseline = self.rl_loss_fn(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-    #                          final_twist, rew_model, output_len, n_twist, prompt_len,
-    #                          cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl)
-    #     elif self.rl_loss_type == "ppo":
-    #                     (grad_params_p, grad_baseline), log_p = self.rl_loss_fn(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_samples, rew_model, cfg_baseline, params_baseline, clip_epsilon, old_log_p, first_iter=True)
-    #
-    #         ppo_and_value_loss(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_samples, rew_model, cfg_baseline, params_baseline, clip_epsilon, old_log_p, first_iter=True)
-    #
-    #     else:
-    #         raise NotImplementedError
-    #     return grad_params_p, grad_baseline
 
 # DO NOT MUTATE THIS. TREAT THIS AS IMMUTABLE
 # https://stackoverflow.com/questions/1151658/python-hashable-dicts
@@ -888,6 +909,12 @@ def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_pl
     token_indices = full_seq[:,prompt_len_plus_t]
     return output_psi[:,prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
 
+# TODO THink about - there's probably some way to avoid having to train a separate positive twist but maybe we can just do that at first as a proof of concept for the idea even if inefficient.
+# Remember that when psi is trained it is prop to phi, which is e^(-beta r(s)). So if we want something prop to e^(beta r(s)), then we need...?
+# Well, if psi = c e^ (-beta r(s)), then log psi = log c  - beta r(s). So if you want log_neg_psi = log c + beta r(s) and you have log c - beta r(s)...
+# def evaluate_log_neg_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t):
+#     log_psi_t = evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t)
+#     log_neg_psi_t = jnp.exp(log_psi_t) * -1.
 
 # WARNING/NOTE that if not using the final twist, then we're using the learned twist
 # And in my current setup I don't think that learned final twist ever gets trained anywhere
@@ -1596,6 +1623,66 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
 
     return loss + baseline_loss
 
+def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
+                rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
+                cfg_p_0, params_p_0, beta_kl, beta_ent, cfg_twist_pos,
+                            params_twist_pos, final_twist_pos):
+    sk, sk_pos, sk2, sk3 = jax.random.split(sk, 4)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
+                                                    cfg_p, params_p,
+                                                    cfg_twist,
+                                                    params_twist,
+                                                    final_twist,
+                                                    output_len,
+                                                    n_samples // 2)
+    _, prompt_w_sigma_pos_sample_s_1_to_t = smc_procedure(sk_pos, prompt,
+                                                    cfg_p, params_p,
+                                                    cfg_twist_pos,
+                                                    params_twist_pos,
+                                                    final_twist_pos,
+                                                    output_len,
+                                                    n_samples // 2)
+
+    for sample in prompt_w_sigma_pos_sample_s_1_to_t[:10, prompt_len:]:
+        print(indices_to_tokens(ordered_token_list, sample))
+    print(prompt_w_sigma_pos_sample_s_1_to_t.shape)
+
+    prompt_w_combined_samples_s_1_to_t = jnp.concatenate((prompt_w_sigma_sample_s_1_to_t, prompt_w_sigma_pos_sample_s_1_to_t)) # WHICH AXIS?
+
+
+    r_seqs_extremes = rew_model(prompt_w_combined_samples_s_1_to_t, prompt_len)
+
+    log_p_theta_extremes_full_seq = evaluate_log_p_theta_1_to_t(
+        prompt_w_combined_samples_s_1_to_t, cfg_p, params_p, prompt_len,
+        output_len)
+
+    baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
+    baseline_no_grad = jax.lax.stop_gradient(baseline)
+    print("Baseline value (Custom)")
+    print(jax.lax.stop_gradient(baseline))
+
+    # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
+    rl_term = ((r_seqs_extremes - baseline_no_grad) * log_p_theta_extremes_full_seq).mean()
+
+    baseline_loss = (baseline - r_seqs_extremes.mean()) ** 2
+
+    # TODO: consider baseline from p?
+    # # Baseline term; use empirical mean of r_seqs drawn from p, to approximate E_p[r(s)]
+    # # Then MSE loss: (baseline - r_seqs.mean()) ^ 2
+    # # This term is only used for training the baseline
+    # model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
+    # r_seqs_model = rew_model(model_seqs, prompt_len)
+    # baseline_loss = (baseline - r_seqs_model.mean()) ** 2
+
+    p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
+    kl_term = calculate_kl_term(p_0_seqs, cfg_p, params_p, prompt_len, output_len)
+    model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
+    ent_term = calculate_entropy_gradient_term(model_seqs, cfg_p, params_p,
+                                               prompt_len, output_len)
+
+    loss = -rl_term + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
+
+    return loss + baseline_loss
 
 # TODO Test longer and longer seq lengths and check that the model A) correctly learns twists and B) correctly modifies the behaviour.
 # TODO also test comparing vs a strong baseline (e.g. PPO with knobs tuned) and compare quantitative and qualitative results.
@@ -2599,6 +2686,18 @@ def main():
                 d_fc=args.d_fc_twist,
             )
 
+    if args.rl_loss_type == "custom_extremes":
+        rnd_key, cfg_twist_pos, params_twist_pos = transformer_init_params(
+            rnd_key,
+            n_vocab=args.n_vocab,
+            d_model=args.d_model_twist,
+            d_k=args.d_k_twist,
+            d_v=args.d_v_twist,
+            n_layers=args.n_layers_twist,
+            n_heads=args.n_heads_twist,
+            d_fc=args.d_fc_twist,
+        )
+
     rnd_key, cfg_baseline, params_baseline = transformer_init_params(
         rnd_key,
         n_vocab=1,
@@ -2616,6 +2715,10 @@ def main():
     optimizer_twist = optax.adam(learning_rate=args.lr_twist, b1=args.beta1, b2=args.beta2)
     optim_twist_state = optimizer_twist.init(params_twist)
 
+    if args.rl_loss_type == "custom_extremes":
+        optimizer_twist_pos = optax.adam(learning_rate=args.lr_twist, b1=args.beta1, b2=args.beta2)
+        optim_twist_state_pos = optimizer_twist_pos.init(params_twist_pos)
+
     optimizer_baseline = optax.adam(learning_rate=args.lr_baseline, b1=args.beta1, b2=args.beta2)
     optim_baseline_state = optimizer_baseline.init(params_baseline)
 
@@ -2629,6 +2732,7 @@ def main():
 
     jnp_prompts = []
     final_twists = []
+    final_twists_pos = []
     for prompt in prompts:
         if token_based_prompt:
             index_based_prompt = tokens_to_jnp_indices(ordered_token_list,
@@ -2640,7 +2744,11 @@ def main():
         final_twist = neg_beta_times_batch_reward_model_curry(prompt.shape[-1],
                                                               beta=args.beta_temp,
                                                               reward_model_fn=experiment_cfg.rm_fn)
+        final_twist_pos = neg_beta_times_batch_reward_model_curry(prompt.shape[-1],
+                                                              beta=args.beta_temp * -1.,
+                                                              reward_model_fn=experiment_cfg.rm_fn)
         final_twists.append(final_twist)
+        final_twists_pos.append(final_twist_pos)
 
     adv_rewards = []
     p_rewards = []
@@ -2656,6 +2764,7 @@ def main():
         for prompt in jnp_prompts:
             prompt_len = prompt.shape[-1]
             final_twist = final_twists[i]
+            final_twist_pos = final_twists_pos[i]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
 
@@ -2676,14 +2785,46 @@ def main():
                 updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
                 params_twist = optax.apply_updates(params_twist, updates_twist)
 
+                if args.rl_loss_type == "custom_extremes":
+                    grad_params_twist_pos = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len,
+                                                                                 cfg_p, params_p, cfg_twist_pos, params_twist_pos, final_twist_pos)
+                    updates_twist_pos, optim_twist_state_pos = optimizer_twist.update(
+                        grad_params_twist_pos, optim_twist_state_pos, params_twist_pos)
+
             for model_update in range(args.model_updates_per_epoch):
                 rnd_key, sk = jax.random.split(rnd_key)
 
-                params_p, optim_p_state, params_baseline, optim_baseline_state = \
-                    experiment_cfg.update_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                                     final_twist, args.output_len, args.n_policy_samples, prompt_len,
-                                     cfg_baseline, params_baseline, cfg_p_0, params_p_0,
-                                    optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state)
+                if args.rl_loss_type == "custom_extremes":
+
+                    params_p, optim_p_state, params_baseline, optim_baseline_state = \
+                        experiment_cfg.update_params_p_and_baseline(sk, prompt,
+                                                                    cfg_p,
+                                                                    params_p,
+                                                                    cfg_twist,
+                                                                    params_twist,
+                                                                    final_twist,
+                                                                    args.output_len,
+                                                                    args.n_policy_samples,
+                                                                    prompt_len,
+                                                                    cfg_baseline,
+                                                                    params_baseline,
+                                                                    cfg_p_0,
+                                                                    params_p_0,
+                                                                    optimizer_p,
+                                                                    optim_p_state,
+                                                                    optimizer_baseline,
+                                                                    optim_baseline_state,
+                                                                    cfg_twist_pos,
+                                                                    params_twist_pos,
+                                                                    final_twist_pos,
+                                                                    )
+                else:
+
+                    params_p, optim_p_state, params_baseline, optim_baseline_state = \
+                        experiment_cfg.update_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                                         final_twist, args.output_len, args.n_policy_samples, prompt_len,
+                                         cfg_baseline, params_baseline, cfg_p_0, params_p_0,
+                                        optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state)
 
 
 
@@ -2717,7 +2858,8 @@ def main():
                         print_bad_word_env_generations(sk2, prompt, cfg_p,
                                                        params_p, prompt_len, args.output_len,
                                                        args.n_bad_word_samples)
-                        if experiment_cfg.rl_loss_type == "custom" or experiment_cfg.rl_loss_type == "custom_baselinep" or experiment_cfg.rl_loss_type == "custom_mixed":
+                        if experiment_cfg.rl_loss_type == "custom" or experiment_cfg.rl_loss_type == "custom_baselinep" or \
+                            experiment_cfg.rl_loss_type == "custom_mixed" or experiment_cfg.rl_loss_type == "custom_extremes":
                             rnd_key, sk1 = jax.random.split(rnd_key)
                             print("SMC GENERATIONS")
                             _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
@@ -2869,7 +3011,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--rm_type", type=str, default="one_bad", choices=["one_bad", "varied", "bad_word"])
 
-    parser.add_argument("--rl_loss_type", type=str, default="custom", choices=["custom", "ppo", "custom_baselinep", "custom_mixed"])
+    parser.add_argument("--rl_loss_type", type=str, default="custom", choices=["custom", "ppo", "custom_baselinep", "custom_mixed", "custom_extremes"])
 
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
