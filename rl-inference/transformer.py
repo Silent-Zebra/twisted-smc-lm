@@ -1643,9 +1643,9 @@ def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist
                                                     output_len,
                                                     n_samples // 2)
 
-    for sample in prompt_w_sigma_pos_sample_s_1_to_t[:10, prompt_len:]:
-        print(indices_to_tokens(ordered_token_list, sample))
-    print(prompt_w_sigma_pos_sample_s_1_to_t.shape)
+    # for sample in prompt_w_sigma_pos_sample_s_1_to_t[:10, prompt_len:]:
+    #     print(indices_to_tokens(ordered_token_list, sample))
+    # print(prompt_w_sigma_pos_sample_s_1_to_t.shape)
 
     prompt_w_combined_samples_s_1_to_t = jnp.concatenate((prompt_w_sigma_sample_s_1_to_t, prompt_w_sigma_pos_sample_s_1_to_t)) # WHICH AXIS?
 
@@ -2860,8 +2860,8 @@ def main():
                                                        args.n_bad_word_samples)
                         if experiment_cfg.rl_loss_type == "custom" or experiment_cfg.rl_loss_type == "custom_baselinep" or \
                             experiment_cfg.rl_loss_type == "custom_mixed" or experiment_cfg.rl_loss_type == "custom_extremes":
+                            print("SMC ADVERSARIAL GENERATIONS")
                             rnd_key, sk1 = jax.random.split(rnd_key)
-                            print("SMC GENERATIONS")
                             _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
                                 sk1, prompt, cfg_p, params_p, cfg_twist,
                                 params_twist, final_twist, args.output_len, args.n_twist)
@@ -2869,6 +2869,18 @@ def main():
                                 token_sample = indices_to_tokens(
                                     ordered_token_list, sample)
                                 print(token_sample[prompt_len:])
+                            if experiment_cfg.rl_loss_type == "custom_extremes":
+                                print("SMC POS GENERATIONS")
+                                rnd_key, sk1 = jax.random.split(rnd_key)
+                                _, prompt_w_sigma_pos_sample_s_1_to_t = smc_procedure(
+                                    sk1, prompt, cfg_p, params_p, cfg_twist_pos,
+                                    params_twist_pos, final_twist_pos, args.output_len,
+                                    args.n_twist)
+                                for sample in prompt_w_sigma_pos_sample_s_1_to_t[
+                                              :args.n_bad_word_samples]:
+                                    token_sample = indices_to_tokens(
+                                        ordered_token_list, sample)
+                                    print(token_sample[prompt_len:])
                     else:
                         print_samples_using_twists(sk, prompt, prompt_len, args.n_vocab,
                                                    args.output_len, cfg_p, params_p,
