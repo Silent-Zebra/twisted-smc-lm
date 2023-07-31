@@ -1104,7 +1104,7 @@ def smc_procedure(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, fin
     if analytic_sigma_sample:
         assert n_vocab > 0
         prompt_len = prompt.shape[-1]
-        return get_analytic_sigma_sample(rnd_key, prompt, prompt_len, n_vocab,
+        return None, get_analytic_sigma_sample(rnd_key, prompt, prompt_len, n_vocab,
                                      output_len, cfg_p, params_p, final_twist,
                                      n_smc_samples)
 
