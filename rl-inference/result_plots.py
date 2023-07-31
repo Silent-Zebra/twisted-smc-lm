@@ -11,7 +11,39 @@ load_dir = "."
 action_size = 2
 input_size = 6
 
-load_prefixes = ["checkpoint_2023-07-27_21-00_seed42_epoch5", "checkpoint_2023-07-27_21-28_seed2_epoch5"]
+load_prefixes_custom = ["checkpoint_2023-07-28_00-16_seed5_epoch50",
+                         "checkpoint_2023-07-28_00-19_seed1_epoch50",
+                         "checkpoint_2023-07-28_00-19_seed3_epoch50",
+                         "checkpoint_2023-07-28_00-20_seed2_epoch50",
+                         "checkpoint_2023-07-28_00-20_seed4_epoch50"
+                        ]
+load_prefixes_ppo = ["checkpoint_2023-07-28_00-28_seed1_epoch50",
+                    "checkpoint_2023-07-28_00-28_seed2_epoch50",
+                    "checkpoint_2023-07-28_00-28_seed3_epoch50",
+                    "checkpoint_2023-07-28_00-28_seed4_epoch50",
+                    "checkpoint_2023-07-28_00-28_seed5_epoch50"
+                    ]
+
+# load_prefixes_mixed = ["checkpoint_2023-07-28_00-15_seed2_epoch50",
+#                     "checkpoint_2023-07-28_00-16_seed5_epoch50",
+#                     "checkpoint_2023-07-28_00-17_seed4_epoch50",
+#                     "checkpoint_2023-07-28_00-18_seed1_epoch50",
+#                     "checkpoint_2023-07-28_01-11_seed3_epoch50",
+#                     ]
+
+load_prefixes_custom_kl_01 = ["checkpoint_2023-07-28_19-03_seed1_epoch50",
+                                "checkpoint_2023-07-28_19-03_seed4_epoch50",
+                                "checkpoint_2023-07-28_19-04_seed2_epoch50",
+                                "checkpoint_2023-07-28_19-04_seed3_epoch50",
+                                "checkpoint_2023-07-28_19-05_seed5_epoch50",
+                              ]
+
+load_prefixes_extremes = ["checkpoint_2023-07-30_18-41_seed4_epoch50",
+                        "checkpoint_2023-07-30_18-44_seed2_epoch50",
+                        "checkpoint_2023-07-30_18-44_seed3_epoch50",
+                        "checkpoint_2023-07-30_18-45_seed5_epoch50",
+                        "checkpoint_2023-07-30_18-46_seed1_epoch50",
+                        ]
 
 def load_from_checkpoint(load_dir, load_prefix):
     epoch_num = int(load_prefix.split("epoch")[-1])
@@ -87,13 +119,13 @@ def setup_plots(titles):
 
     for i in range(nfigs):
         axs[i].set_title(titles[i])
-        axs[i].set_xlabel("Total Number of Outer Steps")
-        axs[i].set_ylabel("Score (Average over Agents and Rollout Length)")
+        axs[i].set_xlabel("Total Number of Policy Update Steps")
+        axs[i].set_ylabel("")
 
     return fig, axs
 
 
-def plot_results(axs, load_prefixes, nfigs, max_iter_plot, label, z_score=1.96, skip_step=1, linestyle='solid'):
+def plot_results(axs, load_prefixes, nfigs, max_iter_plot, label, z_score=1.96, skip_step=10, linestyle='solid'):
 
     n_ckpts = len(load_prefixes)
 
@@ -115,7 +147,8 @@ def plot_results(axs, load_prefixes, nfigs, max_iter_plot, label, z_score=1.96, 
     adv_rewards_total = jnp.stack(adv_rewards_total)
     p_rewards_total = jnp.stack(p_rewards_total)
 
-    plot_tup = (indist_probs_bad_total, ood_probs_bad_total, adv_rewards_total, p_rewards_total)
+    # plot_tup = (jnp.log(indist_probs_bad_total), jnp.log(ood_probs_bad_total), adv_rewards_total, p_rewards_total)
+    plot_tup = (jnp.log(indist_probs_bad_total), adv_rewards_total, p_rewards_total)
 
     for i in range(nfigs):
         plot_with_conf_bounds(plot_tup[i], max_iter_plot, n_ckpts, label,
@@ -123,10 +156,15 @@ def plot_results(axs, load_prefixes, nfigs, max_iter_plot, label, z_score=1.96, 
         axs[i].legend()
 
 
-titles = ("1", "2", "3", "4")
+titles = ("Log Probability of Bad Word", "Reward Under Adversarial Sampling", "Reward Under Standard Sampling")
 fig, axs = setup_plots(titles)
 
-plot_results(axs, load_prefixes, nfigs=len(titles), max_iter_plot=5, label="Test", linestyle='dashed')
+plot_results(axs, load_prefixes_custom, nfigs=len(titles), max_iter_plot=50, label="Adversarial Sampling", linestyle='dashed')
+plot_results(axs, load_prefixes_ppo, nfigs=len(titles), max_iter_plot=50, label="Standard RL", linestyle='dashed')
+# plot_results(axs, load_prefixes_mixed, nfigs=len(titles), max_iter_plot=50, label="Mixed Adversarial + Standard Sampling", linestyle='dashed')
+# plot_results(axs, load_prefixes_custom_kl_01, nfigs=len(titles), max_iter_plot=50, label="Adversarial Sampling with 0.01 KL Div (p_theta_0 samples)", linestyle='dashed') # Sampled from p_0
+plot_results(axs, load_prefixes_extremes, nfigs=len(titles), max_iter_plot=50, label="Extremes Sampling", linestyle='dashed')
+
 
 plt.show()
 

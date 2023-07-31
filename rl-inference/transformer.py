@@ -3000,7 +3000,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_layers_baseline", type=int, default=2,
                         help="Number of layers")
 
-    parser.add_argument("--output_len", type=int, default=8,
+    parser.add_argument("--output_len", type=int, default=5,
                         help="Length of the strings we output")
 
     parser.add_argument("--n_test_smc_samples", type=int, default=20,
