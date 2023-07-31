@@ -157,7 +157,6 @@ class ExperimentConfig:
         return grad_params_twist
 
 
-
     @partial(jax.jit, static_argnames=["self", "final_twist", "final_twist_pos", 'output_len', 'n_samples', "prompt_len",  "optimizer_p", "optimizer_baseline", "cfg_p_0","cfg_p", "cfg_twist", "cfg_baseline", "cfg_twist_pos" ])
     # TODO Jul 13: After finishing, when doing a commit, look at all the diffs, and go over each line to make sure it makes sense and that there are no typos.
     # TODO JUL 13 FIRST TEST, FIX, THEN DO THE ABOVE
@@ -823,14 +822,14 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist):
     # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
     return output_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
-def evaluate_log_psi_t_final(seq, final_twist):
+def evaluate_log_phi_final(seq, final_twist):
     return final_twist(seq)
 
 def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(seq, cfg_p, params_p, final_twist):
     # Takes in batches of sequences s_{1:t}
     # Right now evaluates UNNORMALIZED log q_t which is not actually what the q_t probability is supposed to be
     # Evaluates p(s_t | s_{1:t-1}) psi(s_{1:t})  (IS UNNORMALIZED)
-    return evaluate_log_p_theta_t(seq, cfg_p, params_p) + evaluate_log_psi_t_final(seq, final_twist)
+    return evaluate_log_p_theta_t(seq, cfg_p, params_p) + evaluate_log_phi_final(seq, final_twist)
 
 def evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len, output_log_p_for_each_t=False):
     # Evaluate log p_theta(s_{1:t}) (given the prompt)
@@ -953,7 +952,7 @@ def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
         full_seq, cfg_p, params_p, prompt_len + t)
 
     if use_final_twist:
-        log_r_psi_t_eval = evaluate_log_psi_t_final(full_seq, final_twist)
+        log_r_psi_t_eval = evaluate_log_phi_final(full_seq, final_twist)
     else:
         log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist,
                                                        params_twist,
@@ -1101,8 +1100,16 @@ def smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twi
     return log_z_hat_t, full_seq
 
 
-def smc_procedure(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
-    return smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
+def smc_procedure(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, analytic_sigma_sample=False, n_vocab=0):
+    if analytic_sigma_sample:
+        assert n_vocab > 0
+        prompt_len = prompt.shape[-1]
+        return get_analytic_sigma_sample(rnd_key, prompt, prompt_len, n_vocab,
+                                     output_len, cfg_p, params_p, final_twist,
+                                     n_smc_samples)
+
+    else:
+        return smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
     # return smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
 
 
@@ -1145,7 +1152,7 @@ def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final
         log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p)
 
         if (t == output_len - 1) and use_final_twist:
-            log_r_psi_t_eval = evaluate_log_psi_t_final(prompt_w_s_1_to_t, final_twist)
+            log_r_psi_t_eval = evaluate_log_phi_final(prompt_w_s_1_to_t, final_twist)
         else:
             log_r_psi_t_eval = evaluate_log_psi_t(prompt_w_s_1_to_t, cfg_twist, params_twist)
 
@@ -1196,12 +1203,6 @@ def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final
     return log_z_hat_t, prompt_w_s_1_to_t
 
 
-def smc_wrapper(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples):
-
-    log_z_hat, _ = smc_procedure(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples)
-
-    return log_z_hat
-
 
 def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
     prompt_len = prompt.shape[-1]
@@ -1233,7 +1234,7 @@ def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, par
     seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
     # Seq is the all zeros sequence (following the prompt) along with all zeros except for the last token, for which we check all the n_vocab possibilities
     log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len)
-    # log_psi = evaluate_log_psi_t_final(seq, final_twist)
+    # log_psi = evaluate_log_phi_final(seq, final_twist)
     print(log_p)
 
 # Analytic, all sequences
@@ -1349,7 +1350,7 @@ def inspect_bad_word_reward(sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, 
                                                       params_twist,
                                                       final_twist,
                                                       output_len,
-                                                      n_samples)
+                                                      n_samples, analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
 
     r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
 
@@ -1397,12 +1398,17 @@ def print_samples_using_twists(rnd_key, prompt, prompt_len, n_vocab, output_len,
                                                             n_twist,
                                                             use_final_twist=False)
 
-    all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
-    log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
-                                                 prompt_len, output_len)
-    log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
+    # all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
+    # log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
+    #                                              prompt_len, output_len)
+    # log_psi_all_seqs = evaluate_log_phi_final(all_seqs, final_twist)
+    #
+    # analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
 
-    analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
+    analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(prompt, prompt_len,
+                                                   n_vocab,
+                                                   output_len, cfg_p,
+                                                   params_p, final_twist)
 
     samples = prompt_w_sigma_sample_s_1_to_t
     samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
@@ -1487,9 +1493,10 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                                                     params_twist,
                                                     final_twist,
                                                     output_len,
-                                                    n_samples)
+                                                    n_samples,
+                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
 
-    # r_seqs = evaluate_log_psi_t_final(prompt_w_sigma_sample_s_1_to_t,
+    # r_seqs = evaluate_log_phi_final(prompt_w_sigma_sample_s_1_to_t,
     #                                   rew_model)
     r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
 
@@ -1536,7 +1543,8 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
                                                     params_twist,
                                                     final_twist,
                                                     output_len,
-                                                    n_samples)
+                                                    n_samples,
+                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
 
     r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
 
@@ -1583,7 +1591,8 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
                                                     params_twist,
                                                     final_twist,
                                                     output_len,
-                                                    n_samples)
+                                                    n_samples,
+                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
 
     r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
 
@@ -1634,14 +1643,16 @@ def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist
                                                     params_twist,
                                                     final_twist,
                                                     output_len,
-                                                    n_samples // 2)
+                                                    n_samples // 2,
+                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
     _, prompt_w_sigma_pos_sample_s_1_to_t = smc_procedure(sk_pos, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist_pos,
                                                     params_twist_pos,
                                                     final_twist_pos,
                                                     output_len,
-                                                    n_samples // 2)
+                                                    n_samples // 2,
+                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
 
     # for sample in prompt_w_sigma_pos_sample_s_1_to_t[:10, prompt_len:]:
     #     print(indices_to_tokens(ordered_token_list, sample))
@@ -1762,7 +1773,7 @@ def calc_opt_twist_helper(seqs_2d, cfg_p, params_p, final_twist):
     eval_log_p_t = evaluate_log_p_theta_t(
         seqs_2d, cfg_p, params_p)
 
-    eval_log_psi = evaluate_log_psi_t_final(
+    eval_log_psi = evaluate_log_phi_final(
         seqs_2d, final_twist)
 
     # eval_log_p_t and eval_log_psi are both 1d arrays anyway, so using axis=-1 or not makes no difference
@@ -1772,6 +1783,51 @@ def calc_opt_twist_helper(seqs_2d, cfg_p, params_p, final_twist):
 
 def calc_opt_twist_helper_mapped(seqs_3d, cfg_p, params_p, final_twist):
     return jax.vmap(calc_opt_twist_helper, in_axes=(0, None, None, None))(seqs_3d, cfg_p, params_p, final_twist)
+
+
+def calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, final_twist, return_log=False):
+    # This manually enumerates all possible sequences up to the output_len
+    # And then calculates log_p and log_phi (where phi = e^(-beta r(s)) ) on each of those sequences.
+    # Then the sum of those is equal to log (p phi) where p phi = sigma (at least, an unnormalized sigma)
+    # So softmax takes the exp, which gives us the unnormalized sigma values, then the softmax normalizes them to give us the sigma distribution values
+
+    all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab,
+                                             output_len)
+    log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p,
+                                                 params_p,
+                                                 prompt_len,
+                                                 output_len)
+    log_phi_all_seqs = evaluate_log_phi_final(all_seqs, final_twist)
+
+    if return_log:
+        analytic_log_sigma_vals = jax.nn.log_softmax(log_p_all_seqs + log_phi_all_seqs)
+        return analytic_log_sigma_vals, all_seqs
+
+    analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_phi_all_seqs)
+
+    return analytic_sigma_vals, all_seqs
+
+def get_analytic_sigma_sample(subkey, jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, final_twist, n_samples):
+    analytic_log_sigma_vals, all_seqs = calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, final_twist, return_log=True)
+
+    indices = jax.random.categorical(subkey, analytic_log_sigma_vals,
+                                 shape=(n_samples, ))
+
+
+    # for seq in all_seqs[:, prompt_len]:
+    #     print(indices_to_tokens(ordered_token_list, seq))
+
+    # print(jax.lax.stop_gradient(jnp.exp(analytic_log_sigma_vals)))
+    # print(indices)
+
+    samples = all_seqs[indices]
+
+    # for sample in samples[:, prompt_len:]:
+    #     print(indices_to_tokens(ordered_token_list, sample))
+    # print(samples.shape)
+
+    return samples
+
 
 def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, final_twist):
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len - 1)
@@ -2488,15 +2544,8 @@ class TestClass:
 
 
     def _smc_threshold(self, n_smc_samples, final_twist, threshold):
-        all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
-                                                 self.output_len)
-        log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p,
-                                                     self.params_p,
-                                                     self.prompt_len,
-                                                     self.output_len)
-        log_psi_all_seqs = evaluate_log_psi_t_final(all_seqs, final_twist)
-
-        analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
+        analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(self.prompt, self.prompt_len, self.n_vocab,
+                                                       self.output_len, self.cfg_p, self.params_p, final_twist)
 
         _, samples = smc_procedure(self.rnd_key, self.prompt, self.cfg_p,
                                  self.params_p,
@@ -2509,13 +2558,13 @@ class TestClass:
         diff_array = []
 
         for seq in all_seqs:
-            # print(seq)
-            # print(analytic_sigma_vals[index])
+            print(seq)
+            print(analytic_sigma_vals[index])
             count = 0
             for sample in samples:
                 if (jnp.abs(seq - sample)).sum() == 0:
                     count += 1
-            # print(count / n_smc_samples)
+            print(count / n_smc_samples)
             diff_array.append(
                 (count / n_smc_samples) - analytic_sigma_vals[index])
             index += 1
@@ -2573,7 +2622,7 @@ class TestClass:
 
     def test_smc_non_opt_twist(self):
         # Test that SMC approximately generates samples from the true distribution
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=reward_model_varied)
+        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=reward_model_bad_word)
 
         n_smc_samples = 4000
         self._smc_threshold(n_smc_samples, final_twist, threshold=1e-2)
@@ -2864,18 +2913,21 @@ def main():
                             rnd_key, sk1 = jax.random.split(rnd_key)
                             _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
                                 sk1, prompt, cfg_p, params_p, cfg_twist,
-                                params_twist, final_twist, args.output_len, args.n_twist)
+                                params_twist, final_twist, args.output_len, args.n_twist,
+                                analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
                             for sample in prompt_w_sigma_sample_s_1_to_t[:args.n_bad_word_samples]:
                                 token_sample = indices_to_tokens(
                                     ordered_token_list, sample)
                                 print(token_sample[prompt_len:])
+
                             if experiment_cfg.rl_loss_type == "custom_extremes":
                                 print("SMC POS GENERATIONS")
                                 rnd_key, sk1 = jax.random.split(rnd_key)
                                 _, prompt_w_sigma_pos_sample_s_1_to_t = smc_procedure(
                                     sk1, prompt, cfg_p, params_p, cfg_twist_pos,
                                     params_twist_pos, final_twist_pos, args.output_len,
-                                    args.n_twist)
+                                    args.n_twist,
+                                    analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
                                 for sample in prompt_w_sigma_pos_sample_s_1_to_t[
                                               :args.n_bad_word_samples]:
                                     token_sample = indices_to_tokens(
@@ -3030,11 +3082,15 @@ if __name__ == "__main__":
     # parser.add_argument("--ckpt_every", type=int, default=50, help="Epochs between checkpoint save")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints")
 
+    parser.add_argument("--analytic_sigma_sample", action="store_true", help="Use analytic sigma sampling. Do not use together with twist learning.")
 
     args = parser.parse_args()
 
     if args.rm_type == "bad_word":
         print(f"Len of ordered_token_list (should be = n_vocab): {len(ordered_token_list)}")
         assert args.n_vocab == len(ordered_token_list)
+
+    if args.analytic_sigma_sample:
+        assert args.twist_updates_per_epoch == 0
 
     main()
