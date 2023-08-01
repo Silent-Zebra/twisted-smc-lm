@@ -1460,7 +1460,7 @@ def get_l_dre_roger_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twis
 
     l_dre = 0.
 
-    _, final_twist_samples, intermediate_twist_samples_hist = smc_procedure(rnd_key, prompt,
+    _, final_twist_samples, intermediate_twist_samples_hist = smc_jit(rnd_key, prompt,
                              cfg_p,
                              params_p,
                              cfg_twist, params_twist,
