@@ -1460,7 +1460,7 @@ def get_l_dre_roger_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twis
 
     l_dre = 0.
 
-    _, final_twist_samples, intermediate_twist_samples_hist = smc_jit(rnd_key, prompt,
+    _, final_twist_samples, intermediate_twist_samples_hist = smc_procedure(rnd_key, prompt,
                              cfg_p,
                              params_p,
                              cfg_twist, params_twist,
@@ -2111,6 +2111,23 @@ def value_loss(rewards, values, final_state_vals, gamma):
     values_loss = values_loss.sum(axis=0).mean() # sum across time dimension, mean across batch dimension
 
     return values_loss
+
+def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
+    final_twists = []
+    final_twists_pos = []
+    for jnp_prompt in jnp_prompts:
+        final_twist = neg_beta_times_batch_reward_model_curry(jnp_prompt.shape[-1],
+                                                              beta=curr_beta_temp,
+                                                              reward_model_fn=rm_fn)
+        final_twist_pos = neg_beta_times_batch_reward_model_curry(jnp_prompt.shape[-1],
+                                                              beta=curr_beta_temp * -1.,
+                                                              reward_model_fn=rm_fn)
+        final_twists.append(final_twist)
+        final_twists_pos.append(final_twist_pos)
+
+    return final_twists, final_twists_pos
+
+
 
 # Some simple unit tests to make sure things are working more or less as we would expect
 class TestClass:
@@ -2779,9 +2796,11 @@ def main():
     cfg_p_0, params_p_0 = copy.deepcopy(cfg_p), copy.deepcopy(params_p)
 
 
+    curr_beta_temp = args.beta_temp
+    beta_increment = (args.beta_temp_final - args.beta_temp) / args.epochs
+
     jnp_prompts = []
-    final_twists = []
-    final_twists_pos = []
+
     for prompt in prompts:
         if token_based_prompt:
             index_based_prompt = tokens_to_jnp_indices(ordered_token_list,
@@ -2790,14 +2809,8 @@ def main():
         else:
             prompt = jnp.array(prompt)
         jnp_prompts.append(prompt)
-        final_twist = neg_beta_times_batch_reward_model_curry(prompt.shape[-1],
-                                                              beta=args.beta_temp,
-                                                              reward_model_fn=experiment_cfg.rm_fn)
-        final_twist_pos = neg_beta_times_batch_reward_model_curry(prompt.shape[-1],
-                                                              beta=args.beta_temp * -1.,
-                                                              reward_model_fn=experiment_cfg.rm_fn)
-        final_twists.append(final_twist)
-        final_twists_pos.append(final_twist_pos)
+
+    final_twists, final_twists_pos = build_final_twists(jnp_prompts, curr_beta_temp, experiment_cfg.rm_fn)
 
     adv_rewards = []
     p_rewards = []
@@ -2951,7 +2964,7 @@ def main():
             for prompt in prompts:
                 prompt = jnp.array(prompt)
                 final_twist = neg_beta_times_batch_reward_model_curry(len(prompt),
-                                                                beta=args.beta_temp,
+                                                                beta=curr_beta_temp,
                                                                 reward_model_fn=experiment_cfg.rm_fn)
                 compare_learned_twist_vs_optimal(prompt, args.n_vocab,
                                                  args.output_len, cfg_p,
@@ -2960,7 +2973,11 @@ def main():
                                                  params_twist, rm_type=experiment_cfg.rm_type)
 
         # if (epoch + 1) % args.ckpt_every == 0:
-
+        if args.anneal_beta_temp:
+            curr_beta_temp += beta_increment
+            final_twists, final_twists_pos = build_final_twists(jnp_prompts,
+                                                                curr_beta_temp,
+                                                                experiment_cfg.rm_fn)
 
     print(indist_probs)
     print(ood_probs)
@@ -3002,7 +3019,12 @@ if __name__ == "__main__":
 
     parser.add_argument("--beta_temp", type=float,
                         help="beta used for the temperature scaling",
-                        default=1.)
+                        default=0.3)
+    parser.add_argument("--anneal_beta_temp", action="store_true", help="Start from beta_temp and linearly change beta, ending at beta_temp_final for the final time step")
+    parser.add_argument("--beta_temp_final", type=float,
+                        help="beta used for the temperature scaling",
+                        default=0.3)
+
     parser.add_argument("--beta_kl", type=float,
                         help="beta used for regularization: kl div from original policy (to prevent policy collapse)",
                         default=0.)
@@ -3092,5 +3114,9 @@ if __name__ == "__main__":
 
     if args.analytic_sigma_sample:
         assert args.twist_updates_per_epoch == 0
+
+    if args.anneal_beta_temp:
+        assert args.beta_temp != args.beta_temp_final
+
 
     main()
