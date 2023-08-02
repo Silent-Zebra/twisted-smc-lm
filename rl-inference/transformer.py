@@ -2797,7 +2797,7 @@ def main():
 
 
     curr_beta_temp = args.beta_temp
-    beta_increment = (args.beta_temp_final - args.beta_temp) / args.epochs
+    beta_increment = (args.beta_temp_final - args.beta_temp) / args.anneal_beta_increments
 
     jnp_prompts = []
 
@@ -2973,11 +2973,13 @@ def main():
                                                  params_twist, rm_type=experiment_cfg.rm_type)
 
         # if (epoch + 1) % args.ckpt_every == 0:
-        if args.anneal_beta_temp:
+        if args.anneal_beta_temp and ((epoch + 1) % args.anneal_beta_increments == 0):
             curr_beta_temp += beta_increment
+            print(f"Incrementing Beta: New Beta = {curr_beta_temp}")
             final_twists, final_twists_pos = build_final_twists(jnp_prompts,
                                                                 curr_beta_temp,
                                                                 experiment_cfg.rm_fn)
+
 
     print(indist_probs)
     print(ood_probs)
@@ -3024,6 +3026,7 @@ if __name__ == "__main__":
     parser.add_argument("--beta_temp_final", type=float,
                         help="beta used for the temperature scaling",
                         default=0.3)
+    parser.add_argument("--anneal_beta_increments", type=int, default=10, help="Number of total times we increment beta")
 
     parser.add_argument("--beta_kl", type=float,
                         help="beta used for regularization: kl div from original policy (to prevent policy collapse)",
