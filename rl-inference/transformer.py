@@ -2798,6 +2798,7 @@ def main():
 
     curr_beta_temp = args.beta_temp
     beta_increment = (args.beta_temp_final - args.beta_temp) / args.anneal_beta_increments
+    increment_beta_every = args.epochs / args.anneal_beta_increments
 
     jnp_prompts = []
 
@@ -2973,7 +2974,7 @@ def main():
                                                  params_twist, rm_type=experiment_cfg.rm_type)
 
         # if (epoch + 1) % args.ckpt_every == 0:
-        if args.anneal_beta_temp and ((epoch + 1) % args.anneal_beta_increments == 0):
+        if args.anneal_beta_temp and ((epoch + 1) % increment_beta_every == 0):
             curr_beta_temp += beta_increment
             print(f"Incrementing Beta: New Beta = {curr_beta_temp}")
             final_twists, final_twists_pos = build_final_twists(jnp_prompts,
