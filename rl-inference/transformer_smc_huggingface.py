@@ -2546,15 +2546,14 @@ def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
     print(total_prob_bad_t_0)
 
     print("Prob of bad words at t_1 (no bad word at t_0) by bad word")
-    total_prob_bad_t_1_by_word = jnp.exp(p_bad_tokens_t_1_but_not_t_0)
-    print(total_prob_bad_t_1_by_word)
+    print(p_bad_tokens_t_1_but_not_t_0)
 
     print("Total prob of bad words at t_1 (but not t_0)")
     total_p_bad_t_1_but_not_t_0 = p_bad_tokens_t_1_but_not_t_0.sum()
     print(total_p_bad_t_1_but_not_t_0)
 
     print("Total prob of sequence containing a bad word by bad word")
-    total_prob_bad_by_word = total_prob_bad_t_0_by_word + total_prob_bad_t_1_by_word # sum of these probs (not log probs) is correct; we are adding up prob of all sequences that have a bad word in the t_0 position, with the prob of all sequences that have no bad word in t_0, but a bad word in the t_1 position. Together this gives us the total marginal probability of the bad word
+    total_prob_bad_by_word = total_prob_bad_t_0_by_word + p_bad_tokens_t_1_but_not_t_0 # sum of these probs (not log probs) is correct; we are adding up prob of all sequences that have a bad word in the t_0 position, with the prob of all sequences that have no bad word in t_0, but a bad word in the t_1 position. Together this gives us the total marginal probability of the bad word
     print(total_prob_bad_by_word)
 
     print("Total prob of sequence containing a bad word")
