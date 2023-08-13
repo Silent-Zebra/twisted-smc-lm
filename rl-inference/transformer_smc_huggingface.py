@@ -521,43 +521,8 @@ def batch_reward_model(reward_model_fn):
         return batch_rm(seq, prompt_len)
     return batch_rm_fn
 
-base_reward = 1.
-bad_reward = -10.
-nonsense_reward = 0 # negative (Maybe?) would help with learning at the very beginning
-good_reward = 2.
-evasive_reward = 1.
-
-
-# @partial(jax.jit, static_argnames=["prompt_len"])
-def reward_model_one_bad(single_seq, prompt_len):
-    # Super simple arbitrary reward model that designates the all 0s output string to be bad (achieving the bad_reward),
-    # and other strings to be acceptable (achieving the base_reward)
-
-    if len(single_seq.shape) == 2:
-        output_seq = single_seq[:, prompt_len:]
-        return (output_seq.sum(axis=-1) == 0) * (bad_reward - base_reward) + base_reward
-    elif len(single_seq.shape) == 1:
-        output_seq = single_seq[prompt_len:]
-        return (output_seq.sum() == 0) * (bad_reward - base_reward) + base_reward
-    else:
-        raise NotImplementedError
-
-# @partial(jax.jit, static_argnames=["prompt_len"])
-def reward_model_varied(single_seq, prompt_len):
-    # Just for testing
-    reward_0, reward_1, reward_2, reward_3, reward_4, reward_5 = -4, -3, -2, -1, 0, 1
-    # The default reward for other strings not specified above is 0
-
-    if len(single_seq.shape) == 2:
-        output_seq = single_seq[:, prompt_len:]
-    elif len(single_seq.shape) == 1:
-        output_seq = single_seq[prompt_len:]
-    else:
-        raise NotImplementedError
-    output_sum = output_seq.sum(axis=-1)
-    return (output_sum == 0) * reward_0 + (output_sum == 1) * reward_1 + (
-            output_sum == 2) * reward_2 + (output_sum == 3) * reward_3 + (
-            output_sum == 4) * reward_4 + (output_sum == 5) * reward_5
+base_reward = 0.
+bad_reward = -1.
 
 
 
@@ -572,9 +537,9 @@ def check_indices_match(seq1, seq2):
     return (jnp.abs(seq1 - seq2).sum() == 0)
 
 
-# cock is actually problematic since there are words like "cocktail" that are totally fine. Maybe I'll remove it from the list for now
-# Similar with dick, there are contexts in which it wouldn't be a bad word/offensive. E.g. short form of name
-bad_words_list = ["\u0120fuck", "\u0120fucking", "\u0120fucked", "\u0120Fuck", "\u0120FUCK", "fuck", "Fuck", "\u0120fuckin",
+# Note that there are some issues with words like "dick" -  there are contexts in which it wouldn't be a bad word/offensive. E.g. short form of name
+# So for simplicity in this toy example, I don't include those in the below list:
+bad_word_list = ["\u0120fuck", "\u0120fucking", "\u0120fucked", "\u0120Fuck", "\u0120FUCK", "fuck", "Fuck", "\u0120fuckin",
                   "\u0120bitch", "\u0120cunt", "\u0120shit", "shit", "\u0120bullshit", "\u0120shitty", "\u0120Shit",
                   "\u0120bastard", "\u0120Bastard", "\u0120pussy", "\u0120asshole", ]
 
@@ -614,7 +579,7 @@ def reward_model_binary_single(single_seq, prompt_len):
 
     contains_bad_word = jnp.minimum(parallel_check_contains_bad_index(output_seq, bad_word_indices).sum(), 1)
     # print(contains_bad_word)
-    return -contains_bad_word # -1 if contains bad word, 0 otherwise
+    return bad_reward * contains_bad_word # -1 if contains bad word, 0 otherwise
 
 def reward_model_binary(seq, prompt_len):
     if len(seq.shape) == 2:
@@ -624,35 +589,6 @@ def reward_model_binary(seq, prompt_len):
     else:
         raise NotImplementedError
 
-# def reward_model_bad_word_single(single_seq, prompt_len):
-#     assert len(single_seq.shape) == 1
-#     output_seq = single_seq[prompt_len:]
-#
-#     # basically assumes that nonsense_reward is a base reward and the other rewards are modifiers on that reward. Works non-confusingly when nonsense reward is 0
-#     # Basically this reward structure says: always avoid the bad word. After doing that, it's best to produce a sequence that makes sense, even if it's evasive, rather than nonsense.
-#     # Finally, it's better to produce the good, informative answer, rather than the evasive answer, even if the informative answer is closer to the bad (offensive) answer.
-#     reward = nonsense_reward + check_indices_match(output_seq[:2], good_indices[:2]) * good_reward + \
-#                check_indices_match(output_seq[:2], evasive_indices[:2]) * evasive_reward + \
-#                check_contains_bad_word(output_seq) * bad_reward  # Without mutual exclusivity of conditions, then a sequence starting with don't know but having the bad word gets slightly better reward than just the bad word. I guess this is fine? # assumes mutual exclusivity of various conditions: e.g. cannot match evasive_indices and have the bad output
-#     # check_indices_match(output_seq, good_indices2) * good_reward + \
-#
-#     # TODO now test this reward model with a few different output_seq, manually set even, just to see if it's right. Then test on a bunch of batches and individually print examples to see if it's working right. Finally, test directly in the whole code, print the reward, and see that it matches up and makes sense. Then finally run the experiments and see results.
-#
-#     return reward # TODO can -1 on the reward if we want to shift the base reward e.g. make learning easier by punishing nonsense.
-#
-#
-#
-# def reward_model_bad_word(seq, prompt_len):
-#
-#     # print("check seq in rew model")
-#     # print(seq.shape)
-#
-#     if len(seq.shape) == 2:
-#         return jax.vmap(reward_model_bad_word_single, in_axes=(0, None))(seq, prompt_len)
-#     elif len(seq.shape) == 1:
-#         return reward_model_bad_word_single(seq, prompt_len)
-#     else:
-#         raise NotImplementedError
 
 
 def get_full_list_of_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
@@ -2470,6 +2406,8 @@ def test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twis
 def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
     # ASSUMES OUTPUT LEN 2 RIGHT NOW
 
+    print("Calculating analytic probs of bad words (up to 2 output len)")
+
     prompt_len = prompt.shape[-1]
     rng_key, dropout_rng = jax.random.split(rng_key, 2) # USE the same dropout_rng in order to keep evaluations consistent.
     # log_p_bad_t_0 = evaluate_log_p_theta_1_to_t(batch_prompt, trainstate_p,
@@ -2562,46 +2500,48 @@ def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
     total_prob_bad = jnp.exp(total_bad_word_log_p_t_0) + total_p_bad_t_1_but_not_t_0
     print(total_prob_bad)
 
+    return total_prob_bad_t_0_by_word, total_prob_bad_by_word
 
 
 
-def calc_samples_bad_word_probs(rng_key, samples, trainstate_p, prompt_len, output_len):
-    total_p_of_all_bad_words_t_0_with_double_counting = 0.  # Double counts if you have two bad words in the same seq (prob of these sequences show up multiple times across different words
-    total_p_of_all_bad_words_t_1_with_double_counting = 0.
 
-    rng_key, dropout_rng = jax.random.split(rng_key)
+def calc_samples_bad_word_probs(samples, prompt_len):
+    p_bad_word_t_0_by_word = []
+    p_bad_word_by_word = []
 
-    log_p = evaluate_log_p_theta_1_to_t(samples, trainstate_p,
-                                        trainstate_p.params,
-                                        prompt_len, output_len,
-                                        dropout_rng)
     n_smc_samples = samples.shape[0]
 
     for bad_index in bad_word_indices:
-        print(bad_index)
+        # print(bad_index)
+        # print(samples[:, prompt_len][None, :])
+        # print(samples[:, prompt_len][None, :].shape)
+        # print( batch_check_contains_bad_index(samples[:, prompt_len][None, :], bad_index))
         num_samples_with_bad_index_at_t_0 = batch_check_contains_bad_index(
-            samples[:, :-1], bad_index).sum()
+            samples[:, prompt_len][None, :], bad_index).sum()
+        # print(num_samples_with_bad_index_at_t_0)
         p_of_bad_word_t_0 = num_samples_with_bad_index_at_t_0 / n_smc_samples
-        print(p_of_bad_word_t_0)
+        # print(p_of_bad_word_t_0)
 
-        total_p_of_all_bad_words_t_0_with_double_counting += p_of_bad_word_t_0
+        p_bad_word_t_0_by_word.append(p_of_bad_word_t_0)
 
-        seqs_skipping_t_0 = jnp.concatenate(
-            (samples[:, :-2], samples[:, -1]), axis=-1)
-        print(seqs_skipping_t_0.shape)
-        num_samples_with_bad_index_at_t_1 = batch_check_contains_bad_index(
-            seqs_skipping_t_0, bad_index).sum()
-        p_of_bad_word_t_1 = num_samples_with_bad_index_at_t_1 / n_smc_samples
-        print(p_of_bad_word_t_1)
+        num_samples_with_bad_index = batch_check_contains_bad_index(
+            samples[:, prompt_len:], bad_index).sum()
+        p_of_bad_word = num_samples_with_bad_index / n_smc_samples
 
-        total_p_of_all_bad_words_t_1_with_double_counting += p_of_bad_word_t_1
+        p_bad_word_by_word.append(p_of_bad_word)
 
-    print(
-        "Total Sample Prob of Sequence (len 2) Containing Bad Word in first position:")
-    print(total_p_of_all_bad_words_t_0_with_double_counting)
-    print(
-        "Total Sample Prob of Sequence (len 2) Containing Bad Word in second position:")
-    print(total_p_of_all_bad_words_t_1_with_double_counting)
+    p_bad_word_t_0_by_word = jnp.array(p_bad_word_t_0_by_word)
+    p_bad_word_by_word = jnp.array(p_bad_word_by_word)
+    print("Total Sample Prob of Sequence (len 2) Containing Bad Word in first position, by word:")
+    print(p_bad_word_t_0_by_word)
+    print("Total of above:")
+    print(p_bad_word_t_0_by_word.sum())
+    print("Total Sample Prob of Sequence (len 2) Containing Bad Word in any position:")
+    print(p_bad_word_by_word)
+    print("Total of above:")
+    print(p_bad_word_by_word.sum())
+
+    return p_bad_word_t_0_by_word, p_bad_word_by_word
 
 
 def main():
@@ -2749,14 +2689,46 @@ def main():
 
             rng_key, ska, sk, sk2, sk3, sk4 = jax.random.split(rng_key, 6)
 
-            calc_analytic_bad_word_probs(ska, args.n_vocab, prompt, trainstate_p)
-            #
-            # samples = stochastic_transformer_sample(sk, trainstate_p, prompt, args.output_len, 1000)
-            # calc_samples_bad_word_probs(sk2, samples, trainstate_p, prompt_len, args.output_len)
-            # samples_sigma = smc_procedure(sk3, prompt, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params,
-            #                               final_twist, args.output_len, 1000)
-            # calc_samples_bad_word_probs(sk4, samples_sigma, trainstate_p, prompt_len, args.output_len)
-            #
+            total_prob_bad_t_0_by_word, total_prob_bad_by_word = calc_analytic_bad_word_probs(ska, args.n_vocab, prompt, trainstate_p)
+            print("-----")
+            # TODO do the sigma calc. Finally, compare it versus the sample generations
+            modifier = jnp.exp(-args.beta_temp * bad_reward)
+            unnormalized_sigma_vals_bad_by_word = total_prob_bad_by_word * modifier
+            print(unnormalized_sigma_vals_bad_by_word)
+            prob_not_bad = 1. - total_prob_bad_by_word.sum()
+            unnormalized_sigma_vals_not_bad = prob_not_bad * jnp.exp(-args.beta_temp * base_reward)
+            print(unnormalized_sigma_vals_not_bad)
+            Z_theta = unnormalized_sigma_vals_not_bad + unnormalized_sigma_vals_bad_by_word.sum()
+            print(Z_theta)
+            sigma_vals_bad_by_word = unnormalized_sigma_vals_bad_by_word / Z_theta
+            sigma_vals_not_bad = unnormalized_sigma_vals_not_bad / Z_theta
+            print(sigma_vals_bad_by_word)
+            print(sigma_vals_not_bad)
+            # Then how about the t_0 words only?
+            # The t_0 words are a subset of all the bad outputs
+            # So once you have the unnormalized sigma vals for all the bad outputs
+            # Then you can calc the unnorm sigma for just t_0 bad outputs
+            # subtract, the difference is for just t_1, and you can work with that then.
+            unnormalized_sigma_vals_bad_t_0_by_word = total_prob_bad_t_0_by_word * modifier
+            sigma_vals_bad_t_0_by_word = unnormalized_sigma_vals_bad_t_0_by_word / Z_theta
+            sigma_vals_bad_t_1_but_not_t_0 = sigma_vals_bad_by_word - sigma_vals_bad_t_0_by_word
+            print(sigma_vals_bad_t_0_by_word)
+
+            print("-----------------------")
+
+            samples = stochastic_transformer_sample(sk, trainstate_p, prompt, args.output_len, args.n_test_smc_samples)
+            p_samples_bad_word_t_0_by_word, p_samples_bad_word_by_word = calc_samples_bad_word_probs(samples, prompt_len)
+
+            print(p_samples_bad_word_t_0_by_word - total_prob_bad_t_0_by_word)
+            print(p_samples_bad_word_by_word - total_prob_bad_by_word)
+
+            _, samples_sigma = smc_procedure(sk3, prompt, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params,
+                                          final_twist, args.output_len, args.n_test_smc_samples)
+            sigma_samples_bad_word_t_0_by_word, sigma_samples_bad_word_by_word = calc_samples_bad_word_probs(samples_sigma, prompt_len)
+
+            print(sigma_samples_bad_word_t_0_by_word - sigma_vals_bad_t_0_by_word)
+            print(sigma_samples_bad_word_by_word - sigma_vals_bad_by_word)
+
             print(time.time() - start)
             1/0
             assert args.model_updates_per_epoch == 0 # TODO REMOVE LATER ONCE THE TWIST STUFF IS WORKING WELL
@@ -2943,8 +2915,8 @@ if __name__ == "__main__":
     parser.add_argument("--output_len", type=int, default=2,
                         help="Length of the strings we output")
 
-    parser.add_argument("--n_test_smc_samples", type=int, default=100,
-                        help="Only used for testing SMC, not used elsewhere")
+    parser.add_argument("--n_test_smc_samples", type=int, default=1000,
+                        help="Only used for testing (and viewing information about) SMC, not used elsewhere")
     parser.add_argument("--n_twist", type=int, default=100)
     parser.add_argument("--n_policy_samples", type=int, default=100,
                         help="Batch size to use when updating policy (p) and baseline")
