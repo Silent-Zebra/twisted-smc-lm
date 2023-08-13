@@ -2482,7 +2482,7 @@ def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
     # log_p_all_tokens has shape (batch, seq_len, n_vocab)
 
     log_p_of_interest = log_p_all_tokens[:, -1, :].squeeze() # Just the very last time step (before the first generated token)
-    print(log_p_of_interest.shape)
+    # print(log_p_of_interest.shape)
 
     log_p_select_tokens = log_p_of_interest[bad_word_indices]
 
@@ -2497,12 +2497,14 @@ def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
 
     full_seq = jnp.concatenate((batch_prompt, tokens_excluding_bad[:, None]), axis=1)
     # print(full_seq)
-    print(full_seq.shape)
+    # print(full_seq.shape)
 
     p_bad_tokens_t_1_but_not_t_0 = jnp.zeros((n_bad_words,))
 
-    batch_size = 1024
-    for i in range(n_vocab // batch_size):
+    batch_size = 2048
+
+    # Break up evaluation into batches to avoid running out of memory
+    for i in range(n_vocab // batch_size + 1):
         batch_to_inspect = full_seq[i * batch_size:(i+1) * batch_size]
         # print(batch_to_inspect.shape)
         output_unnormalized_batch = trainstate_p.apply_fn(
@@ -2521,20 +2523,20 @@ def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
 
         # rng_key, dropout_rng = jax.random.split(rng_key)
         log_p_t_0 = jax.nn.log_softmax(output_unnormalized_batch[:,-2,:])[jnp.arange(batch_to_inspect.shape[0]), batch_to_inspect[:,-1]]
-        print(log_p_t_0)
-        print(log_p_t_0.shape)
+        # print(log_p_t_0)
+        # print(log_p_t_0.shape)
 
         log_p_t_0_to_1 = log_p_t_0[:, None] + log_p_t_1_select_tokens
-        print(log_p_t_0_to_1)
-        print(log_p_t_0_to_1.shape)
+        # print(log_p_t_0_to_1)
+        # print(log_p_t_0_to_1.shape)
 
         # print(jnp.exp(log_p_t_0_to_1).sum(axis=0))
         # print(jnp.exp(jax.nn.logsumexp(log_p_t_0_to_1, axis=0)))
 
         p_bad_tokens_t_1_but_not_t_0 += jnp.exp(jax.nn.logsumexp(log_p_t_0_to_1, axis=0))
 
-        print("prob of all sequences not containing a bad word in the first time step but containing a bad word in the second time step (by bad word)")
-        print(p_bad_tokens_t_1_but_not_t_0)
+        # print("prob of all sequences not containing a bad word in the first time step but containing a bad word in the second time step (by bad word)")
+        # print(p_bad_tokens_t_1_but_not_t_0)
 
 
     print("Prob of bad words at t_0 by bad word")
