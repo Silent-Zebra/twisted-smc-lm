@@ -468,8 +468,10 @@ def stochastic_transformer_sample_iter(carry, t):
     # This is the approach that I saw people taking online with transformers.
     # As of May 2023 there did not seem to be a better approach in jax (some discussion of jax.mask didn't end up going anywhere)
     rng_key, full_seq, prompt_len, trainstate_p, params_of_trainstate_p = carry
-    rng_key, dropout_rng = jax.random.split(rng_key)
-    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    # TODO think about whether you actually want a new dropout_rng for each sample step. Maybe not, because if you did, you're essentially
+    # picking a different ensemble each time... And since this is just for sampling, may as well just use the full ensemble, with no dropout
+    # rng_key, dropout_rng = jax.random.split(rng_key)
+    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=False)
     rng_key, subkey = jax.random.split(rng_key)
     # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax.
     # I needed log_softmax on the other ones in order to properly combine with the other log term.
@@ -576,7 +578,7 @@ bad_words_list = ["\u0120fuck", "\u0120fucking", "\u0120fucked", "\u0120Fuck", "
                   "\u0120bitch", "\u0120cunt", "\u0120shit", "shit", "\u0120bullshit", "\u0120shitty", "\u0120Shit",
                   "\u0120bastard", "\u0120Bastard", "\u0120pussy", "\u0120asshole", ]
 
-bad_words_indices = jnp.array([5089, 9372, 20654, 25617, 30998, 31699, 34094, 46733,
+bad_word_indices = jnp.array([5089, 9372, 20654, 25617, 30998, 31699, 34094, 46733,
                      21551, 40267, 7510, 16211, 20041, 32574, 41356,
                      31030, 47209, 18185, 29836 ], dtype=jnp.int32)
 
@@ -606,11 +608,11 @@ def reward_model_binary_single(single_seq, prompt_len):
     output_seq = single_seq[prompt_len:]
 
     # print(output_seq)
-    # print(bad_words_indices)
+    # print(bad_word_indices)
     # print(output_seq.shape)
-    # print(bad_words_indices.shape)
+    # print(bad_word_indices.shape)
 
-    contains_bad_word = jnp.minimum(parallel_check_contains_bad_index(output_seq, bad_words_indices).sum(), 1)
+    contains_bad_word = jnp.minimum(parallel_check_contains_bad_index(output_seq, bad_word_indices).sum(), 1)
     # print(contains_bad_word)
     return -contains_bad_word # -1 if contains bad word, 0 otherwise
 
@@ -2446,39 +2448,7 @@ class CustomLMHeadModel:
         logits = self.huggingface_model(**kwargs)[0]
         return logits
 
-# TODO Remove later: here just for reference for now
-# def do_stuff():
-#     rng_key, dropout_rng = jax.random.split(rng_key)
-#
-#     logits_model = model_lm(**sequences, params=model_lm.params,
-#                             dropout_rng=dropout_rng,
-#                             train=True).logits  # equivalent to [0]
-#
-#     print(logits_model)
-#     print(logits_model.shape)
-#
-#     # rng_key, sk = jax.random.split(rng_key)
-#     # sample_outputs = model_lm.generate(input_ids=padded_sequences.input_ids, max_length=20, top_k=30, do_sample=True,
-#     #                prng_key=sk)
-#     # print(sample_outputs)
-#     # print(type(sample_outputs))
-#     # text_outputs = tokenizer.batch_decode(sample_outputs.sequences,
-#     #                                       skip_special_tokens=True)
-#
-#     baseline_val = model_baseline(**sequences,
-#                                   dropout_rng=dropout_rng,
-#                                   train=True)
-#     print(baseline_val)
-#     # print(type(baseline_val))
-#     print(baseline_val.shape)
-#
-#     twist_vals = model_twist(**sequences,
-#                              dropout_rng=dropout_rng,
-#                              train=True)
-#
-#     print(twist_vals)
-#     # print(type(twist_vals))
-#     print(twist_vals.shape)
+
 
 
 def test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, output_len, n_test_smc_samples, tokenizer):
@@ -2497,57 +2467,102 @@ def test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twis
     print(text_outputs)
 
 
-def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p, output_len):
-    prompt_len = prompt.shape[0]
-    total_p_of_all_bad_words_t_0_with_double_counting = 0.  # Double counts if you have two bad words in the same seq (prob of these sequences show up multiple times across different words
-    total_p_of_all_bad_words_t_1_with_double_counting = 0.
-    # total_p_of_all_bad_words = 0.
-    batch_prompt = jnp.full((n_vocab, prompt_len), prompt)
-    # Only does seqs of length 2 for now
-    for bad_word_index in bad_words_indices:
-        print(bad_word_index)
-        bad_words_at_t_0 = jnp.array(
-            [[bad_word_index, x] for x in range(n_vocab)])
-        bad_words_at_t_1 = jnp.array(
-            [[x, bad_word_index] for x in range(n_vocab)])
-        full_seq_t_0 = jnp.concatenate((batch_prompt, bad_words_at_t_0), axis=1)
-        full_seq_t_1 = jnp.concatenate((batch_prompt, bad_words_at_t_1), axis=1)
+def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
+    # ASSUMES OUTPUT LEN 2 RIGHT NOW
 
-        # all_bad_word_seqs = jnp.concatenate((bad_words_at_t_0, bad_words_at_t_1), axis=0)
-        # full_seq_bad_words = jnp.concatenate((batch_prompt, all_bad_word_seqs), axis=1)
-        # print(full_seq_bad_words.shape)
+    prompt_len = prompt.shape[-1]
+    rng_key, dropout_rng = jax.random.split(rng_key, 2) # USE the same dropout_rng in order to keep evaluations consistent.
+    # log_p_bad_t_0 = evaluate_log_p_theta_1_to_t(batch_prompt, trainstate_p,
+    #                                             trainstate_p.params,
+    #                                             prompt_len, output_len,
+    #                                             dropout_rng)
 
-        print(full_seq_t_0.shape)
+    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=prompt.reshape(1, -1), params=trainstate_p.params, train=True, dropout_rng=dropout_rng)
+    log_p_all_tokens = jax.nn.log_softmax(output_unnormalized_batch, axis=-1)
+    # log_p_all_tokens has shape (batch, seq_len, n_vocab)
 
-        rng_key, dropout_rng, dropout_rng2 = jax.random.split(rng_key, 3)
-        # log_p = evaluate_log_p_theta_1_to_t(full_seq_bad_words, trainstate_p, trainstate_p.params, prompt_len, args.output_len, dropout_rng)
-        log_p_bad_t_0 = evaluate_log_p_theta_1_to_t(full_seq_t_0, trainstate_p,
-                                                    trainstate_p.params,
-                                                    prompt_len, output_len,
-                                                    dropout_rng)
-        log_p_bad_t_1 = evaluate_log_p_theta_1_to_t(full_seq_t_1, trainstate_p,
-                                                    trainstate_p.params,
-                                                    prompt_len, output_len,
-                                                    dropout_rng2)
-        print(log_p_bad_t_0.shape)
+    log_p_of_interest = log_p_all_tokens[:, -1, :].squeeze() # Just the very last time step (before the first generated token)
+    print(log_p_of_interest.shape)
 
-        total_log_p_of_bad_word_t_0 = jax.nn.logsumexp(log_p_bad_t_0)
-        total_log_p_of_bad_word_t_1 = jax.nn.logsumexp(log_p_bad_t_1)
-        total_p_of_bad_word_t_0 = jnp.exp(total_log_p_of_bad_word_t_0)
-        total_p_of_bad_word_t_1 = jnp.exp(total_log_p_of_bad_word_t_1)
+    log_p_select_tokens = log_p_of_interest[bad_word_indices]
 
-        # total_p_of_bad_word = total_p_of_bad_word_t_0 + total_p_of_bad_word_t_1
-        total_p_of_all_bad_words_t_0_with_double_counting += total_p_of_bad_word_t_0
-        total_p_of_all_bad_words_t_1_with_double_counting += total_p_of_bad_word_t_1
+    total_bad_word_log_p_t_0 = jax.nn.logsumexp(log_p_select_tokens)
 
-    print("Total Analytic Prob of Sequence (len 2) Containing Bad Word in first position:")
-    print(total_p_of_all_bad_words_t_0_with_double_counting)
-    print("Total Analytic Prob of Sequence (len 2) Containing Bad Word in second position:")
-    print(total_p_of_all_bad_words_t_1_with_double_counting)
+    n_bad_words = len(bad_word_indices)
 
-    total_p_of_all_bad_words_with_double_counting = total_p_of_all_bad_words_t_0_with_double_counting + total_p_of_all_bad_words_t_1_with_double_counting
-    print("Total Analytic Prob of Sequence (len 2) Containing Bad Word (With Double Counting if 2 Bad Words):")
-    print(total_p_of_all_bad_words_with_double_counting)
+    batch_prompt = jnp.full((n_vocab - n_bad_words, prompt_len), prompt)
+
+    tokens_excluding_bad = jnp.setdiff1d(jnp.arange(n_vocab), bad_word_indices)
+    # print(tokens_excluding_bad.shape)
+
+    full_seq = jnp.concatenate((batch_prompt, tokens_excluding_bad[:, None]), axis=1)
+    # print(full_seq)
+    print(full_seq.shape)
+
+    p_bad_tokens_t_1_but_not_t_0 = jnp.zeros((n_bad_words,))
+
+    batch_size = 1024
+    for i in range(n_vocab // batch_size):
+        batch_to_inspect = full_seq[i * batch_size:(i+1) * batch_size]
+        # print(batch_to_inspect.shape)
+        output_unnormalized_batch = trainstate_p.apply_fn(
+            input_ids=batch_to_inspect, params=trainstate_p.params,
+            train=True, dropout_rng=dropout_rng)
+        log_p_all_tokens = jax.nn.log_softmax(output_unnormalized_batch,
+                                              axis=-1)
+        log_p_t_1_all = log_p_all_tokens[:, -1, :].squeeze()
+        # print(log_p_of_interest)
+        # print(log_p_of_interest.shape)
+
+        log_p_t_1_select_tokens = log_p_t_1_all[:, bad_word_indices]
+        # print(log_p_select_tokens)
+        # print(log_p_select_tokens.shape)
+        # print(log_p_of_interest[0, 5089])
+
+        # rng_key, dropout_rng = jax.random.split(rng_key)
+        log_p_t_0 = jax.nn.log_softmax(output_unnormalized_batch[:,-2,:])[jnp.arange(batch_to_inspect.shape[0]), batch_to_inspect[:,-1]]
+        print(log_p_t_0)
+        print(log_p_t_0.shape)
+
+        log_p_t_0_to_1 = log_p_t_0[:, None] + log_p_t_1_select_tokens
+        print(log_p_t_0_to_1)
+        print(log_p_t_0_to_1.shape)
+
+        # print(jnp.exp(log_p_t_0_to_1).sum(axis=0))
+        # print(jnp.exp(jax.nn.logsumexp(log_p_t_0_to_1, axis=0)))
+
+        p_bad_tokens_t_1_but_not_t_0 += jnp.exp(jax.nn.logsumexp(log_p_t_0_to_1, axis=0))
+
+        print("prob of all sequences not containing a bad word in the first time step but containing a bad word in the second time step (by bad word)")
+        print(p_bad_tokens_t_1_but_not_t_0)
+
+
+    print("Prob of bad words at t_0 by bad word")
+    total_prob_bad_t_0_by_word = jnp.exp(log_p_select_tokens)
+    print(total_prob_bad_t_0_by_word)
+
+    print("Total prob of bad words at t_0")
+    total_prob_bad_t_0 = jnp.exp(total_bad_word_log_p_t_0)
+    print(total_prob_bad_t_0)
+
+    print("Prob of bad words at t_1 (no bad word at t_0) by bad word")
+    total_prob_bad_t_1_by_word = jnp.exp(p_bad_tokens_t_1_but_not_t_0)
+    print(total_prob_bad_t_1_by_word)
+
+    print("Total prob of bad words at t_1 (but not t_0)")
+    total_p_bad_t_1_but_not_t_0 = p_bad_tokens_t_1_but_not_t_0.sum()
+    print(total_p_bad_t_1_but_not_t_0)
+
+    print("Total prob of sequence containing a bad word by bad word")
+    total_prob_bad_by_word = total_prob_bad_t_0_by_word + total_prob_bad_t_1_by_word # sum of these probs (not log probs) is correct; we are adding up prob of all sequences that have a bad word in the t_0 position, with the prob of all sequences that have no bad word in t_0, but a bad word in the t_1 position. Together this gives us the total marginal probability of the bad word
+    print(total_prob_bad_by_word)
+
+    print("Total prob of sequence containing a bad word")
+    total_prob_bad = jnp.exp(total_bad_word_log_p_t_0) + total_p_bad_t_1_but_not_t_0
+    print(total_prob_bad)
+
+
+
 
 def calc_samples_bad_word_probs(rng_key, samples, trainstate_p, prompt_len, output_len):
     total_p_of_all_bad_words_t_0_with_double_counting = 0.  # Double counts if you have two bad words in the same seq (prob of these sequences show up multiple times across different words
@@ -2561,7 +2576,7 @@ def calc_samples_bad_word_probs(rng_key, samples, trainstate_p, prompt_len, outp
                                         dropout_rng)
     n_smc_samples = samples.shape[0]
 
-    for bad_index in bad_words_indices:
+    for bad_index in bad_word_indices:
         print(bad_index)
         num_samples_with_bad_index_at_t_0 = batch_check_contains_bad_index(
             samples[:, :-1], bad_index).sum()
@@ -2713,16 +2728,27 @@ def main():
 
 
             # TODO AUG 13: the below doesn't work, it takes up too much memory. Let's think about another way to do evaluation.
-            # Maybe I can just choose two words, e.g. fuck and bitch or something like that, and then calculate the probs in batches, to avoid too much memory
-            # And then just evaluate that subset of probabilities
-            # Maybe just using two words, I guess
+            # TODO: Here's what we do: the t_0 is easy, just simply take the logits from one single seq passed in.
+            # ALSO, do it in batch. Ie after you pass in the prompt, you get 50k logits, and then you index each of the bad words,
+            # This gives you all of the p for the t_0 seq
+            # The t_1 step is harder. So far my best idea is to simply break it into a bunch. E.g. do 1k seqs at a time. Then, again, index
+            # into the logits, so that you do all of the bad words at the same time (I guess keep a list of probs, that you can add to?)
+            # Then you only need a single pass through 50k examples in order to do the evaluation. This is a lot, but should be manageable
+            # The overlap in probability includes: when the first token is a bad word (as that has already been counted)
+            # One fix would be then to just skip (not include) all of the bad words when generating the 50k+sequences.
+            # Ie create an arange, then remove from the arange (is there a skip arg or something? LOok up how to do this) the bad word tokens
+            # Anyway, this will leave you with only the tokens that aren't covered by the t_0 step
+            # in which case we should have accurate logits, and therefore can calculate accurate sigma values.
+            # TODO SET THAT UP FIRST. AND TEST. START WITH JUST THE T_0 STEP, SHOULD BE VERY EASY, AND TEST THAT ALONE FIRST.
+            # Then move on to the t_1 step, then policy learning.
+            # TODO LEAVE THIS AS A COMMENT FOR UNDERSTANDING
             # let's set up the adversarial examples afterwards I guess.
             # Also do the policy learning
 
 
-            # rng_key, ska, sk, sk2, sk3, sk4 = jax.random.split(rng_key, 6)
-            #
-            # calc_analytic_bad_word_probs(ska, args.n_vocab, prompt, trainstate_p, args.output_len)
+            rng_key, ska, sk, sk2, sk3, sk4 = jax.random.split(rng_key, 6)
+
+            calc_analytic_bad_word_probs(ska, args.n_vocab, prompt, trainstate_p)
             #
             # samples = stochastic_transformer_sample(sk, trainstate_p, prompt, args.output_len, 1000)
             # calc_samples_bad_word_probs(sk2, samples, trainstate_p, prompt_len, args.output_len)
@@ -2730,7 +2756,7 @@ def main():
             #                               final_twist, args.output_len, 1000)
             # calc_samples_bad_word_probs(sk4, samples_sigma, trainstate_p, prompt_len, args.output_len)
             #
-            # print(time.time() - start)
+            print(time.time() - start)
             1/0
             assert args.model_updates_per_epoch == 0 # TODO REMOVE LATER ONCE THE TWIST STUFF IS WORKING WELL
 
