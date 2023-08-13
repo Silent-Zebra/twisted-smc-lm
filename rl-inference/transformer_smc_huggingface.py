@@ -454,7 +454,7 @@ def transformer(cfg, params, seq):
     return x
 
 
-def stochastic_transformer_sample_iter(carry, t, trainstate_p, params_of_trainstate_p):
+def stochastic_transformer_sample_iter(carry, t):
     # Essentially the way this works is we pass in a full computation (eg full prompt_len + output_len)
     # but we only use the logit for the time step t, and discard the rest of the computation
     # That is, we are computing logits on the full sequence of length prompt_len + output_len
@@ -467,32 +467,32 @@ def stochastic_transformer_sample_iter(carry, t, trainstate_p, params_of_trainst
     # So this works with jit, at the cost of a bit of wasted computation
     # This is the approach that I saw people taking online with transformers.
     # As of May 2023 there did not seem to be a better approach in jax (some discussion of jax.mask didn't end up going anywhere)
-    rnd_key, params, full_seq, prompt_len = carry
-    rnd_key, dropout_rng = jax.random.split(rnd_key)
+    rng_key, full_seq, prompt_len, trainstate_p, params_of_trainstate_p = carry
+    rng_key, dropout_rng = jax.random.split(rng_key)
     output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
-    rnd_key, subkey = jax.random.split(rnd_key)
+    rng_key, subkey = jax.random.split(rng_key)
     # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax.
     # I needed log_softmax on the other ones in order to properly combine with the other log term.
     indices_to_use = jax.random.categorical(subkey, output_unnormalized_batch[:, prompt_len + t - 1, :],
                                  shape=(output_unnormalized_batch.shape[0],))
     full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
-    carry = (rnd_key, params, full_seq, prompt_len)
+    carry = (rng_key, full_seq, prompt_len, trainstate_p, params_of_trainstate_p)
     return carry, None
 
 
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
-@partial(jax.jit, static_argnums=[1, 4, 5])
-def stochastic_transformer_sample(rnd_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples):
+@partial(jax.jit, static_argnums=[3, 4])
+def stochastic_transformer_sample(rng_key, trainstate_p, prompt: jnp.ndarray, output_len, n_samples):
     prompt_len = prompt.shape[0]
     # print(prompt_len)
     batch_prompt = jnp.full((n_samples, prompt.shape[0]), prompt)
     output = jnp.zeros((n_samples, output_len), dtype=jnp.int32)
     full_seq = jnp.concatenate((batch_prompt, output), axis=1)
 
-    carry = (rnd_key, params, full_seq, prompt_len)
-    carry, _ =  jax.lax.scan(partial(stochastic_transformer_sample_iter, cfg=cfg), carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
+    carry = (rng_key, full_seq, prompt_len, trainstate_p, trainstate_p.params)
+    carry, _ =  jax.lax.scan(stochastic_transformer_sample_iter, carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
 
-    rnd_key, params, full_seq, _ = carry
+    rng_key, full_seq, _, _, _ = carry
 
     return full_seq
 
@@ -596,6 +596,10 @@ def check_contains_bad_index(seq, bad_index):
 
 parallel_check_contains_bad_index = jax.vmap(check_contains_bad_index, in_axes=(None, 0))
 
+def batch_check_contains_bad_index(seq, bad_index):
+    contains_bad_word = jnp.where(jnp.abs(seq - bad_index) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
+    return jnp.minimum(contains_bad_word.sum(axis=1), 1)
+
 # Use tokenizer to get text sequences first, then pass into this reward model.
 def reward_model_binary_single(single_seq, prompt_len):
     assert len(single_seq.shape) == 1
@@ -692,7 +696,7 @@ def get_all_new_seqs_single_t(seq, n_vocab):
 
 
 
-def get_proposal_q_sample_for_scan(rnd_key, full_seq, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, t):
+def get_proposal_q_sample_for_scan(rng_key, full_seq, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, t):
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
     # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
     # TODO NOTE train = False here for better sampling, but that means no dropout - if you were to train on this (right now I don't), you might want to set train=True for dropout regularization
@@ -702,7 +706,7 @@ def get_proposal_q_sample_for_scan(rnd_key, full_seq, trainstate_p, params_of_tr
 
     output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq, params=params_of_trainstate_twist, train=False)
 
-    rnd_key, subkey = jax.random.split(rnd_key)
+    rng_key, subkey = jax.random.split(rng_key)
 
     # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
     # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
@@ -714,17 +718,17 @@ def get_proposal_q_sample_for_scan(rnd_key, full_seq, trainstate_p, params_of_tr
 
     Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
 
-    return rnd_key, full_seq, Z_s_1_to_t_minus_1
+    return rng_key, full_seq, Z_s_1_to_t_minus_1
 
 
-def get_proposal_q_sample_final(rnd_key, seq, trainstate_p, params_of_trainstate_p, final_twist):
+def get_proposal_q_sample_final(rng_key, seq, trainstate_p, params_of_trainstate_p, final_twist):
     # Same as get_proposal_q_sample except using the true final_twist instead of the learned twists (final_twist = - beta r(s) for adv sampling)
     # Thus, this should only be used for the final time step.
     # TODO NOTE train = False here for better sampling, but that means no dropout - if you were to train on this (right now I don't), you might want to set train=True for dropout regularization
 
     output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=False)
 
-    rnd_key, subkey = jax.random.split(rnd_key)
+    rng_key, subkey = jax.random.split(rng_key)
 
     # n_batch = output_unnormalized_batch.shape[0]
     n_vocab = output_unnormalized_batch.shape[-1]
@@ -753,7 +757,7 @@ def get_proposal_q_sample_final(rnd_key, seq, trainstate_p, params_of_trainstate
     # = logsumexp[log( p(s_t|s_{1:t-1})) + log( psi(s_{1:t})) ) ]
     Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
 
-    return rnd_key, seq, Z_s_1_to_t_minus_1
+    return rng_key, seq, Z_s_1_to_t_minus_1
 
 
 def evaluate_unnormalized_log_q_t_full_seq(full_seq, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len_plus_t, dropout_rng):
@@ -885,7 +889,7 @@ def evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate
 
 # WARNING/NOTE that if not using the final twist, then we're using the learned twist
 # And in my current setup I don't think that learned final twist ever gets trained anywhere
-def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
+def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, use_final_twist, final_twist):
 
     log_w_t_minus_1 = log_w_t
@@ -894,18 +898,18 @@ def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
     if use_final_twist:
         # Full_seq has shape (n_samples, prompt_len + output_len)
-        rnd_key, full_seq, Z_s_1_to_t_minus_1 = \
-            get_proposal_q_sample_final(rnd_key, full_seq[:, :-1],
+        rng_key, full_seq, Z_s_1_to_t_minus_1 = \
+            get_proposal_q_sample_final(rng_key, full_seq[:, :-1],
                                         trainstate_p, params_of_trainstate_p,
                                         final_twist)
             # get_proposal_q_sample_final(
-            # rnd_key, full_seq[:, :-1], trainstate_p, final_twist)
+            # rng_key, full_seq[:, :-1], trainstate_p, final_twist)
     else:
-        rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
-            rnd_key, full_seq, trainstate_p, params_of_trainstate_p,
+        rng_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+            rng_key, full_seq, trainstate_p, params_of_trainstate_p,
             trainstate_twist, params_of_trainstate_twist, prompt_len, t)
 
-    rnd_key, dropout_rng = jax.random.split(rnd_key)
+    rng_key, dropout_rng = jax.random.split(rng_key)
     if use_final_twist:
         # Now this is ok to use since at this point full_seq will have been fully generated, and we can directly use the previous function I had
         log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
@@ -917,14 +921,14 @@ def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
     log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
 
-    rnd_key, dropout_rng = jax.random.split(rnd_key)
+    rng_key, dropout_rng = jax.random.split(rng_key)
     log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t_full_seq(
         full_seq, trainstate_p, params_of_trainstate_p, prompt_len + t, dropout_rng)
 
     if use_final_twist:
         log_r_psi_t_eval = evaluate_log_phi_final(full_seq, final_twist)
     else:
-        rnd_key, dropout_rng = jax.random.split(rnd_key)
+        rng_key, dropout_rng = jax.random.split(rng_key)
         log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist,
                                                        prompt_len + t, dropout_rng)
 
@@ -943,7 +947,7 @@ def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     # resample_condition = False
     if resample_condition:
         # Do resampling
-        rnd_key, subkey = jax.random.split(rnd_key)
+        rng_key, subkey = jax.random.split(rng_key)
 
         a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
 
@@ -965,17 +969,17 @@ def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
 
 def smc_scan_iter_non_final(carry, t):
-    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t, \
+    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t, \
     output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, \
     prompt_len = carry
 
     log_w_t_minus_1 = log_w_t
 
-    rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
-        rnd_key, full_seq, trainstate_p, params_of_trainstate_p,
+    rng_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+        rng_key, full_seq, trainstate_p, params_of_trainstate_p,
         trainstate_twist, params_of_trainstate_twist, prompt_len, t)
 
-    rnd_key, dropout_rng, dropout_rng2, dropout_rng3 = jax.random.split(rnd_key, 4)
+    rng_key, dropout_rng, dropout_rng2, dropout_rng3 = jax.random.split(rng_key, 4)
     log_q_t_eval = evaluate_unnormalized_log_q_t_full_seq(full_seq, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
                                                           prompt_len + t, dropout_rng)
 
@@ -1007,7 +1011,7 @@ def smc_scan_iter_non_final(carry, t):
     # resample_condition = False
     if resample_condition:
         # Do resampling
-        rnd_key, subkey = jax.random.split(rnd_key)
+        rng_key, subkey = jax.random.split(rng_key)
 
         a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
 
@@ -1021,14 +1025,14 @@ def smc_scan_iter_non_final(carry, t):
 
         log_w_t = jnp.zeros_like(log_w_t)
 
-    carry = (rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
+    carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len)
 
     return carry, full_seq
 
 
 @partial(jax.jit, static_argnames=["final_twist", "use_final_twist", 'output_len', 'n_smc_samples', "intermediate_sample_history" ])
-def smc_jit(rnd_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
+def smc_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
     # Generate samples using SMC with twists (learned and final, if use_final_twist)
     # log_z_hat_t unused for now
     prompt_len = prompt.shape[-1]
@@ -1042,7 +1046,7 @@ def smc_jit(rnd_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_tw
     output = jnp.zeros((n_smc_samples, output_len), dtype=jnp.int32)
     full_seq = jnp.concatenate((batch_prompt, output), axis=1)
 
-    carry = (rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
+    carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
     log_z_hat_t, output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len)
 
     carry, full_seq_list = jax.lax.scan(smc_scan_iter_non_final, carry, jnp.arange(output_len - 1, dtype=jnp.int32), output_len - 1)
@@ -1052,10 +1056,10 @@ def smc_jit(rnd_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_tw
     # "Non-hashable static arguments are not supported" ValueError
     # The functools.partial approach I used later on to pass cfg outside of the carry
     # is another, possibly better, approach to avoid this problem too.
-    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
+    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     log_z_hat_t, output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len = carry
 
-    log_z_hat_t, full_seq = smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
+    log_z_hat_t, full_seq = smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, use_final_twist, final_twist)
 
     if intermediate_sample_history:
@@ -1065,22 +1069,22 @@ def smc_jit(rnd_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_tw
     return log_z_hat_t, full_seq
 
 
-def smc_procedure(rnd_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
+def smc_procedure(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
     # NO Analytic sigma sample for the non-toy datasets
 
-    return smc_jit(rnd_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
+    return smc_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
                    final_twist, output_len, n_smc_samples, use_final_twist)
-    # return smc_non_jit(rnd_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist)
+    # return smc_non_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist)
 
 
 
-# def get_l_dre_sixo(rnd_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist, dropout_rng):
+# def get_l_dre_sixo(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist, dropout_rng):
 #     raise NotImplementedError # TODO need to replace trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, etc.
 #     # Should perhaps also consider using full_seq instead
 #
 #     prompt_len = prompt.shape[-1]
 #
-#     rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
+#     rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
 #     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist)
 #     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, trainstate_p, params_of_trainstate_p, prompt, output_len, n_twist)
 #
@@ -1214,29 +1218,29 @@ def inspect_varied_info(jnp_prompt, prompt_len, n_vocab, output_len, trainstate_
 #            bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob
 
 
-def inspect_bad_word_reward(sk, prompt, prompt_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-                            final_twist, output_len, n_samples, rew_model):
-    sk, sk2 = jax.random.split(sk)
-    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
-                                                      trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-                                                      final_twist,
-                                                      output_len,
-                                                      n_samples, analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
-
-    r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
-
-    model_seqs = stochastic_transformer_sample(sk2, trainstate_p, params_of_trainstate_p, prompt,
-                                               output_len, n_samples)
-    r_seqs_model = rew_model(model_seqs, prompt_len)
-
-    adv_reward = r_seqs_adv.mean()
-    p_reward = r_seqs_model.mean()
-
-    print("Average rewards:")
-    print(adv_reward)
-    print(p_reward)
-
-    return adv_reward, p_reward
+# def inspect_bad_word_reward(sk, prompt, prompt_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
+#                             final_twist, output_len, n_samples, rew_model):
+#     sk, sk2 = jax.random.split(sk)
+#     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
+#                                                       trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
+#                                                       final_twist,
+#                                                       output_len,
+#                                                       n_samples, analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
+#
+#     r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
+#
+#     model_seqs = stochastic_transformer_sample(sk2, trainstate_p, params_of_trainstate_p, prompt,
+#                                                output_len, n_samples)
+#     r_seqs_model = rew_model(model_seqs, prompt_len)
+#
+#     adv_reward = r_seqs_adv.mean()
+#     p_reward = r_seqs_model.mean()
+#
+#     print("Average rewards:")
+#     print(adv_reward)
+#     print(p_reward)
+#
+#     return adv_reward, p_reward
 
 
 
@@ -1252,10 +1256,10 @@ def inspect_bad_word_reward(sk, prompt, prompt_len, trainstate_p, params_of_trai
 
 
 
-def print_samples_using_twists(rnd_key, prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, n_twist):
+def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, n_twist):
     print("--TEST--")
 
-    rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
+    rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
 
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist)
 
@@ -1318,10 +1322,10 @@ def get_l_dre_roger_scan_iter(carry, scan_over):
 
 # This is the EBM Maximum Likelihood approach
 @partial(jax.jit, static_argnames=["final_twist", "output_len", "n_twist"])
-def get_l_dre_roger_jit(rnd_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist):
+def get_l_dre_roger_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist):
     prompt_len = prompt.shape[-1]
 
-    rnd_key, sk1, sk2, dropout_rng = jax.random.split(rnd_key, 4)
+    rng_key, sk1, sk2, dropout_rng = jax.random.split(rng_key, 4)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p,
                                                       trainstate_twist, params_of_trainstate_twist,
                                                          final_twist,
@@ -1329,7 +1333,7 @@ def get_l_dre_roger_jit(rnd_key, prompt, trainstate_p, params_of_trainstate_p, t
 
     l_dre = 0.
 
-    _, final_twist_samples, intermediate_twist_samples_hist = smc_jit(rnd_key, prompt,
+    _, final_twist_samples, intermediate_twist_samples_hist = smc_jit(rng_key, prompt,
                              trainstate_p, params_of_trainstate_p,
                              trainstate_twist, params_of_trainstate_twist,
                              final_twist,
@@ -1825,7 +1829,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 # TODO AUG 12 REIMPLEMENT THE TEST CLASSES
 # Some simple unit tests to make sure things are working more or less as we would expect
 # class TestClass:
-#     rnd_key = jax.random.PRNGKey(42)
+#     rng_key = jax.random.PRNGKey(42)
 #     prompt = jnp.array([0, 1, 0, 1])
 #     n_vocab = 2
 #     output_len = 5
@@ -1837,8 +1841,8 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #
 #     # TODO FIX THIS
 #     raise NotImplementedError
-#     # rnd_key, trainstate_p, params_of_trainstate_p = transformer_init_params(
-#     #     rnd_key,
+#     # rng_key, trainstate_p, params_of_trainstate_p = transformer_init_params(
+#     #     rng_key,
 #     #     n_vocab=n_vocab,
 #     #     d_model=64,
 #     #     d_k=16,
@@ -1848,8 +1852,8 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #     #     d_fc=64,
 #     # )
 #     # trainstate_p_0, params_of_trainstate_p_0 = copy.deepcopy(cfg_p), copy.deepcopy(params_p)
-#     # rnd_key, trainstate_twist, params_of_trainstate_twist = transformer_init_params(
-#     #     rnd_key,
+#     # rng_key, trainstate_twist, params_of_trainstate_twist = transformer_init_params(
+#     #     rng_key,
 #     #     n_vocab=n_vocab,
 #     #     d_model=64,
 #     #     d_k=16,
@@ -1858,8 +1862,8 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #     #     d_v=16,
 #     #     d_fc=64,
 #     # )
-#     # rnd_key, trainstate_baseline, params_of_trainstate_baseline = transformer_init_params(
-#     #     rnd_key,
+#     # rng_key, trainstate_baseline, params_of_trainstate_baseline = transformer_init_params(
+#     #     rng_key,
 #     #     n_vocab=1,
 #     #     d_model=64,
 #     #     d_k=16,
@@ -1890,7 +1894,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #
 #         for _ in range(num_epochs):
 #
-#             rnd_key, sk = jax.random.split(self.rnd_key)
+#             rng_key, sk = jax.random.split(self.rng_key)
 #
 #             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
 #                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -1942,7 +1946,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #
 #         for _ in range(num_epochs):
 #
-#             rnd_key, sk = jax.random.split(self.rnd_key)
+#             rng_key, sk = jax.random.split(self.rng_key)
 #
 #             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
 #                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -1993,7 +1997,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #         num_epochs = 50
 #         for _ in range(num_epochs):
 #
-#             rnd_key, sk = jax.random.split(self.rnd_key)
+#             rng_key, sk = jax.random.split(self.rng_key)
 #
 #             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
 #                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -2051,7 +2055,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #         num_epochs = 100
 #         for _ in range(num_epochs):
 #
-#             rnd_key, sk = jax.random.split(self.rnd_key)
+#             rng_key, sk = jax.random.split(self.rng_key)
 #
 #             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
 #                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -2098,13 +2102,13 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #                                                         beta=1.,
 #                                                         reward_model_fn=reward_model_varied)
 #
-#         _, samples_non_jit = smc_procedure(self.rnd_key, self.prompt, self.cfg_p,
+#         _, samples_non_jit = smc_procedure(self.rng_key, self.prompt, self.cfg_p,
 #                                  self.params_p,
 #                                  self.cfg_twist, self.params_twist, final_twist,
 #                                  self.output_len,
 #                                  n_smc_samples)
 #
-#         _, samples_jit = smc_jit(self.rnd_key, self.prompt, self.cfg_p,
+#         _, samples_jit = smc_jit(self.rng_key, self.prompt, self.cfg_p,
 #                                          self.params_p,
 #                                          self.cfg_twist, self.params_twist,
 #                                          final_twist,
@@ -2136,7 +2140,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #         num_epochs = 10
 #         for _ in range(num_epochs):
 #
-#             rnd_key, sk = jax.random.split(self.rnd_key)
+#             rng_key, sk = jax.random.split(self.rng_key)
 #
 #             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
 #                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
@@ -2192,7 +2196,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #         num_epochs = 10
 #         for _ in range(num_epochs):
 #
-#             rnd_key, sk = jax.random.split(self.rnd_key)
+#             rng_key, sk = jax.random.split(self.rng_key)
 #
 #             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
 #                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -2260,7 +2264,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #         analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(self.prompt, self.prompt_len, self.n_vocab,
 #                                                        self.output_len, self.cfg_p, self.params_p, final_twist)
 #
-#         _, samples = smc_procedure(self.rnd_key, self.prompt, self.cfg_p,
+#         _, samples = smc_procedure(self.rng_key, self.prompt, self.cfg_p,
 #                                  self.params_p,
 #                                  self.cfg_twist, self.params_twist, final_twist,
 #                                  self.output_len,
@@ -2307,7 +2311,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #         num_epochs = 100
 #         for _ in range(num_epochs):
 #
-#             rnd_key, sk = jax.random.split(self.rnd_key)
+#             rng_key, sk = jax.random.split(self.rng_key)
 #
 #             grad_params_twist = experiment_cfg.get_grad_params_twist(sk,
 #                                                                      self.prompt,
@@ -2353,7 +2357,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #         num_epochs = 100
 #         for _ in range(num_epochs):
 #
-#             rnd_key, sk = jax.random.split(self.rnd_key)
+#             rng_key, sk = jax.random.split(self.rng_key)
 #
 #             grad_params_twist = experiment_cfg.get_grad_params_twist(sk, self.prompt,
 #                                                                      self.n_vocab,
@@ -2389,7 +2393,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 #         num_epochs = 100
 #         for _ in range(num_epochs):
 #
-#             rnd_key, sk = jax.random.split(self.rnd_key)
+#             rng_key, sk = jax.random.split(self.rng_key)
 #
 #             grad_params_twist = experiment_cfg.get_grad_params_twist(sk, self.prompt,
 #                                                                      self.n_vocab,
@@ -2444,7 +2448,7 @@ class CustomLMHeadModel:
 
 # TODO Remove later: here just for reference for now
 # def do_stuff():
-#     rnd_key, dropout_rng = jax.random.split(rnd_key)
+#     rng_key, dropout_rng = jax.random.split(rng_key)
 #
 #     logits_model = model_lm(**sequences, params=model_lm.params,
 #                             dropout_rng=dropout_rng,
@@ -2453,7 +2457,7 @@ class CustomLMHeadModel:
 #     print(logits_model)
 #     print(logits_model.shape)
 #
-#     # rnd_key, sk = jax.random.split(rnd_key)
+#     # rng_key, sk = jax.random.split(rng_key)
 #     # sample_outputs = model_lm.generate(input_ids=padded_sequences.input_ids, max_length=20, top_k=30, do_sample=True,
 #     #                prng_key=sk)
 #     # print(sample_outputs)
@@ -2477,9 +2481,9 @@ class CustomLMHeadModel:
 #     print(twist_vals.shape)
 
 
-def test_smc_samples(rnd_key, prompt, trainstate_p, trainstate_twist, final_twist, output_len, n_test_smc_samples, tokenizer):
+def test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, output_len, n_test_smc_samples, tokenizer):
     print("TESTING SMC SAMPLES (adv dist)")
-    rnd_key, sk = jax.random.split(rnd_key)
+    rng_key, sk = jax.random.split(rng_key)
     _, samples = smc_procedure(sk, prompt,
                                trainstate_p, trainstate_p.params,
                                trainstate_twist, trainstate_twist.params,
@@ -2492,8 +2496,100 @@ def test_smc_samples(rnd_key, prompt, trainstate_p, trainstate_twist, final_twis
                                           skip_special_tokens=True)
     print(text_outputs)
 
+
+def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p, output_len):
+    prompt_len = prompt.shape[0]
+    total_p_of_all_bad_words_t_0_with_double_counting = 0.  # Double counts if you have two bad words in the same seq (prob of these sequences show up multiple times across different words
+    total_p_of_all_bad_words_t_1_with_double_counting = 0.
+    # total_p_of_all_bad_words = 0.
+    batch_prompt = jnp.full((n_vocab, prompt_len), prompt)
+    # Only does seqs of length 2 for now
+    for bad_word_index in bad_words_indices:
+        print(bad_word_index)
+        bad_words_at_t_0 = jnp.array(
+            [[bad_word_index, x] for x in range(n_vocab)])
+        bad_words_at_t_1 = jnp.array(
+            [[x, bad_word_index] for x in range(n_vocab)])
+        full_seq_t_0 = jnp.concatenate((batch_prompt, bad_words_at_t_0), axis=1)
+        full_seq_t_1 = jnp.concatenate((batch_prompt, bad_words_at_t_1), axis=1)
+
+        # all_bad_word_seqs = jnp.concatenate((bad_words_at_t_0, bad_words_at_t_1), axis=0)
+        # full_seq_bad_words = jnp.concatenate((batch_prompt, all_bad_word_seqs), axis=1)
+        # print(full_seq_bad_words.shape)
+
+        print(full_seq_t_0.shape)
+
+        rng_key, dropout_rng, dropout_rng2 = jax.random.split(rng_key, 3)
+        # log_p = evaluate_log_p_theta_1_to_t(full_seq_bad_words, trainstate_p, trainstate_p.params, prompt_len, args.output_len, dropout_rng)
+        log_p_bad_t_0 = evaluate_log_p_theta_1_to_t(full_seq_t_0, trainstate_p,
+                                                    trainstate_p.params,
+                                                    prompt_len, output_len,
+                                                    dropout_rng)
+        log_p_bad_t_1 = evaluate_log_p_theta_1_to_t(full_seq_t_1, trainstate_p,
+                                                    trainstate_p.params,
+                                                    prompt_len, output_len,
+                                                    dropout_rng2)
+        print(log_p_bad_t_0.shape)
+
+        total_log_p_of_bad_word_t_0 = jax.nn.logsumexp(log_p_bad_t_0)
+        total_log_p_of_bad_word_t_1 = jax.nn.logsumexp(log_p_bad_t_1)
+        total_p_of_bad_word_t_0 = jnp.exp(total_log_p_of_bad_word_t_0)
+        total_p_of_bad_word_t_1 = jnp.exp(total_log_p_of_bad_word_t_1)
+
+        # total_p_of_bad_word = total_p_of_bad_word_t_0 + total_p_of_bad_word_t_1
+        total_p_of_all_bad_words_t_0_with_double_counting += total_p_of_bad_word_t_0
+        total_p_of_all_bad_words_t_1_with_double_counting += total_p_of_bad_word_t_1
+
+    print("Total Analytic Prob of Sequence (len 2) Containing Bad Word in first position:")
+    print(total_p_of_all_bad_words_t_0_with_double_counting)
+    print("Total Analytic Prob of Sequence (len 2) Containing Bad Word in second position:")
+    print(total_p_of_all_bad_words_t_1_with_double_counting)
+
+    total_p_of_all_bad_words_with_double_counting = total_p_of_all_bad_words_t_0_with_double_counting + total_p_of_all_bad_words_t_1_with_double_counting
+    print("Total Analytic Prob of Sequence (len 2) Containing Bad Word (With Double Counting if 2 Bad Words):")
+    print(total_p_of_all_bad_words_with_double_counting)
+
+def calc_samples_bad_word_probs(rng_key, samples, trainstate_p, prompt_len, output_len):
+    total_p_of_all_bad_words_t_0_with_double_counting = 0.  # Double counts if you have two bad words in the same seq (prob of these sequences show up multiple times across different words
+    total_p_of_all_bad_words_t_1_with_double_counting = 0.
+
+    rng_key, dropout_rng = jax.random.split(rng_key)
+
+    log_p = evaluate_log_p_theta_1_to_t(samples, trainstate_p,
+                                        trainstate_p.params,
+                                        prompt_len, output_len,
+                                        dropout_rng)
+    n_smc_samples = samples.shape[0]
+
+    for bad_index in bad_words_indices:
+        print(bad_index)
+        num_samples_with_bad_index_at_t_0 = batch_check_contains_bad_index(
+            samples[:, :-1], bad_index).sum()
+        p_of_bad_word_t_0 = num_samples_with_bad_index_at_t_0 / n_smc_samples
+        print(p_of_bad_word_t_0)
+
+        total_p_of_all_bad_words_t_0_with_double_counting += p_of_bad_word_t_0
+
+        seqs_skipping_t_0 = jnp.concatenate(
+            (samples[:, :-2], samples[:, -1]), axis=-1)
+        print(seqs_skipping_t_0.shape)
+        num_samples_with_bad_index_at_t_1 = batch_check_contains_bad_index(
+            seqs_skipping_t_0, bad_index).sum()
+        p_of_bad_word_t_1 = num_samples_with_bad_index_at_t_1 / n_smc_samples
+        print(p_of_bad_word_t_1)
+
+        total_p_of_all_bad_words_t_1_with_double_counting += p_of_bad_word_t_1
+
+    print(
+        "Total Sample Prob of Sequence (len 2) Containing Bad Word in first position:")
+    print(total_p_of_all_bad_words_t_0_with_double_counting)
+    print(
+        "Total Sample Prob of Sequence (len 2) Containing Bad Word in second position:")
+    print(total_p_of_all_bad_words_t_1_with_double_counting)
+
+
 def main():
-    rnd_key = jax.random.PRNGKey(args.seed)
+    rng_key = jax.random.PRNGKey(args.seed)
 
     assert args.n_vocab == 50257 # TODO Make this more dynamic later
 
@@ -2505,9 +2601,9 @@ def main():
     # model_lm = FlaxAutoModelForCausalLM.from_pretrained(model_config)
     model_lm = CustomLMHeadModel(model_config)
 
-    rnd_key, sk_twist, sk_baseline = jax.random.split(rnd_key, 3)
-    model_twist = CustomLM(rnd_key, model_config, d_model=768, output_size=args.n_vocab)
-    model_baseline = CustomLM(rnd_key, model_config, d_model=768, output_size=1)
+    rng_key, sk_twist, sk_baseline = jax.random.split(rng_key, 3)
+    model_twist = CustomLM(rng_key, model_config, d_model=768, output_size=args.n_vocab)
+    model_baseline = CustomLM(rng_key, model_config, d_model=768, output_size=1)
 
 
 
@@ -2581,7 +2677,7 @@ def main():
             test_smc = False
             if test_smc:
 
-                test_smc_samples(rnd_key, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
+                test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
 
                 # TODO AUG 11 CHECK ALL SEQS vs FULLSEQS. Consider just merging to avoid confusion and duplication as well. When doing so, test the code each step along the way to check that the results remain consistent.
                 1/0
@@ -2589,20 +2685,48 @@ def main():
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
 
-                rnd_key, sk = jax.random.split(rnd_key)
+                rng_key, sk = jax.random.split(rng_key)
 
                 grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params, final_twist)
                 trainstate_twist = trainstate_twist.apply_gradients(grads=grad_params_twist)
 
                 test_smc = True
                 if test_smc:
-                    test_smc_samples(rnd_key, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
+                    test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
 
+                # TODO AUG 12: Figure out a way to test the SMC sampling is doing what we want
+                # For instance, for each bad word in the list, construct all 50257 sequences containing that in the first token slot and the second token slot
+                # Then calculate log p
+                # Sum all those up
+                # Then compare the SMC sampling distribution with those values calced for those bad words
+                # Then 1 - total prob is the prob of the not bad words, let's just lump them into one group
+                # Use maybe 1k SMC samples or so. And test that the analytic prob dist over the bad words more or less matches the SMC samples
+                # Maybe even more than 1k samples, maybe as many as you can fit in memory, to get a better feel/test of how well it's working
+
+                # This scheme can also be used to evaluate the prob of words, going down with the policy training
+                # So: SET UP THIS SCHEME. Then begin testing, and also begin testing the policy learning and comparing with PPO baseline...
+
+                # python transformer_smc_huggingface.py --beta_temp 5. --output_len 2
+
+                # TODO LIST: FIRST DO QUANTITATIVE COMPARE OF SMC VS BAD WORD PROBS (THIS ALSO USEFUL FOR POLICY LEARNING)
+                # THEN IMPLEMENT AND TEST POLICY LEARNING.
+
+            rng_key, ska, sk, sk2, sk3, sk4 = jax.random.split(rng_key, 6)
+
+            calc_analytic_bad_word_probs(ska, args.n_vocab, prompt, trainstate_p, args.output_len)
+
+            samples = stochastic_transformer_sample(sk, trainstate_p, prompt, args.output_len, 1000)
+            calc_samples_bad_word_probs(sk2, samples, trainstate_p, prompt_len, args.output_len)
+            samples_sigma = smc_procedure(sk3, prompt, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params,
+                                          final_twist, args.output_len, 1000)
+            calc_samples_bad_word_probs(sk4, samples_sigma, trainstate_p, prompt_len, args.output_len)
+
+            print(time.time() - start)
             1/0
             assert args.model_updates_per_epoch == 0 # TODO REMOVE LATER ONCE THE TWIST STUFF IS WORKING WELL
 
             for model_update in range(args.model_updates_per_epoch):
-                rnd_key, sk = jax.random.split(rnd_key)
+                rng_key, sk = jax.random.split(rng_key)
 
 
                 # params_p, optim_p_state, params_baseline, optim_baseline_state = \
@@ -2618,7 +2742,7 @@ def main():
             test_info = True
             if (epoch + 1) % args.print_every == 0:
                 if test_info:
-                    rnd_key, sk, sk2, sk3 = jax.random.split(rnd_key, 4)
+                    rng_key, sk, sk2, sk3 = jax.random.split(rng_key, 4)
 
                     if experiment_cfg.rm_type == "binary":
                         raise NotImplementedError # TODO IMPLEMENT
@@ -2641,7 +2765,7 @@ def main():
                         #                                args.n_bad_word_samples)
                         # if experiment_cfg.rl_loss_type == "custom":
                         #     print("SMC ADVERSARIAL GENERATIONS")
-                        #     rnd_key, sk1 = jax.random.split(rnd_key)
+                        #     rng_key, sk1 = jax.random.split(rng_key)
                         #     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
                         #         sk1, prompt, trainstate_p, params_of_trainstate_p,cfg_twist,
                         #         params_twist, final_twist, args.output_len, args.n_twist,
