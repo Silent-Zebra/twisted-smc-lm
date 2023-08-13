@@ -2711,17 +2711,26 @@ def main():
                 # TODO LIST: FIRST DO QUANTITATIVE COMPARE OF SMC VS BAD WORD PROBS (THIS ALSO USEFUL FOR POLICY LEARNING)
                 # THEN IMPLEMENT AND TEST POLICY LEARNING.
 
-            rng_key, ska, sk, sk2, sk3, sk4 = jax.random.split(rng_key, 6)
 
-            calc_analytic_bad_word_probs(ska, args.n_vocab, prompt, trainstate_p, args.output_len)
+            # TODO AUG 13: the below doesn't work, it takes up too much memory. Let's think about another way to do evaluation.
+            # Maybe I can just choose two words, e.g. fuck and bitch or something like that, and then calculate the probs in batches, to avoid too much memory
+            # And then just evaluate that subset of probabilities
+            # Maybe just using two words, I guess
+            # let's set up the adversarial examples afterwards I guess.
+            # Also do the policy learning
 
-            samples = stochastic_transformer_sample(sk, trainstate_p, prompt, args.output_len, 1000)
-            calc_samples_bad_word_probs(sk2, samples, trainstate_p, prompt_len, args.output_len)
-            samples_sigma = smc_procedure(sk3, prompt, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params,
-                                          final_twist, args.output_len, 1000)
-            calc_samples_bad_word_probs(sk4, samples_sigma, trainstate_p, prompt_len, args.output_len)
 
-            print(time.time() - start)
+            # rng_key, ska, sk, sk2, sk3, sk4 = jax.random.split(rng_key, 6)
+            #
+            # calc_analytic_bad_word_probs(ska, args.n_vocab, prompt, trainstate_p, args.output_len)
+            #
+            # samples = stochastic_transformer_sample(sk, trainstate_p, prompt, args.output_len, 1000)
+            # calc_samples_bad_word_probs(sk2, samples, trainstate_p, prompt_len, args.output_len)
+            # samples_sigma = smc_procedure(sk3, prompt, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params,
+            #                               final_twist, args.output_len, 1000)
+            # calc_samples_bad_word_probs(sk4, samples_sigma, trainstate_p, prompt_len, args.output_len)
+            #
+            # print(time.time() - start)
             1/0
             assert args.model_updates_per_epoch == 0 # TODO REMOVE LATER ONCE THE TWIST STUFF IS WORKING WELL
 
