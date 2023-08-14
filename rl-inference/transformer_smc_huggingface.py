@@ -2416,13 +2416,9 @@ def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
     print("Calculating analytic probs of bad words (up to 2 output len)")
 
     prompt_len = prompt.shape[-1]
-    rng_key, dropout_rng = jax.random.split(rng_key, 2) # USE the same dropout_rng in order to keep evaluations consistent.
-    # log_p_bad_t_0 = evaluate_log_p_theta_1_to_t(batch_prompt, trainstate_p,
-    #                                             trainstate_p.params,
-    #                                             prompt_len, output_len,
-    #                                             dropout_rng)
 
-    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=prompt.reshape(1, -1), params=trainstate_p.params, train=True, dropout_rng=dropout_rng)
+    # Train=False for consistency, but change this if you ever need gradients (but why would you need gradients through this function)?
+    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=prompt.reshape(1, -1), params=trainstate_p.params, train=False)
     log_p_all_tokens = jax.nn.log_softmax(output_unnormalized_batch, axis=-1)
     # log_p_all_tokens has shape (batch, seq_len, n_vocab)
 
@@ -2455,7 +2451,7 @@ def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
         # print(batch_to_inspect.shape)
         output_unnormalized_batch = trainstate_p.apply_fn(
             input_ids=batch_to_inspect, params=trainstate_p.params,
-            train=True, dropout_rng=dropout_rng)
+            train=False)
         log_p_all_tokens = jax.nn.log_softmax(output_unnormalized_batch,
                                               axis=-1)
         log_p_t_1_all = log_p_all_tokens[:, -1, :].squeeze()
@@ -2577,11 +2573,6 @@ def compare_smc_samples_vs_analytic_for_output_len_2(rng_key, prompt,
     # print(Z_theta)
     sigma_vals_bad_by_word = unnormalized_sigma_vals_bad_by_word / Z_theta
     sigma_vals_not_bad = unnormalized_sigma_vals_not_bad / Z_theta
-    print("Sigma vals for bad words (by word)")
-    print(sigma_vals_bad_by_word)
-    print(sigma_vals_bad_by_word.sum())
-    print("Sigma for not bad outputs (combined sum)")
-    print(sigma_vals_not_bad)
     # Then how about the t_0 words only?
     # The t_0 words are a subset of all the bad outputs
     # So once you have the unnormalized sigma vals for all the bad outputs
@@ -2593,6 +2584,12 @@ def compare_smc_samples_vs_analytic_for_output_len_2(rng_key, prompt,
     print("Sigma vals for bad words only at t_0 (by word)")
     print(sigma_vals_bad_t_0_by_word)
     print(sigma_vals_bad_t_0_by_word.sum())
+    print("Sigma vals for bad words (by word)")
+    print(sigma_vals_bad_by_word)
+    print(sigma_vals_bad_by_word.sum())
+    print("Sigma for not bad outputs (combined sum)")
+    print(sigma_vals_not_bad)
+
     print("-----")
 
     # Then compare the SMC (or regular p) sampling distribution with those analytic values calculated above
@@ -2731,28 +2728,24 @@ def main():
 
                 grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params, final_twist)
                 trainstate_twist = trainstate_twist.apply_gradients(grads=grad_params_twist)
-                print(f"TIME1: {time.time() - start}", flush=True)
+                # print(f"TIME1: {time.time() - start}", flush=True)
 
-                test_smc = True
-                if test_smc:
-                    test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
-                print(f"TIME2: {time.time() - start}", flush=True)
-
-                compare_smc_samples_vs_analytic_for_output_len_2(sk2, prompt, trainstate_p, trainstate_twist, final_twist)
-                print(f"TIME3: {time.time() - start}", flush=True)
+                # compare_smc_samples_vs_analytic_for_output_len_2(sk2, prompt, trainstate_p, trainstate_twist, final_twist)
+                # print(f"TIME2: {time.time() - start}", flush=True)
 
                 # TODO Aug 13
                 # This evaluation scheme can also be used to check that the prob of bad words are going down with the policy training
                 # Set up the policy learning, test, and compare with the PPO baseline
                 # After that, let's set up the adversarial examples afterwards I guess.
 
-            print(f"TIME: {time.time() - start}", flush=True)
-            1/0
+            print(f"Time after twist updates: {time.time() - start}", flush=True)
+
             assert args.model_updates_per_epoch == 0 # TODO REMOVE LATER ONCE THE TWIST STUFF IS WORKING WELL
 
             for model_update in range(args.model_updates_per_epoch):
-                rng_key, sk = jax.random.split(rng_key)
+                print(f"MODEL UPDATE {model_update}", flush=True)
 
+                rng_key, sk, sk2 = jax.random.split(rng_key, 3)
 
                 # params_p, optim_p_state, params_baseline, optim_baseline_state = \
                 #     experiment_cfg.update_params_p_and_baseline(sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
@@ -2769,35 +2762,10 @@ def main():
                 if test_info:
                     rng_key, sk, sk2, sk3 = jax.random.split(rng_key, 4)
 
-                    if experiment_cfg.rm_type == "binary":
-                        raise NotImplementedError # TODO IMPLEMENT or rather just move around the testing/inspection code I made. Or move this up to there/
+                    test_smc_samples(sk, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
+                    compare_smc_samples_vs_analytic_for_output_len_2(sk2, prompt, trainstate_p, trainstate_twist, final_twist)
 
-
-                    else:
-                        print_samples_using_twists(sk, prompt, prompt_len, args.n_vocab,
-                                                   args.output_len, trainstate_p, params_of_trainstate_p,
-                                                   trainstate_twist, params_of_trainstate_twist,
-                                                   final_twist, args.n_twist)
             i += 1
-
-        test_learned_twist_vs_optimal = True
-        if args.twist_updates_per_epoch == 0:
-            test_learned_twist_vs_optimal = False
-        if experiment_cfg.rm_type == "binary":
-            test_learned_twist_vs_optimal = False
-
-        if test_learned_twist_vs_optimal and ((epoch + 1) % args.print_every == 0):
-            print("---Comparing Twists---")
-            for prompt in prompts:
-                prompt = jnp.array(prompt)
-                final_twist = neg_beta_times_batch_reward_model_curry(len(prompt),
-                                                                beta=curr_beta_temp,
-                                                                reward_model_fn=experiment_cfg.rm_fn)
-                # compare_learned_twist_vs_optimal(prompt, args.n_vocab,
-                #                                  args.output_len, cfg_p,
-                #                                  params_p, final_twist,
-                #                                  cfg_twist,
-                #                                  params_twist, rm_type=experiment_cfg.rm_type)
 
         # if (epoch + 1) % args.ckpt_every == 0:
         if args.anneal_beta_temp and ((epoch + 1) % increment_beta_every == 0):
