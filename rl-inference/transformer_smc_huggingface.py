@@ -2521,11 +2521,11 @@ def calc_samples_bad_word_probs(samples, prompt_len):
 
     for bad_index in bad_word_indices:
         # print(bad_index)
-        # print(samples[:, prompt_len][None, :])
-        # print(samples[:, prompt_len][None, :].shape)
+        # print(samples[:, prompt_len][:, None].shape)
+        # print(samples[:, prompt_len:].shape)
         # print( batch_check_contains_bad_index(samples[:, prompt_len][None, :], bad_index))
         num_samples_with_bad_index_at_t_0 = batch_check_contains_bad_index(
-            samples[:, prompt_len][None, :], bad_index).sum()
+            samples[:, prompt_len][:, None], bad_index).sum()
         # print(num_samples_with_bad_index_at_t_0)
         p_of_bad_word_t_0 = num_samples_with_bad_index_at_t_0 / n_smc_samples
         # print(p_of_bad_word_t_0)
@@ -2648,6 +2648,7 @@ def main():
                                       beta_kl=args.beta_kl, ppo_steps=args.ppo_steps, clip_epsilon=args.clip_epsilon,
                                       gamma=args.gamma, gae_lambda=args.gae_lambda, beta_ent=args.beta_ent)
 
+
     eps = 1e-8
     weight_decay = 0.01
     optim_p = optax.adamw(learning_rate=args.lr_p, b1=args.beta1,
@@ -2701,6 +2702,7 @@ def main():
 
     for epoch in range(args.epochs):
 
+
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
 
@@ -2720,6 +2722,8 @@ def main():
 
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
+
+                print(f"TWIST UPDATE {twist_update}", flush=True)
 
                 rng_key, sk, sk2 = jax.random.split(rng_key, 3)
 
