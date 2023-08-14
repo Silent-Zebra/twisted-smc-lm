@@ -2405,6 +2405,13 @@ def test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twis
 
 def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
     # ASSUMES OUTPUT LEN 2 RIGHT NOW
+    # Calculates the probability of bad words, for each bad word in bad_word_indices
+    # Provides the probability values for sequences that only contain the bad word in the first position (the first token after the prompt)
+    # and also does it for all sequences that contain the bad word in only the second position, BUT NOT IN THE FIRST POSITION
+    # You can get the probability value for sequences with a bad word in either position by summing two above those up.
+    # The first position calculation is easy: simply take the logits from one single seq passed in.
+    # The second calculation is harder. 50k+ sequences takes too much memory. So instead I break it into batches.
+    # Again, we index into the logits of the bad words we care about.
 
     print("Calculating analytic probs of bad words (up to 2 output len)")
 
@@ -2430,6 +2437,7 @@ def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
 
     batch_prompt = jnp.full((n_vocab - n_bad_words, prompt_len), prompt)
 
+    # Do this so that you don't double count - only count the sequences that don't have a bad token in the first position
     tokens_excluding_bad = jnp.setdiff1d(jnp.arange(n_vocab), bad_word_indices)
     # print(tokens_excluding_bad.shape)
 
@@ -2544,6 +2552,78 @@ def calc_samples_bad_word_probs(samples, prompt_len):
     return p_bad_word_t_0_by_word, p_bad_word_by_word
 
 
+def compare_smc_samples_vs_analytic_for_output_len_2(rng_key, prompt,
+                                                     trainstate_p, trainstate_twist, final_twist):
+    assert args.output_len == 2
+    prompt_len = prompt.shape[-1]
+
+    rng_key, ska, sk, sk2, sk3, sk4 = jax.random.split(rng_key, 6)
+
+    # We construct the analytic probability of bad words being produced (bad words in the first position, and then bad words in any position)
+    total_prob_bad_t_0_by_word, total_prob_bad_by_word = calc_analytic_bad_word_probs(
+        ska, args.n_vocab, prompt, trainstate_p)
+    print("-----")
+    # We can multiply by e^(-beta_temp r(s)) and normalize to get the sigma values
+    # TODO do the sigma calc. Finally, compare it versus the sample generations
+    modifier = jnp.exp(-args.beta_temp * bad_reward)
+    unnormalized_sigma_vals_bad_by_word = total_prob_bad_by_word * modifier
+    # print(unnormalized_sigma_vals_bad_by_word)
+    # Then 1 - total prob is the prob of the not bad words, let's just lump them into one group, since they all have the same reward under the binary model
+    prob_not_bad = 1. - total_prob_bad_by_word.sum()
+    unnormalized_sigma_vals_not_bad = prob_not_bad * jnp.exp(
+        -args.beta_temp * base_reward)
+    # print(unnormalized_sigma_vals_not_bad)
+    Z_theta = unnormalized_sigma_vals_not_bad + unnormalized_sigma_vals_bad_by_word.sum()
+    # print(Z_theta)
+    sigma_vals_bad_by_word = unnormalized_sigma_vals_bad_by_word / Z_theta
+    sigma_vals_not_bad = unnormalized_sigma_vals_not_bad / Z_theta
+    print("Sigma vals for bad words (by word)")
+    print(sigma_vals_bad_by_word)
+    print(sigma_vals_bad_by_word.sum())
+    print("Sigma for not bad outputs (combined sum)")
+    print(sigma_vals_not_bad)
+    # Then how about the t_0 words only?
+    # The t_0 words are a subset of all the bad outputs
+    # So once you have the unnormalized sigma vals for all the bad outputs
+    # Then you can calc the unnorm sigma for just t_0 bad outputs
+    # subtract, the difference is for just t_1, and you can work with that then.
+    unnormalized_sigma_vals_bad_t_0_by_word = total_prob_bad_t_0_by_word * modifier
+    sigma_vals_bad_t_0_by_word = unnormalized_sigma_vals_bad_t_0_by_word / Z_theta
+    # sigma_vals_bad_t_1_but_not_t_0 = sigma_vals_bad_by_word - sigma_vals_bad_t_0_by_word
+    print("Sigma vals for bad words only at t_0 (by word)")
+    print(sigma_vals_bad_t_0_by_word)
+    print(sigma_vals_bad_t_0_by_word.sum())
+    print("-----")
+
+    # Then compare the SMC (or regular p) sampling distribution with those analytic values calculated above
+    samples = stochastic_transformer_sample(sk, trainstate_p, prompt,
+                                            args.output_len,
+                                            args.n_test_smc_samples)
+    p_samples_bad_word_t_0_by_word, p_samples_bad_word_by_word = calc_samples_bad_word_probs(
+        samples, prompt_len)
+
+    print("Differences in P Values (Actual Samples - Analytic)")
+    print("For t_0 bad words only")
+    print(p_samples_bad_word_t_0_by_word - total_prob_bad_t_0_by_word)
+    print("For bad words anywhere")
+    print(p_samples_bad_word_by_word - total_prob_bad_by_word)
+
+    _, samples_sigma = smc_procedure(sk3, prompt, trainstate_p,
+                                     trainstate_p.params, trainstate_twist,
+                                     trainstate_twist.params,
+                                     final_twist, args.output_len,
+                                     args.n_test_smc_samples)
+    sigma_samples_bad_word_t_0_by_word, sigma_samples_bad_word_by_word = calc_samples_bad_word_probs(
+        samples_sigma, prompt_len)
+
+    print("Differences in Sigma Values (Actual Samples - Analytic)")
+    print("For t_0 bad words only")
+    print(sigma_samples_bad_word_t_0_by_word - sigma_vals_bad_t_0_by_word)
+    print("For bad words anywhere")
+    print(sigma_samples_bad_word_by_word - sigma_vals_bad_by_word)
+
+
+
 def main():
     rng_key = jax.random.PRNGKey(args.seed)
 
@@ -2641,7 +2721,7 @@ def main():
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
 
-                rng_key, sk = jax.random.split(rng_key)
+                rng_key, sk, sk2 = jax.random.split(rng_key, 3)
 
                 grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params, final_twist)
                 trainstate_twist = trainstate_twist.apply_gradients(grads=grad_params_twist)
@@ -2650,86 +2730,15 @@ def main():
                 if test_smc:
                     test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
 
-                # TODO AUG 12: Figure out a way to test the SMC sampling is doing what we want
-                # For instance, for each bad word in the list, construct all 50257 sequences containing that in the first token slot and the second token slot
-                # Then calculate log p
-                # Sum all those up
-                # Then compare the SMC sampling distribution with those values calced for those bad words
-                # Then 1 - total prob is the prob of the not bad words, let's just lump them into one group
-                # Use maybe 1k SMC samples or so. And test that the analytic prob dist over the bad words more or less matches the SMC samples
-                # Maybe even more than 1k samples, maybe as many as you can fit in memory, to get a better feel/test of how well it's working
+                compare_smc_samples_vs_analytic_for_output_len_2(sk2, prompt, trainstate_p, trainstate_twist, final_twist)
+                print(f"TIME: {time.time() - start}")
 
-                # This scheme can also be used to evaluate the prob of words, going down with the policy training
-                # So: SET UP THIS SCHEME. Then begin testing, and also begin testing the policy learning and comparing with PPO baseline...
+                # TODO Aug 13
+                # This evaluation scheme can also be used to check that the prob of bad words are going down with the policy training
+                # Set up the policy learning, test, and compare with the PPO baseline
+                # After that, let's set up the adversarial examples afterwards I guess.
 
-                # python transformer_smc_huggingface.py --beta_temp 5. --output_len 2
-
-                # TODO LIST: FIRST DO QUANTITATIVE COMPARE OF SMC VS BAD WORD PROBS (THIS ALSO USEFUL FOR POLICY LEARNING)
-                # THEN IMPLEMENT AND TEST POLICY LEARNING.
-
-
-            # TODO AUG 13: the below doesn't work, it takes up too much memory. Let's think about another way to do evaluation.
-            # TODO: Here's what we do: the t_0 is easy, just simply take the logits from one single seq passed in.
-            # ALSO, do it in batch. Ie after you pass in the prompt, you get 50k logits, and then you index each of the bad words,
-            # This gives you all of the p for the t_0 seq
-            # The t_1 step is harder. So far my best idea is to simply break it into a bunch. E.g. do 1k seqs at a time. Then, again, index
-            # into the logits, so that you do all of the bad words at the same time (I guess keep a list of probs, that you can add to?)
-            # Then you only need a single pass through 50k examples in order to do the evaluation. This is a lot, but should be manageable
-            # The overlap in probability includes: when the first token is a bad word (as that has already been counted)
-            # One fix would be then to just skip (not include) all of the bad words when generating the 50k+sequences.
-            # Ie create an arange, then remove from the arange (is there a skip arg or something? LOok up how to do this) the bad word tokens
-            # Anyway, this will leave you with only the tokens that aren't covered by the t_0 step
-            # in which case we should have accurate logits, and therefore can calculate accurate sigma values.
-            # TODO SET THAT UP FIRST. AND TEST. START WITH JUST THE T_0 STEP, SHOULD BE VERY EASY, AND TEST THAT ALONE FIRST.
-            # Then move on to the t_1 step, then policy learning.
-            # TODO LEAVE THIS AS A COMMENT FOR UNDERSTANDING
-            # let's set up the adversarial examples afterwards I guess.
-            # Also do the policy learning
-
-
-            rng_key, ska, sk, sk2, sk3, sk4 = jax.random.split(rng_key, 6)
-
-            total_prob_bad_t_0_by_word, total_prob_bad_by_word = calc_analytic_bad_word_probs(ska, args.n_vocab, prompt, trainstate_p)
-            print("-----")
-            # TODO do the sigma calc. Finally, compare it versus the sample generations
-            modifier = jnp.exp(-args.beta_temp * bad_reward)
-            unnormalized_sigma_vals_bad_by_word = total_prob_bad_by_word * modifier
-            print(unnormalized_sigma_vals_bad_by_word)
-            prob_not_bad = 1. - total_prob_bad_by_word.sum()
-            unnormalized_sigma_vals_not_bad = prob_not_bad * jnp.exp(-args.beta_temp * base_reward)
-            print(unnormalized_sigma_vals_not_bad)
-            Z_theta = unnormalized_sigma_vals_not_bad + unnormalized_sigma_vals_bad_by_word.sum()
-            print(Z_theta)
-            sigma_vals_bad_by_word = unnormalized_sigma_vals_bad_by_word / Z_theta
-            sigma_vals_not_bad = unnormalized_sigma_vals_not_bad / Z_theta
-            print(sigma_vals_bad_by_word)
-            print(sigma_vals_not_bad)
-            # Then how about the t_0 words only?
-            # The t_0 words are a subset of all the bad outputs
-            # So once you have the unnormalized sigma vals for all the bad outputs
-            # Then you can calc the unnorm sigma for just t_0 bad outputs
-            # subtract, the difference is for just t_1, and you can work with that then.
-            unnormalized_sigma_vals_bad_t_0_by_word = total_prob_bad_t_0_by_word * modifier
-            sigma_vals_bad_t_0_by_word = unnormalized_sigma_vals_bad_t_0_by_word / Z_theta
-            sigma_vals_bad_t_1_but_not_t_0 = sigma_vals_bad_by_word - sigma_vals_bad_t_0_by_word
-            print(sigma_vals_bad_t_0_by_word)
-
-            print("-----------------------")
-
-            samples = stochastic_transformer_sample(sk, trainstate_p, prompt, args.output_len, args.n_test_smc_samples)
-            p_samples_bad_word_t_0_by_word, p_samples_bad_word_by_word = calc_samples_bad_word_probs(samples, prompt_len)
-
-            print(p_samples_bad_word_t_0_by_word - total_prob_bad_t_0_by_word)
-            print(p_samples_bad_word_by_word - total_prob_bad_by_word)
-
-            _, samples_sigma = smc_procedure(sk3, prompt, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params,
-                                          final_twist, args.output_len, args.n_test_smc_samples)
-            sigma_samples_bad_word_t_0_by_word, sigma_samples_bad_word_by_word = calc_samples_bad_word_probs(samples_sigma, prompt_len)
-
-            print(sigma_samples_bad_word_t_0_by_word - sigma_vals_bad_t_0_by_word)
-            print(sigma_samples_bad_word_by_word - sigma_vals_bad_by_word)
-
-            print(time.time() - start)
+            print(f"TIME: {time.time() - start}")
             1/0
             assert args.model_updates_per_epoch == 0 # TODO REMOVE LATER ONCE THE TWIST STUFF IS WORKING WELL
 
