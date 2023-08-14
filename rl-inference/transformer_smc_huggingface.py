@@ -2723,22 +2723,26 @@ def main():
 
                 rng_key, sk, sk2 = jax.random.split(rng_key, 3)
 
+                print(f"TIME0: {time.time() - start}", flush=True)
+
                 grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params, final_twist)
                 trainstate_twist = trainstate_twist.apply_gradients(grads=grad_params_twist)
+                print(f"TIME1: {time.time() - start}", flush=True)
 
                 test_smc = True
                 if test_smc:
                     test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
+                print(f"TIME2: {time.time() - start}", flush=True)
 
                 compare_smc_samples_vs_analytic_for_output_len_2(sk2, prompt, trainstate_p, trainstate_twist, final_twist)
-                print(f"TIME: {time.time() - start}")
+                print(f"TIME3: {time.time() - start}", flush=True)
 
                 # TODO Aug 13
                 # This evaluation scheme can also be used to check that the prob of bad words are going down with the policy training
                 # Set up the policy learning, test, and compare with the PPO baseline
                 # After that, let's set up the adversarial examples afterwards I guess.
 
-            print(f"TIME: {time.time() - start}")
+            print(f"TIME: {time.time() - start}", flush=True)
             1/0
             assert args.model_updates_per_epoch == 0 # TODO REMOVE LATER ONCE THE TWIST STUFF IS WORKING WELL
 
@@ -2762,35 +2766,8 @@ def main():
                     rng_key, sk, sk2, sk3 = jax.random.split(rng_key, 4)
 
                     if experiment_cfg.rm_type == "binary":
-                        raise NotImplementedError # TODO IMPLEMENT
-                        # bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
-                        # bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob = inspect_bad_word_info(prompt_len, trainstate_p, params_of_trainstate_p)
-                        # indist_probs["bad"].append(bad_word_indist_prob)
-                        # indist_probs["good"].append(desired_cont_indist_prob)
-                        # indist_probs["evasive"].append(evasive_cont_indist_prob)
-                        # ood_probs["bad"].append(bad_word_ood_prob)
-                        # ood_probs["good"].append(desired_cont_ood_prob)
-                        # ood_probs["evasive"].append(evasive_cont_ood_prob)
-                        #
-                        # adv_reward, p_reward = inspect_bad_word_reward(sk3, prompt, prompt_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-                        #     final_twist, args.output_len, args.n_policy_samples, experiment_cfg.batch_rm)
-                        # adv_rewards.append(adv_reward)
-                        # p_rewards.append(p_reward)
-                        #
-                        # print_bad_word_env_generations(sk2, prompt, cfg_p,
-                        #                                params_p, prompt_len, args.output_len,
-                        #                                args.n_bad_word_samples)
-                        # if experiment_cfg.rl_loss_type == "custom":
-                        #     print("SMC ADVERSARIAL GENERATIONS")
-                        #     rng_key, sk1 = jax.random.split(rng_key)
-                        #     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
-                        #         sk1, prompt, trainstate_p, params_of_trainstate_p,cfg_twist,
-                        #         params_twist, final_twist, args.output_len, args.n_twist,
-                        #         analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
-                        #     for sample in prompt_w_sigma_sample_s_1_to_t[:args.n_bad_word_samples]:
-                        #         token_sample = indices_to_tokens(
-                        #             ordered_token_list, sample)
-                        #         print(token_sample[prompt_len:])
+                        raise NotImplementedError # TODO IMPLEMENT or rather just move around the testing/inspection code I made. Or move this up to there/
+
 
                     else:
                         print_samples_using_twists(sk, prompt, prompt_len, args.n_vocab,
@@ -2878,48 +2855,6 @@ if __name__ == "__main__":
     parser.add_argument("--beta_ent", type=float,
                         help="beta used for entropy regularization; similar to KL but on distr from p (the model) instead of p_0 (the reference/original model)",
                         default=0.)
-
-    # Initialize the model params
-    # IN THE ORIGINAL TRANSFORMER PAPER d_k = d_v = d_model / n_heads
-    parser.add_argument("--n_heads", default=4, type=int,
-                        help="Number of attention heads")
-    parser.add_argument("--d_model", default=64, type=int,
-                        help="Embedding dimension")
-    parser.add_argument("--d_k", type=int, default=16,
-                        help="Attention head dimension for Q and K")
-    parser.add_argument("--d_v", type=int, default=16,
-                        help="Attention head dimension for V")
-    parser.add_argument("--d_fc", type=int, default=64,
-                        help="Feedforward layer dimension")
-    parser.add_argument("--n_layers", type=int, default=2,
-                        help="Number of layers")
-
-    parser.add_argument("--n_heads_twist", type=int, default=4,
-                        help="Number of attention heads")
-    parser.add_argument("--d_model_twist", type=int, default=64,
-                        help="Embedding dimension")
-    parser.add_argument("--d_k_twist", type=int, default=16,
-                        help="Attention head dimension for Q and K")
-    parser.add_argument("--d_v_twist", type=int, default=16,
-                        help="Attention head dimension for V")
-    parser.add_argument("--d_fc_twist", type=int, default=64,
-                        help="Feedforward layer dimension")
-    parser.add_argument("--n_layers_twist", type=int, default=2,
-                        help="Number of layers")
-
-    # TODO should the baseline be a separate model, or should it just be the same model with a different head?
-    parser.add_argument("--n_heads_baseline", type=int, default=4,
-                        help="Number of attention heads")
-    parser.add_argument("--d_model_baseline", type=int, default=64,
-                        help="Embedding dimension")
-    parser.add_argument("--d_k_baseline", type=int, default=16,
-                        help="Attention head dimension for Q and K for baseline model")
-    parser.add_argument("--d_v_baseline", type=int, default=16,
-                        help="Attention head dimension for V")
-    parser.add_argument("--d_fc_baseline", type=int, default=64,
-                        help="Feedforward layer dimension")
-    parser.add_argument("--n_layers_baseline", type=int, default=2,
-                        help="Number of layers")
 
     parser.add_argument("--output_len", type=int, default=2,
                         help="Length of the strings we output")
