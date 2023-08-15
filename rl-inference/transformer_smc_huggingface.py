@@ -183,37 +183,30 @@ class ExperimentConfig:
             return new_trainstate_p, new_trainstate_baseline
 
         elif self.rl_loss_type == "ppo":
-            raise NotImplementedError # TODO IMPLEMENT
-            # sk, sk2 = jax.random.split(sk)
-            # (grad_params_p, grad_params_baseline), ref_log_p = \
-            #     self.rl_loss_fn(sk2, prompt, trainstate_p, params_of_trainstate_p, prompt_len, output_len, n_samples, self.batch_rm, trainstate_baseline, params_of_trainstate_baseline,
-            #                     self.clip_epsilon, self.gamma, self.gae_lambda, old_log_p=None, first_iter=True)
-            #
-            # params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(optimizer_p,
-            #                                                grad_params_p,
-            #                                                optim_p_state,
-            #                                                params_p,
-            #                                                optimizer_baseline,
-            #                                                grad_params_baseline,
-            #                                                optim_baseline_state,
-            #                                                params_baseline,
-            #                                                 )
-            #
-            # carry = (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state)
-            #
-            # carry, _ = jax.lax.scan(partial(self.ppo_scan_iter, cfg_p=cfg_p, cfg_baseline=cfg_baseline,
-            #                                 ref_log_p=ref_log_p, optimizer_p=optimizer_p,
-            #                                 optimizer_baseline=optimizer_baseline, n_samples=n_samples, prompt_len=prompt_len, output_len=output_len),
-            #                         carry, None, self.ppo_steps - 1 )
-            # (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state) = carry
-            #
-            # return params_p, optim_p_state, params_baseline, optim_baseline_state
+            # raise NotImplementedError # TODO IMPLEMENT
+            sk, sk2 = jax.random.split(sk)
+
+            (grad_params_p, grad_params_baseline), ref_log_p = \
+                self.rl_loss_fn(sk2, prompt, trainstate_p, params_of_trainstate_p, prompt_len, output_len, n_samples, self.batch_rm,
+                                trainstate_baseline, params_of_trainstate_baseline,
+                                self.clip_epsilon, self.gamma, self.gae_lambda, old_log_p=None, first_iter=True)
+
+            new_trainstate_p = trainstate_p.apply_gradients(grads=grad_params_p)
+            new_trainstate_baseline = trainstate_baseline.apply_gradients(grads=grad_params_baseline)
+
+            carry = (sk, prompt, new_trainstate_p, new_trainstate_p.params, new_trainstate_baseline, new_trainstate_baseline.params)
+
+            carry, _ = jax.lax.scan(partial(self.ppo_scan_iter, ref_log_p=ref_log_p, n_samples=n_samples, prompt_len=prompt_len, output_len=output_len),
+                                    carry, None, self.ppo_steps - 1 )
+            (sk, prompt, new_trainstate_p, _, new_trainstate_baseline, _) = carry
+
+            return new_trainstate_p, new_trainstate_baseline
 
         else:
             raise NotImplementedError
 
-    def ppo_scan_iter(self, carry, unused, cfg_p, cfg_baseline, ref_log_p, optimizer_p, optimizer_baseline, n_samples, prompt_len, output_len):
-        (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state) = carry
+    def ppo_scan_iter(self, carry, unused, ref_log_p, n_samples, prompt_len, output_len):
+        (sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_baseline, params_of_trainstate_baseline) = carry
         sk, sk2 = jax.random.split(sk)
         (grad_params_p, grad_params_baseline), _ = \
             self.rl_loss_fn(sk2, prompt, trainstate_p, params_of_trainstate_p, prompt_len,
@@ -222,18 +215,11 @@ class ExperimentConfig:
                             self.clip_epsilon, self.gamma,
                             self.gae_lambda, old_log_p=ref_log_p,
                             first_iter=False)
-        params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(
-            optimizer_p,
-            grad_params_p,
-            optim_p_state,
-            params_p,
-            optimizer_baseline,
-            grad_params_baseline,
-            optim_baseline_state,
-            params_baseline,
-        )
+        new_trainstate_p = trainstate_p.apply_gradients(grads=grad_params_p)
+        new_trainstate_baseline = trainstate_baseline.apply_gradients(
+            grads=grad_params_baseline)
 
-        carry = (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state)
+        carry = (sk, prompt, new_trainstate_p, new_trainstate_p.params, new_trainstate_baseline, new_trainstate_baseline.params)
 
         return carry, None
 
@@ -1626,17 +1612,17 @@ def get_gae_advantages(rewards, values, next_val_history, gamma, gae_lambda):
     return advantages
 
 
-# TODO Jul 13 JIT? Same for RL loss. Or the whole outer training loop perhaps
+# Jit is done on the whole outer training loop
 def ppo_and_value_loss(sk, prompt, trainstate_p, params_of_trainstate_p, prompt_len, output_len, n_samples, rew_model, trainstate_baseline, params_of_trainstate_baseline, clip_epsilon, gamma, gae_lambda, old_log_p=None, first_iter=False):
 
-    sk, dropout_rng = jax.random.split(sk)
+    sk, dropout_rng, dropout_rng_b = jax.random.split(sk, 3)
     if not first_iter:
         assert old_log_p is not None
 
-    seq = stochastic_transformer_sample(sk, trainstate_p, params_of_trainstate_p, prompt, output_len, n_samples)
+    seq = stochastic_transformer_sample(sk, trainstate_p, prompt, output_len, n_samples)
 
     curr_log_p = evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p, prompt_len,
-                                    output_len, output_log_p_for_each_t=True)
+                                    output_len, dropout_rng=dropout_rng, output_log_p_for_each_t=True)
 
     # print(curr_log_p.shape) # should be batch, output_len
 
@@ -1656,7 +1642,7 @@ def ppo_and_value_loss(sk, prompt, trainstate_p, params_of_trainstate_p, prompt_
     # values_incl_prompt = batch_transformer(trainstate_baseline, params_of_trainstate_baseline, seq).squeeze()
     values_incl_prompt = trainstate_baseline.apply_fn(input_ids=seq,
                                                       params=params_of_trainstate_baseline,
-                                                      train=True, dropout_rng=dropout_rng).squeeze()
+                                                      train=True, dropout_rng=dropout_rng_b).squeeze()
     # print(values_incl_prompt.shape) # should be (batch, seq_len)
     # print(jax.lax.stop_gradient(values_incl_prompt))
 
@@ -2828,7 +2814,7 @@ if __name__ == "__main__":
     parser.add_argument("--dre_type", type=str, default="roger", choices=["roger", "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=1)
 
     parser.add_argument("--twist_updates_per_epoch", type=int, default=100)
     parser.add_argument("--model_updates_per_epoch", type=int, default=100)
