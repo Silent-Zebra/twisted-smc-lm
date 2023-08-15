@@ -718,8 +718,10 @@ def evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p, promp
         # log_p += evaluate_log_p_theta_t(seq[:, :prompt_len + t + 1], trainstate_p, params_of_trainstate_p)
 
     # seq has shape (batch, seq_len) (NOTE: seq_len includes prompt_len + output_len)
-    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=False)
-    # output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    if args.use_dropout:
+        output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    else:
+        output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=False)
     log_p_all_tokens = jax.nn.log_softmax(output_unnormalized_batch, axis=-1)
     # log_p_all_tokens has shape (batch, seq_len, n_vocab)
 
@@ -755,8 +757,12 @@ def evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p, promp
 def evaluate_log_p_theta_t(seq, trainstate_p, params_of_trainstate_p, dropout_rng):
     # Takes in batches of sequences s_{1:t}
     # Evaluate log p_theta(s_t|s_{1:t-1}) - VERY IMPORTANT - THIS ONLY EVALUATES for s_t, not for the full sequence from 1 to t
-    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=False)
-    # output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    if args.use_dropout:
+        output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    else:
+        output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq,
+                                                          params=params_of_trainstate_p,
+                                                          train=False)
 
     # First axis is batch, last is n_vocab
     # We take [-2] index because this is the log prob of s_t (the last token in the current sequence (not including the next predicted token))
@@ -774,8 +780,10 @@ def evaluate_log_p_theta_t_full_seq(full_seq, trainstate_p, params_of_trainstate
     # Then if we want e.g. the first time step, e.g. t=0, then say prompt_len is 4, then prompt_len_plus_t = 4
     # and we want to evaluate the probability of the tokens outputted at the first time step, then what we need are the indices of the tokens
     # from index 4 (0 based indexing), so we need prompt_len_plus_t.
-    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=False)
-    # output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    if args.use_dropout:
+        output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    else:
+        output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=False)
     token_indices = full_seq[:, prompt_len_plus_t]
     # Then finally prompt_len_plus_t-1 is needed because we need to get the logits from the time step before the tokens we have generated
     # (as those were the probabilities for each of the possible words in the vocabulary)
@@ -785,12 +793,14 @@ def evaluate_log_p_theta_t_full_seq(full_seq, trainstate_p, params_of_trainstate
 def evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist, prompt_len_plus_t, dropout_rng):
     # see def evaluate_log_psi_t for more comments/detail
     # Similar also to evaluate_log_p_theta_t_full_seq, except adapting evaluate_log_psi_t instead of adapting evaluate_log_p_theta_t
-    output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
-                                                      params=params_of_trainstate_twist,
-                                                      train=False)
-    # output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
-    #                                                   params=params_of_trainstate_twist,
-    #                                                   train=True, dropout_rng=dropout_rng)
+    if args.use_dropout:
+        output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
+                                                          params=params_of_trainstate_twist,
+                                                          train=True, dropout_rng=dropout_rng)
+    else:
+        output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
+                                                     params=params_of_trainstate_twist,
+                                                     train=False)
     token_indices = full_seq[:, prompt_len_plus_t]
     return output_psi_batch[:, prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
 
@@ -1296,8 +1306,10 @@ def rl_loss(sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, 
     # print(prompt.shape)
 
     # baseline = transformer(trainstate_baseline, params_of_trainstate_baseline, prompt)[-1].squeeze()
-    # baseline = trainstate_baseline.apply_fn(input_ids=prompt.reshape(1, -1), params=params_of_trainstate_baseline, train=True, dropout_rng=dropout_rng_b).squeeze()[-1]
-    baseline = trainstate_baseline.apply_fn(input_ids=prompt.reshape(1, -1), params=params_of_trainstate_baseline, train=False).squeeze()[-1]
+    if args.use_dropout:
+        baseline = trainstate_baseline.apply_fn(input_ids=prompt.reshape(1, -1), params=params_of_trainstate_baseline, train=True, dropout_rng=dropout_rng_b).squeeze()[-1]
+    else:
+        baseline = trainstate_baseline.apply_fn(input_ids=prompt.reshape(1, -1), params=params_of_trainstate_baseline, train=False).squeeze()[-1]
     baseline_no_grad = jax.lax.stop_gradient(baseline)
     print(baseline.shape)
     # print("Baseline value (Custom)")
@@ -1646,12 +1658,15 @@ def ppo_and_value_loss(sk, prompt, trainstate_p, params_of_trainstate_p, prompt_
     # This assumes the same model arch for the baseline as in our derivation (since using trainstate_baseline, params_of_trainstate_baseline, batch_transformer, and squeeze),
     # which should be ok. Just the method of training the model is different
     # values_incl_prompt = batch_transformer(trainstate_baseline, params_of_trainstate_baseline, seq).squeeze()
-    values_incl_prompt = trainstate_baseline.apply_fn(input_ids=seq,
+    if args.use_dropout:
+        values_incl_prompt = trainstate_baseline.apply_fn(input_ids=seq,
+                                                          params=params_of_trainstate_baseline,
+                                                          train=True,
+                                                          dropout_rng=dropout_rng_b).squeeze()  # Use train=True if you want dropout. Based on my reading of their code, dropout is the only thing affected by train=True (it's even called "deterministic" in other parts of the code (and negated))
+    else:
+        values_incl_prompt = trainstate_baseline.apply_fn(input_ids=seq,
                                                       params=params_of_trainstate_baseline,
                                                       train=False).squeeze()
-    # values_incl_prompt = trainstate_baseline.apply_fn(input_ids=seq,
-    #                                                   params=params_of_trainstate_baseline,
-    #                                                   train=True, dropout_rng=dropout_rng_b).squeeze()
     # print(values_incl_prompt.shape) # should be (batch, seq_len)
     # print(jax.lax.stop_gradient(values_incl_prompt))
 
@@ -2392,7 +2407,7 @@ def test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twis
     print(text_outputs)
 
 
-def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
+def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p, batch_size=512):
     # ASSUMES OUTPUT LEN 2 RIGHT NOW
     # Calculates the probability of bad words, for each bad word in bad_word_indices
     # Provides the probability values for sequences that only contain the bad word in the first position (the first token after the prompt)
@@ -2431,8 +2446,6 @@ def calc_analytic_bad_word_probs(rng_key, n_vocab, prompt, trainstate_p):
     # print(full_seq.shape)
 
     p_bad_tokens_t_1_but_not_t_0 = jnp.zeros((n_bad_words,))
-
-    batch_size = 2048
 
     # Break up evaluation into batches to avoid running out of memory
     for i in range(n_vocab // batch_size + 1):
@@ -2840,7 +2853,8 @@ if __name__ == "__main__":
     # parser.add_argument("--ckpt_every", type=int, default=50, help="Epochs between checkpoint save")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints")
 
-    parser.add_argument("--analytic_sigma_sample", action="store_true", help="Use analytic sigma sampling. Do not use together with twist learning.")
+    # parser.add_argument("--analytic_sigma_sample", action="store_true", help="Use analytic sigma sampling. Do not use together with twist learning.")
+    parser.add_argument("--use_dropout", action="store_true", help="Use dropout")
 
     args = parser.parse_args()
 
