@@ -2858,8 +2858,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.analytic_sigma_sample:
-        assert args.twist_updates_per_epoch == 0
+    # if args.analytic_sigma_sample:
+    #     assert args.twist_updates_per_epoch == 0
 
     if args.anneal_beta_temp:
         assert args.beta_temp != args.beta_temp_final
