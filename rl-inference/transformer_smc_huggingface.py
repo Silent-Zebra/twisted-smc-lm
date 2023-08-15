@@ -183,7 +183,6 @@ class ExperimentConfig:
             return new_trainstate_p, new_trainstate_baseline
 
         elif self.rl_loss_type == "ppo":
-            # raise NotImplementedError # TODO IMPLEMENT
             sk, sk2 = jax.random.split(sk)
 
             (grad_params_p, grad_params_baseline), ref_log_p = \
@@ -2838,5 +2837,7 @@ if __name__ == "__main__":
     if args.anneal_beta_temp:
         assert args.beta_temp != args.beta_temp_final
 
+    if args.rl_loss_type == "ppo":
+        assert args.twist_updates_per_epoch == 0 # Because twists are not being used in the current formulation of the PPO RL loss - it's just standard RL sampling + PPO.
 
     main()
