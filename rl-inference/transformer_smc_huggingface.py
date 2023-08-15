@@ -718,7 +718,8 @@ def evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p, promp
         # log_p += evaluate_log_p_theta_t(seq[:, :prompt_len + t + 1], trainstate_p, params_of_trainstate_p)
 
     # seq has shape (batch, seq_len) (NOTE: seq_len includes prompt_len + output_len)
-    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=False)
+    # output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
     log_p_all_tokens = jax.nn.log_softmax(output_unnormalized_batch, axis=-1)
     # log_p_all_tokens has shape (batch, seq_len, n_vocab)
 
@@ -754,7 +755,8 @@ def evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p, promp
 def evaluate_log_p_theta_t(seq, trainstate_p, params_of_trainstate_p, dropout_rng):
     # Takes in batches of sequences s_{1:t}
     # Evaluate log p_theta(s_t|s_{1:t-1}) - VERY IMPORTANT - THIS ONLY EVALUATES for s_t, not for the full sequence from 1 to t
-    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=False)
+    # output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
 
     # First axis is batch, last is n_vocab
     # We take [-2] index because this is the log prob of s_t (the last token in the current sequence (not including the next predicted token))
@@ -772,7 +774,8 @@ def evaluate_log_p_theta_t_full_seq(full_seq, trainstate_p, params_of_trainstate
     # Then if we want e.g. the first time step, e.g. t=0, then say prompt_len is 4, then prompt_len_plus_t = 4
     # and we want to evaluate the probability of the tokens outputted at the first time step, then what we need are the indices of the tokens
     # from index 4 (0 based indexing), so we need prompt_len_plus_t.
-    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
+    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=False)
+    # output_unnormalized_batch = trainstate_p.apply_fn(input_ids=full_seq, params=params_of_trainstate_p, train=True, dropout_rng=dropout_rng)
     token_indices = full_seq[:, prompt_len_plus_t]
     # Then finally prompt_len_plus_t-1 is needed because we need to get the logits from the time step before the tokens we have generated
     # (as those were the probabilities for each of the possible words in the vocabulary)
@@ -784,7 +787,10 @@ def evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate
     # Similar also to evaluate_log_p_theta_t_full_seq, except adapting evaluate_log_psi_t instead of adapting evaluate_log_p_theta_t
     output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
                                                       params=params_of_trainstate_twist,
-                                                      train=True, dropout_rng=dropout_rng)
+                                                      train=False)
+    # output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
+    #                                                   params=params_of_trainstate_twist,
+    #                                                   train=True, dropout_rng=dropout_rng)
     token_indices = full_seq[:, prompt_len_plus_t]
     return output_psi_batch[:, prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
 
@@ -1290,7 +1296,8 @@ def rl_loss(sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, 
     # print(prompt.shape)
 
     # baseline = transformer(trainstate_baseline, params_of_trainstate_baseline, prompt)[-1].squeeze()
-    baseline = trainstate_baseline.apply_fn(input_ids=prompt.reshape(1, -1), params=params_of_trainstate_baseline, train=True, dropout_rng=dropout_rng_b).squeeze()[-1]
+    # baseline = trainstate_baseline.apply_fn(input_ids=prompt.reshape(1, -1), params=params_of_trainstate_baseline, train=True, dropout_rng=dropout_rng_b).squeeze()[-1]
+    baseline = trainstate_baseline.apply_fn(input_ids=prompt.reshape(1, -1), params=params_of_trainstate_baseline, train=False).squeeze()[-1]
     baseline_no_grad = jax.lax.stop_gradient(baseline)
     print(baseline.shape)
     # print("Baseline value (Custom)")
@@ -1641,7 +1648,10 @@ def ppo_and_value_loss(sk, prompt, trainstate_p, params_of_trainstate_p, prompt_
     # values_incl_prompt = batch_transformer(trainstate_baseline, params_of_trainstate_baseline, seq).squeeze()
     values_incl_prompt = trainstate_baseline.apply_fn(input_ids=seq,
                                                       params=params_of_trainstate_baseline,
-                                                      train=True, dropout_rng=dropout_rng_b).squeeze()
+                                                      train=False).squeeze()
+    # values_incl_prompt = trainstate_baseline.apply_fn(input_ids=seq,
+    #                                                   params=params_of_trainstate_baseline,
+    #                                                   train=True, dropout_rng=dropout_rng_b).squeeze()
     # print(values_incl_prompt.shape) # should be (batch, seq_len)
     # print(jax.lax.stop_gradient(values_incl_prompt))
 
@@ -2613,6 +2623,9 @@ def main():
     tokenizer.pad_token = tokenizer.eos_token
     # model_lm = FlaxAutoModelForCausalLM.from_pretrained(model_config)
     model_lm = CustomLMHeadModel(model_config)
+
+    print(model_lm.huggingface_model.module)
+    1/0
 
     rng_key, sk_twist, sk_baseline = jax.random.split(rng_key, 3)
     model_twist = CustomLM(rng_key, model_config, d_model=768, output_size=args.n_vocab)
