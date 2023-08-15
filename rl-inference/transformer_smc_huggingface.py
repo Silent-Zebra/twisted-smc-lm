@@ -52,24 +52,25 @@ def kl_div_jax_sum_last_axis(log_p, log_q):
 #     kl_term = kl_div_jax_full_dist_over_tokens(log_p_target, log_p_curr)
 #     return kl_term
 
-# This, in expectation with p_seqs drawn from the model p, will give you the KL divergence D_KL(p || p_0)
-def calculate_kl_term(p0_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len):
-    log_p_theta_s = evaluate_log_p_theta_1_to_t(p0_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
-    kl_term = - log_p_theta_s # has shape (batch, )
-    return kl_term.mean() # empirical estimate of expectation
-
-def calculate_rev_kl_term(p_seqs, trainstate_p, params_of_trainstate_p,trainstate_p_0, params_of_trainstate_p_0, prompt_len, output_len):
-    log_p_theta_s = evaluate_log_p_theta_1_to_t(p_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
-    log_p_theta_0_s = evaluate_log_p_theta_1_to_t(p_seqs, trainstate_p_0, params_of_trainstate_p_0, prompt_len, output_len)
-    kl_term = log_p_theta_s - log_p_theta_0_s # has shape (batch, )
-    return kl_term.mean() # empirical estimate of expectation
-
-def calculate_entropy_gradient_term(seqs_p, trainstate_p, params_of_trainstate_p, prompt_len, output_len):
-    # See writeup for derivation
-    log_p_theta_s = evaluate_log_p_theta_1_to_t(seqs_p, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
-    ent_term = - log_p_theta_s * (jax.lax.stop_gradient(log_p_theta_s) + 1.)
-    ent_term = ent_term.mean()
-    return ent_term
+# # TODO AUG 14 CHECK THAT THESE FUNCTIONS BELOW WORK AS INTENDED
+# # This, in expectation with p_seqs drawn from the model p, will give you the KL divergence D_KL(p || p_0)
+# def calculate_kl_term(p0_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len):
+#     log_p_theta_s = evaluate_log_p_theta_1_to_t(p0_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
+#     kl_term = - log_p_theta_s # has shape (batch, )
+#     return kl_term.mean() # empirical estimate of expectation
+#
+# def calculate_rev_kl_term(p_seqs, trainstate_p, params_of_trainstate_p,trainstate_p_0, params_of_trainstate_p_0, prompt_len, output_len):
+#     log_p_theta_s = evaluate_log_p_theta_1_to_t(p_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
+#     log_p_theta_0_s = evaluate_log_p_theta_1_to_t(p_seqs, trainstate_p_0, params_of_trainstate_p_0, prompt_len, output_len)
+#     kl_term = log_p_theta_s - log_p_theta_0_s # has shape (batch, )
+#     return kl_term.mean() # empirical estimate of expectation
+#
+# def calculate_entropy_gradient_term(seqs_p, trainstate_p, params_of_trainstate_p, prompt_len, output_len):
+#     # See writeup for derivation
+#     log_p_theta_s = evaluate_log_p_theta_1_to_t(seqs_p, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
+#     ent_term = - log_p_theta_s * (jax.lax.stop_gradient(log_p_theta_s) + 1.)
+#     ent_term = ent_term.mean()
+#     return ent_term
 
 def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p,
                        optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline):
@@ -156,16 +157,10 @@ class ExperimentConfig:
         return grad_params_twist
 
 
-    @partial(jax.jit, static_argnames=["self", "final_twist", "final_twist_pos", 'output_len', 'n_samples', "prompt_len",  "optimizer_p", "optimizer_baseline" ])
-    # TODO Jul 13: After finishing, when doing a commit, look at all the diffs, and go over each line to make sure it makes sense and that there are no typos.
-    # TODO JUL 13 FIRST TEST, FIX, THEN DO THE ABOVE
-    # TODO Jul 13 Check that everything else is working, including each of the print statements, document all of the shapes, check they all match, etc.
-    # TODO WRITE SOME UNIT TESTS FOR PPO: check that the baseline/value function learns something reasonable. Check that the policy learns something reasonable too.
+    @partial(jax.jit, static_argnames=["self", "final_twist", 'output_len', 'n_samples', "prompt_len" ])
     def update_params_p_and_baseline(self, sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
                                      final_twist, output_len, n_samples, prompt_len,
-                                     trainstate_baseline, params_of_trainstate_baseline, trainstate_p_0, params_of_trainstate_p_0,
-                                     optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state,
-                                     cfg_twist_pos=None, params_twist_pos=None, final_twist_pos=None,
+                                     trainstate_baseline, params_of_trainstate_baseline, trainstate_p_0, params_of_trainstate_p_0
                                      ):
         if self.rl_loss_type == "custom":
 
@@ -180,49 +175,39 @@ class ExperimentConfig:
                                                            trainstate_p_0, params_of_trainstate_p_0,
                                                            self.beta_kl,
                                                                   self.beta_ent)
-            # grad_params_p, grad_params_baseline = self.get_grad_params_p_and_baseline(
-            #     sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-            #     final_twist, rew_model, output_len, n_twist, prompt_len,
-            #     trainstate_baseline, params_of_trainstate_baseline, trainstate_p_0, params_of_trainstate_p_0, beta_kl)
 
-            # updates_p, optim_p_state = optimizer_p.update(
-            #     grad_params_p, optim_p_state, params_p)
-            # params_p = optax.apply_updates(params_p, updates_p)
-            #
-            # updates_baseline, optim_baseline_state = optimizer_baseline.update(
-            #     grad_params_baseline, optim_baseline_state, params_baseline)
-            # params_baseline = optax.apply_updates(params_baseline, updates_baseline)
+            new_trainstate_p = trainstate_p.apply_gradients(grads=grad_params_p)
 
-            params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p,
-                       optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline)
+            new_trainstate_baseline = trainstate_baseline.apply_gradients(grads=grad_params_baseline)
 
-            return params_p, optim_p_state, params_baseline, optim_baseline_state
+            return new_trainstate_p, new_trainstate_baseline
 
         elif self.rl_loss_type == "ppo":
-            sk, sk2 = jax.random.split(sk)
-            (grad_params_p, grad_params_baseline), ref_log_p = \
-                self.rl_loss_fn(sk2, prompt, trainstate_p, params_of_trainstate_p, prompt_len, output_len, n_samples, self.batch_rm, trainstate_baseline, params_of_trainstate_baseline,
-                                self.clip_epsilon, self.gamma, self.gae_lambda, old_log_p=None, first_iter=True)
-
-            params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(optimizer_p,
-                                                           grad_params_p,
-                                                           optim_p_state,
-                                                           params_p,
-                                                           optimizer_baseline,
-                                                           grad_params_baseline,
-                                                           optim_baseline_state,
-                                                           params_baseline,
-                                                            )
-
-            carry = (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state)
-
-            carry, _ = jax.lax.scan(partial(self.ppo_scan_iter, cfg_p=cfg_p, cfg_baseline=cfg_baseline,
-                                            ref_log_p=ref_log_p, optimizer_p=optimizer_p,
-                                            optimizer_baseline=optimizer_baseline, n_samples=n_samples, prompt_len=prompt_len, output_len=output_len),
-                                    carry, None, self.ppo_steps - 1 )
-            (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state) = carry
-
-            return params_p, optim_p_state, params_baseline, optim_baseline_state
+            raise NotImplementedError # TODO IMPLEMENT
+            # sk, sk2 = jax.random.split(sk)
+            # (grad_params_p, grad_params_baseline), ref_log_p = \
+            #     self.rl_loss_fn(sk2, prompt, trainstate_p, params_of_trainstate_p, prompt_len, output_len, n_samples, self.batch_rm, trainstate_baseline, params_of_trainstate_baseline,
+            #                     self.clip_epsilon, self.gamma, self.gae_lambda, old_log_p=None, first_iter=True)
+            #
+            # params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(optimizer_p,
+            #                                                grad_params_p,
+            #                                                optim_p_state,
+            #                                                params_p,
+            #                                                optimizer_baseline,
+            #                                                grad_params_baseline,
+            #                                                optim_baseline_state,
+            #                                                params_baseline,
+            #                                                 )
+            #
+            # carry = (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state)
+            #
+            # carry, _ = jax.lax.scan(partial(self.ppo_scan_iter, cfg_p=cfg_p, cfg_baseline=cfg_baseline,
+            #                                 ref_log_p=ref_log_p, optimizer_p=optimizer_p,
+            #                                 optimizer_baseline=optimizer_baseline, n_samples=n_samples, prompt_len=prompt_len, output_len=output_len),
+            #                         carry, None, self.ppo_steps - 1 )
+            # (sk, prompt, params_p, params_baseline, optim_p_state, optim_baseline_state) = carry
+            #
+            # return params_p, optim_p_state, params_baseline, optim_baseline_state
 
         else:
             raise NotImplementedError
@@ -1271,12 +1256,12 @@ def get_l_dre_roger_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, t
 
     l_dre = 0.
 
-    _, final_twist_samples, intermediate_twist_samples_hist = smc_jit(rng_key, prompt,
+    _, _, intermediate_twist_samples_hist = smc_jit(rng_key, prompt,
                              trainstate_p, params_of_trainstate_p,
                              trainstate_twist, params_of_trainstate_twist,
                              final_twist,
                              output_len,
-                             n_twist, use_final_twist=False, intermediate_sample_history=True)
+                             n_twist, use_final_twist=False, intermediate_sample_history=True) # I think the use_final_twist=False doesn't even matter here since I'm only using the intermediate sample history...
 
     scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len - 1))
 
@@ -1295,15 +1280,14 @@ def rl_loss(sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, 
                 rew_model, output_len, n_samples, prompt_len, trainstate_baseline, params_of_trainstate_baseline,
                 trainstate_p_0, params_of_trainstate_p_0, beta_kl, beta_ent):
 
-    sk, sk2, sk3 = jax.random.split(sk, 3)
+    sk, sk2, sk3, dropout_rng, dropout_rng_b = jax.random.split(sk, 5)
 
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                     trainstate_p, params_of_trainstate_p,
                                                     trainstate_twist, params_of_trainstate_twist,
                                                     final_twist,
                                                     output_len,
-                                                    n_samples,
-                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
+                                                    n_samples)
 
     # r_seqs = evaluate_log_phi_final(prompt_w_sigma_sample_s_1_to_t,
     #                                   rew_model)
@@ -1314,12 +1298,16 @@ def rl_loss(sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, 
 
     log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
         prompt_w_sigma_sample_s_1_to_t, trainstate_p, params_of_trainstate_p, prompt_len,
-        output_len)
+        output_len, dropout_rng)
 
     # print(log_p_theta_full_seq)
 
-    baseline = transformer(trainstate_baseline, params_of_trainstate_baseline, prompt)[-1].squeeze()
+    # print(prompt.shape)
+
+    # baseline = transformer(trainstate_baseline, params_of_trainstate_baseline, prompt)[-1].squeeze()
+    baseline = trainstate_baseline.apply_fn(input_ids=prompt.reshape(1, -1), params=params_of_trainstate_baseline, train=True, dropout_rng=dropout_rng_b).squeeze()[-1]
     baseline_no_grad = jax.lax.stop_gradient(baseline)
+    print(baseline.shape)
     # print("Baseline value (Custom)")
     # print(jax.lax.stop_gradient(baseline))
 
@@ -1329,16 +1317,22 @@ def rl_loss(sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, 
 
     objective = first_term - second_term
 
-    model_seqs = stochastic_transformer_sample(sk2, trainstate_p, params_of_trainstate_p, prompt, output_len, n_samples)
-    p_0_seqs = stochastic_transformer_sample(sk3, trainstate_p_0, params_of_trainstate_p_0, prompt, output_len, n_samples)
-    kl_term = calculate_kl_term(p_0_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
-    ent_term = calculate_entropy_gradient_term(model_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
-    loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
+    # model_seqs = stochastic_transformer_sample(sk2, trainstate_p, prompt, output_len, n_samples)
+    # p_0_seqs = stochastic_transformer_sample(sk3, trainstate_p_0, prompt, output_len, n_samples)
+    # kl_term = calculate_kl_term(p_0_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
+    # ent_term = calculate_entropy_gradient_term(model_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
+    loss = -objective # TODO UPDATE THIS: + beta_kl * kl_term #- beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
 
     # Baseline term; use empirical mean of r_seqs drawn from sigma, to approximate E_sigma[r(s)]
     # Then MSE loss: (baseline - r_seqs.mean()) ^ 2
     # This term is only used for training the baseline
     baseline_loss = (baseline - r_seqs.mean()) ** 2
+
+    # print(prompt_w_sigma_sample_s_1_to_t.shape)
+    # print(r_seqs.shape)
+    # print(r_seqs)
+
+
     return loss + baseline_loss
 
 
@@ -2619,6 +2613,7 @@ def compare_smc_samples_vs_analytic_for_output_len_2(rng_key, prompt,
     print("For bad words anywhere")
     print(sigma_samples_bad_word_by_word - sigma_vals_bad_by_word)
 
+    return total_prob_bad_by_word.sum()
 
 
 def main():
@@ -2660,7 +2655,7 @@ def main():
 
     optim_baseline = optax.adamw(learning_rate=args.lr_baseline, b1=args.beta1,
                         b2=args.beta2, eps=eps, weight_decay=weight_decay)
-    trainstate_baseline = train_state.TrainState.create(apply_fn=model_twist.__call__,
+    trainstate_baseline = train_state.TrainState.create(apply_fn=model_baseline.__call__,
                                           params=model_baseline.huggingface_model.params, tx=optim_baseline)
 
     trainstate_p_0 = flax.jax_utils.replicate(trainstate_p)
@@ -2692,10 +2687,7 @@ def main():
 
     final_twists = build_final_twists(jnp_prompts, curr_beta_temp, experiment_cfg.rm_fn)
 
-    adv_rewards = []
-    p_rewards = []
-    indist_probs = {"bad":[], "good":[], "evasive":[]}
-    ood_probs = {"bad":[], "good":[], "evasive":[]}
+    prob_bad_word_list = []
 
     for epoch in range(args.epochs):
 
@@ -2721,10 +2713,9 @@ def main():
             for twist_update in range(args.twist_updates_per_epoch):
 
                 print(f"TWIST UPDATE {twist_update}", flush=True)
+                print(f"TIME: {time.time() - start}", flush=True)
 
                 rng_key, sk, sk2 = jax.random.split(rng_key, 3)
-
-                print(f"TIME0: {time.time() - start}", flush=True)
 
                 grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params, final_twist)
                 trainstate_twist = trainstate_twist.apply_gradients(grads=grad_params_twist)
@@ -2740,21 +2731,17 @@ def main():
 
             print(f"Time after twist updates: {time.time() - start}", flush=True)
 
-            assert args.model_updates_per_epoch == 0 # TODO REMOVE LATER ONCE THE TWIST STUFF IS WORKING WELL
-
             for model_update in range(args.model_updates_per_epoch):
                 print(f"MODEL UPDATE {model_update}", flush=True)
+                print(f"TIME: {time.time() - start}", flush=True)
 
                 rng_key, sk, sk2 = jax.random.split(rng_key, 3)
 
-                # params_p, optim_p_state, params_baseline, optim_baseline_state = \
-                #     experiment_cfg.update_params_p_and_baseline(sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-                #                      final_twist, args.output_len, args.n_policy_samples, prompt_len,
-                #                      trainstate_baseline, params_of_trainstate_baseline, trainstate_p_0, params_of_trainstate_p_0,
-                #                     optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state)
-
-
-
+                trainstate_p, trainstate_baseline = experiment_cfg.update_params_p_and_baseline(
+                    sk, prompt, trainstate_p, trainstate_p.params, trainstate_twist, trainstate_twist.params,
+                                     final_twist, args.output_len, args.n_policy_samples, prompt_len,
+                                     trainstate_baseline, trainstate_baseline.params, trainstate_p_0, trainstate_p_0.params
+                                     )
 
             # We should also be seeing this distribution change, with model updates (even without twist updates)
             test_info = True
@@ -2763,25 +2750,22 @@ def main():
                     rng_key, sk, sk2, sk3 = jax.random.split(rng_key, 4)
 
                     test_smc_samples(sk, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
-                    compare_smc_samples_vs_analytic_for_output_len_2(sk2, prompt, trainstate_p, trainstate_twist, final_twist)
+                    total_prob_bad_word = compare_smc_samples_vs_analytic_for_output_len_2(sk2, prompt, trainstate_p, trainstate_twist, final_twist)
+                    prob_bad_word_list.append(total_prob_bad_word)
 
             i += 1
 
         # if (epoch + 1) % args.ckpt_every == 0:
         if args.anneal_beta_temp and ((epoch + 1) % increment_beta_every == 0):
             curr_beta_temp += beta_increment
-            print(f"Incrementing Beta: New Beta = {curr_beta_temp}")
+            print(f"Incrementing Beta: New Beta = {curr_beta_temp}", flush=True)
             final_twists = build_final_twists(jnp_prompts, curr_beta_temp, experiment_cfg.rm_fn)
 
 
-    print(indist_probs)
-    print(ood_probs)
-    print(adv_rewards)
-    print(p_rewards)
+    print(prob_bad_word_list)
 
     checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                target=(indist_probs, ood_probs,
-                                        adv_rewards, p_rewards),
+                                target=(prob_bad_word_list,),
                                 step=epoch + 1,
                                 prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
     end = time.time()
