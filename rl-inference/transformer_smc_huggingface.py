@@ -2391,8 +2391,8 @@ class CustomLMHeadModel:
 
 
 
-def test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, output_len, n_test_smc_samples, tokenizer):
-    print("TESTING SMC SAMPLES (adv dist)")
+def print_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, output_len, n_test_smc_samples, tokenizer):
+    print("PRINTING SMC SAMPLES (adv dist)")
     rng_key, sk = jax.random.split(rng_key)
     _, samples = smc_procedure(sk, prompt,
                                trainstate_p, trainstate_p.params,
@@ -2401,6 +2401,16 @@ def test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twis
                                output_len,
                                n_test_smc_samples)
 
+    # print(samples)
+    text_outputs = tokenizer.batch_decode(samples,
+                                          skip_special_tokens=True)
+    print(text_outputs)
+
+def print_model_samples(rng_key, prompt, trainstate_p, output_len, n_samples, tokenizer):
+    print("PRINTING SAMPLES (unmodified p dist)")
+    rng_key, sk = jax.random.split(rng_key)
+    samples = stochastic_transformer_sample(sk, trainstate_p, prompt,
+                                            output_len, n_samples)
     # print(samples)
     text_outputs = tokenizer.batch_decode(samples,
                                           skip_special_tokens=True)
@@ -2597,7 +2607,7 @@ def compare_smc_samples_vs_analytic_for_output_len_2(rng_key, prompt,
     # Then compare the SMC (or regular p) sampling distribution with those analytic values calculated above
     samples = stochastic_transformer_sample(sk, trainstate_p, prompt,
                                             args.output_len,
-                                            args.n_test_smc_samples)
+                                            args.n_print_samples)
     p_samples_bad_word_t_0_by_word, p_samples_bad_word_by_word = calc_samples_bad_word_probs(
         samples, prompt_len)
 
@@ -2611,7 +2621,7 @@ def compare_smc_samples_vs_analytic_for_output_len_2(rng_key, prompt,
                                      trainstate_p.params, trainstate_twist,
                                      trainstate_twist.params,
                                      final_twist, args.output_len,
-                                     args.n_test_smc_samples)
+                                     args.n_print_samples)
     sigma_samples_bad_word_t_0_by_word, sigma_samples_bad_word_by_word = calc_samples_bad_word_probs(
         samples_sigma, prompt_len)
 
@@ -2713,7 +2723,7 @@ def main():
             test_smc = False
             if test_smc:
 
-                test_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
+                print_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_print_samples, tokenizer)
 
                 # TODO AUG 11 CHECK ALL SEQS vs FULLSEQS. Consider just merging to avoid confusion and duplication as well. When doing so, test the code each step along the way to check that the results remain consistent.
                 1/0
@@ -2758,7 +2768,10 @@ def main():
                 if test_info:
                     rng_key, sk, sk2, sk3 = jax.random.split(rng_key, 4)
 
-                    test_smc_samples(sk, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_test_smc_samples, tokenizer)
+                    print_model_samples(rng_key, prompt, trainstate_p,
+                                        args.output_len, args.n_print_samples, tokenizer)
+                    if args.rl_loss_type == "custom":
+                        print_smc_samples(sk, prompt, trainstate_p, trainstate_twist, final_twist, args.output_len, args.n_print_samples, tokenizer)
                     total_prob_bad_word = compare_smc_samples_vs_analytic_for_output_len_2(sk2, prompt, trainstate_p, trainstate_twist, final_twist)
                     prob_bad_word_list.append(total_prob_bad_word)
 
@@ -2824,8 +2837,8 @@ if __name__ == "__main__":
     parser.add_argument("--output_len", type=int, default=2,
                         help="Length of the strings we output")
 
-    parser.add_argument("--n_test_smc_samples", type=int, default=1000,
-                        help="Only used for testing (and viewing information about) SMC, not used elsewhere")
+    parser.add_argument("--n_print_samples", type=int, default=1000,
+                        help="Only used for viewing samples from SMC (and the regular policy), not used elsewhere")
     parser.add_argument("--n_twist", type=int, default=100)
     parser.add_argument("--n_policy_samples", type=int, default=100,
                         help="Batch size to use when updating policy (p) and baseline")
