@@ -2749,9 +2749,18 @@ def main():
             "nicholasKluge/ToxicityModel")
         # toxicityModelpt = AutoModelForSequenceClassification.from_pretrained(
         #     "nicholasKluge/ToxicityModel")
-        toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained(
-            "nicholasKluge/ToxicityModel",
-            from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
+
+        load_pt_model = False
+        if load_pt_model:
+            toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "nicholasKluge/ToxicityModel",
+                from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
+            toxicityModel.save_pretrained("./toxicityModelFlax")
+        else:
+            print("Loading model")
+            toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "./toxicityModelFlax")
+            print("Loaded model")
 
 
     experiment_cfg = ExperimentConfig(args.dre_type, args.rm_type, rl_loss_type=args.rl_loss_type,
