@@ -1,5 +1,4 @@
 # Some inspiration from https://github.com/vpj/jax_transformer and https://github.com/awf/functional-transformer; these were sometimes used as a reference, but everything remaining here should be code I wrote myself
-
 from jax import vmap, jit
 
 import time
@@ -26,6 +25,9 @@ from transformers import AutoTokenizer
 
 from flax.training import train_state
 import flax
+
+from transformers import FlaxAutoModelForSequenceClassification
+
 
 # NOTE TO SELF: look up https://github.com/huggingface/transformers/blob/fe3c8ab1af558b95f67f5fafc0c55f09fd2b09db/src/transformers/models/gpt2/modeling_flax_gpt2.py
 # for details on the Flax GPT2 model
@@ -87,9 +89,10 @@ def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state
 
 
 class ExperimentConfig:
-    def __init__(self, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0):
+    def __init__(self, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0,
+                 toxicityModel=None, tokenizer_RM=None, device=None, tokenizer=None):
         self.dre_type = dre_type.lower()
-        assert self.dre_type in ["roger", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
+
         self.dre_grad_fn = self._get_dre_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
@@ -103,6 +106,16 @@ class ExperimentConfig:
             assert ppo_steps > 0
             self.ppo_steps = ppo_steps
             self.clip_epsilon = clip_epsilon
+
+        if rm_type == "toxicity":
+            assert toxicityModel is not None
+            assert tokenizer_RM is not None
+            # assert device is not None
+            assert tokenizer is not None
+            self.toxicityModel = toxicityModel
+            self.tokenizer_RM = tokenizer_RM
+            # self.device = device
+            self.tokenizer = tokenizer
 
         self.rm_type = rm_type.lower()
         self.rm_fn = self._get_rm_fn()
@@ -138,12 +151,17 @@ class ExperimentConfig:
     def _get_rm_fn(self):
         if self.rm_type == "binary":
             return reward_model_binary
+        elif self.rm_type == "toxicity":
+            return curried_reward_model_toxicity(self.toxicityModel, self.tokenizer_RM, self.tokenizer)
         else:
             raise NotImplementedError
 
     def _get_batch_rm(self):
-        batch_rm = batch_reward_model(reward_model_fn=self.rm_fn)
-        return batch_rm
+        if self.rm_type == "toxicity":
+            return self._get_rm_fn()
+        else:
+            batch_rm = batch_reward_model(reward_model_fn=self.rm_fn)
+            return batch_rm
 
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, trainstate_p, params_of_trainstate_p,
                               trainstate_twist, params_of_trainstate_twist, final_twist):
@@ -551,6 +569,9 @@ def reward_model_binary_single(single_seq, prompt_len):
     # print(contains_bad_word)
     return bad_reward * contains_bad_word # -1 if contains bad word, 0 otherwise
 
+# The reason for this awkward setup is so that I can deal with 2d and 1d batches
+# There is a part of the code where I set up an array of size (batch1, batch2, seq_len)
+# And for this 2d batch, I need this two layers of vmap (one here, and one in the batch_rm function)
 def reward_model_binary(seq, prompt_len):
     if len(seq.shape) == 2:
         return jax.vmap(reward_model_binary_single, in_axes=(0, None))(seq, prompt_len)
@@ -559,6 +580,52 @@ def reward_model_binary(seq, prompt_len):
     else:
         raise NotImplementedError
 
+def reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenizer):
+    # print(seq)
+    # print(seq.shape)
+    # This is a really awkward way of gluing together 2 models (GPT and BERT)
+    # Essentially I have to convert the GPT indices/tokens to text first,
+    # and then retokenize for BERT
+
+    do_reshape = False
+    if len(seq.shape) == 3:
+        original_shape = seq.shape
+        do_reshape = True
+        seq = seq.reshape(-1, seq.shape[-1])
+        print(seq.shape)
+
+    text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
+    tokens = tokenizer_RM(text_outputs,
+                          truncation=True,
+                          padding=True,
+                          max_length=512,
+                          return_token_type_ids=False,
+                          return_tensors="np",
+                          return_attention_mask=True)
+
+    print(tokens)
+    print(tokens["input_ids"].shape)
+    1/0
+
+    # TODO AUG 15 JUST GET THIS WORKING FIRST, THEN after you got this working
+    # FIRST just play around with the RM and use a few examples of the swear words and see what happens
+    # Even test some edge cases, just for fun.
+    # Figure out how to rework the rest of the code to fit this, along with all the batch rm stuff
+    # Then test that, and finally begin experiments using that
+    # print(tokens)
+    # tokens.to(device)
+    score = toxicityModel(**tokens)[0]
+    print(score.squeeze(-1).shape)
+
+    if do_reshape:
+        return score.squeeze(-1).reshape(original_shape[0], original_shape[1])
+
+    return score.squeeze(-1)
+
+def curried_reward_model_toxicity(toxicityModel, tokenizer_RM, tokenizer):
+    def new_rm(seq, prompt_len):
+        return reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenizer)
+    return new_rm
 
 
 def get_full_list_of_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
@@ -612,6 +679,7 @@ def get_proposal_q_sample_for_scan(rng_key, full_seq, trainstate_p, params_of_tr
     # print(output_unnormalized_batch)
     # print(output_unnormalized_batch.shape)
 
+
     output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq, params=params_of_trainstate_twist, train=False)
 
     rng_key, subkey = jax.random.split(rng_key)
@@ -645,7 +713,14 @@ def get_proposal_q_sample_final(rng_key, seq, trainstate_p, params_of_trainstate
 
     # print(all_new_seqs.shape) # shape (batch, n_vocab, seq_len) (seq len includes the prompt len and output len)
 
+    print(all_new_seqs.shape)
+
     output_psi_batch = final_twist(all_new_seqs)
+
+    print(output_psi_batch.shape)
+    print(output_unnormalized_batch.shape)
+    print(jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]))
+    # 1/0
 
     # Again the output_unnormalized_batch[:,-1,:] needs a log_softmax for the log probabilities to be correct
     # However the final twist is just the - beta r(s) which is the same as exp of that followed by log.
@@ -2652,13 +2727,24 @@ def main():
     model_twist = CustomLM(rng_key, model_config, d_model=768, output_size=args.n_vocab)
     model_baseline = CustomLM(rng_key, model_config, d_model=768, output_size=1)
 
+    toxicityModel, tokenizer_RM, device = None, None, None
 
+    if args.rm_type == "toxicity":
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        tokenizer_RM = AutoTokenizer.from_pretrained(
+            "nicholasKluge/ToxicityModel")
+        # toxicityModelpt = AutoModelForSequenceClassification.from_pretrained(
+        #     "nicholasKluge/ToxicityModel")
+        toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+            "nicholasKluge/ToxicityModel",
+            from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
 
 
     experiment_cfg = ExperimentConfig(args.dre_type, args.rm_type, rl_loss_type=args.rl_loss_type,
                                       beta_kl=args.beta_kl, ppo_steps=args.ppo_steps, clip_epsilon=args.clip_epsilon,
-                                      gamma=args.gamma, gae_lambda=args.gae_lambda, beta_ent=args.beta_ent)
-
+                                      gamma=args.gamma, gae_lambda=args.gae_lambda, beta_ent=args.beta_ent,
+                                      toxicityModel=toxicityModel, tokenizer_RM=tokenizer_RM, device=device, tokenizer=tokenizer)
 
     eps = 1e-8
     weight_decay = 0.01
@@ -2710,7 +2796,6 @@ def main():
 
     for epoch in range(args.epochs):
 
-
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
 
@@ -2719,6 +2804,51 @@ def main():
             prompt_len = prompt.shape[-1]
             final_twist = final_twists[i]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
+
+            # TODO REMOVE LATER
+            p_samples = stochastic_transformer_sample(rng_key, trainstate_p,
+                                                      prompt, args.output_len,
+                                                      args.n_print_samples) # shape 100, 6
+            # text_outputs = tokenizer.batch_decode(p_samples,
+            #                                 skip_special_tokens=True)
+            # print(text_outputs)
+            # tokens = tokenizer_RM(text_outputs,
+            #                       truncation=True,
+            #                                         padding=True,
+            #                       max_length=512,
+            #                       return_token_type_ids=False,
+            #                       return_tensors="pt",
+            #                       return_attention_mask=True)
+            #
+            # # TODO AUG 15 JUST GET THIS WORKING FIRST, THEN after you got this working
+            # # FIRST just play around with the RM and use a few examples of the swear words and see what happens
+            # # Even test some edge cases, just for fun.
+            # # Figure out how to rework the rest of the code to fit this, along with all the batch rm stuff
+            # # Then test that, and finally begin experiments using that
+            # print(tokens)
+            # tokens.to(device)
+            # score = toxicityModel(**tokens)[0]
+            # print(score)
+            #
+            r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
+            print(r_seqs)
+            print(r_seqs.shape)
+
+            r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
+            print(r_seqs)
+            print(r_seqs.shape)
+
+            p_samples = p_samples.reshape(2, 50, -1)
+            print(p_samples.shape)
+            r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
+            print(r_seqs)
+            print(r_seqs.shape)
+
+            r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
+            print(r_seqs)
+            print(r_seqs.shape)
+            1/0
+
 
             test_smc = False
             if test_smc:
@@ -2855,7 +2985,7 @@ if __name__ == "__main__":
     parser.add_argument("--twist_updates_per_epoch", type=int, default=100)
     parser.add_argument("--model_updates_per_epoch", type=int, default=100)
 
-    parser.add_argument("--rm_type", type=str, default="binary", choices=["binary"])
+    parser.add_argument("--rm_type", type=str, default="toxicity", choices=["binary, toxicity"])
 
     parser.add_argument("--rl_loss_type", type=str, default="custom", choices=["custom", "ppo"])
 
