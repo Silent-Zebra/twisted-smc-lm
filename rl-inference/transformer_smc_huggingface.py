@@ -1,4 +1,6 @@
 # Some inspiration from https://github.com/vpj/jax_transformer and https://github.com/awf/functional-transformer; these were sometimes used as a reference, but everything remaining here should be code I wrote myself
+import torch
+
 from jax import vmap, jit
 
 import time
@@ -2758,8 +2760,7 @@ def main():
             toxicityModel.save_pretrained("./toxicityModelFlax")
         else:
             print("Loading model")
-            toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained(
-                "./toxicityModelFlax")
+            toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained("./toxicityModelFlax")
             print("Loaded model")
 
 
