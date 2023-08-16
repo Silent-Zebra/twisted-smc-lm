@@ -74,18 +74,18 @@ def kl_div_jax_sum_last_axis(log_p, log_q):
 #     ent_term = ent_term.mean()
 #     return ent_term
 
-def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p,
-                       optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline):
-    updates_p, optim_p_state = optimizer_p.update(
-        grad_params_p, optim_p_state, params_p)
-    params_p = optax.apply_updates(params_p, updates_p)
-
-    updates_baseline, optim_baseline_state = optimizer_baseline.update(
-        grad_params_baseline, optim_baseline_state, params_baseline)
-    params_baseline = optax.apply_updates(params_baseline,
-                                          updates_baseline)
-
-    return params_p, optim_p_state, params_baseline, optim_baseline_state
+# def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p,
+#                        optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline):
+#     updates_p, optim_p_state = optimizer_p.update(
+#         grad_params_p, optim_p_state, params_p)
+#     params_p = optax.apply_updates(params_p, updates_p)
+#
+#     updates_baseline, optim_baseline_state = optimizer_baseline.update(
+#         grad_params_baseline, optim_baseline_state, params_baseline)
+#     params_baseline = optax.apply_updates(params_baseline,
+#                                           updates_baseline)
+#
+#     return params_p, optim_p_state, params_baseline, optim_baseline_state
 
 
 class ExperimentConfig:
@@ -152,7 +152,9 @@ class ExperimentConfig:
         if self.rm_type == "binary":
             return reward_model_binary
         elif self.rm_type == "toxicity":
-            return curried_reward_model_toxicity(self.toxicityModel, self.tokenizer_RM, self.tokenizer)
+            curried_rm = curried_reward_model_toxicity(self.toxicityModel, self.tokenizer_RM, self.tokenizer)
+            # return curried_rm
+            return reward_model_toxicity_w_callback(curried_rm)
         else:
             raise NotImplementedError
 
@@ -580,6 +582,9 @@ def reward_model_binary(seq, prompt_len):
     else:
         raise NotImplementedError
 
+
+
+
 def reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenizer):
     # print(seq)
     # print(seq.shape)
@@ -594,6 +599,8 @@ def reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenize
         seq = seq.reshape(-1, seq.shape[-1])
         print(seq.shape)
 
+
+
     text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
     tokens = tokenizer_RM(text_outputs,
                           truncation=True,
@@ -603,9 +610,8 @@ def reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenize
                           return_tensors="np",
                           return_attention_mask=True)
 
-    print(tokens)
-    print(tokens["input_ids"].shape)
-    1/0
+    # print(tokens)
+    # print(tokens["input_ids"].shape)
 
     # TODO AUG 15 JUST GET THIS WORKING FIRST, THEN after you got this working
     # FIRST just play around with the RM and use a few examples of the swear words and see what happens
@@ -627,6 +633,13 @@ def curried_reward_model_toxicity(toxicityModel, tokenizer_RM, tokenizer):
         return reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenizer)
     return new_rm
 
+
+def reward_model_toxicity_w_callback(curried_rm):
+    def new_rm_fn(seq, prompt_len):
+        result_shape = jax.core.ShapedArray(seq.shape[:-1], seq.dtype)
+        print(result_shape)
+        return jax.pure_callback(curried_rm, result_shape, seq, prompt_len)
+    return new_rm_fn
 
 def get_full_list_of_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
     # Needs prompt[None, :] for unprocessed (jnp) prompt
@@ -2806,9 +2819,11 @@ def main():
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
             # TODO REMOVE LATER
-            p_samples = stochastic_transformer_sample(rng_key, trainstate_p,
-                                                      prompt, args.output_len,
-                                                      args.n_print_samples) # shape 100, 6
+            # p_samples = stochastic_transformer_sample(rng_key, trainstate_p,
+            #                                           prompt, args.output_len,
+            #                                           args.n_print_samples) # shape 100, 6
+
+
             # text_outputs = tokenizer.batch_decode(p_samples,
             #                                 skip_special_tokens=True)
             # print(text_outputs)
@@ -2830,24 +2845,44 @@ def main():
             # score = toxicityModel(**tokens)[0]
             # print(score)
             #
-            r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
-            print(r_seqs)
-            print(r_seqs.shape)
 
-            r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
-            print(r_seqs)
-            print(r_seqs.shape)
+            # TODO AUG 16
+            # The problems include: cannot convert to numpy (which tokenizer does)
+            # if we want to use jit. THere's also the callback that gets around it e.g. https://stackoverflow.com/questions/73464697/i-am-trying-to-assign-a-jax-tracer-object-to-a-numpy-array-that-requires-concret
+            # However this requires a fixed size known in advance, which isn't the case with the padding required
+            # Another possibility then is to perhaps just add some extra padding - I guess I can write a function that takes in a max len, maybe some pretty large number like 20 or something, or maybe 4x (input len + prompt len)
+            # something like that. And then uses a fill function or something, or just concatenates based on the size difference
+            # Use this together with the callback, see what happens then.
+            # If I still can't get it working, then just try no jit perhaps... but that's gonna be so super slow
+            # Another possiblity is to try training my own RM e.g. on the anthropic data, or whatever the guy did to build his toxicity model
+            # TRY THE PADDING AND CALLBACK IDEA FIRST. This shld work and should be reasonably fast to implement
+            # IF THAT DOESN't WORK: try just isolating the parts of the code that call final_twist or the rew_model. Everything else can be jitted. Then jit low level instead of top level, and move all the tokenize/text logic outside of those functions.
+            # The above strat should be workable as well. All the final_twist stuff appears only in last iter of SMC, so that can go outside of the jitted function which has the lax.scan loop
+            # For policy learning, again we can isolate the calculation of the rewards from the rest of the code that works with it.
+            # This should take more time, so start with the callback. That one is also a more interesting learning experience.
 
-            p_samples = p_samples.reshape(2, 50, -1)
-            print(p_samples.shape)
-            r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
-            print(r_seqs)
-            print(r_seqs.shape)
+            # Anyway discuss this also and see what ideas Roger or the rest have
+            # Disucss also that the reason for this is that otherwise the results aren't that interesting... binary reward model is too simplistic with no gradation.
+            #
 
-            r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
-            print(r_seqs)
-            print(r_seqs.shape)
-            1/0
+            # r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
+            # print(r_seqs)
+            # print(r_seqs.shape)
+            #
+            # r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
+            # print(r_seqs)
+            # print(r_seqs.shape)
+            #
+            # p_samples = p_samples.reshape(2, 50, -1)
+            # print(p_samples.shape)
+            # r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
+            # print(r_seqs)
+            # print(r_seqs.shape)
+            #
+            # r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
+            # print(r_seqs)
+            # print(r_seqs.shape)
+            # 1/0
 
 
             test_smc = False
