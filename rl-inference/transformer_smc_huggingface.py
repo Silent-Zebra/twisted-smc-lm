@@ -16,7 +16,7 @@ import jax
 
 import optax
 
-from flax.training import checkpoints
+# from flax.training import checkpoints
 import datetime
 
 from transformers import FlaxAutoModelForCausalLM, FlaxAutoModel
@@ -2951,10 +2951,10 @@ def main():
 
     print(prob_bad_word_list)
 
-    checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                target=(prob_bad_word_list,),
-                                step=epoch + 1,
-                                prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
+    # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+    #                             target=(prob_bad_word_list,),
+    #                             step=epoch + 1,
+    #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
     end = time.time()
     total_time = end - start
     print("TIME: " + str(total_time))
