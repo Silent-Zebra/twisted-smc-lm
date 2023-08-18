@@ -76,7 +76,9 @@ def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state
 
 
 class ExperimentConfig:
-    def __init__(self, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0):
+    def __init__(self, n_vocab, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0, analytic_sigma_sample=False):
+        self.n_vocab = n_vocab
+        self.analytic_sigma_sample = analytic_sigma_sample
         self.dre_type = dre_type.lower()
         assert self.dre_type in ["roger", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
         self.dre_grad_fn = self._get_dre_grad_fn()
@@ -181,7 +183,9 @@ class ExperimentConfig:
                                                            params_baseline,
                                                            cfg_p_0, params_p_0,
                                                            self.beta_kl,
-                                                                  self.beta_ent)
+                                                                  self.beta_ent,
+                                                                  self.analytic_sigma_sample,
+                                                                  self.n_vocab)
             # grad_params_p, grad_params_baseline = self.get_grad_params_p_and_baseline(
             #     sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
             #     final_twist, rew_model, output_len, n_twist, prompt_len,
@@ -221,7 +225,9 @@ class ExperimentConfig:
                                                                   self.beta_ent,
                                                                   cfg_twist_pos,
                                                                   params_twist_pos,
-                                                                  final_twist_pos
+                                                                  final_twist_pos,
+                                                                  self.analytic_sigma_sample,
+                                                                  self.n_vocab
                                                                   )
 
             params_p, optim_p_state, params_baseline, optim_baseline_state = get_updated_params_and_optim_state(
@@ -500,31 +506,31 @@ def stochastic_transformer_sample_iter(carry, t, cfg):
     # So this works with jit, at the cost of a bit of wasted computation
     # This is the approach that I saw people taking online with transformers.
     # As of May 2023 there did not seem to be a better approach in jax (some discussion of jax.mask didn't end up going anywhere)
-    rnd_key, params, full_seq, prompt_len = carry
+    rng_key, params, full_seq, prompt_len = carry
     output_unnormalized_batch = batch_transformer(cfg, params, full_seq)
-    rnd_key, subkey = jax.random.split(rnd_key)
+    rng_key, subkey = jax.random.split(rng_key)
     # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax.
     # I needed log_softmax on the other ones in order to properly combine with the other log term.
     indices_to_use = jax.random.categorical(subkey, output_unnormalized_batch[:, prompt_len + t - 1, :],
                                  shape=(output_unnormalized_batch.shape[0],))
     full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
-    carry = (rnd_key, params, full_seq, prompt_len)
+    carry = (rng_key, params, full_seq, prompt_len)
     return carry, None
 
 
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
 @partial(jax.jit, static_argnums=[1, 4, 5])
-def stochastic_transformer_sample(rnd_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples):
+def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples):
     prompt_len = prompt.shape[0]
     # print(prompt_len)
     batch_prompt = jnp.full((n_samples, prompt.shape[0]), prompt)
     output = jnp.zeros((n_samples, output_len), dtype=jnp.int32)
     full_seq = jnp.concatenate((batch_prompt, output), axis=1)
 
-    carry = (rnd_key, params, full_seq, prompt_len)
+    carry = (rng_key, params, full_seq, prompt_len)
     carry, _ =  jax.lax.scan(partial(stochastic_transformer_sample_iter, cfg=cfg), carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
 
-    rnd_key, params, full_seq, _ = carry
+    rng_key, params, full_seq, _ = carry
 
     return full_seq
 
@@ -692,14 +698,14 @@ def get_all_new_seqs_single_t(seq, n_vocab):
 
 
 # @partial(jax.jit, static_argnames=['cfg_p', 'cfg_twist']) # Actually slower with the jit? Maybe due to compile time.
-def get_proposal_q_sample(rnd_key, seq, cfg_p, params_p, cfg_twist, params_twist):
+def get_proposal_q_sample(rng_key, seq, cfg_p, params_p, cfg_twist, params_twist):
     # Sample from q(s_t | s_{1:t-1}); samples a single time step, using the learned twists
     # Also concatenates the s_t tokens with the s_{1:t-1} tokens and returns that
     output_unnormalized_batch = batch_transformer(cfg_p, params_p, seq)
 
     output_psi_batch = batch_transformer(cfg_twist, params_twist, seq)
 
-    rnd_key, subkey = jax.random.split(rnd_key)
+    rng_key, subkey = jax.random.split(rng_key)
     # Here I do sampling according to the logits instead of the hard argmax
     # log [p(s) psi(s)] = log p(s) + log psi(s)
     # So for the two logits, we can add them together
@@ -722,17 +728,17 @@ def get_proposal_q_sample(rnd_key, seq, cfg_p, params_p, cfg_twist, params_twist
     Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
 
 
-    return rnd_key, seq, Z_s_1_to_t_minus_1
+    return rng_key, seq, Z_s_1_to_t_minus_1
 
 
-def get_proposal_q_sample_for_scan(rnd_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t):
+def get_proposal_q_sample_for_scan(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t):
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
     # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
     output_unnormalized_batch = batch_transformer(cfg_p, params_p, full_seq)
 
     output_psi_batch = batch_transformer(cfg_twist, params_twist, full_seq)
 
-    rnd_key, subkey = jax.random.split(rnd_key)
+    rng_key, subkey = jax.random.split(rng_key)
 
     # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
     # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
@@ -744,15 +750,16 @@ def get_proposal_q_sample_for_scan(rnd_key, full_seq, cfg_p, params_p, cfg_twist
 
     Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
 
-    return rnd_key, full_seq, Z_s_1_to_t_minus_1
+    return rng_key, full_seq, Z_s_1_to_t_minus_1
 
 
-def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
+
+def get_proposal_q_sample_final(rng_key, seq, cfg_p, params_p, final_twist):
     # Same as get_proposal_q_sample except using the true final_twist instead of the learned twists (final_twist = - beta r(s) for adv sampling)
     # Thus, this should only be used for the final time step.
     output_unnormalized_batch = batch_transformer(cfg_p, params_p, seq)
 
-    rnd_key, subkey = jax.random.split(rnd_key)
+    rng_key, subkey = jax.random.split(rng_key)
 
     # n_batch = output_unnormalized_batch.shape[0]
     n_vocab = output_unnormalized_batch.shape[-1]
@@ -781,7 +788,7 @@ def get_proposal_q_sample_final(rnd_key, seq, cfg_p, params_p, final_twist):
     # = logsumexp[log( p(s_t|s_{1:t-1})) + log( psi(s_{1:t})) ) ]
     Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
 
-    return rnd_key, seq, Z_s_1_to_t_minus_1
+    return rng_key, seq, Z_s_1_to_t_minus_1
 
 
 def evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len_plus_t):
@@ -917,34 +924,37 @@ def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_pl
 
 # WARNING/NOTE that if not using the final twist, then we're using the learned twist
 # And in my current setup I don't think that learned final twist ever gets trained anywhere
-def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
+def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, use_final_twist, final_twist):
 
     log_w_t_minus_1 = log_w_t
 
     t = output_len - 1
 
-    if use_final_twist:
-        # Full_seq has shape (n_samples, prompt_len + output_len)
-        rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(
-            rnd_key, full_seq[:, :-1], cfg_p,
-            params_p, final_twist)
-    else:
-        rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
-            rnd_key, full_seq, cfg_p,
-            params_p,
-            cfg_twist, params_twist, prompt_len, t)
+    # if use_final_twist:
+    #     # Full_seq has shape (n_samples, prompt_len + output_len)
+    #     rng_key, full_seq, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(
+    #         rng_key, full_seq[:, :-1], cfg_p,
+    #         params_p, final_twist)
+    # else:
+    # New implementation: do the below always, (proposal always from twists, to avoid absurd amounts of calculation on n_vocab * batch number of seqs for the reward model)
+    # If using final twist (ie. sigma samples, the positive samples), the only difference will be in the psi_t_eval later:
+    rng_key, full_seq, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+        rng_key, full_seq, cfg_p,
+        params_p,
+        cfg_twist, params_twist, prompt_len, t)
 
-    if use_final_twist:
-        # Now this is ok to use since at this point full_seq will have been fully generated, and we can directly use the previous function I had
-        log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
-            full_seq, cfg_p, params_p, final_twist)
-    else:
-        log_q_t_eval = evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p,
-                                                              params_p,
-                                                              cfg_twist,
-                                                              params_twist,
-                                                              prompt_len + t)
+    # if use_final_twist:
+    #     # Now this is ok to use since at this point full_seq will have been fully generated, and we can directly use the previous function I had
+    #     log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
+    #         full_seq, cfg_p, params_p, final_twist)
+    # else:
+    # New implementation: log_q_t_eval is now the same regardless of using final twist as well, because we have the same proposal distribution
+    log_q_t_eval = evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p,
+                                                          params_p,
+                                                          cfg_twist,
+                                                          params_twist,
+                                                          prompt_len + t)
 
     log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
 
@@ -960,7 +970,7 @@ def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
 
-    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
+    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + log_Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
 
     log_w_t = log_w_t_minus_1 + log_alpha_t
 
@@ -973,7 +983,7 @@ def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     # resample_condition = False
     if resample_condition:
         # Do resampling
-        rnd_key, subkey = jax.random.split(rnd_key)
+        rng_key, subkey = jax.random.split(rng_key)
 
         a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
 
@@ -995,14 +1005,14 @@ def smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
 
 def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist):
-    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t, \
+    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t, \
     output_len, params_p, params_twist, \
     prompt_len = carry
 
     log_w_t_minus_1 = log_w_t
 
-    rnd_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
-        rnd_key, full_seq, cfg_p,
+    rng_key, full_seq, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+        rng_key, full_seq, cfg_p,
         params_p,
         cfg_twist, params_twist, prompt_len, t)
 
@@ -1028,7 +1038,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist):
     # for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized)
 
     # alpha is the factor multiplied (added in log space) to the previous weight
-    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
+    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + log_Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
     # It may be less confusing to include the Z directly in the log q eval - but the reason I've left it like this
     # is because if I follow the TODO where I cancel the numerator and denominator, I'll want the Z term to exist separately.
 
@@ -1042,7 +1052,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist):
     # resample_condition = False
     if resample_condition:
         # Do resampling
-        rnd_key, subkey = jax.random.split(rnd_key)
+        rng_key, subkey = jax.random.split(rng_key)
 
         a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
 
@@ -1056,14 +1066,14 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist):
 
         log_w_t = jnp.zeros_like(log_w_t)
 
-    carry = (rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
+    carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, params_p, params_twist, prompt_len)
 
     return carry, full_seq
 
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "use_final_twist", 'output_len', 'n_smc_samples', "intermediate_sample_history" ])
-def smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
+def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
     # Generate samples using SMC with twists (learned and final, if use_final_twist)
     # log_z_hat_t unused for now
     prompt_len = prompt.shape[-1]
@@ -1077,7 +1087,7 @@ def smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twi
     output = jnp.zeros((n_smc_samples, output_len), dtype=jnp.int32)
     full_seq = jnp.concatenate((batch_prompt, output), axis=1)
 
-    carry = (rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
+    carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
     log_z_hat_t, output_len, params_p, params_twist, prompt_len)
 
     carry, full_seq_list = jax.lax.scan(partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist), carry, jnp.arange(output_len - 1, dtype=jnp.int32), output_len - 1)
@@ -1087,11 +1097,13 @@ def smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twi
     # "Non-hashable static arguments are not supported" ValueError
     # The functools.partial approach I used later on to pass cfg outside of the carry
     # is another, possibly better, approach to avoid this problem too.
-    rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
+    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     log_z_hat_t, output_len, params_p, params_twist, prompt_len = carry
 
-    log_z_hat_t, full_seq = smc_scan_iter_final(rnd_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
+    log_z_hat_t, full_seq = smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, use_final_twist, final_twist)
+
+    full_seq_list = jnp.concatenate((full_seq_list, full_seq[None, :, :]))
 
     if intermediate_sample_history:
         return log_z_hat_t, full_seq, full_seq_list
@@ -1100,114 +1112,114 @@ def smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twi
     return log_z_hat_t, full_seq
 
 
-def smc_procedure(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, analytic_sigma_sample=False, n_vocab=0):
+def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, analytic_sigma_sample=False, n_vocab=0):
     if analytic_sigma_sample:
         assert n_vocab > 0
         prompt_len = prompt.shape[-1]
-        return None, get_analytic_sigma_sample(rnd_key, prompt, prompt_len, n_vocab,
+        return None, get_analytic_sigma_sample(rng_key, prompt, prompt_len, n_vocab,
                                      output_len, cfg_p, params_p, final_twist,
                                      n_smc_samples)
 
     else:
-        return smc_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
-    # return smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
+        return smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
+    # return smc_non_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist)
 
 
-# @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "use_final_twist", 'output_len', 'n_smc_samples']) # works but takes forever to recompile and recompiles several times
-def smc_non_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
-    # prompt_len = prompt.shape[-1]
+# # @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "use_final_twist", 'output_len', 'n_smc_samples']) # works but takes forever to recompile and recompiles several times
+# def smc_non_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
+#     # prompt_len = prompt.shape[-1]
+#
+#     log_z_hat_t = 0.
+#     log_w_t = 0.
+#     log_gamma_1_to_t_eval = 0.
+#     log_p_theta_1_to_t_eval = 0.
+#
+#     prompt_w_s_1_to_t = jnp.full((n_smc_samples, prompt.shape[0]), prompt)
+#     # for t in range(prompt_len + 1, prompt_len + 1 + output_len - 1): # This is not needed since t is not used here, except just to count the number of iterations
+#     for t in range(output_len):
+#         log_w_t_minus_1 = log_w_t
+#
+#
+#         if (t == output_len - 1) and use_final_twist:
+#             rng_key, prompt_w_s_1_to_t_plus_1, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(rng_key, prompt_w_s_1_to_t, cfg_p,
+#                                                         params_p, final_twist)
+#
+#         else:
+#             rng_key, prompt_w_s_1_to_t_plus_1, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample(rng_key, prompt_w_s_1_to_t, cfg_p,
+#                                                         params_p,
+#                                                         cfg_twist, params_twist)
+#         prompt_w_s_1_to_t = prompt_w_s_1_to_t_plus_1
+#
+#         if (t == output_len - 1) and use_final_twist:
+#             log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
+#                 prompt_w_s_1_to_t, cfg_p, params_p, final_twist)
+#         else:
+#             log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1(prompt_w_s_1_to_t, cfg_p,
+#                                                              params_p,
+#                                                              cfg_twist,
+#                                                              params_twist)
+#
+#         log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
+#
+#         log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p)
+#
+#         if (t == output_len - 1) and use_final_twist:
+#             log_r_psi_t_eval = evaluate_log_phi_final(prompt_w_s_1_to_t, final_twist)
+#         else:
+#             log_r_psi_t_eval = evaluate_log_psi_t(prompt_w_s_1_to_t, cfg_twist, params_twist)
+#
+#         log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
+#
+#         # The normalization constant is crucial; q has to be a normalized probability (for the weights;
+#         # for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized otherwise you get weird issues)
+#
+#         # alpha is the factor multiplied (added in log space) to the previous weight
+#         log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + log_Z_s_1_to_t_minus_1 # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
+#         # It may be less confusing to include the Z directly in the log q eval - but the reason I've left it like this
+#         # is because if I follow the TODO where I cancel the numerator and denominator, I'll want the Z term to exist separately.
+#
+#         log_w_t = log_w_t_minus_1 + log_alpha_t
+#
+#         if t == 0:
+#             log_z_over_z = jax.nn.logsumexp(log_w_t)
+#         else:
+#             log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(
+#                 log_w_t_minus_1)
+#
+#         log_z_hat_t = log_z_hat_t + log_z_over_z
+#
+#
+#         # TODO maybe don't resample on the first iteration??
+#         # if t == 0:
+#         #     resample_condition = False
+#         # else:
+#         #     resample_condition = True
+#         resample_condition = True
+#         # resample_condition = False
+#         if resample_condition:
+#             # Do resampling
+#             rng_key, subkey = jax.random.split(rng_key)
+#
+#             a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
+#
+#             prompt_w_s_1_to_t = prompt_w_s_1_to_t[a_t]
+#
+#             # Make sure the gamma values also track the correct trajectories
+#             log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
+#
+#             # Same for the p values:
+#             log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
+#
+#             log_w_t = jnp.zeros_like(log_w_t)
+#
+#     return log_z_hat_t, prompt_w_s_1_to_t
+#
 
-    log_z_hat_t = 0.
-    log_w_t = 0.
-    log_gamma_1_to_t_eval = 0.
-    log_p_theta_1_to_t_eval = 0.
 
-    prompt_w_s_1_to_t = jnp.full((n_smc_samples, prompt.shape[0]), prompt)
-    # for t in range(prompt_len + 1, prompt_len + 1 + output_len - 1): # This is not needed since t is not used here, except just to count the number of iterations
-    for t in range(output_len):
-        log_w_t_minus_1 = log_w_t
-
-
-        if (t == output_len - 1) and use_final_twist:
-            rnd_key, prompt_w_s_1_to_t_plus_1, Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(rnd_key, prompt_w_s_1_to_t, cfg_p,
-                                                        params_p, final_twist)
-
-        else:
-            rnd_key, prompt_w_s_1_to_t_plus_1, Z_s_1_to_t_minus_1 = get_proposal_q_sample(rnd_key, prompt_w_s_1_to_t, cfg_p,
-                                                        params_p,
-                                                        cfg_twist, params_twist)
-        prompt_w_s_1_to_t = prompt_w_s_1_to_t_plus_1
-
-        if (t == output_len - 1) and use_final_twist:
-            log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
-                prompt_w_s_1_to_t, cfg_p, params_p, final_twist)
-        else:
-            log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1(prompt_w_s_1_to_t, cfg_p,
-                                                             params_p,
-                                                             cfg_twist,
-                                                             params_twist)
-
-        log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
-
-        log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p)
-
-        if (t == output_len - 1) and use_final_twist:
-            log_r_psi_t_eval = evaluate_log_phi_final(prompt_w_s_1_to_t, final_twist)
-        else:
-            log_r_psi_t_eval = evaluate_log_psi_t(prompt_w_s_1_to_t, cfg_twist, params_twist)
-
-        log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
-
-        # The normalization constant is crucial; q has to be a normalized probability (for the weights;
-        # for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized otherwise you get weird issues)
-
-        # alpha is the factor multiplied (added in log space) to the previous weight
-        log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1 # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
-        # It may be less confusing to include the Z directly in the log q eval - but the reason I've left it like this
-        # is because if I follow the TODO where I cancel the numerator and denominator, I'll want the Z term to exist separately.
-
-        log_w_t = log_w_t_minus_1 + log_alpha_t
-
-        if t == 0:
-            log_z_over_z = jax.nn.logsumexp(log_w_t)
-        else:
-            log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(
-                log_w_t_minus_1)
-
-        log_z_hat_t = log_z_hat_t + log_z_over_z
-
-
-        # TODO maybe don't resample on the first iteration??
-        # if t == 0:
-        #     resample_condition = False
-        # else:
-        #     resample_condition = True
-        resample_condition = True
-        # resample_condition = False
-        if resample_condition:
-            # Do resampling
-            rnd_key, subkey = jax.random.split(rnd_key)
-
-            a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
-
-            prompt_w_s_1_to_t = prompt_w_s_1_to_t[a_t]
-
-            # Make sure the gamma values also track the correct trajectories
-            log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
-
-            # Same for the p values:
-            log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
-
-            log_w_t = jnp.zeros_like(log_w_t)
-
-    return log_z_hat_t, prompt_w_s_1_to_t
-
-
-
-def get_l_dre_sixo(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
+def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
     prompt_len = prompt.shape[-1]
 
-    rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
+    rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist)
 
@@ -1342,7 +1354,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p):
 
 
 def inspect_bad_word_reward(sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
-                            final_twist, output_len, n_samples, rew_model):
+                            final_twist, output_len, n_samples, rew_model, analytic_sigma_sample, n_vocab):
     sk, sk2 = jax.random.split(sk)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                       cfg_p, params_p,
@@ -1350,7 +1362,7 @@ def inspect_bad_word_reward(sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, 
                                                       params_twist,
                                                       final_twist,
                                                       output_len,
-                                                      n_samples, analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
+                                                      n_samples, analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
 
     r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
 
@@ -1381,10 +1393,10 @@ def print_bad_word_env_generations(key, indices_prompt, cfg_p, params_p, prompt_
 
 
 
-def print_samples_using_twists(rnd_key, prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist, n_twist):
+def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist, n_twist):
     print("--TEST--")
 
-    rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
+    rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
 
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
 
@@ -1448,10 +1460,10 @@ def get_l_dre_roger_scan_iter(carry, scan_over, cfg_twist):
 
 # This is the EBM Maximum Likelihood approach
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "final_twist", "output_len", "n_twist"])
-def get_l_dre_roger_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
+def get_l_dre_roger_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist):
     prompt_len = prompt.shape[-1]
 
-    rnd_key, sk1, sk2 = jax.random.split(rnd_key, 3)
+    rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p,
                                                          params_p, cfg_twist,
                                                          params_twist,
@@ -1460,7 +1472,7 @@ def get_l_dre_roger_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twis
 
     l_dre = 0.
 
-    _, final_twist_samples, intermediate_twist_samples_hist = smc_jit(rnd_key, prompt,
+    _, final_twist_samples, intermediate_twist_samples_hist = smc_jit(rng_key, prompt,
                              cfg_p,
                              params_p,
                              cfg_twist, params_twist,
@@ -1468,22 +1480,22 @@ def get_l_dre_roger_jit(rnd_key, prompt, cfg_p, params_p, cfg_twist, params_twis
                              output_len,
                              n_twist, use_final_twist=False, intermediate_sample_history=True)
 
-    scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len - 1))
+    scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len))
 
     carry = (l_dre, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len)
 
-    carry, _ = jax.lax.scan(partial(get_l_dre_roger_scan_iter, cfg_twist=cfg_twist), carry, scan_over, output_len - 1)
+    carry, _ = jax.lax.scan(partial(get_l_dre_roger_scan_iter, cfg_twist=cfg_twist), carry, scan_over, output_len)
 
     l_dre, _, _, _ = carry
 
-    l_dre /= (output_len - 1)
+    l_dre /= (output_len)
     return -l_dre  # negative because now we have a loss
 
 
 
 def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
-                cfg_p_0, params_p_0, beta_kl, beta_ent):
+                cfg_p_0, params_p_0, beta_kl, beta_ent, analytic_sigma_sample, n_vocab):
 
     sk, sk2, sk3 = jax.random.split(sk, 3)
 
@@ -1494,7 +1506,7 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                                                     final_twist,
                                                     output_len,
                                                     n_samples,
-                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
+                                                      analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
 
     # r_seqs = evaluate_log_phi_final(prompt_w_sigma_sample_s_1_to_t,
     #                                   rew_model)
@@ -1535,7 +1547,7 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
 
 def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
-                cfg_p_0, params_p_0, beta_kl, beta_ent):
+                cfg_p_0, params_p_0, beta_kl, beta_ent, analytic_sigma_sample, n_vocab):
     sk, sk2, sk3 = jax.random.split(sk, 3)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                     cfg_p, params_p,
@@ -1544,7 +1556,7 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
                                                     final_twist,
                                                     output_len,
                                                     n_samples,
-                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
+                                                      analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
 
     r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
 
@@ -1583,7 +1595,7 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
 # with the custom baselinep adv training scheme where both use the regular RL baseline value.
 def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
-                cfg_p_0, params_p_0, beta_kl, beta_ent):
+                cfg_p_0, params_p_0, beta_kl, beta_ent, analytic_sigma_sample, n_vocab):
     sk, sk2, sk3 = jax.random.split(sk, 3)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                     cfg_p, params_p,
@@ -1592,7 +1604,7 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
                                                     final_twist,
                                                     output_len,
                                                     n_samples,
-                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
+                                                      analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
 
     r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
 
@@ -1635,7 +1647,7 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
 def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
                 cfg_p_0, params_p_0, beta_kl, beta_ent, cfg_twist_pos,
-                            params_twist_pos, final_twist_pos):
+                            params_twist_pos, final_twist_pos, analytic_sigma_sample, n_vocab):
     sk, sk_pos, sk2, sk3 = jax.random.split(sk, 4)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                     cfg_p, params_p,
@@ -1644,7 +1656,7 @@ def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist
                                                     final_twist,
                                                     output_len,
                                                     n_samples // 2,
-                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
+                                                      analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
     _, prompt_w_sigma_pos_sample_s_1_to_t = smc_procedure(sk_pos, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist_pos,
@@ -1652,7 +1664,7 @@ def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist
                                                     final_twist_pos,
                                                     output_len,
                                                     n_samples // 2,
-                                                      analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
+                                                      analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
 
     # for sample in prompt_w_sigma_pos_sample_s_1_to_t[:10, prompt_len:]:
     #     print(indices_to_tokens(ordered_token_list, sample))
@@ -1833,7 +1845,7 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, final_
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len - 1)
 
     all_seqs_to_T_minus_1 = all_seqs_list[-1]
-    all_seqs_with_n_vocab_at_t = get_all_new_seqs_single_t(
+    all_seqs_with_n_vocab_at_T = get_all_new_seqs_single_t(
         all_seqs_to_T_minus_1, n_vocab)
     # When we call print(all_seqs_with_n_vocab_at_t.shape), we get shape of: batch (which should be n_vocab ^ (output_len - 1) I believe), n_vocab, output_len - 1 + prompt_len
 
@@ -1844,8 +1856,10 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, final_
     # n_vocab ^ (output_len - 1) groups based on summing over the n_vocab tokens for the next time step, in this case directly using the
     # known final twist values (e.g. RM/PM). This gives us our twists for the t-1 time step (indeed we assume output_len > 1, otherwise there are no twists to calculate)
 
-    opt_log_twist_array = calc_opt_twist_helper_mapped(all_seqs_with_n_vocab_at_t, cfg_p, params_p, final_twist)
+    opt_log_twist_array = calc_opt_twist_helper_mapped(all_seqs_with_n_vocab_at_T, cfg_p, params_p, final_twist)
     opt_log_twist_array_list.append(opt_log_twist_array)
+
+    eval_log_phi_final = evaluate_log_phi_final(all_seqs_with_n_vocab_at_T.reshape(-1, all_seqs_with_n_vocab_at_T.shape[-1]), final_twist)
 
     # TODO JULY 1 can I vmap this loop too? Seems not so trivial to do.
     # The above section calculates the optimal twists for the t-1 time step
@@ -1880,16 +1894,20 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, final_
 
         j += 1
 
+    opt_log_twist_array_list.insert(0, eval_log_phi_final)
+    # print(eval_log_phi_final)
+    # print(opt_log_twist_array_list)
+
     return opt_log_twist_array_list
 
 def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist):
     # Calculates on all possible sequences (not practical for large n_vocab or large output_len)
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(
-        prompt, n_vocab, output_len - 1)
+        prompt, n_vocab, output_len)
 
     model_twist_array_list = []
 
-    for j in range(1, output_len):
+    for j in range(1, output_len + 1):
         all_seqs = all_seqs_list[-j]
         model_twist = evaluate_log_psi_t(all_seqs, cfg_twist, params_twist)
         model_twist_array_list.append(model_twist)
@@ -2131,7 +2149,7 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 
 # Some simple unit tests to make sure things are working more or less as we would expect
 class TestClass:
-    rnd_key = jax.random.PRNGKey(42)
+    rng_key = jax.random.PRNGKey(42)
     prompt = jnp.array([0, 1, 0, 1])
     n_vocab = 2
     output_len = 5
@@ -2141,8 +2159,8 @@ class TestClass:
     n_twist = 1000 # for the training procedure
     n_policy_samples = 1000
 
-    rnd_key, cfg_p, params_p = transformer_init_params(
-        rnd_key,
+    rng_key, cfg_p, params_p = transformer_init_params(
+        rng_key,
         n_vocab=n_vocab,
         d_model=64,
         d_k=16,
@@ -2152,8 +2170,8 @@ class TestClass:
         d_fc=64,
     )
     cfg_p_0, params_p_0 = copy.deepcopy(cfg_p), copy.deepcopy(params_p)
-    rnd_key, cfg_twist, params_twist = transformer_init_params(
-        rnd_key,
+    rng_key, cfg_twist, params_twist = transformer_init_params(
+        rng_key,
         n_vocab=n_vocab,
         d_model=64,
         d_k=16,
@@ -2162,8 +2180,8 @@ class TestClass:
         d_v=16,
         d_fc=64,
     )
-    rnd_key, cfg_baseline, params_baseline = transformer_init_params(
-        rnd_key,
+    rng_key, cfg_baseline, params_baseline = transformer_init_params(
+        rng_key,
         n_vocab=1,
         d_model=64,
         d_k=16,
@@ -2184,7 +2202,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="one_bad",
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="one_bad",
                                           rl_loss_type="custom", beta_kl=0.)
 
         num_epochs = 50
@@ -2194,7 +2212,7 @@ class TestClass:
 
         for _ in range(num_epochs):
 
-            rnd_key, sk = jax.random.split(self.rnd_key)
+            rng_key, sk = jax.random.split(self.rng_key)
 
             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -2236,7 +2254,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied",
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="varied",
                                           rl_loss_type="custom", beta_kl=0.)
 
         num_epochs = 50
@@ -2246,7 +2264,7 @@ class TestClass:
 
         for _ in range(num_epochs):
 
-            rnd_key, sk = jax.random.split(self.rnd_key)
+            rng_key, sk = jax.random.split(self.rng_key)
 
             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -2291,13 +2309,13 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="one_bad",
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="one_bad",
                                           rl_loss_type="ppo", ppo_steps=5, gamma=1., gae_lambda=1.)
 
         num_epochs = 50
         for _ in range(num_epochs):
 
-            rnd_key, sk = jax.random.split(self.rnd_key)
+            rng_key, sk = jax.random.split(self.rng_key)
 
             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -2349,13 +2367,13 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied",
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="varied",
                                           rl_loss_type="ppo", ppo_steps=5, gamma=1., gae_lambda=1.)
 
         num_epochs = 100
         for _ in range(num_epochs):
 
-            rnd_key, sk = jax.random.split(self.rnd_key)
+            rng_key, sk = jax.random.split(self.rng_key)
 
             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -2396,26 +2414,26 @@ class TestClass:
         assert log_p[0] < -5. # TODO JUL 16 test PPO further. Maybe test with more steps? Something weird seems to be happening (maybe? Or maybe it's just the conservative clipping causing the slow training. But what about the positive rewards?)
 
 
-    def test_smc_jit_vs_no_jit(self):
-        n_smc_samples = 100
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
-                                                        beta=1.,
-                                                        reward_model_fn=reward_model_varied)
-
-        _, samples_non_jit = smc_procedure(self.rnd_key, self.prompt, self.cfg_p,
-                                 self.params_p,
-                                 self.cfg_twist, self.params_twist, final_twist,
-                                 self.output_len,
-                                 n_smc_samples)
-
-        _, samples_jit = smc_jit(self.rnd_key, self.prompt, self.cfg_p,
-                                         self.params_p,
-                                         self.cfg_twist, self.params_twist,
-                                         final_twist,
-                                         self.output_len,
-                                         n_smc_samples)
-
-        assert (jnp.abs(samples_non_jit - samples_jit)).sum() == 0
+    # def test_smc_jit_vs_no_jit(self):
+    #     n_smc_samples = 100
+    #     final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+    #                                                     beta=1.,
+    #                                                     reward_model_fn=reward_model_varied)
+    #
+    #     _, samples_non_jit = smc_procedure(self.rng_key, self.prompt, self.cfg_p,
+    #                              self.params_p,
+    #                              self.cfg_twist, self.params_twist, final_twist,
+    #                              self.output_len,
+    #                              n_smc_samples)
+    #
+    #     _, samples_jit = smc_jit(self.rng_key, self.prompt, self.cfg_p,
+    #                                      self.params_p,
+    #                                      self.cfg_twist, self.params_twist,
+    #                                      final_twist,
+    #                                      self.output_len,
+    #                                      n_smc_samples)
+    #
+    #     assert (jnp.abs(samples_non_jit - samples_jit)).sum() == 0
 
 
 
@@ -2432,7 +2450,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
 
         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1.,
@@ -2440,7 +2458,7 @@ class TestClass:
         num_epochs = 10
         for _ in range(num_epochs):
 
-            rnd_key, sk = jax.random.split(self.rnd_key)
+            rng_key, sk = jax.random.split(self.rng_key)
 
             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
@@ -2487,7 +2505,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
 
         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1.,
@@ -2496,7 +2514,7 @@ class TestClass:
         num_epochs = 10
         for _ in range(num_epochs):
 
-            rnd_key, sk = jax.random.split(self.rnd_key)
+            rng_key, sk = jax.random.split(self.rng_key)
 
             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
@@ -2564,7 +2582,7 @@ class TestClass:
         analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(self.prompt, self.prompt_len, self.n_vocab,
                                                        self.output_len, self.cfg_p, self.params_p, final_twist)
 
-        _, samples = smc_procedure(self.rnd_key, self.prompt, self.cfg_p,
+        _, samples = smc_procedure(self.rng_key, self.prompt, self.cfg_p,
                                  self.params_p,
                                  self.cfg_twist, self.params_twist, final_twist,
                                  self.output_len,
@@ -2603,7 +2621,7 @@ class TestClass:
         optimizer_twist = optax.adam(learning_rate=lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
-        experiment_cfg = ExperimentConfig(dre_type="analytic_mse_rel", rm_type="one_bad")
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="analytic_mse_rel", rm_type="one_bad")
 
         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1., reward_model_fn=experiment_cfg.rm_fn)
@@ -2611,7 +2629,7 @@ class TestClass:
         num_epochs = 100
         for _ in range(num_epochs):
 
-            rnd_key, sk = jax.random.split(self.rnd_key)
+            rng_key, sk = jax.random.split(self.rng_key)
 
             grad_params_twist = experiment_cfg.get_grad_params_twist(sk,
                                                                      self.prompt,
@@ -2647,44 +2665,69 @@ class TestClass:
 
     def test_roger_dre(self):
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
+        self.rng_key, self.cfg_twist, self.params_twist = transformer_init_params(
+            self.rng_key,
+            n_vocab=self.n_vocab,
+            d_model=64,
+            d_k=8,
+            n_layers=4,
+            n_heads=8,
+            d_v=8,
+            d_fc=64,
+        )
 
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
-        experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied")
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="varied")
         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
 
-        num_epochs = 100
-        for _ in range(num_epochs):
-
-            rnd_key, sk = jax.random.split(self.rnd_key)
-
-            grad_params_twist = experiment_cfg.get_grad_params_twist(sk, self.prompt,
-                                                                     self.n_vocab,
-                                                                     self.n_twist,
-                                                                     self.output_len,
-                                                                     self.cfg_p,
-                                                                     self.params_p,
-                                                                     self.cfg_twist,
-                                                                     self.params_twist,
-                                                                     final_twist)
-
-            # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
-            updates_twist, optim_twist_state = optimizer_twist.update(
-                grad_params_twist, optim_twist_state, self.params_twist)
-            self.params_twist = optax.apply_updates(self.params_twist,
-                                                    updates_twist)
-
-        avg_rel_diff = compare_learned_twist_vs_optimal(self.prompt, self.n_vocab, self.output_len, self.cfg_p,
+        avg_rel_diff_start = compare_learned_twist_vs_optimal(self.prompt, self.n_vocab, self.output_len, self.cfg_p,
                                          self.params_p, final_twist, self.cfg_twist,
-                                         self.params_twist, rm_type=experiment_cfg.rm_type, verbose=False, relative_diff_loss=True)
+                                         self.params_twist, rm_type=experiment_cfg.rm_type, verbose=True, relative_diff_loss=True)
+        avg_rel_diff_list = [avg_rel_diff_start]
+        print(avg_rel_diff_list)
 
-        assert avg_rel_diff < 0.1
+        eval_repeats = 3
+        for repeat in range(eval_repeats):
+            num_epochs = 100
+            for _ in range(num_epochs):
+
+                rng_key, sk = jax.random.split(self.rng_key)
+
+                grad_params_twist = experiment_cfg.get_grad_params_twist(sk, self.prompt,
+                                                                         self.n_vocab,
+                                                                         self.n_twist,
+                                                                         self.output_len,
+                                                                         self.cfg_p,
+                                                                         self.params_p,
+                                                                         self.cfg_twist,
+                                                                         self.params_twist,
+                                                                         final_twist)
+
+                # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
+                updates_twist, optim_twist_state = optimizer_twist.update(
+                    grad_params_twist, optim_twist_state, self.params_twist)
+                self.params_twist = optax.apply_updates(self.params_twist,
+                                                        updates_twist)
+
+            avg_rel_diff = compare_learned_twist_vs_optimal(self.prompt, self.n_vocab, self.output_len, self.cfg_p,
+                                             self.params_p, final_twist, self.cfg_twist,
+                                             self.params_twist, rm_type=experiment_cfg.rm_type, verbose=True, relative_diff_loss=True)
+            avg_rel_diff_list.append(avg_rel_diff)
+            print(avg_rel_diff)
+
+        print(avg_rel_diff_list)
+        assert avg_rel_diff_list[0] > avg_rel_diff_list[1]
+        assert avg_rel_diff_list[1] > avg_rel_diff_list[2]
+        assert avg_rel_diff_list[2] > avg_rel_diff_list[3]
+
+        assert avg_rel_diff_list[-1] < 0.1
 
     def test_sixo_dre(self):
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
 
-        experiment_cfg = ExperimentConfig(dre_type="sixo", rm_type="varied")
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="sixo", rm_type="varied")
 
         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
@@ -2693,7 +2736,7 @@ class TestClass:
         num_epochs = 100
         for _ in range(num_epochs):
 
-            rnd_key, sk = jax.random.split(self.rnd_key)
+            rng_key, sk = jax.random.split(self.rng_key)
 
             grad_params_twist = experiment_cfg.get_grad_params_twist(sk, self.prompt,
                                                                      self.n_vocab,
@@ -2721,16 +2764,16 @@ class TestClass:
 
 def main():
 
-    experiment_cfg = ExperimentConfig(args.dre_type, args.rm_type, rl_loss_type=args.rl_loss_type,
+    experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, dre_type=args.dre_type, rm_type=args.rm_type, rl_loss_type=args.rl_loss_type,
                                       beta_kl=args.beta_kl, ppo_steps=args.ppo_steps, clip_epsilon=args.clip_epsilon,
                                       gamma=args.gamma, gae_lambda=args.gae_lambda, beta_ent=args.beta_ent)
 
     start = time.time()
 
-    rnd_key = jax.random.PRNGKey(args.seed)
+    rng_key = jax.random.PRNGKey(args.seed)
 
-    rnd_key, cfg_p, params_p = transformer_init_params(
-        rnd_key,
+    rng_key, cfg_p, params_p = transformer_init_params(
+        rng_key,
         n_vocab=args.n_vocab,
         d_model=args.d_model,
         d_k=args.d_k,
@@ -2741,8 +2784,8 @@ def main():
     )
 
     # USE A SINGLE TRANSFORMER that parameterizes all the twists (with weight sharing, which is what we want)
-    rnd_key, cfg_twist, params_twist = transformer_init_params(
-                rnd_key,
+    rng_key, cfg_twist, params_twist = transformer_init_params(
+                rng_key,
                 n_vocab=args.n_vocab,
                 d_model=args.d_model_twist,
                 d_k=args.d_k_twist,
@@ -2753,8 +2796,8 @@ def main():
             )
 
     if args.rl_loss_type == "custom_extremes":
-        rnd_key, cfg_twist_pos, params_twist_pos = transformer_init_params(
-            rnd_key,
+        rng_key, cfg_twist_pos, params_twist_pos = transformer_init_params(
+            rng_key,
             n_vocab=args.n_vocab,
             d_model=args.d_model_twist,
             d_k=args.d_k_twist,
@@ -2764,8 +2807,8 @@ def main():
             d_fc=args.d_fc_twist,
         )
 
-    rnd_key, cfg_baseline, params_baseline = transformer_init_params(
-        rnd_key,
+    rng_key, cfg_baseline, params_baseline = transformer_init_params(
+        rng_key,
         n_vocab=1,
         d_model=args.d_model_baseline,
         d_k=args.d_k_baseline,
@@ -2819,7 +2862,6 @@ def main():
     ood_probs = {"bad":[], "good":[], "evasive":[]}
 
     for epoch in range(args.epochs):
-
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
 
@@ -2830,18 +2872,54 @@ def main():
             final_twist_pos = final_twists_pos[i]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
+            # TODO TESTING ONLY REMOVE LATER
+            rng_key, sk = jax.random.split(rng_key)
+            experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab,
+                                              dre_type="roger",
+                                              rm_type="varied")
+            final_twist = neg_beta_times_batch_reward_model_curry(
+                prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
+            # grad_params_twist = experiment_cfg.get_grad_params_twist(sk,
+            #                                                          prompt,
+            #                                                          args.n_vocab,
+            #                                                          args.n_twist,
+            #                                                          args.output_len,
+            #                                                          cfg_p,
+            #                                                          params_p,
+            #                                                          cfg_twist,
+            #                                                          params_twist,
+            #                                                          final_twist)
+            #
+            # # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
+            # updates_twist, optim_twist_state = optimizer_twist.update(
+            #     grad_params_twist, optim_twist_state, params_twist)
+            # params_twist = optax.apply_updates(params_twist,
+            #                                         updates_twist)
+            avg_rel_diff = compare_learned_twist_vs_optimal(prompt,
+                                                            args.n_vocab,
+                                                            args.output_len,
+                                                            cfg_p,
+                                                            params_p,
+                                                            final_twist,
+                                                            cfg_twist,
+                                                            params_twist,
+                                                            rm_type=experiment_cfg.rm_type,
+                                                            verbose=False,
+                                                            relative_diff_loss=True)
 
+            print(avg_rel_diff)
+            1 / 0
 
             test_smc = False
             if test_smc:
-                test_smc(rnd_key, prompt, args.n_vocab, args.output_len, args.n_test_smc_samples,
+                test_smc(rng_key, prompt, args.n_vocab, args.output_len, args.n_test_smc_samples,
                          cfg_p, params_p, cfg_twist, params_twist, final_twist)
                 1/0
 
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
 
-                rnd_key, sk = jax.random.split(rnd_key)
+                rng_key, sk = jax.random.split(rng_key)
 
                 grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist)
 
@@ -2855,7 +2933,7 @@ def main():
                         grad_params_twist_pos, optim_twist_state_pos, params_twist_pos)
 
             for model_update in range(args.model_updates_per_epoch):
-                rnd_key, sk = jax.random.split(rnd_key)
+                rng_key, sk = jax.random.split(rng_key)
 
                 if args.rl_loss_type == "custom_extremes":
 
@@ -2896,7 +2974,7 @@ def main():
             test_info = True
             if (epoch + 1) % args.print_every == 0:
                 if test_info:
-                    rnd_key, sk, sk2, sk3 = jax.random.split(rnd_key, 4)
+                    rng_key, sk, sk2, sk3 = jax.random.split(rng_key, 4)
 
                     if experiment_cfg.rm_type == "one_bad":
                         inspect_one_bad_info(prompt, prompt_len, args.n_vocab, args.output_len, cfg_p, params_p)
@@ -2914,7 +2992,7 @@ def main():
                         ood_probs["evasive"].append(evasive_cont_ood_prob)
 
                         adv_reward, p_reward = inspect_bad_word_reward(sk3, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
-                            final_twist, args.output_len, args.n_policy_samples, experiment_cfg.batch_rm)
+                            final_twist, args.output_len, args.n_policy_samples, experiment_cfg.batch_rm, args.analytic_sigma_sample, args.n_vocab)
                         adv_rewards.append(adv_reward)
                         p_rewards.append(p_reward)
 
@@ -2924,7 +3002,7 @@ def main():
                         if experiment_cfg.rl_loss_type == "custom" or experiment_cfg.rl_loss_type == "custom_baselinep" or \
                             experiment_cfg.rl_loss_type == "custom_mixed" or experiment_cfg.rl_loss_type == "custom_extremes":
                             print("SMC ADVERSARIAL GENERATIONS")
-                            rnd_key, sk1 = jax.random.split(rnd_key)
+                            rng_key, sk1 = jax.random.split(rng_key)
                             _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
                                 sk1, prompt, cfg_p, params_p, cfg_twist,
                                 params_twist, final_twist, args.output_len, args.n_twist,
@@ -2936,7 +3014,7 @@ def main():
 
                             if experiment_cfg.rl_loss_type == "custom_extremes":
                                 print("SMC POS GENERATIONS")
-                                rnd_key, sk1 = jax.random.split(rnd_key)
+                                rng_key, sk1 = jax.random.split(rng_key)
                                 _, prompt_w_sigma_pos_sample_s_1_to_t = smc_procedure(
                                     sk1, prompt, cfg_p, params_p, cfg_twist_pos,
                                     params_twist_pos, final_twist_pos, args.output_len,
