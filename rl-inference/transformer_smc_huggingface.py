@@ -164,8 +164,9 @@ class ExperimentConfig:
         if self.rm_type == "toxicity":
             return self._get_rm_fn()
         else:
-            batch_rm = batch_reward_model(reward_model_fn=self.rm_fn)
-            return batch_rm
+            raise NotImplementedError
+            # batch_rm = batch_reward_model(reward_model_fn=self.rm_fn)
+            # return batch_rm
 
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, trainstate_p, params_of_trainstate_p,
                               trainstate_twist, params_of_trainstate_twist, final_twist):
@@ -498,20 +499,19 @@ def batch_transformer(trainstate_p, params_of_trainstate_p,seq):
     return batch_transformer_func(trainstate_p, params_of_trainstate_p,seq)
 
 # curry the prompt_len... TODO think about whether this structure or the one where you pass in (e.g. like batch_reward_model below) makes more sense
-def neg_beta_times_batch_reward_model_curry(prompt_len, beta, reward_model_fn):
-    def curried_batch_rm_fn(seq):
-        neg_beta_batch_rm = vmap(neg_beta_times_reward_model, in_axes=(0, None, None, None), out_axes=0)
-        return neg_beta_batch_rm(seq, prompt_len, beta, reward_model_fn)
-    return curried_batch_rm_fn
+def neg_beta_times_reward_model_curry(prompt_len, beta, reward_model_fn):
+    def curried_phi_fn(seq):
+        return neg_beta_times_reward_model(seq, prompt_len, beta, reward_model_fn)
+    return curried_phi_fn
 
 def neg_beta_times_reward_model(single_seq, prompt_len, beta, reward_model_fn):
     return reward_model_fn(single_seq, prompt_len) * -1. * beta
 
-def batch_reward_model(reward_model_fn):
-    def batch_rm_fn(seq, prompt_len):
-        batch_rm = vmap(reward_model_fn, in_axes=(0, None), out_axes=0)
-        return batch_rm(seq, prompt_len)
-    return batch_rm_fn
+# def batch_reward_model(reward_model_fn):
+#     def batch_rm_fn(seq, prompt_len):
+#         batch_rm = vmap(reward_model_fn, in_axes=(0, None), out_axes=0)
+#         return batch_rm(seq, prompt_len)
+#     return batch_rm_fn
 
 base_reward = 0.
 bad_reward = -1.
@@ -599,8 +599,6 @@ def reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenize
         original_shape = seq.shape
         do_reshape = True
         seq = seq.reshape(-1, seq.shape[-1])
-        print(seq.shape)
-
 
 
     text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
@@ -623,7 +621,8 @@ def reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenize
     # print(tokens)
     # tokens.to(device)
     score = toxicityModel(**tokens)[0]
-    print(score.squeeze(-1).shape)
+    # print("SCORE SHAPE")
+    # print(score.squeeze(-1).shape)
 
     if do_reshape:
         return score.squeeze(-1).reshape(original_shape[0], original_shape[1])
@@ -636,9 +635,11 @@ def curried_reward_model_toxicity(toxicityModel, tokenizer_RM, tokenizer):
     return new_rm
 
 
+# Note that jax.pure_callback requires a fixed size known in advance, however since we can pass in the padded sequences, then that size is just whatever the final padded size is
 def reward_model_toxicity_w_callback(curried_rm):
     def new_rm_fn(seq, prompt_len):
-        result_shape = jax.core.ShapedArray(seq.shape[:-1], seq.dtype)
+        print(seq.shape)
+        result_shape = jax.core.ShapedArray(seq.shape[:-1], dtype=jnp.float32)
         print(result_shape)
         return jax.pure_callback(curried_rm, result_shape, seq, prompt_len)
     return new_rm_fn
@@ -707,9 +708,9 @@ def get_proposal_q_sample_for_scan(rng_key, full_seq, trainstate_p, params_of_tr
 
     full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
 
-    Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
+    log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
 
-    return rng_key, full_seq, Z_s_1_to_t_minus_1
+    return rng_key, full_seq, log_Z_s_1_to_t_minus_1
 
 
 def get_proposal_q_sample_final(rng_key, seq, trainstate_p, params_of_trainstate_p, final_twist):
@@ -753,9 +754,9 @@ def get_proposal_q_sample_final(rng_key, seq, trainstate_p, params_of_trainstate
     # = log [sum_{s_t} of exp(log( p(s_t|s_{1:t-1}) psi(s_{1:t}) ))  ]
     # = log [sum_{s_t} of exp( log(p(s_t|s_{1:t-1})) + log(psi(s_{1:t})) )  ]
     # = logsumexp[log( p(s_t|s_{1:t-1})) + log( psi(s_{1:t})) ) ]
-    Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
+    log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
 
-    return rng_key, seq, Z_s_1_to_t_minus_1
+    return rng_key, seq, log_Z_s_1_to_t_minus_1
 
 
 def evaluate_unnormalized_log_q_t_full_seq(full_seq, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len_plus_t, dropout_rng):
@@ -905,33 +906,40 @@ def evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate
 # And in my current setup I don't think that learned final twist ever gets trained anywhere
 def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, use_final_twist, final_twist):
+    # IF use_final_twist, essentially what we are saying is don't use the learned twist for the final step,
+    # Use the actual - beta * reward model or whatever is the final twist
+    # use_final_twist should be True for sigma samples
+    # and should be False for the other samples in the Roger DRE update
 
     log_w_t_minus_1 = log_w_t
 
     t = output_len - 1
 
-    if use_final_twist:
-        # Full_seq has shape (n_samples, prompt_len + output_len)
-        rng_key, full_seq, Z_s_1_to_t_minus_1 = \
-            get_proposal_q_sample_final(rng_key, full_seq[:, :-1],
-                                        trainstate_p, params_of_trainstate_p,
-                                        final_twist)
-            # get_proposal_q_sample_final(
-            # rng_key, full_seq[:, :-1], trainstate_p, final_twist)
-    else:
-        rng_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
-            rng_key, full_seq, trainstate_p, params_of_trainstate_p,
-            trainstate_twist, params_of_trainstate_twist, prompt_len, t)
+    # if use_final_twist:
+    #     # Full_seq has shape (n_samples, prompt_len + output_len)
+    #     rng_key, full_seq, log_Z_s_1_to_t_minus_1 = \
+    #         get_proposal_q_sample_final(rng_key, full_seq[:, :-1],
+    #                                     trainstate_p, params_of_trainstate_p,
+    #                                     final_twist)
+    #         # get_proposal_q_sample_final(
+    #         # rng_key, full_seq[:, :-1], trainstate_p, final_twist)
+    # else:
+    # New implementation: do the below always, (proposal always from twists, to avoid absurd amounts of calculation on n_vocab * batch number of seqs for the reward model)
+    # If using final twist (ie. sigma samples, the positive samples), the only difference will be in the psi_t_eval later:
+    rng_key, full_seq, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+        rng_key, full_seq, trainstate_p, params_of_trainstate_p,
+        trainstate_twist, params_of_trainstate_twist, prompt_len, t)
 
     rng_key, dropout_rng = jax.random.split(rng_key)
-    if use_final_twist:
-        # Now this is ok to use since at this point full_seq will have been fully generated, and we can directly use the previous function I had
-        log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
-            full_seq, trainstate_p, params_of_trainstate_p, final_twist, dropout_rng)
-    else:
-        log_q_t_eval = evaluate_unnormalized_log_q_t_full_seq(full_seq, trainstate_p, params_of_trainstate_p,
-                                                              trainstate_twist, params_of_trainstate_twist,
-                                                              prompt_len + t, dropout_rng)
+    # if use_final_twist:
+    #     # Now this is ok to use since at this point full_seq will have been fully generated, and we can directly use the previous function I had
+    #     log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
+    #         full_seq, trainstate_p, params_of_trainstate_p, final_twist, dropout_rng)
+    # else:
+    # New implementation: log_q_t_eval is now the same regardless of using final twist as well, because we have the same proposal distribution
+    log_q_t_eval = evaluate_unnormalized_log_q_t_full_seq(full_seq, trainstate_p, params_of_trainstate_p,
+                                                          trainstate_twist, params_of_trainstate_twist,
+                                                          prompt_len + t, dropout_rng)
 
     log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
 
@@ -948,7 +956,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
 
-    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
+    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + log_Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
 
     log_w_t = log_w_t_minus_1 + log_alpha_t
 
@@ -989,7 +997,7 @@ def smc_scan_iter_non_final(carry, t):
 
     log_w_t_minus_1 = log_w_t
 
-    rng_key, full_seq, Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+    rng_key, full_seq, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
         rng_key, full_seq, trainstate_p, params_of_trainstate_p,
         trainstate_twist, params_of_trainstate_twist, prompt_len, t)
 
@@ -1011,7 +1019,7 @@ def smc_scan_iter_non_final(carry, t):
     # for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized)
 
     # alpha is the factor multiplied (added in log space) to the previous weight
-    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
+    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + log_Z_s_1_to_t_minus_1  # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
     # It may be less confusing to include the Z directly in the log q eval - but the reason I've left it like this
     # is because if I follow the TODO where I cancel the numerator and denominator, I'll want the Z term to exist separately.
 
@@ -1044,7 +1052,6 @@ def smc_scan_iter_non_final(carry, t):
 
     return carry, full_seq
 
-
 @partial(jax.jit, static_argnames=["final_twist", "use_final_twist", 'output_len', 'n_smc_samples', "intermediate_sample_history" ])
 def smc_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
     # Generate samples using SMC with twists (learned and final, if use_final_twist)
@@ -1075,6 +1082,8 @@ def smc_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_tw
 
     log_z_hat_t, full_seq = smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, use_final_twist, final_twist)
+
+    full_seq_list = jnp.concatenate((full_seq_list, full_seq[None, :, :]))
 
     if intermediate_sample_history:
         return log_z_hat_t, full_seq, full_seq_list
@@ -1275,7 +1284,7 @@ def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len,
 
     rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
 
-    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist, use_final_twist=True)
 
     _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_procedure(sk2, prompt,
                                                             trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
@@ -1343,7 +1352,7 @@ def get_l_dre_roger_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, t
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p,
                                                       trainstate_twist, params_of_trainstate_twist,
                                                          final_twist,
-                                                         output_len, n_twist)
+                                                         output_len, n_twist, use_final_twist=True)
 
     l_dre = 0.
 
@@ -1352,17 +1361,17 @@ def get_l_dre_roger_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, t
                              trainstate_twist, params_of_trainstate_twist,
                              final_twist,
                              output_len,
-                             n_twist, use_final_twist=False, intermediate_sample_history=True) # I think the use_final_twist=False doesn't even matter here since I'm only using the intermediate sample history...
+                             n_twist, use_final_twist=False, intermediate_sample_history=True)
 
-    scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len - 1))
+    scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len))
 
     carry = (l_dre, prompt_w_sigma_sample_s_1_to_t, trainstate_twist, params_of_trainstate_twist, prompt_len, dropout_rng)
 
-    carry, _ = jax.lax.scan(get_l_dre_roger_scan_iter, carry, scan_over, output_len - 1)
+    carry, _ = jax.lax.scan(get_l_dre_roger_scan_iter, carry, scan_over, output_len)
 
     l_dre, _, _, _, _, _ = carry
 
-    l_dre /= (output_len - 1)
+    l_dre /= (output_len)
     return -l_dre  # negative because now we have a loss
 
 
@@ -1849,7 +1858,7 @@ def value_loss(rewards, values, final_state_vals, gamma):
 def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
     final_twists = []
     for jnp_prompt in jnp_prompts:
-        final_twist = neg_beta_times_batch_reward_model_curry(jnp_prompt.shape[-1],
+        final_twist = neg_beta_times_reward_model_curry(jnp_prompt.shape[-1],
                                                               beta=curr_beta_temp,
                                                               reward_model_fn=rm_fn)
 
@@ -2489,7 +2498,7 @@ def print_smc_samples(rng_key, prompt, trainstate_p, trainstate_twist, final_twi
                                trainstate_twist, trainstate_twist.params,
                                final_twist,
                                output_len,
-                               n_test_smc_samples)
+                               n_test_smc_samples, use_final_twist=True)
 
     # print(samples)
     text_outputs = tokenizer.batch_decode(samples,
@@ -2711,7 +2720,7 @@ def compare_smc_samples_vs_analytic_for_output_len_2(rng_key, prompt,
                                      trainstate_p.params, trainstate_twist,
                                      trainstate_twist.params,
                                      final_twist, args.output_len,
-                                     args.n_print_samples)
+                                     args.n_print_samples, use_final_twist=True)
     sigma_samples_bad_word_t_0_by_word, sigma_samples_bad_word_by_word = calc_samples_bad_word_probs(
         samples_sigma, prompt_len)
 
@@ -2764,7 +2773,7 @@ def main():
             print("Loaded model")
 
 
-    experiment_cfg = ExperimentConfig(args.dre_type, args.rm_type, rl_loss_type=args.rl_loss_type,
+    experiment_cfg = ExperimentConfig(dre_type=args.dre_type, rm_type=args.rm_type, rl_loss_type=args.rl_loss_type,
                                       beta_kl=args.beta_kl, ppo_steps=args.ppo_steps, clip_epsilon=args.clip_epsilon,
                                       gamma=args.gamma, gae_lambda=args.gae_lambda, beta_ent=args.beta_ent,
                                       toxicityModel=toxicityModel, tokenizer_RM=tokenizer_RM, device=device, tokenizer=tokenizer)
@@ -2828,71 +2837,55 @@ def main():
             final_twist = final_twists[i]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
-            # TODO REMOVE LATER
-            # p_samples = stochastic_transformer_sample(rng_key, trainstate_p,
-            #                                           prompt, args.output_len,
-            #                                           args.n_print_samples) # shape 100, 6
-
-
-            # text_outputs = tokenizer.batch_decode(p_samples,
-            #                                 skip_special_tokens=True)
-            # print(text_outputs)
-            # tokens = tokenizer_RM(text_outputs,
-            #                       truncation=True,
-            #                                         padding=True,
-            #                       max_length=512,
-            #                       return_token_type_ids=False,
-            #                       return_tensors="pt",
-            #                       return_attention_mask=True)
+            # # # TODO REMOVE LATER
             #
-            # # TODO AUG 15 JUST GET THIS WORKING FIRST, THEN after you got this working
-            # # FIRST just play around with the RM and use a few examples of the swear words and see what happens
-            # # Even test some edge cases, just for fun.
-            # # Figure out how to rework the rest of the code to fit this, along with all the batch rm stuff
-            # # Then test that, and finally begin experiments using that
-            # print(tokens)
-            # tokens.to(device)
-            # score = toxicityModel(**tokens)[0]
-            # print(score)
+            # rng_key, sk1, sk2, dropout_rng = jax.random.split(rng_key, 4)
+            # _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt,
+            #                                                   trainstate_p,
+            #                                                   trainstate_p.params,
+            #                                                   trainstate_twist,
+            #                                                   trainstate_twist.params,
+            #                                                   final_twist,
+            #                                                   args.output_len,
+            #                                                   100,
+            #                                                   use_final_twist=True)
             #
-
-            # TODO AUG 16
-            # The problems include: cannot convert to numpy (which tokenizer does)
-            # if we want to use jit. THere's also the callback that gets around it e.g. https://stackoverflow.com/questions/73464697/i-am-trying-to-assign-a-jax-tracer-object-to-a-numpy-array-that-requires-concret
-            # However this requires a fixed size known in advance, which isn't the case with the padding required
-            # Another possibility then is to perhaps just add some extra padding - I guess I can write a function that takes in a max len, maybe some pretty large number like 20 or something, or maybe 4x (input len + prompt len)
-            # something like that. And then uses a fill function or something, or just concatenates based on the size difference
-            # Use this together with the callback, see what happens then.
-            # If I still can't get it working, then just try no jit perhaps... but that's gonna be so super slow
-            # Another possiblity is to try training my own RM e.g. on the anthropic data, or whatever the guy did to build his toxicity model
-            # TRY THE PADDING AND CALLBACK IDEA FIRST. This shld work and should be reasonably fast to implement
-            # IF THAT DOESN't WORK: try just isolating the parts of the code that call final_twist or the rew_model. Everything else can be jitted. Then jit low level instead of top level, and move all the tokenize/text logic outside of those functions.
-            # The above strat should be workable as well. All the final_twist stuff appears only in last iter of SMC, so that can go outside of the jitted function which has the lax.scan loop
-            # For policy learning, again we can isolate the calculation of the rewards from the rest of the code that works with it.
-            # This should take more time, so start with the callback. That one is also a more interesting learning experience.
-
-            # Anyway discuss this also and see what ideas Roger or the rest have
-            # Disucss also that the reason for this is that otherwise the results aren't that interesting... binary reward model is too simplistic with no gradation.
+            # # get_l_dre_roger_jit(rng_key, prompt, trainstate_p,
+            # #                     trainstate_p.params, trainstate_twist,
+            # #                     trainstate_twist.params, final_twist,
+            # #                     args.output_len, 100)
             #
-
-            # r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
-            # print(r_seqs)
-            # print(r_seqs.shape)
-            #
-            # r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
-            # print(r_seqs)
-            # print(r_seqs.shape)
-            #
-            # p_samples = p_samples.reshape(2, 50, -1)
-            # print(p_samples.shape)
-            # r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
-            # print(r_seqs)
-            # print(r_seqs.shape)
-            #
-            # r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
-            # print(r_seqs)
-            # print(r_seqs.shape)
-            # 1/0
+            # # p_samples = stochastic_transformer_sample(rng_key, trainstate_p,
+            # #                                           prompt, args.output_len,
+            # #                                           args.n_print_samples) # shape 100, 6
+            # #
+            # #
+            # # # TODO AUG 16
+            # # # Another possiblity is to try training my own RM e.g. on the anthropic data, or whatever the guy did to build his toxicity model
+            # # # TRY THE PADDING AND CALLBACK IDEA FIRST. This shld work and should be reasonably fast to implement
+            # # # IF THAT DOESN't WORK: try just isolating the parts of the code that call final_twist or the rew_model. Everything else can be jitted. Then jit low level instead of top level, and move all the tokenize/text logic outside of those functions.
+            # # # The above strat should be workable as well. All the final_twist stuff appears only in last iter of SMC, so that can go outside of the jitted function which has the lax.scan loop
+            # # # For policy learning, again we can isolate the calculation of the rewards from the rest of the code that works with it.
+            # # # This should take more time, so start with the callback. That one is also a more interesting learning experience.
+            # #
+            # # r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
+            # # print(r_seqs)
+            # # print(r_seqs.shape)
+            # #
+            # # r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
+            # # print(r_seqs)
+            # # print(r_seqs.shape)
+            # #
+            # # p_samples = p_samples.reshape(2, 50, -1)
+            # # print(p_samples.shape)
+            # # r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
+            # # print(r_seqs)
+            # # print(r_seqs.shape)
+            # #
+            # # r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
+            # # print(r_seqs)
+            # # print(r_seqs.shape)
+            # # 1/0
 
 
             test_smc = False
