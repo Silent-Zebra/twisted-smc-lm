@@ -1057,7 +1057,8 @@ def smc_scan_iter_non_final(carry, t):
 
     return carry, full_seq
 
-# @partial(jax.jit, static_argnames=['output_len', 'n_smc_samples'])
+# TODO Aug 19 try to see if you can get jit back on this.
+@partial(jax.jit, static_argnames=['output_len', 'n_smc_samples'])
 def smc_jit_before_final(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, output_len, n_smc_samples):
     # Generate samples using SMC with twists (learned and final, if use_final_twist)
     # log_z_hat_t unused for now
