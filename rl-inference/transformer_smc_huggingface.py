@@ -476,8 +476,7 @@ def stochastic_transformer_sample_iter(carry, t):
 
 
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
-# TODO Aug 19 Rejit
-# @partial(jax.jit, static_argnums=[3, 4])
+@partial(jax.jit, static_argnums=[3, 4])
 def stochastic_transformer_sample(rng_key, trainstate_p, prompt: jnp.ndarray, output_len, n_samples):
     prompt_len = prompt.shape[0]
     # print(prompt_len)
@@ -1053,8 +1052,7 @@ def smc_scan_iter_non_final(carry, t):
 
     return carry, full_seq
 
-# TODO Aug 19 Rejit
-# @partial(jax.jit, static_argnames=['output_len', 'n_smc_samples'])
+@partial(jax.jit, static_argnames=['output_len', 'n_smc_samples'])
 def smc_jit_before_final(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, output_len, n_smc_samples):
     # Generate samples using SMC with twists (learned and final, if use_final_twist)
     # log_z_hat_t unused for now
@@ -1379,8 +1377,7 @@ def get_l_dre_roger_partial_jit(rng_key, prompt, trainstate_p, params_of_trainst
 
 
 # This is the EBM Maximum Likelihood approach
-# TODO Aug 19 Rejit
-# @partial(jax.jit, static_argnames=["output_len"])
+@partial(jax.jit, static_argnames=["output_len"])
 def get_l_dre_roger_jitted_part(rng_key, prompt, trainstate_twist, params_of_trainstate_twist, output_len, prompt_w_sigma_sample_s_1_to_t, intermediate_twist_samples_hist):
     prompt_len = prompt.shape[-1]
 
