@@ -32,9 +32,9 @@ from transformers import FlaxAutoModelForSequenceClassification
 
 import os
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
 # os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".25"
-# os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"]="platform"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"]="platform"
 
 # NOTE TO SELF: look up https://github.com/huggingface/transformers/blob/fe3c8ab1af558b95f67f5fafc0c55f09fd2b09db/src/transformers/models/gpt2/modeling_flax_gpt2.py
 # for details on the Flax GPT2 model
