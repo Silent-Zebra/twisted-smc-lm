@@ -155,8 +155,8 @@ class ExperimentConfig:
             return reward_model_binary
         elif self.rm_type == "toxicity":
             curried_rm = curried_reward_model_toxicity(self.toxicityModel, self.tokenizer_RM, self.tokenizer)
-            # return curried_rm
-            return reward_model_toxicity_w_callback(curried_rm)
+            return curried_rm
+            # return reward_model_toxicity_w_callback(curried_rm)
         else:
             raise NotImplementedError
 
