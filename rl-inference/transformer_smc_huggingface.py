@@ -136,8 +136,8 @@ class ExperimentConfig:
 
     def _get_dre_grad_fn(self):
         if self.dre_type == "roger":
-            # dre_grad_fn = jax.grad(get_l_dre_roger, argnums=5)
-            dre_grad_fn = jax.grad(get_l_dre_roger_jit, argnums=5)
+            # dre_grad_fn = jax.grad(get_l_dre_roger_jit, argnums=5)
+            dre_grad_fn = jax.grad(get_l_dre_roger_partial_jit, argnums=5)
         # elif self.dre_type == "sixo":
         #     dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         # elif self.dre_type == "analytic_mse_rel":
@@ -947,12 +947,12 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t_full_seq(
         full_seq, trainstate_p, params_of_trainstate_p, prompt_len + t, dropout_rng)
 
-    # if use_final_twist:
-    #     log_r_psi_t_eval = evaluate_log_phi_final(full_seq, final_twist)
-    # else:
-    rng_key, dropout_rng = jax.random.split(rng_key)
-    log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist,
-                                                   prompt_len + t, dropout_rng)
+    if use_final_twist:
+        log_r_psi_t_eval = evaluate_log_phi_final(full_seq, final_twist)
+    else:
+        rng_key, dropout_rng = jax.random.split(rng_key)
+        log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist,
+                                                       prompt_len + t, dropout_rng)
 
     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
 
@@ -1355,25 +1355,39 @@ def get_l_dre_roger_scan_iter(carry, scan_over):
     return carry, None
 
 
-# This is the EBM Maximum Likelihood approach
-@partial(jax.jit, static_argnames=["final_twist", "output_len", "n_twist"])
-def get_l_dre_roger_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist):
-    prompt_len = prompt.shape[-1]
+def get_l_dre_roger_partial_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist):
 
-    rng_key, sk1, sk2, dropout_rng = jax.random.split(rng_key, 4)
-    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p,
-                                                      trainstate_twist, params_of_trainstate_twist,
-                                                         final_twist,
-                                                         output_len, n_twist, use_final_twist=True)
-
-    l_dre = 0.
-
+    rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p,
+                                                      params_of_trainstate_p,
+                                                      trainstate_twist,
+                                                      params_of_trainstate_twist,
+                                                      final_twist,
+                                                      output_len, n_twist,
+                                                      use_final_twist=True)
     _, _, intermediate_twist_samples_hist = smc_procedure(sk2, prompt,
                              trainstate_p, params_of_trainstate_p,
                              trainstate_twist, params_of_trainstate_twist,
                              final_twist,
                              output_len,
                              n_twist, use_final_twist=False, intermediate_sample_history=True)
+
+    l_dre = get_l_dre_roger_jitted_part(rng_key, prompt, trainstate_twist, params_of_trainstate_twist, output_len, prompt_w_sigma_sample_s_1_to_t, intermediate_twist_samples_hist)
+    return l_dre
+
+
+# This is the EBM Maximum Likelihood approach
+@partial(jax.jit, static_argnames=["output_len"])
+def get_l_dre_roger_jitted_part(rng_key, prompt, trainstate_twist, params_of_trainstate_twist, output_len, prompt_w_sigma_sample_s_1_to_t, intermediate_twist_samples_hist):
+    prompt_len = prompt.shape[-1]
+
+    rng_key, sk1, sk2, dropout_rng = jax.random.split(rng_key, 4)
+    # _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p,
+    #                                                   trainstate_twist, params_of_trainstate_twist,
+    #                                                      final_twist,
+    #                                                      output_len, n_twist, use_final_twist=True)
+
+    l_dre = 0.
 
     scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len))
 
