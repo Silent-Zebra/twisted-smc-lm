@@ -1052,7 +1052,7 @@ def smc_scan_iter_non_final(carry, t):
 
     return carry, full_seq
 
-@partial(jax.jit, static_argnames=['output_len', 'n_smc_samples'])
+# @partial(jax.jit, static_argnames=['output_len', 'n_smc_samples'])
 def smc_jit_before_final(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, output_len, n_smc_samples):
     # Generate samples using SMC with twists (learned and final, if use_final_twist)
     # log_z_hat_t unused for now
@@ -2355,9 +2355,9 @@ def main():
                 # Set up the policy learning, test, and compare with the PPO baseline
                 # After that, let's set up the adversarial examples afterwards I guess.
 
+            print(f"Time after twist updates: {time.time() - start}", flush=True)
 
             assert args.model_updates_per_epoch == 0 # TODO Aug 19 later fix this; the rew_model calls, if to the RM which requires retokenization, need to go outside of any jitted functions
-            print(f"Time after twist updates: {time.time() - start}", flush=True)
 
             for model_update in range(args.model_updates_per_epoch):
                 print(f"MODEL UPDATE {model_update}", flush=True)
