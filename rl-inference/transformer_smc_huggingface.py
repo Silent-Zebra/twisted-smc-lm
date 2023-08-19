@@ -180,7 +180,7 @@ class ExperimentConfig:
         return grad_params_twist
 
 
-    @partial(jax.jit, static_argnames=["self", "final_twist", 'output_len', 'n_samples', "prompt_len" ])
+    # @partial(jax.jit, static_argnames=["self", "final_twist", 'output_len', 'n_samples', "prompt_len" ])
     def update_params_p_and_baseline(self, sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
                                      final_twist, output_len, n_samples, prompt_len,
                                      trainstate_baseline, params_of_trainstate_baseline, trainstate_p_0, params_of_trainstate_p_0
@@ -476,7 +476,8 @@ def stochastic_transformer_sample_iter(carry, t):
 
 
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
-@partial(jax.jit, static_argnums=[3, 4])
+# TODO Aug 19 Rejit
+# @partial(jax.jit, static_argnums=[3, 4])
 def stochastic_transformer_sample(rng_key, trainstate_p, prompt: jnp.ndarray, output_len, n_samples):
     prompt_len = prompt.shape[0]
     # print(prompt_len)
@@ -491,12 +492,12 @@ def stochastic_transformer_sample(rng_key, trainstate_p, prompt: jnp.ndarray, ou
 
     return full_seq
 
-@partial(jax.jit, static_argnums=0)
-def batch_transformer(trainstate_p, params_of_trainstate_p,seq):
-    # Output has shape (batch_size, prompt_len + output_len, n_vocab)
-    # Logsoftmax needed in order to go from unnormalized values to log probs
-    batch_transformer_func = vmap(transformer, in_axes=(None, None, 0), out_axes=0)
-    return batch_transformer_func(trainstate_p, params_of_trainstate_p,seq)
+# @partial(jax.jit, static_argnums=0)
+# def batch_transformer(trainstate_p, params_of_trainstate_p,seq):
+#     # Output has shape (batch_size, prompt_len + output_len, n_vocab)
+#     # Logsoftmax needed in order to go from unnormalized values to log probs
+#     batch_transformer_func = vmap(transformer, in_axes=(None, None, 0), out_axes=0)
+#     return batch_transformer_func(trainstate_p, params_of_trainstate_p,seq)
 
 # curry the prompt_len... TODO think about whether this structure or the one where you pass in (e.g. like batch_reward_model below) makes more sense
 def neg_beta_times_reward_model_curry(prompt_len, beta, reward_model_fn):
@@ -1052,7 +1053,8 @@ def smc_scan_iter_non_final(carry, t):
 
     return carry, full_seq
 
-@partial(jax.jit, static_argnames=['output_len', 'n_smc_samples'])
+# TODO Aug 19 Rejit
+# @partial(jax.jit, static_argnames=['output_len', 'n_smc_samples'])
 def smc_jit_before_final(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, output_len, n_smc_samples):
     # Generate samples using SMC with twists (learned and final, if use_final_twist)
     # log_z_hat_t unused for now
@@ -1377,7 +1379,8 @@ def get_l_dre_roger_partial_jit(rng_key, prompt, trainstate_p, params_of_trainst
 
 
 # This is the EBM Maximum Likelihood approach
-@partial(jax.jit, static_argnames=["output_len"])
+# TODO Aug 19 Rejit
+# @partial(jax.jit, static_argnames=["output_len"])
 def get_l_dre_roger_jitted_part(rng_key, prompt, trainstate_twist, params_of_trainstate_twist, output_len, prompt_w_sigma_sample_s_1_to_t, intermediate_twist_samples_hist):
     prompt_len = prompt.shape[-1]
 
