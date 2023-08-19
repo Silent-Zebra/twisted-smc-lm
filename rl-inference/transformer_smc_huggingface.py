@@ -504,8 +504,8 @@ def neg_beta_times_reward_model_curry(prompt_len, beta, reward_model_fn):
         return neg_beta_times_reward_model(seq, prompt_len, beta, reward_model_fn)
     return curried_phi_fn
 
-def neg_beta_times_reward_model(single_seq, prompt_len, beta, reward_model_fn):
-    return reward_model_fn(single_seq, prompt_len) * -1. * beta
+def neg_beta_times_reward_model(seq, prompt_len, beta, reward_model_fn):
+    return reward_model_fn(seq, prompt_len) * -1. * beta
 
 # def batch_reward_model(reward_model_fn):
 #     def batch_rm_fn(seq, prompt_len):
@@ -644,6 +644,7 @@ def reward_model_toxicity_w_callback(curried_rm):
         return jax.pure_callback(curried_rm, result_shape, seq, prompt_len)
     return new_rm_fn
 
+
 def get_full_list_of_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
     # Needs prompt[None, :] for unprocessed (jnp) prompt
     seq = prompt[None, :]
@@ -713,51 +714,51 @@ def get_proposal_q_sample_for_scan(rng_key, full_seq, trainstate_p, params_of_tr
     return rng_key, full_seq, log_Z_s_1_to_t_minus_1
 
 
-def get_proposal_q_sample_final(rng_key, seq, trainstate_p, params_of_trainstate_p, final_twist):
-    # Same as get_proposal_q_sample except using the true final_twist instead of the learned twists (final_twist = - beta r(s) for adv sampling)
-    # Thus, this should only be used for the final time step.
-    # TODO NOTE train = False here for better sampling, but that means no dropout - if you were to train on this (right now I don't), you might want to set train=True for dropout regularization
-
-    output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=False)
-
-    rng_key, subkey = jax.random.split(rng_key)
-
-    # n_batch = output_unnormalized_batch.shape[0]
-    n_vocab = output_unnormalized_batch.shape[-1]
-
-    all_new_seqs = get_all_new_seqs_single_t(seq, n_vocab)
-
-    # print(all_new_seqs.shape) # shape (batch, n_vocab, seq_len) (seq len includes the prompt len and output len)
-
-    print(all_new_seqs.shape)
-
-    output_psi_batch = final_twist(all_new_seqs)
-
-    print(output_psi_batch.shape)
-    print(output_unnormalized_batch.shape)
-    print(jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]))
-    # 1/0
-
-    # Again the output_unnormalized_batch[:,-1,:] needs a log_softmax for the log probabilities to be correct
-    # However the final twist is just the - beta r(s) which is the same as exp of that followed by log.
-    # So no additional transformations needed, just add it directly to the logsoftmax of the output of the model
-    log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]) + output_psi_batch # psi is already in log space
-    indices_to_use = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(output_unnormalized_batch.shape[0],))
-
-    seq = jnp.concatenate((seq, indices_to_use[:, None]), axis=1)
-
-    # For the importance sampling procedure, since we are sampling q proportional to p psi,
-    # Then we need q(s_t|s_{1:t-1}) = p(s_t|s_{1:t-1}) psi_t(s_{1:t}) / sum_{s_t} of p(s_t|s_{1:t-1}) psi(s_{1:t})
-    # The denominator is the normalizing constant, Z(s_{1:t-1}) = sum_{s_t} of p(s_t|s_{1:t-1}) psi(s_{1:t})
-    # We need this for the importance weights (sampling is ok since sampling takes unnormalized values)
-    # Calculate log Z(s_{1:t-1}) = log [sum_{s_t} of p(s_t|s_{1:t-1}) psi(s_{1:t})]
-    # = log [sum_{s_t} of exp(log( p(s_t|s_{1:t-1}) psi(s_{1:t}) ))  ]
-    # = log [sum_{s_t} of exp( log(p(s_t|s_{1:t-1})) + log(psi(s_{1:t})) )  ]
-    # = logsumexp[log( p(s_t|s_{1:t-1})) + log( psi(s_{1:t})) ) ]
-    log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
-
-    return rng_key, seq, log_Z_s_1_to_t_minus_1
-
+# def get_proposal_q_sample_final(rng_key, seq, trainstate_p, params_of_trainstate_p, final_twist):
+#     # Same as get_proposal_q_sample except using the true final_twist instead of the learned twists (final_twist = - beta r(s) for adv sampling)
+#     # Thus, this should only be used for the final time step.
+#     # TODO NOTE train = False here for better sampling, but that means no dropout - if you were to train on this (right now I don't), you might want to set train=True for dropout regularization
+#
+#     output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=False)
+#
+#     rng_key, subkey = jax.random.split(rng_key)
+#
+#     # n_batch = output_unnormalized_batch.shape[0]
+#     n_vocab = output_unnormalized_batch.shape[-1]
+#
+#     all_new_seqs = get_all_new_seqs_single_t(seq, n_vocab)
+#
+#     # print(all_new_seqs.shape) # shape (batch, n_vocab, seq_len) (seq len includes the prompt len and output len)
+#
+#     # print(all_new_seqs.shape)
+#
+#     output_psi_batch = final_twist(all_new_seqs)
+#
+#     # print(output_psi_batch.shape)
+#     # print(output_unnormalized_batch.shape)
+#     # print(jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]))
+#     # 1/0
+#
+#     # Again the output_unnormalized_batch[:,-1,:] needs a log_softmax for the log probabilities to be correct
+#     # However the final twist is just the - beta r(s) which is the same as exp of that followed by log.
+#     # So no additional transformations needed, just add it directly to the logsoftmax of the output of the model
+#     log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]) + output_psi_batch # psi is already in log space
+#     indices_to_use = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(output_unnormalized_batch.shape[0],))
+#
+#     seq = jnp.concatenate((seq, indices_to_use[:, None]), axis=1)
+#
+#     # For the importance sampling procedure, since we are sampling q proportional to p psi,
+#     # Then we need q(s_t|s_{1:t-1}) = p(s_t|s_{1:t-1}) psi_t(s_{1:t}) / sum_{s_t} of p(s_t|s_{1:t-1}) psi(s_{1:t})
+#     # The denominator is the normalizing constant, Z(s_{1:t-1}) = sum_{s_t} of p(s_t|s_{1:t-1}) psi(s_{1:t})
+#     # We need this for the importance weights (sampling is ok since sampling takes unnormalized values)
+#     # Calculate log Z(s_{1:t-1}) = log [sum_{s_t} of p(s_t|s_{1:t-1}) psi(s_{1:t})]
+#     # = log [sum_{s_t} of exp(log( p(s_t|s_{1:t-1}) psi(s_{1:t}) ))  ]
+#     # = log [sum_{s_t} of exp( log(p(s_t|s_{1:t-1})) + log(psi(s_{1:t})) )  ]
+#     # = logsumexp[log( p(s_t|s_{1:t-1})) + log( psi(s_{1:t})) ) ]
+#     log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
+#
+#     return rng_key, seq, log_Z_s_1_to_t_minus_1
+#
 
 def evaluate_unnormalized_log_q_t_full_seq(full_seq, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len_plus_t, dropout_rng):
     # Assumes 0 based indexing for t
@@ -794,11 +795,11 @@ def evaluate_unnormalized_log_q_t_full_seq(full_seq, trainstate_p, params_of_tra
 def evaluate_log_phi_final(seq, final_twist):
     return final_twist(seq)
 
-def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(seq, trainstate_p, params_of_trainstate_p, final_twist, dropout_rng):
-    # Takes in batches of sequences s_{1:t}
-    # Right now evaluates UNNORMALIZED log q_t which is not actually what the q_t probability is supposed to be
-    # Evaluates p(s_t | s_{1:t-1}) psi(s_{1:t})  (IS UNNORMALIZED)
-    return evaluate_log_p_theta_t(seq, trainstate_p, params_of_trainstate_p, dropout_rng) + evaluate_log_phi_final(seq, final_twist)
+# def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(seq, trainstate_p, params_of_trainstate_p, final_twist, dropout_rng):
+#     # Takes in batches of sequences s_{1:t}
+#     # Right now evaluates UNNORMALIZED log q_t which is not actually what the q_t probability is supposed to be
+#     # Evaluates p(s_t | s_{1:t-1}) psi(s_{1:t})  (IS UNNORMALIZED)
+#     return evaluate_log_p_theta_t(seq, trainstate_p, params_of_trainstate_p, dropout_rng) + evaluate_log_phi_final(seq, final_twist)
 
 def evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p, prompt_len, output_len, dropout_rng, output_log_p_for_each_t=False):
     # Evaluate log p_theta(s_{1:t}) (given the prompt)
@@ -902,8 +903,7 @@ def evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate
 #     log_psi_t = evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist, prompt_len_plus_t)
 #     log_neg_psi_t = jnp.exp(log_psi_t) * -1.
 
-# WARNING/NOTE that if not using the final twist, then we're using the learned twist
-# And in my current setup I don't think that learned final twist ever gets trained anywhere
+
 def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, use_final_twist, final_twist):
     # IF use_final_twist, essentially what we are saying is don't use the learned twist for the final step,
@@ -1052,8 +1052,8 @@ def smc_scan_iter_non_final(carry, t):
 
     return carry, full_seq
 
-@partial(jax.jit, static_argnames=["final_twist", "use_final_twist", 'output_len', 'n_smc_samples', "intermediate_sample_history" ])
-def smc_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
+@partial(jax.jit, static_argnames=['output_len', 'n_smc_samples'])
+def smc_jit_before_final(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, output_len, n_smc_samples):
     # Generate samples using SMC with twists (learned and final, if use_final_twist)
     # log_z_hat_t unused for now
     prompt_len = prompt.shape[-1]
@@ -1080,6 +1080,19 @@ def smc_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_tw
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     log_z_hat_t, output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len = carry
 
+    return rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t, \
+           output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, full_seq_list
+
+
+# No jit on this
+def smc_with_final_step(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist,
+        params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
+    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
+    log_z_hat_t, output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, \
+    params_of_trainstate_twist, prompt_len, full_seq_list = smc_jit_before_final(
+        rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist,
+        params_of_trainstate_twist, output_len, n_smc_samples)
+
     log_z_hat_t, full_seq = smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
     output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, use_final_twist, final_twist)
 
@@ -1088,16 +1101,15 @@ def smc_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_tw
     if intermediate_sample_history:
         return log_z_hat_t, full_seq, full_seq_list
 
-
     return log_z_hat_t, full_seq
 
 
-def smc_procedure(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist=True):
+
+def smc_procedure(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist=True, intermediate_sample_history=False):
     # NO Analytic sigma sample for the non-toy datasets
 
-    return smc_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-                   final_twist, output_len, n_smc_samples, use_final_twist)
-    # return smc_non_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_smc_samples, use_final_twist)
+    return smc_with_final_step(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
+                   final_twist, output_len, n_smc_samples, use_final_twist, intermediate_sample_history)
 
 
 
@@ -1279,54 +1291,54 @@ def inspect_varied_info(jnp_prompt, prompt_len, n_vocab, output_len, trainstate_
 
 
 
-def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, n_twist):
-    print("--TEST--")
-
-    rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
-
-    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist, use_final_twist=True)
-
-    _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_procedure(sk2, prompt,
-                                                            trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-                                                            None,
-                                                            output_len - 1,
-                                                            n_twist,
-                                                            use_final_twist=False)
-
-    # all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
-    # log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, trainstate_p, params_of_trainstate_p,
-    #                                              prompt_len, output_len)
-    # log_psi_all_seqs = evaluate_log_phi_final(all_seqs, final_twist)
-    #
-    # analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
-
-    analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(prompt, prompt_len,
-                                                   n_vocab,
-                                                   output_len,
-                                                             trainstate_p, params_of_trainstate_p, final_twist)
-
-    samples = prompt_w_sigma_sample_s_1_to_t
-    samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
-
-    index = 0
-
-    for seq in all_seqs:
-        print(seq)
-        print(analytic_sigma_vals[index])
-        count = 0
-        for sample in samples:
-            if (jnp.abs(seq - sample)).sum() == 0:
-                count += 1
-        print(count / n_twist)
-        count2 = 0
-        for sample2 in samples2:
-            if (jnp.abs(seq[:-1] - sample2)).sum() == 0:
-                count2 += 1
-        print(count2 / n_twist)
-        index += 1
-
-    print("--END TEST--")
-
+# def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, n_twist):
+#     print("--TEST--")
+#
+#     rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
+#
+#     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist, use_final_twist=True)
+#
+#     _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_procedure(sk2, prompt,
+#                                                             trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
+#                                                             None,
+#                                                             output_len - 1,
+#                                                             n_twist,
+#                                                             use_final_twist=False)
+#
+#     # all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
+#     # log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, trainstate_p, params_of_trainstate_p,
+#     #                                              prompt_len, output_len)
+#     # log_psi_all_seqs = evaluate_log_phi_final(all_seqs, final_twist)
+#     #
+#     # analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
+#
+#     analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(prompt, prompt_len,
+#                                                    n_vocab,
+#                                                    output_len,
+#                                                              trainstate_p, params_of_trainstate_p, final_twist)
+#
+#     samples = prompt_w_sigma_sample_s_1_to_t
+#     samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
+#
+#     index = 0
+#
+#     for seq in all_seqs:
+#         print(seq)
+#         print(analytic_sigma_vals[index])
+#         count = 0
+#         for sample in samples:
+#             if (jnp.abs(seq - sample)).sum() == 0:
+#                 count += 1
+#         print(count / n_twist)
+#         count2 = 0
+#         for sample2 in samples2:
+#             if (jnp.abs(seq[:-1] - sample2)).sum() == 0:
+#                 count2 += 1
+#         print(count2 / n_twist)
+#         index += 1
+#
+#     print("--END TEST--")
+#
 
 def get_l_dre_roger_scan_iter(carry, scan_over):
     l_dre, prompt_w_sigma_sample_s_1_to_t, trainstate_twist, params_of_trainstate_twist, prompt_len, dropout_rng = carry
@@ -1356,7 +1368,7 @@ def get_l_dre_roger_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, t
 
     l_dre = 0.
 
-    _, _, intermediate_twist_samples_hist = smc_jit(rng_key, prompt,
+    _, _, intermediate_twist_samples_hist = smc_procedure(sk2, prompt,
                              trainstate_p, params_of_trainstate_p,
                              trainstate_twist, params_of_trainstate_twist,
                              final_twist,
@@ -1870,593 +1882,6 @@ def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
 # TODO AUG 12 REIMPLEMENT THE TEST CLASSES
 # Some simple unit tests to make sure things are working more or less as we would expect
 # class TestClass:
-#     rng_key = jax.random.PRNGKey(42)
-#     prompt = jnp.array([0, 1, 0, 1])
-#     n_vocab = 2
-#     output_len = 5
-#     prompt_len = prompt.shape[-1]
-#     # I cannot declare final twist here for it to work
-#     lr = 0.0001
-#     n_twist = 1000 # for the training procedure
-#     n_policy_samples = 1000
-#
-#     # TODO FIX THIS
-#     raise NotImplementedError
-#     # rng_key, trainstate_p, params_of_trainstate_p = transformer_init_params(
-#     #     rng_key,
-#     #     n_vocab=n_vocab,
-#     #     d_model=64,
-#     #     d_k=16,
-#     #     n_layers=2,
-#     #     n_heads=4,
-#     #     d_v=16,
-#     #     d_fc=64,
-#     # )
-#     # trainstate_p_0, params_of_trainstate_p_0 = copy.deepcopy(cfg_p), copy.deepcopy(params_p)
-#     # rng_key, trainstate_twist, params_of_trainstate_twist = transformer_init_params(
-#     #     rng_key,
-#     #     n_vocab=n_vocab,
-#     #     d_model=64,
-#     #     d_k=16,
-#     #     n_layers=2,
-#     #     n_heads=4,
-#     #     d_v=16,
-#     #     d_fc=64,
-#     # )
-#     # rng_key, trainstate_baseline, params_of_trainstate_baseline = transformer_init_params(
-#     #     rng_key,
-#     #     n_vocab=1,
-#     #     d_model=64,
-#     #     d_k=16,
-#     #     n_layers=2,
-#     #     n_heads=4,
-#     #     d_v=16,
-#     #     d_fc=64,
-#     # )
-#
-#     def test_custom_rl_one_bad_simple(self):
-#         self.n_policy_samples = 100 # For the custom RL with one bad in the toy model you may actually need more samples (or higher temperature)
-#         # This is important to avoid an edge case where every sequence sampled is the same one, and therefore the advantages all become 0
-#         # More temperature (e.g. lower beta) seems to be the key here...
-#
-#         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_p_state = optimizer_p.init(self.params_p)
-#
-#         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
-#
-#         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="one_bad",
-#                                           rl_loss_type="custom", beta_kl=0.)
-#
-#         num_epochs = 50
-#         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
-#                                                               beta=0.1,
-#                                                               reward_model_fn=experiment_cfg.rm_fn)
-#
-#         for _ in range(num_epochs):
-#
-#             rng_key, sk = jax.random.split(self.rng_key)
-#
-#             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
-#                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
-#                                                             self.cfg_p,
-#                                                             self.params_p,
-#                                                             self.cfg_twist,
-#                                                             self.params_twist,
-#                                                             final_twist,
-#                                                             self.output_len,
-#                                                             self.n_policy_samples,
-#                                                             self.prompt_len,
-#                                                             self.cfg_baseline,
-#                                                             self.params_baseline,
-#                                                             self.cfg_p_0,
-#                                                             self.params_p_0,
-#                                                             optimizer_p,
-#                                                             optim_p_state,
-#                                                             optimizer_baseline,
-#                                                             optim_baseline_state)
-#
-#         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
-#                                                  self.output_len)
-#
-#         log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p, self.prompt_len, self.output_len)
-#
-#         print(log_p)
-#         print(log_p[0])
-#
-#         assert log_p[0] < -5.
-#
-#     def test_custom_rl_varied_simple(self):
-#         self.n_policy_samples = 100  # For the custom RL with one bad in the toy model you may actually need more samples (or higher temperature)
-#         # This is important to avoid an edge case where every sequence sampled is the same one, and therefore the advantages all become 0
-#         # More temperature (e.g. lower beta) seems to be the key here...
-#
-#         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_p_state = optimizer_p.init(self.params_p)
-#
-#         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
-#
-#         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied",
-#                                           rl_loss_type="custom", beta_kl=0.)
-#
-#         num_epochs = 50
-#         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
-#                                                               beta=0.5,
-#                                                               reward_model_fn=experiment_cfg.rm_fn)
-#
-#         for _ in range(num_epochs):
-#
-#             rng_key, sk = jax.random.split(self.rng_key)
-#
-#             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
-#                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
-#                                                             self.cfg_p,
-#                                                             self.params_p,
-#                                                             self.cfg_twist,
-#                                                             self.params_twist,
-#                                                             final_twist,
-#                                                             self.output_len,
-#                                                             self.n_policy_samples,
-#                                                             self.prompt_len,
-#                                                             self.cfg_baseline,
-#                                                             self.params_baseline,
-#                                                             self.cfg_p_0,
-#                                                             self.params_p_0,
-#                                                             optimizer_p,
-#                                                             optim_p_state,
-#                                                             optimizer_baseline,
-#                                                             optim_baseline_state)
-#
-#         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
-#                                                  self.output_len)
-#
-#         log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
-#                                             self.prompt_len, self.output_len)
-#
-#         print(log_p)
-#         print(log_p[0])
-#
-#         assert log_p[0] < -5.
-#
-#     def test_ppo_one_bad_simple(self):
-#
-#         self.n_policy_samples = 100
-#
-#         # rew_model = batch_reward_model(self.prompt_len,
-#         #                                reward_model_fn=reward_model_one_bad)
-#
-#         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_p_state = optimizer_p.init(self.params_p)
-#
-#         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
-#
-#         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="one_bad",
-#                                           rl_loss_type="ppo", ppo_steps=5, gamma=1., gae_lambda=1.)
-#
-#         num_epochs = 50
-#         for _ in range(num_epochs):
-#
-#             rng_key, sk = jax.random.split(self.rng_key)
-#
-#             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
-#                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
-#                                                             self.cfg_p,
-#                                                             self.params_p,
-#                                                             None, # no twists for PPO
-#                                                             None, # no twists for PPO
-#                                                             None, # final_twist not needed for PPO
-#                                                             self.output_len,
-#                                                             self.n_policy_samples,
-#                                                             self.prompt_len,
-#                                                             self.cfg_baseline,
-#                                                             self.params_baseline,
-#                                                             self.cfg_p_0,
-#                                                             self.params_p_0,
-#                                                             optimizer_p,
-#                                                             optim_p_state,
-#                                                             optimizer_baseline,
-#                                                             optim_baseline_state)
-#
-#             # all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
-#             #                                          self.output_len)
-#             # log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p,
-#             #                                     self.params_p, self.prompt_len,
-#             #                                     self.output_len)
-#             # print("--TEST--")
-#             # print(log_p[0])
-#
-#         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
-#                                                  self.output_len)
-#
-#         log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p, self.prompt_len, self.output_len)
-#
-#         print(log_p)
-#         print(log_p[0])
-#
-#         assert log_p[0] < -5. # TODO JUL 16 test PPO further. Maybe test with more steps? Something weird seems to be happening (maybe? Or maybe it's just the conservative clipping causing the slow training. But what about the positive rewards?)
-#
-#     def test_ppo_varied_simple(self):
-#
-#         self.n_policy_samples = 100
-#
-#         # rew_model = batch_reward_model(self.prompt_len,
-#         #                                reward_model_fn=reward_model_varied)
-#
-#         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_p_state = optimizer_p.init(self.params_p)
-#
-#         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
-#
-#         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied",
-#                                           rl_loss_type="ppo", ppo_steps=5, gamma=1., gae_lambda=1.)
-#
-#         num_epochs = 100
-#         for _ in range(num_epochs):
-#
-#             rng_key, sk = jax.random.split(self.rng_key)
-#
-#             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
-#                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
-#                                                             self.cfg_p,
-#                                                             self.params_p,
-#                                                             None, # no twists for PPO
-#                                                             None, # no twists for PPO
-#                                                             None, # final_twist not needed for PPO
-#                                                             self.output_len,
-#                                                             self.n_policy_samples,
-#                                                             self.prompt_len,
-#                                                             self.cfg_baseline,
-#                                                             self.params_baseline,
-#                                                             self.cfg_p_0,
-#                                                             self.params_p_0,
-#                                                             optimizer_p,
-#                                                             optim_p_state,
-#                                                             optimizer_baseline,
-#                                                             optim_baseline_state)
-#
-#             all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
-#                                                      self.output_len)
-#             log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p,
-#                                                 self.params_p, self.prompt_len,
-#                                                 self.output_len)
-#             print("--TEST--")
-#             print(log_p[0])
-#
-#
-#         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
-#                                                  self.output_len)
-#
-#         log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p, self.prompt_len, self.output_len)
-#
-#         print(log_p)
-#         print(log_p[0])
-#
-#         assert log_p[0] < -5. # TODO JUL 16 test PPO further. Maybe test with more steps? Something weird seems to be happening (maybe? Or maybe it's just the conservative clipping causing the slow training. But what about the positive rewards?)
-#
-#
-#     def test_smc_jit_vs_no_jit(self):
-#         n_smc_samples = 100
-#         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
-#                                                         beta=1.,
-#                                                         reward_model_fn=reward_model_varied)
-#
-#         _, samples_non_jit = smc_procedure(self.rng_key, self.prompt, self.cfg_p,
-#                                  self.params_p,
-#                                  self.cfg_twist, self.params_twist, final_twist,
-#                                  self.output_len,
-#                                  n_smc_samples)
-#
-#         _, samples_jit = smc_jit(self.rng_key, self.prompt, self.cfg_p,
-#                                          self.params_p,
-#                                          self.cfg_twist, self.params_twist,
-#                                          final_twist,
-#                                          self.output_len,
-#                                          n_smc_samples)
-#
-#         assert (jnp.abs(samples_non_jit - samples_jit)).sum() == 0
-#
-#
-#
-#     def test_kl_on_policy_low_beta_kl(self):
-#         beta_kl = 0
-#
-#
-#         # rew_model = batch_reward_model(self.prompt_len,
-#         #                                reward_model_fn=reward_model_varied)
-#
-#         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_p_state = optimizer_p.init(self.params_p)
-#
-#         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
-#
-#         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
-#
-#         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
-#                                                         beta=1.,
-#                                                         reward_model_fn=experiment_cfg.rm_fn)
-#         num_epochs = 10
-#         for _ in range(num_epochs):
-#
-#             rng_key, sk = jax.random.split(self.rng_key)
-#
-#             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
-#                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
-#                                                             self.params_twist,
-#                                                             final_twist,
-#                                                             self.output_len,
-#                                                             self.n_policy_samples,
-#                                                             self.prompt_len,
-#                                                             self.cfg_baseline,
-#                                                             self.params_baseline,
-#                                                             self.cfg_p_0,
-#                                                             self.params_p_0,
-#                                                             optimizer_p,
-#                                                             optim_p_state,
-#                                                             optimizer_baseline,
-#                                                             optim_baseline_state)
-#
-#         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
-#                                                  self.output_len)
-#
-#         log_p_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
-#                                                     self.prompt_len, self.output_len)
-#         log_p_0_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p_0,
-#                                                     self.params_p_0,
-#                                                     self.prompt_len,
-#                                                     self.output_len)
-#
-#         print(kl_div_jax_sum_last_axis(log_p_s, log_p_0_s))
-#         print(jnp.abs(log_p_s - log_p_0_s).mean())
-#
-#         assert (kl_div_jax_sum_last_axis(log_p_s, log_p_0_s)) > 1e-1
-#         assert jnp.abs(log_p_s - log_p_0_s).mean() > 0.3
-#
-#     # Test KL div (try a very high beta_kl and ensure after a few steps of params_p updates that the kl div from original is close to 0 (also just check a few probabilities and check that they match in L2 distance)
-#     def test_kl_on_policy_high_beta_kl(self):
-#         beta_kl = 1.  # use some big number and test that the kl is ~0 after
-#
-#         # rew_model = batch_reward_model(self.prompt_len,
-#         #                                reward_model_fn=reward_model_varied)
-#
-#         optimizer_p = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_p_state = optimizer_p.init(self.params_p)
-#
-#         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
-#
-#         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
-#
-#         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
-#                                                         beta=1.,
-#                                                         reward_model_fn=experiment_cfg.rm_fn)
-#
-#         num_epochs = 10
-#         for _ in range(num_epochs):
-#
-#             rng_key, sk = jax.random.split(self.rng_key)
-#
-#             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
-#                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt,
-#                                                             self.cfg_p,
-#                                                             self.params_p,
-#                                                             self.cfg_twist,
-#                                                             self.params_twist,
-#                                                             final_twist,
-#                                                             self.output_len,
-#                                                             self.n_policy_samples,
-#                                                             self.prompt_len,
-#                                                             self.cfg_baseline,
-#                                                             self.params_baseline,
-#                                                             self.cfg_p_0,
-#                                                             self.params_p_0,
-#                                                             optimizer_p,
-#                                                             optim_p_state,
-#                                                             optimizer_baseline,
-#                                                             optim_baseline_state)
-#
-#
-#         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
-#                                                  self.output_len)
-#
-#         log_p_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
-#                                                     self.prompt_len, self.output_len)
-#         log_p_0_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p_0,
-#                                                     self.params_p_0,
-#                                                     self.prompt_len,
-#                                                     self.output_len)
-#
-#         print(kl_div_jax_sum_last_axis(log_p_s, log_p_0_s))
-#         print(jnp.abs(log_p_s - log_p_0_s).mean())
-#
-#         assert (kl_div_jax_sum_last_axis(log_p_s, log_p_0_s)) < 1e-9 # 1e-2
-#         assert jnp.abs(log_p_s - log_p_0_s).mean() <  1e-9 # 1e-1
-#
-#
-#
-#     def test_cond_vs_marg_prob(self):
-#         seq1 = jnp.array([[0, 1, 0, 1, 0, 1, 1, 0, 1], [1, 1, 1, 0, 1, 1, 1, 0, 1]])
-#         seq2 = jnp.array([[0, 1, 0, 1, 1, 0, 1, 1, 0], [1, 1, 1, 0, 0, 1, 0, 1, 0]])
-#         self._cond_vs_marg_prob(seq1, seq2, 4, 5)
-#
-#     def _cond_vs_marg_prob(self, seq1, seq2, prompt_len, output_len):
-#         assert jnp.abs(seq1[:, :prompt_len] - seq2[:, :prompt_len]).sum() == 0
-#         # p(x'|z)/p(x|z) = p(x',z)/p(x,z)
-#         # log p(x'|z) - log p(x|z) = log p(x',z) - log p(x,z)
-#         # Here z is the prompt and x is the continuation after the prompt
-#         # But this is kind of again working by default, since I built the log p calculation based off of conditional probs anyway...
-#         # I have to have at least 1 token as prompt - otherwise, what's the prob of the first token??
-#         log_p_x_prime_given_z = evaluate_log_p_theta_1_to_t(seq1, self.cfg_p, self.params_p, prompt_len, output_len)
-#         log_p_x_given_z = evaluate_log_p_theta_1_to_t(seq2, self.cfg_p, self.params_p, prompt_len, output_len)
-#         log_p_x_prime_z = evaluate_log_p_theta_1_to_t(seq1, self.cfg_p,
-#                                                         self.params_p,
-#                                                         1, output_len + prompt_len - 1) # Do this assuming a single token of prompt, so not really log_p_x_prime_z but rather log_p_x_prime_given_first_token
-#         log_p_x_z = evaluate_log_p_theta_1_to_t(seq2, self.cfg_p,
-#                                                   self.params_p, 1, output_len + prompt_len - 1)
-#
-#         assert jnp.abs((log_p_x_prime_given_z - log_p_x_given_z) - (log_p_x_prime_z - log_p_x_z)).mean() < 1e-6
-#
-#
-#
-#     def _smc_threshold(self, n_smc_samples, final_twist, threshold):
-#         analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(self.prompt, self.prompt_len, self.n_vocab,
-#                                                        self.output_len, self.cfg_p, self.params_p, final_twist)
-#
-#         _, samples = smc_procedure(self.rng_key, self.prompt, self.cfg_p,
-#                                  self.params_p,
-#                                  self.cfg_twist, self.params_twist, final_twist,
-#                                  self.output_len,
-#                                  n_smc_samples)
-#
-#         index = 0
-#
-#         diff_array = []
-#
-#         for seq in all_seqs:
-#             print(seq)
-#             print(analytic_sigma_vals[index])
-#             count = 0
-#             for sample in samples:
-#                 if (jnp.abs(seq - sample)).sum() == 0:
-#                     count += 1
-#             print(count / n_smc_samples)
-#             diff_array.append(
-#                 (count / n_smc_samples) - analytic_sigma_vals[index])
-#             index += 1
-#
-#         diff_array = jnp.stack(diff_array)
-#         print("Array diffs")
-#         for x in diff_array:
-#             print(x)
-#         print("End of array diffs")
-#         print((jnp.abs(diff_array)).mean())
-#         assert (jnp.abs(diff_array)).mean() < threshold
-#
-#
-#     def test_smc_mse_rel_from_opt_twist(self):
-#         # This test shows that the twists do make a difference (at least for small enough sample size)
-#         n_smc_samples = 4
-#         lr = 0.01
-#
-#         optimizer_twist = optax.adam(learning_rate=lr, b1=0.9, b2=0.99)
-#         optim_twist_state = optimizer_twist.init(self.params_twist)
-#
-#         experiment_cfg = ExperimentConfig(dre_type="analytic_mse_rel", rm_type="one_bad")
-#
-#         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
-#                                                         beta=1., reward_model_fn=experiment_cfg.rm_fn)
-#
-#         num_epochs = 100
-#         for _ in range(num_epochs):
-#
-#             rng_key, sk = jax.random.split(self.rng_key)
-#
-#             grad_params_twist = experiment_cfg.get_grad_params_twist(sk,
-#                                                                      self.prompt,
-#                                                                      self.n_vocab,
-#                                                                      self.n_twist,
-#                                                                      self.output_len,
-#                                                                      self.cfg_p,
-#                                                                      self.params_p,
-#                                                                      self.cfg_twist,
-#                                                                      self.params_twist,
-#                                                                      final_twist)
-#
-#             # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
-#             updates_twist, optim_twist_state = optimizer_twist.update(
-#                 grad_params_twist, optim_twist_state, self.params_twist)
-#             self.params_twist = optax.apply_updates(self.params_twist, updates_twist)
-#
-#         compare_learned_twist_vs_optimal(self.prompt, self.n_vocab,
-#                                          self.output_len, self.cfg_p,
-#                                          self.params_p, final_twist,
-#                                          self.cfg_twist,
-#                                          self.params_twist, rm_type=experiment_cfg.rm_type, verbose=True,
-#                                          relative_diff_loss=True)
-#         self._smc_threshold(n_smc_samples, final_twist, threshold=1e-2)
-#
-#     def test_smc_non_opt_twist(self):
-#         # Test that SMC approximately generates samples from the true distribution
-#         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=reward_model_bad_word)
-#
-#         n_smc_samples = 4000
-#         self._smc_threshold(n_smc_samples, final_twist, threshold=1e-2)
-#
-#
-#     def test_roger_dre(self):
-#         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
-#
-#         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_twist_state = optimizer_twist.init(self.params_twist)
-#
-#         experiment_cfg = ExperimentConfig(dre_type="roger", rm_type="varied")
-#         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
-#
-#         num_epochs = 100
-#         for _ in range(num_epochs):
-#
-#             rng_key, sk = jax.random.split(self.rng_key)
-#
-#             grad_params_twist = experiment_cfg.get_grad_params_twist(sk, self.prompt,
-#                                                                      self.n_vocab,
-#                                                                      self.n_twist,
-#                                                                      self.output_len,
-#                                                                      self.cfg_p,
-#                                                                      self.params_p,
-#                                                                      self.cfg_twist,
-#                                                                      self.params_twist,
-#                                                                      final_twist)
-#
-#             # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
-#             updates_twist, optim_twist_state = optimizer_twist.update(
-#                 grad_params_twist, optim_twist_state, self.params_twist)
-#             self.params_twist = optax.apply_updates(self.params_twist,
-#                                                     updates_twist)
-#
-#         avg_rel_diff = compare_learned_twist_vs_optimal(self.prompt, self.n_vocab, self.output_len, self.cfg_p,
-#                                          self.params_p, final_twist, self.cfg_twist,
-#                                          self.params_twist, rm_type=experiment_cfg.rm_type, verbose=False, relative_diff_loss=True)
-#
-#         assert avg_rel_diff < 0.1
-#
-#     def test_sixo_dre(self):
-#         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
-#
-#         experiment_cfg = ExperimentConfig(dre_type="sixo", rm_type="varied")
-#
-#         final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
-#         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
-#         optim_twist_state = optimizer_twist.init(self.params_twist)
-#
-#         num_epochs = 100
-#         for _ in range(num_epochs):
-#
-#             rng_key, sk = jax.random.split(self.rng_key)
-#
-#             grad_params_twist = experiment_cfg.get_grad_params_twist(sk, self.prompt,
-#                                                                      self.n_vocab,
-#                                                                      self.n_twist,
-#                                                                      self.output_len,
-#                                                                      self.cfg_p,
-#                                                                      self.params_p,
-#                                                                      self.cfg_twist,
-#                                                                      self.params_twist,
-#                                                                      final_twist)
-#
-#             # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
-#             updates_twist, optim_twist_state = optimizer_twist.update(
-#                 grad_params_twist, optim_twist_state, self.params_twist)
-#             self.params_twist = optax.apply_updates(self.params_twist,
-#                                                     updates_twist)
-#
-#         avg_rel_diff = compare_learned_twist_vs_optimal(self.prompt, self.n_vocab, self.output_len, self.cfg_p,
-#                                          self.params_p, final_twist, self.cfg_twist,
-#                                          self.params_twist, rm_type=experiment_cfg.rm_type, verbose=False, relative_diff_loss=True)
-#
-#         assert avg_rel_diff < 0.25 # 0.1
 
 
 class CustomLM:
@@ -2916,6 +2341,8 @@ def main():
                 # Set up the policy learning, test, and compare with the PPO baseline
                 # After that, let's set up the adversarial examples afterwards I guess.
 
+
+            assert args.model_updates_per_epoch == 0 # TODO Aug 19 later fix this; the rew_model calls, if to the RM which requires retokenization, need to go outside of any jitted functions
             print(f"Time after twist updates: {time.time() - start}", flush=True)
 
             for model_update in range(args.model_updates_per_epoch):
