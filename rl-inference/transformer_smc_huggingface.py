@@ -30,8 +30,11 @@ import flax
 
 from transformers import FlaxAutoModelForSequenceClassification
 
-import gc
+import os
 
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".25"
+# os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"]="platform"
 
 # NOTE TO SELF: look up https://github.com/huggingface/transformers/blob/fe3c8ab1af558b95f67f5fafc0c55f09fd2b09db/src/transformers/models/gpt2/modeling_flax_gpt2.py
 # for details on the Flax GPT2 model
@@ -1367,14 +1370,12 @@ def get_l_dre_roger_partial_jit(rng_key, prompt, trainstate_p, params_of_trainst
                                                       final_twist,
                                                       output_len, n_twist,
                                                       use_final_twist=True)
-    gc.collect()
     _, _, intermediate_twist_samples_hist = smc_procedure(sk2, prompt,
                              trainstate_p, params_of_trainstate_p,
                              trainstate_twist, params_of_trainstate_twist,
                              final_twist,
                              output_len,
                              n_twist, use_final_twist=False, intermediate_sample_history=True)
-    gc.collect()
 
     l_dre = get_l_dre_roger_jitted_part(rng_key, prompt, trainstate_twist, params_of_trainstate_twist, output_len, prompt_w_sigma_sample_s_1_to_t, intermediate_twist_samples_hist)
     return l_dre
