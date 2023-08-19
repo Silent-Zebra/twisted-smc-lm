@@ -947,12 +947,12 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t_full_seq(
         full_seq, trainstate_p, params_of_trainstate_p, prompt_len + t, dropout_rng)
 
-    if use_final_twist:
-        log_r_psi_t_eval = evaluate_log_phi_final(full_seq, final_twist)
-    else:
-        rng_key, dropout_rng = jax.random.split(rng_key)
-        log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist,
-                                                       prompt_len + t, dropout_rng)
+    # if use_final_twist:
+    #     log_r_psi_t_eval = evaluate_log_phi_final(full_seq, final_twist)
+    # else:
+    rng_key, dropout_rng = jax.random.split(rng_key)
+    log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist,
+                                                   prompt_len + t, dropout_rng)
 
     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
 
