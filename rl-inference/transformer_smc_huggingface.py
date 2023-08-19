@@ -2360,7 +2360,6 @@ def main():
                 # Set up the policy learning, test, and compare with the PPO baseline
                 # After that, let's set up the adversarial examples afterwards I guess.
 
-                gc.collect()
 
             print(f"Time after twist updates: {time.time() - start}", flush=True)
 
