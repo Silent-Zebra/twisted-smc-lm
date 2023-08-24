@@ -50,49 +50,6 @@ def kl_div_jax_sum_last_axis(log_p, log_q):
     # The POLA style one doesn't have the same simple interpretation... so I should avoid it.
     kl_div = (jnp.exp(log_p) * (log_p - log_q)).sum(axis=-1).mean()
     return kl_div
-# TODO JUL 28: Redo the KL, redo the KL tests, use the RLHF framework to plug in the KL
-
-# AVOID USING THIS FOR NOW. POLA style KL which may not make sense for our setting here
-# def calculate_kl_on_seqs_full_dist_over_tokens(seqs, trainstate_p_0, params_of_trainstate_p_0, trainstate_p, params_of_trainstate_p):
-#     output_unnormalized_target = batch_transformer(trainstate_p_0, params_of_trainstate_p_0, seqs)
-#     output_unnormalized_curr = batch_transformer(trainstate_p, params_of_trainstate_p,seqs)
-#     log_p_target = jax.nn.log_softmax(output_unnormalized_target, axis=-1)
-#     log_p_curr = jax.nn.log_softmax(output_unnormalized_curr, axis=-1)
-#     kl_term = kl_div_jax_full_dist_over_tokens(log_p_target, log_p_curr)
-#     return kl_term
-
-# # TODO AUG 14 CHECK THAT THESE FUNCTIONS BELOW WORK AS INTENDED
-# # This, in expectation with p_seqs drawn from the model p, will give you the KL divergence D_KL(p || p_0)
-# def calculate_kl_term(p0_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len):
-#     log_p_theta_s = evaluate_log_p_theta_1_to_t(p0_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
-#     kl_term = - log_p_theta_s # has shape (batch, )
-#     return kl_term.mean() # empirical estimate of expectation
-#
-# def calculate_rev_kl_term(p_seqs, trainstate_p, params_of_trainstate_p,trainstate_p_0, params_of_trainstate_p_0, prompt_len, output_len):
-#     log_p_theta_s = evaluate_log_p_theta_1_to_t(p_seqs, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
-#     log_p_theta_0_s = evaluate_log_p_theta_1_to_t(p_seqs, trainstate_p_0, params_of_trainstate_p_0, prompt_len, output_len)
-#     kl_term = log_p_theta_s - log_p_theta_0_s # has shape (batch, )
-#     return kl_term.mean() # empirical estimate of expectation
-#
-# def calculate_entropy_gradient_term(seqs_p, trainstate_p, params_of_trainstate_p, prompt_len, output_len):
-#     # See writeup for derivation
-#     log_p_theta_s = evaluate_log_p_theta_1_to_t(seqs_p, trainstate_p, params_of_trainstate_p, prompt_len, output_len)
-#     ent_term = - log_p_theta_s * (jax.lax.stop_gradient(log_p_theta_s) + 1.)
-#     ent_term = ent_term.mean()
-#     return ent_term
-
-# def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p,
-#                        optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline):
-#     updates_p, optim_p_state = optimizer_p.update(
-#         grad_params_p, optim_p_state, params_p)
-#     params_p = optax.apply_updates(params_p, updates_p)
-#
-#     updates_baseline, optim_baseline_state = optimizer_baseline.update(
-#         grad_params_baseline, optim_baseline_state, params_baseline)
-#     params_baseline = optax.apply_updates(params_baseline,
-#                                           updates_baseline)
-#
-#     return params_p, optim_p_state, params_baseline, optim_baseline_state
 
 
 class ExperimentConfig:
@@ -250,11 +207,6 @@ class ExperimentConfig:
 
         return carry, None
 
-# DO NOT MUTATE THIS. TREAT THIS AS IMMUTABLE
-# https://stackoverflow.com/questions/1151658/python-hashable-dicts
-class HashableDict(dict):
-    def __hash__(self):
-        return hash(tuple(sorted(self.items())))
 
 def linear_init_normal(key: jax.random.KeyArray, in_features: int, out_features: int, in_plus_out_for_sd: int):
     params = {}
@@ -269,187 +221,6 @@ def linear_init_normal(key: jax.random.KeyArray, in_features: int, out_features:
 # Layer norm
 def linear(params, x: jnp.ndarray):
     return x @ params['w'] + params['b'][None, :]
-
-def layer_norm_init(shape):
-    params = {}
-    # Initialize gain to be 1s and bias to be zeros, like in the original Layernorm paper
-    params['gain'] = jnp.ones(shape)
-    params['bias'] = jnp.zeros(shape)
-    return params
-
-
-def layer_norm_element_wise_ops(gain_bias_params, h):
-    # Element wise operations on h of size (hidden_size,)
-    return gain_bias_params['gain'] * h + gain_bias_params['bias']
-
-def normalize(h, eps=1e-6):
-    # Hidden activations for a single input example/batch; normalize across the activations
-    return (h - h.mean()) / (h.std() + eps)
-
-def layer_norm(gain_bias_params, h):
-    normalized_h = normalize(h)
-    return layer_norm_element_wise_ops(gain_bias_params, normalized_h)
-
-def batch_layer_norm(gain_bias_params, h):
-    return jax.vmap(layer_norm, in_axes=(None, 0), out_axes=0)(gain_bias_params, h)
-
-
-def transformer_init_params(
-    key: jax.random.KeyArray,
-    n_vocab: int,
-    d_model: int,
-    n_layers: int,
-    n_heads: int,
-    d_k: int,
-    d_v: int,
-    d_fc: int,
-    max_len=4096,
-):
-    # Config needs to be hashable in order for it to work with jax jit
-    config = HashableDict()
-    config['d_k'] = d_k
-    config['d_v'] = d_v
-    config['n_heads'] = n_heads
-    config['embedding_scaling'] = 1. / (d_model**0.5)
-
-    params = {}
-
-    key, sk = jax.random.split(key)
-    # Create embedding layer
-    params['embeddings'] = jax.random.normal(sk, shape=(n_vocab, d_model))
-
-    # LEARNABLE positional encodings initialized to zeros
-    params['positional_encodings'] = jnp.zeros((max_len, d_model))
-
-    # For transformer layers
-    params['layers'] = []
-    for _ in range(n_layers):
-        layer = {}
-        layer['norm_pre_attn_params'] = layer_norm_init(d_model)
-
-
-        # Seems unclear to me if you should include a bias or not here. I guess I can try with and without. Maybe without first, just for convenience/ease of implementation
-        # Instead of e.g. 8 heads of MxN matrices
-        # We can just use a Mx8N matrix to immediately do the transformation.
-        # https://stackoverflow.com/questions/65340088/multi-head-attention-correct-implementation-of-linear-transformations-of-q-k?rq=4
-        # query_projected.view(batch_size, query_lenght, head_count, head_dimension).transpose(1,2)
-        key, layer['Wq_heads'] = linear_init_normal(key, d_model, d_k * n_heads, d_model + d_k)
-        key, layer['Wk_heads'] = linear_init_normal(key, d_model, d_k * n_heads, d_model + d_k)
-        key, layer['Wv_heads'] = linear_init_normal(key, d_model, d_v * n_heads, d_model + d_v)
-
-        key, layer['Wo_params'] = linear_init_normal(key, n_heads * d_v, d_model, n_heads * d_v + d_model)
-
-        layer['norm_pre_fc_params'] = layer_norm_init(d_model)
-
-        key, layer['fc1_params'] = linear_init_normal(key, d_model, d_fc, d_model+d_fc)
-        key, layer['fc2_params'] = linear_init_normal(key, d_fc, d_model, d_model+d_fc)
-
-        params['layers'].append(layer)
-
-    # Final normalization and output layer
-    params['norm_pre_output_params'] = layer_norm_init(d_model)
-    key, params['output_params'] = linear_init_normal(key, d_model, n_vocab, d_model + n_vocab)
-
-    return key, config, params
-
-
-def attention(Q, K, V, d_k, mask):
-
-    attn_scores = Q @ K.transpose([0, 2, 1]) / d_k**0.5
-    # print(attn_scores.shape)
-    # Has shape (n_heads, seq_len, seq_len); remember, these are the attention scores,
-    # so for each token in the sequence, you have a compatibility score with every other token in the sequence
-
-    attn_scores += mask # prevent attending to future tokens
-
-    result = jax.nn.softmax(attn_scores, axis=-1) @ V
-    # Has shape (n_heads, seq_len, d_v)
-
-    return result
-
-
-
-
-def transformer(cfg, params, seq):
-    seq_len = seq.shape[-1] # 1D x; batching done via vmap
-
-    # seq is assumed to be token indices. Embeddings is of shape (n_vocab, d_model)
-    # So we are taking the d_model embeddings corresponding the indices of the tokens in seq
-    embeddings = cfg['embedding_scaling'] * params['embeddings'][seq, :]
-
-    # Learned positional encodings that also have dimension d_model so can be added
-    # to the token embeddings
-    # We take the positional encodings only up to the length of the sequence we're evaluating
-    positional_encodings = params['positional_encodings'][:seq_len, :]
-
-    x = embeddings + positional_encodings
-
-    # Decoder only architecture e.g. like GPT, so only self attention, so K, Q, V all come from the same place (the embeddings)
-    for layer in params['layers']:
-        # See e.g. https://proceedings.mlr.press/v119/xiong20b/xiong20b.pdf for discussion on pre vs post LN transformer
-
-        # print(x)
-        # x is of shape (batch_size, d_model)
-        sublayer_x = batch_layer_norm(layer['norm_pre_attn_params'], x)
-
-        Q, K, V = sublayer_x, sublayer_x, sublayer_x
-
-        # Include bias or not in projection matrices? Couldn't find reasonable answers online (that gave an explanation)
-        # Most implementations do include the bias. It doesn't add much computational overhead
-        # and may increase the model capacity or make it easier for the model to learn in some edge cases (e.g. you don't have to have all 0s for both Q and K mapping to 0)
-
-        # The reshape and transpose gives a result which is equivalent do doing the below,
-        # and then stacking, for example (with dimension 3 as the d_k, and 2 heads only)
-        # print(Q @ layer.Wq_heads.w[:, :3])
-        # print(Q @ layer.Wq_heads.w[:, 3:])
-        Q_Wq = linear(layer['Wq_heads'], Q)\
-            .reshape(seq_len, cfg['n_heads'], cfg['d_k']).transpose([1, 0, 2])
-        K_Wk = linear(layer['Wk_heads'], K)\
-            .reshape(seq_len, cfg['n_heads'], cfg['d_k']).transpose([1, 0, 2])
-        V_Wv = linear(layer['Wv_heads'], V)\
-            .reshape(seq_len, cfg['n_heads'], cfg['d_v']).transpose([1, 0, 2])
-
-        # https://stackoverflow.com/questions/65340088/multi-head-attention-correct-implementation-of-linear-transformations-of-q-k?rq=4
-        # query_projected.view(batch_size, query_lenght, head_count, head_dimension).transpose(1,2)
-
-        # This is 0 for elements above the diagonal and -inf otherwise.
-        # Adding this to attention then results in 0 after softmax for the tokens
-        # above the diagonal
-        mask = jnp.log(jnp.tril(jnp.ones((seq_len, seq_len)))).reshape(1, seq_len, seq_len)
-
-        sublayer_x = attention(Q_Wq, K_Wk, V_Wv, cfg['d_k'], mask)
-        # print(sublayer_x.shape)
-        # Has shape (n_heads, seq_len, d_v)
-
-        sublayer_x = jnp.concatenate(sublayer_x, axis=-1)
-        # print(sublayer_x.shape)
-        # Has shape (seq_len, n_heads * d_v) because concat uses the first axis for concatenation, and then axis=-1 does the concatenating on the last axis
-
-        sublayer_x = linear(layer['Wo_params'], sublayer_x)
-        # print(sublayer_x.shape)
-        # Has shape (seq_len, d_model); so can be added to x which has the same shape
-        # (note that all seq_len here include the prompt)
-
-        x = x + sublayer_x
-
-        # PRE-LN transformer: see e.g. https://proceedings.mlr.press/v119/xiong20b/xiong20b.pdf for why we do this
-        sublayer_x = batch_layer_norm(layer['norm_pre_fc_params'], x)
-        sublayer_x = linear(layer['fc1_params'], sublayer_x)
-        sublayer_x = jax.nn.relu(sublayer_x)
-        sublayer_x = linear(layer['fc2_params'], sublayer_x)
-        x = x + sublayer_x
-
-        # POST-LN transformer like in the original transformer paper
-        # sublayer_x = linear(layer['fc1_params'], sublayer_x)
-        # sublayer_x = jax.nn.relu(sublayer_x)
-        # sublayer_x = linear(layer['fc2_params'], sublayer_x)
-        #
-        # x = batch_layer_norm(params, x + sublayer_x)
-
-    x = batch_layer_norm(params['norm_pre_output_params'], x)
-    x = linear(params['output_params'], x)
-    # Return the final values without forcing softmax; softmax is to be done elsewhere if required
-    return x
 
 
 def stochastic_transformer_sample_iter(carry, t):
@@ -496,13 +267,6 @@ def stochastic_transformer_sample(rng_key, trainstate_p, prompt: jnp.ndarray, ou
 
     return full_seq
 
-# @partial(jax.jit, static_argnums=0)
-# def batch_transformer(trainstate_p, params_of_trainstate_p,seq):
-#     # Output has shape (batch_size, prompt_len + output_len, n_vocab)
-#     # Logsoftmax needed in order to go from unnormalized values to log probs
-#     batch_transformer_func = vmap(transformer, in_axes=(None, None, 0), out_axes=0)
-#     return batch_transformer_func(trainstate_p, params_of_trainstate_p,seq)
-
 # curry the prompt_len... TODO think about whether this structure or the one where you pass in (e.g. like batch_reward_model below) makes more sense
 def neg_beta_times_reward_model_curry(prompt_len, beta, reward_model_fn):
     def curried_phi_fn(seq):
@@ -511,12 +275,6 @@ def neg_beta_times_reward_model_curry(prompt_len, beta, reward_model_fn):
 
 def neg_beta_times_reward_model(seq, prompt_len, beta, reward_model_fn):
     return reward_model_fn(seq, prompt_len) * -1. * beta
-
-# def batch_reward_model(reward_model_fn):
-#     def batch_rm_fn(seq, prompt_len):
-#         batch_rm = vmap(reward_model_fn, in_axes=(0, None), out_axes=0)
-#         return batch_rm(seq, prompt_len)
-#     return batch_rm_fn
 
 base_reward = 0.
 bad_reward = -1.
@@ -543,16 +301,6 @@ bad_word_list = ["\u0120fuck", "\u0120fucking", "\u0120fucked", "\u0120Fuck", "\
 bad_word_indices = jnp.array([5089, 9372, 20654, 25617, 30998, 31699, 34094, 46733,
                      21551, 40267, 7510, 16211, 20041, 32574, 41356,
                      31030, 47209, 18185, 29836 ], dtype=jnp.int32)
-
-# def check_contains_bad_word(seq, bad_word="bad_term"):
-#
-#     for bad_word in bad_words_list:
-#
-#     bad_index = ordered_token_list.index(bad_word)
-#
-#     contains_bad_word = jnp.where(jnp.abs(seq - bad_index) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
-#
-#     return jnp.minimum(contains_bad_word.sum(), 1)
 
 def check_contains_bad_index(seq, bad_index):
     contains_bad_word = jnp.where(jnp.abs(seq - bad_index) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
@@ -650,20 +398,6 @@ def reward_model_toxicity_w_callback(curried_rm):
     return new_rm_fn
 
 
-def get_full_list_of_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
-    # Needs prompt[None, :] for unprocessed (jnp) prompt
-    seq = prompt[None, :]
-    # Essentially repeat get_all_new_seqs output_len times, starting from prompt
-    # Same as get_all_seqs_up_to_output_len but return full list instead of just last set of sequences
-    # This will be useful instead of calling get_all_seqs_up_to_output_len over and over again
-    output_list = []
-    for i in range(output_len):
-        seq = get_all_new_seqs_single_t(seq, n_vocab)
-        seq = seq.reshape(-1, seq.shape[-1])
-        output_list.append(seq)
-
-    return output_list
-
 def get_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
     # Needs prompt[None, :] for unprocessed (jnp) prompt
     seq = prompt[None, :]
@@ -719,52 +453,6 @@ def get_proposal_q_sample_for_scan(rng_key, full_seq, trainstate_p, params_of_tr
     return rng_key, full_seq, log_Z_s_1_to_t_minus_1
 
 
-# def get_proposal_q_sample_final(rng_key, seq, trainstate_p, params_of_trainstate_p, final_twist):
-#     # Same as get_proposal_q_sample except using the true final_twist instead of the learned twists (final_twist = - beta r(s) for adv sampling)
-#     # Thus, this should only be used for the final time step.
-#     # TODO NOTE train = False here for better sampling, but that means no dropout - if you were to train on this (right now I don't), you might want to set train=True for dropout regularization
-#
-#     output_unnormalized_batch = trainstate_p.apply_fn(input_ids=seq, params=params_of_trainstate_p, train=False)
-#
-#     rng_key, subkey = jax.random.split(rng_key)
-#
-#     # n_batch = output_unnormalized_batch.shape[0]
-#     n_vocab = output_unnormalized_batch.shape[-1]
-#
-#     all_new_seqs = get_all_new_seqs_single_t(seq, n_vocab)
-#
-#     # print(all_new_seqs.shape) # shape (batch, n_vocab, seq_len) (seq len includes the prompt len and output len)
-#
-#     # print(all_new_seqs.shape)
-#
-#     output_psi_batch = final_twist(all_new_seqs)
-#
-#     # print(output_psi_batch.shape)
-#     # print(output_unnormalized_batch.shape)
-#     # print(jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]))
-#     # 1/0
-#
-#     # Again the output_unnormalized_batch[:,-1,:] needs a log_softmax for the log probabilities to be correct
-#     # However the final twist is just the - beta r(s) which is the same as exp of that followed by log.
-#     # So no additional transformations needed, just add it directly to the logsoftmax of the output of the model
-#     log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]) + output_psi_batch # psi is already in log space
-#     indices_to_use = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(output_unnormalized_batch.shape[0],))
-#
-#     seq = jnp.concatenate((seq, indices_to_use[:, None]), axis=1)
-#
-#     # For the importance sampling procedure, since we are sampling q proportional to p psi,
-#     # Then we need q(s_t|s_{1:t-1}) = p(s_t|s_{1:t-1}) psi_t(s_{1:t}) / sum_{s_t} of p(s_t|s_{1:t-1}) psi(s_{1:t})
-#     # The denominator is the normalizing constant, Z(s_{1:t-1}) = sum_{s_t} of p(s_t|s_{1:t-1}) psi(s_{1:t})
-#     # We need this for the importance weights (sampling is ok since sampling takes unnormalized values)
-#     # Calculate log Z(s_{1:t-1}) = log [sum_{s_t} of p(s_t|s_{1:t-1}) psi(s_{1:t})]
-#     # = log [sum_{s_t} of exp(log( p(s_t|s_{1:t-1}) psi(s_{1:t}) ))  ]
-#     # = log [sum_{s_t} of exp( log(p(s_t|s_{1:t-1})) + log(psi(s_{1:t})) )  ]
-#     # = logsumexp[log( p(s_t|s_{1:t-1})) + log( psi(s_{1:t})) ) ]
-#     log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
-#
-#     return rng_key, seq, log_Z_s_1_to_t_minus_1
-#
-
 def evaluate_unnormalized_log_q_t_full_seq(full_seq, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len_plus_t, dropout_rng):
     # Assumes 0 based indexing for t
     dropout_rng, dropout_rng2 = jax.random.split(dropout_rng)
@@ -772,39 +460,9 @@ def evaluate_unnormalized_log_q_t_full_seq(full_seq, trainstate_p, params_of_tra
            evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist, prompt_len_plus_t, dropout_rng2)
 
 
-# def evaluate_log_psi_t(seq, trainstate_twist, params_of_trainstate_twist, dropout_rng):
-#     # Takes in sequences s_{1:t} of (n_batch, seq_length) shape
-#     # Evaluate log psi (s_{1:t})
-#     output_psi_batch = trainstate_twist.apply_fn(input_ids=seq,
-#                                                       params=params_of_trainstate_twist,
-#                                                       train=True,
-#                                                  dropout_rng=dropout_rng)
-#
-#     # If I use a single transformer, essentially I am doing a kind of weight tying between the different psi_t (which should be desirable)
-#     # I could use a separate transformer for each psi_t but that seems a little inefficient
-#     # Then we take [seq[-1]] because that is the index of the corresponding token
-#     # The way to think about the twist function / psi transformer here is that:
-#     # essentially each prob distribution over n_vocab tokens at time step i describes a psi value for s_{1:i} where the previous s_{1:i-1} are based on
-#     # the input seq, and then s_i is whatever n_vocab token you are taking from this distribution over n_vocab tokens
-#     # First axis is batch, last is n_vocab
-#     # We take [-2] index because this is for the last token in the current sequence (not including the next predicted token)
-#     # Then we take [seq[:, -1]] because that gives the indices of the corresponding token that was generated, for which we want the psi value
-#     # jnp.arange(seq.shape[0]), seq[:,-1] just lets us do the indexing we want.
-#     # What it does is take index 0, 1, 2, ... from the first axis, and then the indices according to the tokens from the second axis
-#     # Now an important thing to note: since the optimal psi_T is just the exp(-beta r(s)), and the optimal psi_t is sigma(s_{1:t})/p(s_{1:t}),
-#     # we cannot constrain the psi (psi, or at least the output from the twist, is not a probability). We also have a choice: we can make the twist directly
-#     # represent exp(-beta r(s)), or we can make it represent the log of that, -beta r(s).
-#     # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
-#     return output_psi_batch[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
-
 def evaluate_log_phi_final(seq, final_twist):
     return final_twist(seq)
 
-# def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(seq, trainstate_p, params_of_trainstate_p, final_twist, dropout_rng):
-#     # Takes in batches of sequences s_{1:t}
-#     # Right now evaluates UNNORMALIZED log q_t which is not actually what the q_t probability is supposed to be
-#     # Evaluates p(s_t | s_{1:t-1}) psi(s_{1:t})  (IS UNNORMALIZED)
-#     return evaluate_log_p_theta_t(seq, trainstate_p, params_of_trainstate_p, dropout_rng) + evaluate_log_phi_final(seq, final_twist)
 
 def evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p, prompt_len, output_len, dropout_rng, output_log_p_for_each_t=False):
     # Evaluate log p_theta(s_{1:t}) (given the prompt)
@@ -900,13 +558,6 @@ def evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate
                                                      train=False)
     token_indices = full_seq[:, prompt_len_plus_t]
     return output_psi_batch[:, prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
-
-# TODO THink about - there's probably some way to avoid having to train a separate positive twist but maybe we can just do that at first as a proof of concept for the idea even if inefficient.
-# Remember that when psi is trained it is prop to phi, which is e^(-beta r(s)). So if we want something prop to e^(beta r(s)), then we need...?
-# Well, if psi = c e^ (-beta r(s)), then log psi = log c  - beta r(s). So if you want log_neg_psi = log c + beta r(s) and you have log c - beta r(s)...
-# def evaluate_log_neg_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist, prompt_len_plus_t):
-#     log_psi_t = evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate_twist, prompt_len_plus_t)
-#     log_neg_psi_t = jnp.exp(log_psi_t) * -1.
 
 
 def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
@@ -1118,31 +769,6 @@ def smc_procedure(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainst
                    final_twist, output_len, n_smc_samples, use_final_twist, intermediate_sample_history)
 
 
-
-# def get_l_dre_sixo(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist, dropout_rng):
-#     raise NotImplementedError # TODO need to replace trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, etc.
-#     # Should perhaps also consider using full_seq instead
-#
-#     prompt_len = prompt.shape[-1]
-#
-#     rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
-#     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist)
-#     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, trainstate_p, params_of_trainstate_p, prompt, output_len, n_twist)
-#
-#     l_dre = 0.
-#
-#     for t in range(prompt_len + 1, prompt_len + 1 + output_len - 1): # start with +1 so that you pass in the first generated token; s_{prompt_len + 1} is essentially s_1, the first generated token. end with -1 because the final step uses the true phi, so we aren't updating twist parameters for that
-#
-#         # Having the log on psi makes sense: as training psi = log density ratio, so then training log psi = log density ratio gets psi = density ratio
-#         # Passing in the full sequence up to time step t is correct, because the evalute_log_psi_t only evaluates the very last logit
-#         # l_dre += (jax.nn.log_sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], trainstate_twist, params_of_trainstate_twist))) + \
-#         #          jnp.log(1 - jax.nn.sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], trainstate_twist, params_of_trainstate_twist))))).mean()
-#         l_dre += (jax.nn.log_sigmoid(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], trainstate_twist, params_of_trainstate_twist, dropout_rng)) + \
-#                  jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], trainstate_twist, params_of_trainstate_twist, dropout_rng)))).mean()
-#
-#     l_dre /= (output_len - 1)
-#     return -l_dre # negative because now we have a loss
-
 # Just check the all 0s string and adjacent probabilities
 def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p):
     print("--INSPECT ONE_BAD PROGRESS--")
@@ -1155,196 +781,6 @@ def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, trainstate
     # log_psi = evaluate_log_phi_final(seq, final_twist)
     print(log_p)
 
-# Analytic, all sequences
-# def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p):
-#     print("--INSPECT ONE_BAD PROGRESS--")
-#     all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len)
-#     log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, trainstate_p, params_of_trainstate_p,
-#                                                  prompt_len, output_len)
-#     print(log_p_all_seqs)
-
-
-def inspect_varied_info(jnp_prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p):
-    print("--INSPECT VARIED PROGRESS--")
-    all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len)
-    log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, trainstate_p, params_of_trainstate_p,
-                                                 prompt_len, output_len)
-    print(log_p_all_seqs)
-
-
-# def inspect_bad_word_info(prompt_len, trainstate_p, params_of_trainstate_p):
-#     print("--INSPECT BAD WORD PROGRESS--")
-#     # test_seqs = [
-#     #     ["what", "is", "the", "term", "for", "neutral_term", "the", "term",
-#     #      "is", "neutral_term", "_"],
-#     #     ["what", "is", "the", "term", "for", "neutral_term", "the", "term",
-#     #      "is", "bad_term", "_"],
-#     #     ["what", "is", "the", "term", "for", "neutral_term", "don't", "know",
-#     #      "_", "_", "_"],
-#     #     ["what", "is", "the", "term", "for", "neutral_term", "term", "term",
-#     #      "the", "for", "_"],
-#     #     ["what", "is", "the", "term", "for", "neutral_term", "bad_term", "term",
-#     #      "is", "neutral_term", "_"],
-#     # ] # Test probs for: good output, bad output, evasive output, garbage/nonsense, and nonsense containing bad-word. There are lots of other possible sequences but they should all have very low prob.
-#     # So first prob should go up, second should go down fast, third and fourth should ideally go down, fifth should go down fast.
-#     # Then added a sixth which is just testing first 3 tokens of an evasive response and how likely that is
-#
-#     output_len = 2
-#     test_seqs = [
-#         ["what", "is", "the", "term", "for", "neutral_term", "neutral_term", "_"],
-#         ["what", "is", "the", "term", "for", "neutral_term", "unsure", "_",
-#          ],
-#         ["what", "is", "the", "term", "for", "neutral_term", "_", "_", ],
-#         ["what", "is", "the", "term", "for", "neutral_term", "term", "the", ],
-#     ] # good, evasive, nonsense, nonsense
-#     jnp_indices_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_seqs])
-#
-#     log_p_all_seqs = evaluate_log_p_theta_1_to_t(jnp_indices_seqs, trainstate_p, params_of_trainstate_p,
-#                                                  prompt_len, output_len)
-#     print(log_p_all_seqs)
-#     print(reward_model_binary(jnp_indices_seqs, prompt_len))
-#     desired_cont_indist_prob = jnp.exp(log_p_all_seqs[0])
-#     evasive_cont_indist_prob = jnp.exp(log_p_all_seqs[1])
-#
-#     test_bad_seqs = []
-#     for x in ordered_token_list:
-#         seq = ["what", "is", "the", "term", "for", "neutral_term", x, "bad_term"]
-#         test_bad_seqs.append(seq)
-#     for y in ordered_token_list:
-#         if y != "bad_term":
-#             seq = ["what", "is", "the", "term", "for", "neutral_term", "bad_term", y, ]
-#             test_bad_seqs.append(seq)
-#     jnp_ind_test_bad_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_bad_seqs])
-#     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_bad_seqs, trainstate_p, params_of_trainstate_p,
-#                                                  prompt_len, 2)
-#     print("BAD WORD In dist Prob")
-#     bad_word_indist_prob = jnp.exp(log_p).sum()
-#     print(bad_word_indist_prob) # total sum prob of bad term in the ood prompt case
-#
-#     # DO SOME OOD TESTING
-#     ood_prompt_len = 9
-#     test_ood_bad_seqs = []
-#     for x in ordered_token_list:
-#         seq = ["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", x, "bad_term" ]
-#         test_ood_bad_seqs.append(seq)
-#     for y in ordered_token_list:
-#         if y != "bad_term":
-#             seq = ["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "bad_term", y, ]
-#             test_ood_bad_seqs.append(seq)
-#
-#     jnp_ind_test_ood_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_bad_seqs])
-#     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_seqs, trainstate_p, params_of_trainstate_p,
-#                                                  ood_prompt_len, output_len)
-#     print("BAD WORD OOD Prob")
-#     bad_word_ood_prob = jnp.exp(log_p).sum()
-#     print(bad_word_ood_prob) # total sum prob of bad term in the ood prompt case
-#
-#     test_ood_good_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "neutral_term", "_" ]]
-#     jnp_ind_test_ood_good_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_good_seq])
-#     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_good_seq, trainstate_p, params_of_trainstate_p,
-#                                         ood_prompt_len, output_len) # prompt_len = 6, 6+3=9
-#     print("Desired continuation OOD Prob")
-#     desired_cont_ood_prob = jnp.exp(log_p)
-#     print(desired_cont_ood_prob)
-#
-#     test_ood_evasive_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "unsure", "_" ]]
-#     jnp_ind_test_ood_evasive_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_evasive_seq])
-#     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_evasive_seq, trainstate_p, params_of_trainstate_p,
-#                                         ood_prompt_len, output_len) # prompt_len = 6, 6+3=9
-#     print("Evasive continuation OOD Prob")
-#     evasive_cont_ood_prob = jnp.exp(log_p)
-#     print(evasive_cont_ood_prob)
-#
-#     return bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
-#            bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob
-
-
-# def inspect_bad_word_reward(sk, prompt, prompt_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-#                             final_twist, output_len, n_samples, rew_model):
-#     sk, sk2 = jax.random.split(sk)
-#     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
-#                                                       trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-#                                                       final_twist,
-#                                                       output_len,
-#                                                       n_samples, analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
-#
-#     r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
-#
-#     model_seqs = stochastic_transformer_sample(sk2, trainstate_p, params_of_trainstate_p, prompt,
-#                                                output_len, n_samples)
-#     r_seqs_model = rew_model(model_seqs, prompt_len)
-#
-#     adv_reward = r_seqs_adv.mean()
-#     p_reward = r_seqs_model.mean()
-#
-#     print("Average rewards:")
-#     print(adv_reward)
-#     print(p_reward)
-#
-#     return adv_reward, p_reward
-
-
-
-# def print_bad_word_env_generations(key, indices_prompt, trainstate_p, params_of_trainstate_p, prompt_len, output_len, n_samples):
-#
-#     print("Model Stochastic Generations")
-#     key, sk = jax.random.split(key)
-#     samples = stochastic_transformer_sample(sk, trainstate_p, params_of_trainstate_p,indices_prompt, output_len, n_samples)
-#     for sample in samples:
-#         token_sample = indices_to_tokens(ordered_token_list, sample)
-#         print(token_sample[prompt_len:])
-#
-
-
-
-# def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, n_twist):
-#     print("--TEST--")
-#
-#     rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
-#
-#     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, final_twist, output_len, n_twist, use_final_twist=True)
-#
-#     _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_procedure(sk2, prompt,
-#                                                             trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist,
-#                                                             None,
-#                                                             output_len - 1,
-#                                                             n_twist,
-#                                                             use_final_twist=False)
-#
-#     # all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
-#     # log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, trainstate_p, params_of_trainstate_p,
-#     #                                              prompt_len, output_len)
-#     # log_psi_all_seqs = evaluate_log_phi_final(all_seqs, final_twist)
-#     #
-#     # analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
-#
-#     analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(prompt, prompt_len,
-#                                                    n_vocab,
-#                                                    output_len,
-#                                                              trainstate_p, params_of_trainstate_p, final_twist)
-#
-#     samples = prompt_w_sigma_sample_s_1_to_t
-#     samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
-#
-#     index = 0
-#
-#     for seq in all_seqs:
-#         print(seq)
-#         print(analytic_sigma_vals[index])
-#         count = 0
-#         for sample in samples:
-#             if (jnp.abs(seq - sample)).sum() == 0:
-#                 count += 1
-#         print(count / n_twist)
-#         count2 = 0
-#         for sample2 in samples2:
-#             if (jnp.abs(seq[:-1] - sample2)).sum() == 0:
-#                 count2 += 1
-#         print(count2 / n_twist)
-#         index += 1
-#
-#     print("--END TEST--")
-#
 
 def get_l_dre_roger_scan_iter(carry, scan_over):
     l_dre, prompt_w_sigma_sample_s_1_to_t, trainstate_twist, params_of_trainstate_twist, prompt_len, dropout_rng = carry
@@ -1470,262 +906,6 @@ def rl_loss(sk, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, 
 
     return loss + baseline_loss
 
-
-
-# TODO Test longer and longer seq lengths and check that the model A) correctly learns twists and B) correctly modifies the behaviour.
-# TODO also test comparing vs a strong baseline (e.g. PPO with knobs tuned) and compare quantitative and qualitative results.
-# TODO Find a setting that mimics real world things we care about (e.g. setting that allows for evasiveness, with sensitive words to avoid, etc.)
-
-# # THIS FUNCTION ONLY WORKS FOR THE ONE_BAD REWARD MODEL (WITH THE ALL 0s BEING BAD), and only calculates twists on strings containing 0s e.g. 0, then 00, 000, etc. regardless of the n_vocab (although each computation must calculate using a sum over all n_vocab tokens)
-# def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, trainstate_p, params_of_trainstate_p, final_twist):
-#     # Add output_len-1 zeros first
-#     seq = jnp.concatenate((jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
-#     seq = seq[None, :]
-#     # then call the get_all_new_seqs_single_t function
-#     seq = get_all_new_seqs_single_t(seq, n_vocab)
-#     seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
-#
-#     # then do the summation done for the other stuff, recursively
-#     opt_log_twist_array_list = []
-#
-#     opt_log_twist_single = calc_opt_twist_helper(seq, trainstate_p, params_of_trainstate_p, final_twist)
-#     opt_log_twist_array = jnp.concatenate((opt_log_twist_single.reshape((1,)),
-#                                            jnp.ones(
-#                                                n_vocab - 1, ) * - base_reward))
-#
-#     opt_log_twist_array_list.append(opt_log_twist_array)
-#
-#     for t in range(output_len - 1 - 1, 0, -1):
-#         seq = jnp.concatenate(
-#             (jnp_prompt, jnp.zeros((t,), dtype=jnp.int32)))
-#         seq = seq[None, :]
-#         seq = get_all_new_seqs_single_t(seq, n_vocab)
-#         seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
-#
-#         eval_log_p_t = evaluate_log_p_theta_t(seq, trainstate_p, params_of_trainstate_p)
-#
-#         # optimal_twist = (jnp.exp(eval_log_p + opt_log_twist_array[i * args.n_vocab:(i+1) * args.n_vocab])).sum()
-#         opt_log_twist_single = jax.nn.logsumexp(eval_log_p_t + opt_log_twist_array)
-#         opt_log_twist_array = jnp.concatenate((opt_log_twist_single.reshape((1,)), jnp.ones(n_vocab - 1,) * - base_reward ))
-#
-#         opt_log_twist_array_list.append(opt_log_twist_array)
-#
-#     return opt_log_twist_array_list
-
-# # Check the model twists in a similar manner to the optimal twists for the one_bad reward model
-# def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, trainstate_twist, params_of_trainstate_twist):
-#     # Add output_len-1 zeros first
-#     seq = jnp.concatenate(
-#         (jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
-#     seq = seq[None, :]
-#     # then call the get_all_new_seqs_single_t function
-#     seq = get_all_new_seqs_single_t(seq, n_vocab)
-#     seq = seq.reshape(-1, seq.shape[
-#         -1])  # turn into (batch_size = n_vocab, seq_len) shape
-#
-#     model_twist_array_list = []
-#
-#     model_twist = evaluate_log_psi_t(seq, trainstate_twist, params_of_trainstate_twist)
-#
-#     model_twist_array_list.append(model_twist)
-#
-#     for t in range(output_len - 1 - 1, 0, -1):
-#         seq = jnp.concatenate(
-#             (jnp_prompt, jnp.zeros((t,), dtype=jnp.int32)))
-#         seq = seq[None, :]
-#         seq = get_all_new_seqs_single_t(seq, n_vocab)
-#         seq = seq.reshape(-1, seq.shape[
-#             -1])  # turn into (batch_size = n_vocab, seq_len) shape
-#
-#         model_twist = evaluate_log_psi_t(seq, trainstate_twist, params_of_trainstate_twist)
-#
-#         model_twist_array_list.append(model_twist)
-#
-#     return model_twist_array_list
-
-
-
-
-# def calc_opt_twist_helper(seqs_2d, trainstate_p, params_of_trainstate_p, final_twist):
-#     eval_log_p_t = evaluate_log_p_theta_t(
-#         seqs_2d, trainstate_p, params_of_trainstate_p)
-#
-#     eval_log_psi = evaluate_log_phi_final(
-#         seqs_2d, final_twist)
-#
-#     # eval_log_p_t and eval_log_psi are both 1d arrays anyway, so using axis=-1 or not makes no difference
-#     optimal_log_twist = jax.nn.logsumexp(eval_log_p_t + eval_log_psi)
-#
-#     return optimal_log_twist
-#
-# def calc_opt_twist_helper_mapped(seqs_3d, trainstate_p, params_of_trainstate_p, final_twist):
-#     return jax.vmap(calc_opt_twist_helper, in_axes=(0, None, None, None))(seqs_3d, trainstate_p, params_of_trainstate_p, final_twist)
-
-
-# def calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p, final_twist, return_log=False):
-#     # This manually enumerates all possible sequences up to the output_len
-#     # And then calculates log_p and log_phi (where phi = e^(-beta r(s)) ) on each of those sequences.
-#     # Then the sum of those is equal to log (p phi) where p phi = sigma (at least, an unnormalized sigma)
-#     # So softmax takes the exp, which gives us the unnormalized sigma values, then the softmax normalizes them to give us the sigma distribution values
-#
-#     all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab,
-#                                              output_len)
-#     log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, trainstate_p, params_of_trainstate_p,
-#                                                  prompt_len,
-#                                                  output_len)
-#     log_phi_all_seqs = evaluate_log_phi_final(all_seqs, final_twist)
-#
-#     if return_log:
-#         analytic_log_sigma_vals = jax.nn.log_softmax(log_p_all_seqs + log_phi_all_seqs)
-#         return analytic_log_sigma_vals, all_seqs
-#
-#     analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_phi_all_seqs)
-#
-#     return analytic_sigma_vals, all_seqs
-#
-# def get_analytic_sigma_sample(subkey, jnp_prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p, final_twist, n_samples):
-#     analytic_log_sigma_vals, all_seqs = calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, trainstate_p, params_of_trainstate_p, final_twist, return_log=True)
-#
-#     indices = jax.random.categorical(subkey, analytic_log_sigma_vals,
-#                                  shape=(n_samples, ))
-#
-#
-#     # for seq in all_seqs[:, prompt_len]:
-#     #     print(indices_to_tokens(ordered_token_list, seq))
-#
-#     # print(jax.lax.stop_gradient(jnp.exp(analytic_log_sigma_vals)))
-#     # print(indices)
-#
-#     samples = all_seqs[indices]
-#
-#     # for sample in samples[:, prompt_len:]:
-#     #     print(indices_to_tokens(ordered_token_list, sample))
-#     # print(samples.shape)
-#
-#     return samples
-#
-#
-# def calc_optimal_twists(jnp_prompt, n_vocab, output_len, trainstate_p, params_of_trainstate_p, final_twist):
-#     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len - 1)
-#
-#     all_seqs_to_T_minus_1 = all_seqs_list[-1]
-#     all_seqs_with_n_vocab_at_t = get_all_new_seqs_single_t(
-#         all_seqs_to_T_minus_1, n_vocab)
-#     # When we call print(all_seqs_with_n_vocab_at_t.shape), we get shape of: batch (which should be n_vocab ^ (output_len - 1) I believe), n_vocab, output_len - 1 + prompt_len
-#
-#     opt_log_twist_array_list = []
-#
-#     # We're going to iterate over all of the sequences of length t: but since they're sorted into groups of n_vocab size, and we have
-#     # n_vocab ^ (output_len - 1) of those groups, we're going to iterate over each of those groups, calculate the twist value for each of the
-#     # n_vocab ^ (output_len - 1) groups based on summing over the n_vocab tokens for the next time step, in this case directly using the
-#     # known final twist values (e.g. RM/PM). This gives us our twists for the t-1 time step (indeed we assume output_len > 1, otherwise there are no twists to calculate)
-#
-#     opt_log_twist_array = calc_opt_twist_helper_mapped(all_seqs_with_n_vocab_at_t, trainstate_p, params_of_trainstate_p, final_twist)
-#     opt_log_twist_array_list.append(opt_log_twist_array)
-#
-#     # TODO JULY 1 can I vmap this loop too? Seems not so trivial to do.
-#     # The above section calculates the optimal twists for the t-1 time step
-#     # (again remember no need to calculate for t as we use the final twist there,
-#     # also we never train any twists for time t in the way I currently have the code setup anyway)
-#     # The below now takes those, and recursively calculates the optimal twists for time step t-2, and so on, decrementing by 1 each time.
-#     j = 2
-#     while (j < output_len):
-#
-#         new_opt_log_twist_list = []
-#
-#         all_seqs_to_T_minus_j = all_seqs_list[-j]
-#
-#         all_seqs_with_n_vocab_at_t = get_all_new_seqs_single_t(
-#             all_seqs_to_T_minus_j, n_vocab)
-#         for i in range(all_seqs_with_n_vocab_at_t.shape[0]):
-#             eval_log_p_t = evaluate_log_p_theta_t(
-#                 all_seqs_with_n_vocab_at_t[i, :, :], trainstate_p, params_of_trainstate_p)
-#             # optimal_twist = (jnp.exp(eval_log_p + opt_log_twist_array[i * args.n_vocab:(i+1) * args.n_vocab])).sum()
-#             optimal_log_twist = jax.nn.logsumexp(
-#                 eval_log_p_t + opt_log_twist_array[
-#                              i * n_vocab:(i + 1) * n_vocab])
-#             new_opt_log_twist_list.append(optimal_log_twist)
-#
-#         new_opt_log_twist_array = jnp.stack(new_opt_log_twist_list)
-#
-#         opt_log_twist_array_list.append(new_opt_log_twist_array)
-#
-#         opt_log_twist_array = new_opt_log_twist_array
-#
-#         # Remember again essentially what the optimal twists are doing are giving you marginals (using the final twist as the reference)
-#
-#         j += 1
-#
-#     return opt_log_twist_array_list
-
-
-# def l_rel_compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-#                                      params_p, final_twist, trainstate_twist, params_of_trainstate_twist,rm_type):
-#     return compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-#                                      params_p, final_twist, trainstate_twist, params_of_trainstate_twist,rm_type, verbose=False,  relative_diff_loss=True)
-#
-# def l_abs_compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-#                                      params_p, final_twist, trainstate_twist, params_of_trainstate_twist,rm_type):
-#     return compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-#                                      params_p, final_twist, trainstate_twist, params_of_trainstate_twist,rm_type, verbose=False,  relative_diff_loss=False)
-#
-# def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-#                                      params_p, final_twist, trainstate_twist, params_of_trainstate_twist,rm_type,
-#                                      verbose=True, relative_diff_loss=True):
-#     if rm_type == "one_bad":
-#         opt_log_twist_array_list = calc_optimal_twists_one_bad(prompt, n_vocab,
-#                                                    output_len, cfg_p,
-#                                                    params_p, final_twist)
-#     elif rm_type == "bad_word":
-#         raise NotImplementedError
-#     else:
-#         # FIRST generate optimal twists
-#         # seqs_to_test_on = all_seqs # For longer time horizons can instead use some randomly sampled sequences s_{1:T} (Works only when you can avoid the exponential number of sums e.g. with some structure in the reward model) For shorter time horizons, can literally test every sequence
-#         opt_log_twist_array_list = calc_optimal_twists(prompt, n_vocab,
-#                                                        output_len, cfg_p,
-#                                                        params_p, final_twist)
-#
-#     if verbose:
-#         print("OPTIMAL TWISTS")
-#         print(opt_log_twist_array_list)
-#
-#     # if rm_type == "one_bad":
-#     #     model_twist_array_list = calc_model_twists_one_bad(prompt, n_vocab, output_len,
-#     #                                                trainstate_twist, params_of_trainstate_twist)
-#     # else:
-#     #     # NEXT generate all seqs, and compare the model twists on all 1:t for all t on all seqs.
-#     #     model_twist_array_list = calc_model_twists(prompt, n_vocab, output_len,
-#     #                                                trainstate_twist, params_of_trainstate_twist)
-#
-#     # TODO Twist Calc/Inspection
-#
-#     # if verbose:
-#     #     print("MODEL TWISTS")
-#     #     print(model_twist_array_list)
-#
-#     sum_diff = 0.
-#     total_size = 0.
-#
-#     # if verbose:
-#     #     print("DIFFS")
-#     # for i in range(len(opt_log_twist_array_list)):
-#     #     diff_i = opt_log_twist_array_list[i] - model_twist_array_list[i]
-#     #
-#     #     if verbose:
-#     #         print(diff_i)
-#     #         print(diff_i - diff_i.mean())
-#     #         print((jnp.abs(diff_i - diff_i.mean())).mean()) # This is useful because adding a constant to log twists changes nothing (like multiplying unnormalized probabilities by a constant). Therefore we should not be concerned if the learned twists differ from the optimal only by a constant amount across all entries. What we care about are RELATIVE differences - after removing a constant shift (using the mean of the differences, to give the most charitable interpretation), how much remaining differences are left?
-#     #
-#     #     if relative_diff_loss:
-#     #         sum_diff += ((diff_i - diff_i.mean()) ** 2).sum()
-#     #     else:
-#     #         sum_diff += (diff_i ** 2).sum()
-#     #     total_size += opt_log_twist_array_list[i].shape[0]
-#     #
-#     # # print(total_size)
-#     # # print(sum_diff / total_size)
-#
-#     return sum_diff / total_size
 
 
 # PPO STUFF
@@ -2282,57 +1462,6 @@ def main():
             final_twist = final_twists[i]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
-            # # # TODO REMOVE LATER
-            #
-            # rng_key, sk1, sk2, dropout_rng = jax.random.split(rng_key, 4)
-            # _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt,
-            #                                                   trainstate_p,
-            #                                                   trainstate_p.params,
-            #                                                   trainstate_twist,
-            #                                                   trainstate_twist.params,
-            #                                                   final_twist,
-            #                                                   args.output_len,
-            #                                                   100,
-            #                                                   use_final_twist=True)
-            #
-            # # get_l_dre_roger_jit(rng_key, prompt, trainstate_p,
-            # #                     trainstate_p.params, trainstate_twist,
-            # #                     trainstate_twist.params, final_twist,
-            # #                     args.output_len, 100)
-            #
-            # # p_samples = stochastic_transformer_sample(rng_key, trainstate_p,
-            # #                                           prompt, args.output_len,
-            # #                                           args.n_print_samples) # shape 100, 6
-            # #
-            # #
-            # # # TODO AUG 16
-            # # # Another possiblity is to try training my own RM e.g. on the anthropic data, or whatever the guy did to build his toxicity model
-            # # # TRY THE PADDING AND CALLBACK IDEA FIRST. This shld work and should be reasonably fast to implement
-            # # # IF THAT DOESN't WORK: try just isolating the parts of the code that call final_twist or the rew_model. Everything else can be jitted. Then jit low level instead of top level, and move all the tokenize/text logic outside of those functions.
-            # # # The above strat should be workable as well. All the final_twist stuff appears only in last iter of SMC, so that can go outside of the jitted function which has the lax.scan loop
-            # # # For policy learning, again we can isolate the calculation of the rewards from the rest of the code that works with it.
-            # # # This should take more time, so start with the callback. That one is also a more interesting learning experience.
-            # #
-            # # r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
-            # # print(r_seqs)
-            # # print(r_seqs.shape)
-            # #
-            # # r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
-            # # print(r_seqs)
-            # # print(r_seqs.shape)
-            # #
-            # # p_samples = p_samples.reshape(2, 50, -1)
-            # # print(p_samples.shape)
-            # # r_seqs = experiment_cfg.batch_rm(p_samples, prompt_len)
-            # # print(r_seqs)
-            # # print(r_seqs.shape)
-            # #
-            # # r_seqs = experiment_cfg.rm_fn(p_samples, prompt_len)
-            # # print(r_seqs)
-            # # print(r_seqs.shape)
-            # # 1/0
-
-
             test_smc = False
             if test_smc:
 
@@ -2484,9 +1613,6 @@ if __name__ == "__main__":
     parser.add_argument("--use_dropout", action="store_true", help="Use dropout")
 
     args = parser.parse_args()
-
-    # if args.analytic_sigma_sample:
-    #     assert args.twist_updates_per_epoch == 0
 
     if args.anneal_beta_temp:
         assert args.beta_temp != args.beta_temp_final
