@@ -743,8 +743,8 @@ class TestClass:
         print(kl_div_jax_sum_last_axis(log_p_s, log_p_0_s))
         print(jnp.abs(log_p_s - log_p_0_s).mean())
 
-        assert (kl_div_jax_sum_last_axis(log_p_s, log_p_0_s)) < 1e-9 # 1e-2
-        assert jnp.abs(log_p_s - log_p_0_s).mean() <  1e-9 # 1e-1
+        assert (kl_div_jax_sum_last_axis(log_p_s, log_p_0_s)) < 1e-2
+        assert jnp.abs(log_p_s - log_p_0_s).mean() < 1e-1
 
 
 
@@ -927,32 +927,63 @@ class TestClass:
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
-        num_epochs = 100
-        for _ in range(num_epochs):
+        avg_rel_diff_start = compare_learned_twist_vs_optimal(self.prompt,
+                                                              self.n_vocab,
+                                                              self.output_len,
+                                                              self.cfg_p,
+                                                              self.params_p,
+                                                              final_twist,
+                                                              self.cfg_twist,
+                                                              self.params_twist,
+                                                              rm_type=experiment_cfg.rm_type,
+                                                              verbose=True,
+                                                              relative_diff_loss=True)
+        avg_rel_diff_list = [avg_rel_diff_start]
+        print(avg_rel_diff_list)
 
-            rng_key, sk = jax.random.split(self.rng_key)
+        eval_repeats = 3
+        for repeat in range(eval_repeats):
+            num_epochs = 100
+            for _ in range(num_epochs):
 
-            grad_params_twist = experiment_cfg.get_grad_params_twist(sk, self.prompt,
-                                                                     self.n_vocab,
-                                                                     self.n_twist,
-                                                                     self.output_len,
-                                                                     self.cfg_p,
-                                                                     self.params_p,
-                                                                     self.cfg_twist,
-                                                                     self.params_twist,
-                                                                     final_twist)
+                rng_key, sk = jax.random.split(self.rng_key)
 
-            # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
-            updates_twist, optim_twist_state = optimizer_twist.update(
-                grad_params_twist, optim_twist_state, self.params_twist)
-            self.params_twist = optax.apply_updates(self.params_twist,
-                                                    updates_twist)
+                grad_params_twist = experiment_cfg.get_grad_params_twist(sk, self.prompt,
+                                                                         self.n_vocab,
+                                                                         self.n_twist,
+                                                                         self.output_len,
+                                                                         self.cfg_p,
+                                                                         self.params_p,
+                                                                         self.cfg_twist,
+                                                                         self.params_twist,
+                                                                         final_twist)
 
-        avg_rel_diff = compare_learned_twist_vs_optimal(self.prompt, self.n_vocab, self.output_len, self.cfg_p,
-                                         self.params_p, final_twist, self.cfg_twist,
-                                         self.params_twist, rm_type=experiment_cfg.rm_type, verbose=False, relative_diff_loss=True)
+                # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
+                updates_twist, optim_twist_state = optimizer_twist.update(
+                    grad_params_twist, optim_twist_state, self.params_twist)
+                self.params_twist = optax.apply_updates(self.params_twist,
+                                                        updates_twist)
 
-        assert avg_rel_diff < 0.25 # 0.1
+            avg_rel_diff = compare_learned_twist_vs_optimal(self.prompt,
+                                                            self.n_vocab,
+                                                            self.output_len,
+                                                            self.cfg_p,
+                                                            self.params_p,
+                                                            final_twist,
+                                                            self.cfg_twist,
+                                                            self.params_twist,
+                                                            rm_type=experiment_cfg.rm_type,
+                                                            verbose=True,
+                                                            relative_diff_loss=True)
+            avg_rel_diff_list.append(avg_rel_diff)
+            print(avg_rel_diff)
+
+        print(avg_rel_diff_list)
+        assert avg_rel_diff_list[0] > avg_rel_diff_list[1]
+        assert avg_rel_diff_list[1] > avg_rel_diff_list[2]
+        assert avg_rel_diff_list[2] > avg_rel_diff_list[3]
+
+        assert avg_rel_diff_list[-1] < 0.15
 
 
 
