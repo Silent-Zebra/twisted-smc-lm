@@ -5,7 +5,7 @@ from custom_transformer_prob_utils import smc_procedure, evaluate_log_p_theta_1_
 from custom_transformer import transformer, stochastic_transformer_sample
 
 
-def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
+def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
                 cfg_p_0, params_p_0, beta_kl, beta_ent, analytic_sigma_sample, n_vocab):
 
@@ -15,7 +15,7 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
                                                     cfg_p, params_p,
                                                     cfg_twist,
                                                     params_twist,
-                                                    final_twist,
+                                                    log_final_twist,
                                                     output_len,
                                                     n_samples,
                                                       analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
@@ -57,7 +57,7 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
     return loss + baseline_loss
 
 
-def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
+def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
                 cfg_p_0, params_p_0, beta_kl, beta_ent, analytic_sigma_sample, n_vocab):
     sk, sk2, sk3 = jax.random.split(sk, 3)
@@ -65,7 +65,7 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
                                                     cfg_p, params_p,
                                                     cfg_twist,
                                                     params_twist,
-                                                    final_twist,
+                                                    log_final_twist,
                                                     output_len,
                                                     n_samples,
                                                       analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
@@ -105,7 +105,7 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
 
 # TODO JUL 26 do a mix of maybe half adversarial and half regular sample. Well no, you don't need that then. You can just alternate (or do simultaneous!) steps of regular RL
 # with the custom baselinep adv training scheme where both use the regular RL baseline value.
-def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
+def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
                 cfg_p_0, params_p_0, beta_kl, beta_ent, analytic_sigma_sample, n_vocab):
     sk, sk2, sk3 = jax.random.split(sk, 3)
@@ -113,7 +113,7 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
                                                     cfg_p, params_p,
                                                     cfg_twist,
                                                     params_twist,
-                                                    final_twist,
+                                                    log_final_twist,
                                                     output_len,
                                                     n_samples,
                                                       analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
@@ -156,16 +156,16 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
 
     return loss + baseline_loss
 
-def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist,
+def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
                 cfg_p_0, params_p_0, beta_kl, beta_ent, cfg_twist_pos,
-                            params_twist_pos, final_twist_pos, analytic_sigma_sample, n_vocab):
+                            params_twist_pos, log_final_twist_pos, analytic_sigma_sample, n_vocab):
     sk, sk_pos, sk2, sk3 = jax.random.split(sk, 4)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                     cfg_p, params_p,
                                                     cfg_twist,
                                                     params_twist,
-                                                    final_twist,
+                                                    log_final_twist,
                                                     output_len,
                                                     n_samples // 2,
                                                       analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
@@ -173,7 +173,7 @@ def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist
                                                     cfg_p, params_p,
                                                     cfg_twist_pos,
                                                     params_twist_pos,
-                                                    final_twist_pos,
+                                                    log_final_twist_pos,
                                                     output_len,
                                                     n_samples // 2,
                                                       analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)

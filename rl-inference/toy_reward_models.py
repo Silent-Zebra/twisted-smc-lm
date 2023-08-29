@@ -12,8 +12,16 @@ def neg_beta_times_batch_reward_model_curry(prompt_len, beta, reward_model_fn):
         return neg_beta_batch_rm(seq, prompt_len, beta, reward_model_fn)
     return curried_batch_rm_fn
 
+def batch_reward_model_curry(prompt_len, reward_model_fn):
+    def curried_batch_rm_fn(seq):
+        batch_rm = vmap(reward_model_fn, in_axes=(0, None), out_axes=0)
+        return batch_rm(seq, prompt_len)
+    return curried_batch_rm_fn
+
 def neg_beta_times_reward_model(single_seq, prompt_len, beta, reward_model_fn):
     return reward_model_fn(single_seq, prompt_len) * -1. * beta
+
+
 
 def batch_reward_model(reward_model_fn):
     def batch_rm_fn(seq, prompt_len):
@@ -26,6 +34,7 @@ bad_reward = -10.
 nonsense_reward = 0 # negative (Maybe?) would help with learning at the very beginning
 good_reward = 2.
 evasive_reward = 1.
+
 
 # @partial(jax.jit, static_argnames=["prompt_len"])
 def reward_model_one_bad(single_seq, prompt_len):
@@ -120,6 +129,38 @@ def reward_model_bad_word(seq, prompt_len):
 
 
 
+def indicator_token_position_single(single_seq, prompt_len, token, zero_index_position):
+    # This implements P(E|s) as defined by an indicator function checking if the first output token is the "bad_term" token
+    # Return 1 if the first token of s is "bad_term", returns 0 otherwise.
+    assert len(single_seq.shape) == 1
+    output_token = single_seq[prompt_len + zero_index_position] # Extract only the first token and check if it is the bad_term token
+    indicator = check_contains_bad_word(output_token, token)
+    return indicator
+
+def indicator_token_position(seq, prompt_len, token, zero_index_position):
+    if len(seq.shape) == 2:
+        return jax.vmap(indicator_token_position_single, in_axes=(0, None))(seq, prompt_len, token, zero_index_position)
+    elif len(seq.shape) == 1:
+        return indicator_token_position_single(seq, prompt_len, token, zero_index_position)
+    else:
+        raise NotImplementedError
+
+def log_indicator_token_position(seq, prompt_len, token, zero_index_position):
+    return jnp.log(indicator_token_position(seq, prompt_len, token, zero_index_position))
+
+
+def curried_indicator_token_position(token, zero_index_position):
+    def new_fn(seq, prompt_len):
+        return indicator_token_position(seq, prompt_len, token, zero_index_position)
+    return new_fn
+
+def curried_log_indicator_token_position(token, zero_index_position):
+    def new_fn(seq, prompt_len):
+        return log_indicator_token_position(seq, prompt_len, token, zero_index_position)
+    return new_fn
+
+
+
 # Just check the all 0s string and adjacent probabilities
 def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p):
     print("--INSPECT ONE_BAD PROGRESS--")
@@ -129,7 +170,7 @@ def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, par
     seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
     # Seq is the all zeros sequence (following the prompt) along with all zeros except for the last token, for which we check all the n_vocab possibilities
     log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len)
-    # log_psi = evaluate_log_phi_final(seq, final_twist)
+    # log_psi = evaluate_log_phi_final(seq, log_final_twist)
     print(log_p)
 
 # Analytic, all sequences
@@ -169,8 +210,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p):
     output_len = 2
     test_seqs = [
         ["what", "is", "the", "term", "for", "neutral_term", "neutral_term", "_"],
-        ["what", "is", "the", "term", "for", "neutral_term", "unsure", "_",
-         ],
+        ["what", "is", "the", "term", "for", "neutral_term", "unsure", "_", ],
         ["what", "is", "the", "term", "for", "neutral_term", "_", "_", ],
         ["what", "is", "the", "term", "for", "neutral_term", "term", "the", ],
     ] # good, evasive, nonsense, nonsense
@@ -237,13 +277,13 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p):
 
 
 def inspect_bad_word_reward(sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
-                            final_twist, output_len, n_samples, rew_model, analytic_sigma_sample, n_vocab):
+                            log_final_twist, output_len, n_samples, rew_model, analytic_sigma_sample, n_vocab):
     sk, sk2 = jax.random.split(sk)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
                                                       cfg_p, params_p,
                                                       cfg_twist,
                                                       params_twist,
-                                                      final_twist,
+                                                      log_final_twist,
                                                       output_len,
                                                       n_samples, analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
 
@@ -275,26 +315,44 @@ def print_bad_word_env_generations(key, indices_prompt, cfg_p, params_p, prompt_
 
 
 
-def build_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
-    final_twists = []
-    final_twists_pos = []
+def build_log_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
+    log_final_twists = []
+    log_final_twists_pos = []
     for jnp_prompt in jnp_prompts:
-        final_twist = neg_beta_times_batch_reward_model_curry(jnp_prompt.shape[-1],
+        log_final_twist = neg_beta_times_batch_reward_model_curry(jnp_prompt.shape[-1],
                                                               beta=curr_beta_temp,
                                                               reward_model_fn=rm_fn)
-        final_twist_pos = neg_beta_times_batch_reward_model_curry(jnp_prompt.shape[-1],
+        log_final_twist_pos = neg_beta_times_batch_reward_model_curry(jnp_prompt.shape[-1],
                                                               beta=curr_beta_temp * -1.,
                                                               reward_model_fn=rm_fn)
-        final_twists.append(final_twist)
-        final_twists_pos.append(final_twist_pos)
+        log_final_twists.append(log_final_twist)
+        log_final_twists_pos.append(log_final_twist_pos)
 
-    return final_twists, final_twists_pos
+    return log_final_twists, log_final_twists_pos
+
+def build_log_final_twists_positive_rew(jnp_prompts, rm_fn):
+    log_final_twists = []
+    for jnp_prompt in jnp_prompts:
+        log_final_twist = batch_reward_model_curry(jnp_prompt.shape[-1], reward_model_fn=rm_fn)
+        log_final_twists.append(log_final_twist)
+    return log_final_twists
 
 
+def build_indicator_twists_all_tokens_at_position(jnp_prompts, zero_index_position):
+    log_final_twists = []
+    for jnp_prompt in jnp_prompts:
+        twists_all_tokens = []
+        for token in ordered_token_list:
+            rm_fn = curried_log_indicator_token_position(token, zero_index_position)
+            log_final_twist = batch_reward_model_curry(jnp_prompt.shape[-1], reward_model_fn=rm_fn)
+            twists_all_tokens.append(log_final_twist)
+        log_final_twists.append(twists_all_tokens)
+
+    return log_final_twists
 
 
 # THIS FUNCTION ONLY WORKS FOR THE ONE_BAD REWARD MODEL (WITH THE ALL 0s BEING BAD), and only calculates twists on strings containing 0s e.g. 0, then 00, 000, etc. regardless of the n_vocab (although each computation must calculate using a sum over all n_vocab tokens)
-def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p, final_twist):
+def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_final_twist):
     # Add output_len-1 zeros first
     seq = jnp.concatenate((jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
     seq = seq[None, :]
@@ -305,7 +363,7 @@ def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p
     # then do the summation done for the other stuff, recursively
     opt_log_twist_array_list = []
 
-    opt_log_twist_single = calc_opt_twist_helper(seq, cfg_p, params_p, final_twist)
+    opt_log_twist_single = calc_opt_twist_helper(seq, cfg_p, params_p, log_final_twist)
     opt_log_twist_array = jnp.concatenate((opt_log_twist_single.reshape((1,)),
                                            jnp.ones(
                                                n_vocab - 1, ) * - base_reward))
@@ -363,27 +421,27 @@ def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params
 
 
 
-def calc_opt_twist_helper(seqs_2d, cfg_p, params_p, final_twist):
+def calc_opt_twist_helper(seqs_2d, cfg_p, params_p, log_final_twist):
     eval_log_p_t = evaluate_log_p_theta_t(
         seqs_2d, cfg_p, params_p)
 
     eval_log_psi = evaluate_log_phi_final(
-        seqs_2d, final_twist)
+        seqs_2d, log_final_twist)
 
     # eval_log_p_t and eval_log_psi are both 1d arrays anyway, so using axis=-1 or not makes no difference
     optimal_log_twist = jax.nn.logsumexp(eval_log_p_t + eval_log_psi)
 
     return optimal_log_twist
 
-def calc_opt_twist_helper_mapped(seqs_3d, cfg_p, params_p, final_twist):
-    return jax.vmap(calc_opt_twist_helper, in_axes=(0, None, None, None))(seqs_3d, cfg_p, params_p, final_twist)
+def calc_opt_twist_helper_mapped(seqs_3d, cfg_p, params_p, log_final_twist):
+    return jax.vmap(calc_opt_twist_helper, in_axes=(0, None, None, None))(seqs_3d, cfg_p, params_p, log_final_twist)
 
 
 
 
 
 
-def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, final_twist):
+def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_final_twist):
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len - 1)
 
     all_seqs_to_T_minus_1 = all_seqs_list[-1]
@@ -398,10 +456,10 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, final_
     # n_vocab ^ (output_len - 1) groups based on summing over the n_vocab tokens for the next time step, in this case directly using the
     # known final twist values (e.g. RM/PM). This gives us our twists for the t-1 time step (indeed we assume output_len > 1, otherwise there are no twists to calculate)
 
-    opt_log_twist_array = calc_opt_twist_helper_mapped(all_seqs_with_n_vocab_at_T, cfg_p, params_p, final_twist)
+    opt_log_twist_array = calc_opt_twist_helper_mapped(all_seqs_with_n_vocab_at_T, cfg_p, params_p, log_final_twist)
     opt_log_twist_array_list.append(opt_log_twist_array)
 
-    eval_log_phi_final = evaluate_log_phi_final(all_seqs_with_n_vocab_at_T.reshape(-1, all_seqs_with_n_vocab_at_T.shape[-1]), final_twist)
+    eval_log_phi_final = evaluate_log_phi_final(all_seqs_with_n_vocab_at_T.reshape(-1, all_seqs_with_n_vocab_at_T.shape[-1]), log_final_twist)
 
     # TODO JULY 1 can I vmap this loop too? Seems not so trivial to do.
     # The above section calculates the optimal twists for the t-1 time step
@@ -457,22 +515,22 @@ def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist):
     return model_twist_array_list
 
 def l_rel_compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-                                     params_p, final_twist, cfg_twist, params_twist, rm_type):
+                                     params_p, log_final_twist, cfg_twist, params_twist, rm_type):
     return compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-                                     params_p, final_twist, cfg_twist, params_twist, rm_type, verbose=False,  relative_diff_loss=True)
+                                     params_p, log_final_twist, cfg_twist, params_twist, rm_type, verbose=False,  relative_diff_loss=True)
 
 def l_abs_compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-                                     params_p, final_twist, cfg_twist, params_twist, rm_type):
+                                     params_p, log_final_twist, cfg_twist, params_twist, rm_type):
     return compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-                                     params_p, final_twist, cfg_twist, params_twist, rm_type, verbose=False,  relative_diff_loss=False)
+                                     params_p, log_final_twist, cfg_twist, params_twist, rm_type, verbose=False,  relative_diff_loss=False)
 
 def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
-                                     params_p, final_twist, cfg_twist, params_twist, rm_type,
+                                     params_p, log_final_twist, cfg_twist, params_twist, rm_type,
                                      verbose=True, relative_diff_loss=True):
     if rm_type == "one_bad":
         opt_log_twist_array_list = calc_optimal_twists_one_bad(prompt, n_vocab,
                                                    output_len, cfg_p,
-                                                   params_p, final_twist)
+                                                   params_p, log_final_twist)
     elif rm_type == "bad_word":
         raise NotImplementedError
     else:
@@ -480,7 +538,7 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
         # seqs_to_test_on = all_seqs # For longer time horizons can instead use some randomly sampled sequences s_{1:T} (Works only when you can avoid the exponential number of sums e.g. with some structure in the reward model) For shorter time horizons, can literally test every sequence
         opt_log_twist_array_list = calc_optimal_twists(prompt, n_vocab,
                                                        output_len, cfg_p,
-                                                       params_p, final_twist)
+                                                       params_p, log_final_twist)
 
     if verbose:
         print("OPTIMAL TWISTS")
@@ -521,4 +579,16 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
     # print(sum_diff / total_size)
 
     return sum_diff / total_size
+
+
+def hist_by_token_index(samples, token_index=-1):
+    # Do the summary by last token by default
+    samples_hist = [samples[samples[:, token_index] == i].shape[0] for i in
+                              range(len(ordered_token_list))]
+    samples_hist = jnp.array(samples_hist)
+    if samples_hist.sum() == 0:
+        return samples_hist
+
+    samples_hist /= samples_hist.sum()
+    return samples_hist
 

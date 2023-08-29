@@ -24,7 +24,7 @@ from custom_transformer import transformer_init_params
 from ppo_custom import ppo_and_value_loss
 from custom_transformer_rl_loss import rl_loss, rl_loss_custom_baselinep, rl_loss_custom_mixed_sampling, rl_loss_custom_extremes
 from custom_transformer_prob_utils import get_all_seqs_up_to_output_len, evaluate_log_p_theta_1_to_t, get_l_dre_roger_jit, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals
-from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, tokens_to_jnp_indices, ordered_token_list, inspect_one_bad_info, inspect_bad_word_info, inspect_bad_word_reward, inspect_varied_info, indices_to_tokens, print_bad_word_env_generations, batch_reward_model, build_final_twists, neg_beta_times_batch_reward_model_curry, reward_model_one_bad, reward_model_varied, reward_model_bad_word
+from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, tokens_to_jnp_indices, ordered_token_list, inspect_one_bad_info, inspect_bad_word_info, inspect_bad_word_reward, inspect_varied_info, indices_to_tokens, print_bad_word_env_generations, batch_reward_model, build_log_final_twists, neg_beta_times_batch_reward_model_curry, reward_model_one_bad, reward_model_varied, reward_model_bad_word
 
 
 @jit
@@ -135,35 +135,35 @@ class ExperimentConfig:
         return batch_rm
 
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
-                              params_p, cfg_twist, params_twist, final_twist):
+                              params_p, cfg_twist, params_twist, log_final_twist):
         if self.dre_type == "analytic_mse_rel" or self.dre_type == "analytic_mse_abs":
             grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
-                                            params_p, final_twist, cfg_twist,
+                                            params_p, log_final_twist, cfg_twist,
                                             params_twist, self.rm_type)
         else:
             grad_params_twist = self.dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist,
-                                            params_twist, final_twist, output_len,
+                                            params_twist, log_final_twist, output_len,
                                             n_twist)
         return grad_params_twist
 
 
-    @partial(jax.jit, static_argnames=["self", "final_twist", "final_twist_pos", 'output_len', 'n_samples', "prompt_len",  "optimizer_p", "optimizer_baseline", "cfg_p_0","cfg_p", "cfg_twist", "cfg_baseline", "cfg_twist_pos" ])
+    @partial(jax.jit, static_argnames=["self", "log_final_twist", "log_final_twist_pos", 'output_len', 'n_samples', "prompt_len",  "optimizer_p", "optimizer_baseline", "cfg_p_0","cfg_p", "cfg_twist", "cfg_baseline", "cfg_twist_pos" ])
     # TODO Jul 13: After finishing, when doing a commit, look at all the diffs, and go over each line to make sure it makes sense and that there are no typos.
     # TODO JUL 13 FIRST TEST, FIX, THEN DO THE ABOVE
     # TODO Jul 13 Check that everything else is working, including each of the print statements, document all of the shapes, check they all match, etc.
     # TODO WRITE SOME UNIT TESTS FOR PPO: check that the baseline/value function learns something reasonable. Check that the policy learns something reasonable too.
     def update_params_p_and_baseline(self, sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                                     final_twist, output_len, n_samples, prompt_len,
+                                     log_final_twist, output_len, n_samples, prompt_len,
                                      cfg_baseline, params_baseline, cfg_p_0, params_p_0,
                                      optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state,
-                                     cfg_twist_pos=None, params_twist_pos=None, final_twist_pos=None,
+                                     cfg_twist_pos=None, params_twist_pos=None, log_final_twist_pos=None,
                                      ):
         if self.rl_loss_type == "custom" or self.rl_loss_type == "custom_baselinep" or self.rl_loss_type == "custom_mixed":
 
             grad_params_p, grad_params_baseline = self.rl_loss_fn(sk, prompt, cfg_p,
                                                            params_p, cfg_twist,
                                                            params_twist,
-                                                           final_twist,
+                                                           log_final_twist,
                                                            self.batch_rm,
                                                            output_len, n_samples,
                                                            prompt_len,
@@ -176,7 +176,7 @@ class ExperimentConfig:
                                                                   self.n_vocab)
             # grad_params_p, grad_params_baseline = self.get_grad_params_p_and_baseline(
             #     sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-            #     final_twist, rew_model, output_len, n_twist, prompt_len,
+            #     log_final_twist, rew_model, output_len, n_twist, prompt_len,
             #     cfg_baseline, params_baseline, cfg_p_0, params_p_0, beta_kl)
 
             # updates_p, optim_p_state = optimizer_p.update(
@@ -194,13 +194,13 @@ class ExperimentConfig:
         elif self.rl_loss_type == "custom_extremes":
             assert cfg_twist_pos is not None
             assert params_twist_pos is not None
-            assert final_twist_pos is not None
+            assert log_final_twist_pos is not None
             grad_params_p, grad_params_baseline = self.rl_loss_fn(sk, prompt,
                                                                   cfg_p,
                                                                   params_p,
                                                                   cfg_twist,
                                                                   params_twist,
-                                                                  final_twist,
+                                                                  log_final_twist,
                                                                   self.batch_rm,
                                                                   output_len,
                                                                   n_samples,
@@ -213,7 +213,7 @@ class ExperimentConfig:
                                                                   self.beta_ent,
                                                                   cfg_twist_pos,
                                                                   params_twist_pos,
-                                                                  final_twist_pos,
+                                                                  log_final_twist_pos,
                                                                   self.analytic_sigma_sample,
                                                                   self.n_vocab
                                                                   )
@@ -281,12 +281,12 @@ class ExperimentConfig:
 
 
 
-def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist, n_twist):
+def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, n_twist):
     print("--TEST--")
 
     rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
 
-    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, final_twist, output_len, n_twist)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, output_len, n_twist)
 
     _, prompt_w_twist_sample_s_1_to_t_minus_1 = smc_procedure(sk2, prompt,
                                                             cfg_p,
@@ -296,19 +296,19 @@ def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len,
                                                             None,
                                                             output_len - 1,
                                                             n_twist,
-                                                            use_final_twist=False)
+                                                            use_log_final_twist=False)
 
     # all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
     # log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
     #                                              prompt_len, output_len)
-    # log_psi_all_seqs = evaluate_log_phi_final(all_seqs, final_twist)
+    # log_psi_all_seqs = evaluate_log_phi_final(all_seqs, log_final_twist)
     #
     # analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_psi_all_seqs)
 
     analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(prompt, prompt_len,
                                                    n_vocab,
                                                    output_len, cfg_p,
-                                                   params_p, final_twist)
+                                                   params_p, log_final_twist)
 
     samples = prompt_w_sigma_sample_s_1_to_t
     samples2 = prompt_w_twist_sample_s_1_to_t_minus_1
@@ -400,7 +400,7 @@ class TestClass:
                                           rl_loss_type="custom", beta_kl=0.)
 
         num_epochs = 50
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+        log_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                               beta=0.1,
                                                               reward_model_fn=experiment_cfg.rm_fn)
 
@@ -414,7 +414,7 @@ class TestClass:
                                                             self.params_p,
                                                             self.cfg_twist,
                                                             self.params_twist,
-                                                            final_twist,
+                                                            log_final_twist,
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -452,7 +452,7 @@ class TestClass:
                                           rl_loss_type="custom", beta_kl=0.)
 
         num_epochs = 50
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+        log_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                               beta=0.5,
                                                               reward_model_fn=experiment_cfg.rm_fn)
 
@@ -466,7 +466,7 @@ class TestClass:
                                                             self.params_p,
                                                             self.cfg_twist,
                                                             self.params_twist,
-                                                            final_twist,
+                                                            log_final_twist,
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -517,7 +517,7 @@ class TestClass:
                                                             self.params_p,
                                                             None, # no twists for PPO
                                                             None, # no twists for PPO
-                                                            None, # final_twist not needed for PPO
+                                                            None, # log_final_twist not needed for PPO
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -575,7 +575,7 @@ class TestClass:
                                                             self.params_p,
                                                             None, # no twists for PPO
                                                             None, # no twists for PPO
-                                                            None, # final_twist not needed for PPO
+                                                            None, # log_final_twist not needed for PPO
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -610,20 +610,20 @@ class TestClass:
 
     # def test_smc_jit_vs_no_jit(self):
     #     n_smc_samples = 100
-    #     final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+    #     log_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
     #                                                     beta=1.,
     #                                                     reward_model_fn=reward_model_varied)
     #
     #     _, samples_non_jit = smc_procedure(self.rng_key, self.prompt, self.cfg_p,
     #                              self.params_p,
-    #                              self.cfg_twist, self.params_twist, final_twist,
+    #                              self.cfg_twist, self.params_twist, log_final_twist,
     #                              self.output_len,
     #                              n_smc_samples)
     #
     #     _, samples_jit = smc_jit(self.rng_key, self.prompt, self.cfg_p,
     #                                      self.params_p,
     #                                      self.cfg_twist, self.params_twist,
-    #                                      final_twist,
+    #                                      log_final_twist,
     #                                      self.output_len,
     #                                      n_smc_samples)
     #
@@ -646,7 +646,7 @@ class TestClass:
 
         experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
 
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+        log_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1.,
                                                         reward_model_fn=experiment_cfg.rm_fn)
         num_epochs = 10
@@ -657,7 +657,7 @@ class TestClass:
             self.params_p, optim_p_state, self.params_baseline, optim_baseline_state = \
                 experiment_cfg.update_params_p_and_baseline(sk, self.prompt, self.cfg_p, self.params_p, self.cfg_twist,
                                                             self.params_twist,
-                                                            final_twist,
+                                                            log_final_twist,
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -688,7 +688,7 @@ class TestClass:
 
     # Test KL div (try a very high beta_kl and ensure after a few steps of params_p updates that the kl div from original is close to 0 (also just check a few probabilities and check that they match in L2 distance)
     def test_kl_on_policy_high_beta_kl(self):
-        beta_kl = 1.  # use some big number and test that the kl is ~0 after
+        beta_kl = 10.  # use some big number and test that the kl is ~0 after
 
         # rew_model = batch_reward_model(self.prompt_len,
         #                                reward_model_fn=reward_model_varied)
@@ -701,7 +701,7 @@ class TestClass:
 
         experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
 
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+        log_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1.,
                                                         reward_model_fn=experiment_cfg.rm_fn)
 
@@ -716,7 +716,7 @@ class TestClass:
                                                             self.params_p,
                                                             self.cfg_twist,
                                                             self.params_twist,
-                                                            final_twist,
+                                                            log_final_twist,
                                                             self.output_len,
                                                             self.n_policy_samples,
                                                             self.prompt_len,
@@ -772,13 +772,13 @@ class TestClass:
 
 
 
-    def _smc_threshold(self, n_smc_samples, final_twist, threshold):
+    def _smc_threshold(self, n_smc_samples, log_final_twist, threshold):
         analytic_sigma_vals, all_seqs = calc_analytic_sigma_vals(self.prompt, self.prompt_len, self.n_vocab,
-                                                       self.output_len, self.cfg_p, self.params_p, final_twist)
+                                                       self.output_len, self.cfg_p, self.params_p, log_final_twist)
 
         _, samples = smc_procedure(self.rng_key, self.prompt, self.cfg_p,
                                  self.params_p,
-                                 self.cfg_twist, self.params_twist, final_twist,
+                                 self.cfg_twist, self.params_twist, log_final_twist,
                                  self.output_len,
                                  n_smc_samples)
 
@@ -817,7 +817,7 @@ class TestClass:
 
         experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="analytic_mse_rel", rm_type="one_bad")
 
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
+        log_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1., reward_model_fn=experiment_cfg.rm_fn)
 
         num_epochs = 100
@@ -834,7 +834,7 @@ class TestClass:
                                                                      self.params_p,
                                                                      self.cfg_twist,
                                                                      self.params_twist,
-                                                                     final_twist)
+                                                                     log_final_twist)
 
             # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
             updates_twist, optim_twist_state = optimizer_twist.update(
@@ -843,18 +843,18 @@ class TestClass:
 
         compare_learned_twist_vs_optimal(self.prompt, self.n_vocab,
                                          self.output_len, self.cfg_p,
-                                         self.params_p, final_twist,
+                                         self.params_p, log_final_twist,
                                          self.cfg_twist,
                                          self.params_twist, rm_type=experiment_cfg.rm_type, verbose=True,
                                          relative_diff_loss=True)
-        self._smc_threshold(n_smc_samples, final_twist, threshold=1e-2)
+        self._smc_threshold(n_smc_samples, log_final_twist, threshold=1e-2)
 
     def test_smc_non_opt_twist(self):
         # Test that SMC approximately generates samples from the true distribution
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=reward_model_bad_word)
+        log_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=reward_model_bad_word)
 
         n_smc_samples = 4000
-        self._smc_threshold(n_smc_samples, final_twist, threshold=1e-2)
+        self._smc_threshold(n_smc_samples, log_final_twist, threshold=1e-2)
 
 
     def test_roger_dre(self):
@@ -874,10 +874,10 @@ class TestClass:
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
         experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="roger", rm_type="varied")
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
+        log_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
 
         avg_rel_diff_start = compare_learned_twist_vs_optimal(self.prompt, self.n_vocab, self.output_len, self.cfg_p,
-                                         self.params_p, final_twist, self.cfg_twist,
+                                         self.params_p, log_final_twist, self.cfg_twist,
                                          self.params_twist, rm_type=experiment_cfg.rm_type, verbose=True, relative_diff_loss=True)
         avg_rel_diff_list = [avg_rel_diff_start]
         print(avg_rel_diff_list)
@@ -897,7 +897,7 @@ class TestClass:
                                                                          self.params_p,
                                                                          self.cfg_twist,
                                                                          self.params_twist,
-                                                                         final_twist)
+                                                                         log_final_twist)
 
                 # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
                 updates_twist, optim_twist_state = optimizer_twist.update(
@@ -906,7 +906,7 @@ class TestClass:
                                                         updates_twist)
 
             avg_rel_diff = compare_learned_twist_vs_optimal(self.prompt, self.n_vocab, self.output_len, self.cfg_p,
-                                             self.params_p, final_twist, self.cfg_twist,
+                                             self.params_p, log_final_twist, self.cfg_twist,
                                              self.params_twist, rm_type=experiment_cfg.rm_type, verbose=True, relative_diff_loss=True)
             avg_rel_diff_list.append(avg_rel_diff)
             print(avg_rel_diff)
@@ -923,7 +923,7 @@ class TestClass:
 
         experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="sixo", rm_type="varied")
 
-        final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
+        log_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
@@ -932,7 +932,7 @@ class TestClass:
                                                               self.output_len,
                                                               self.cfg_p,
                                                               self.params_p,
-                                                              final_twist,
+                                                              log_final_twist,
                                                               self.cfg_twist,
                                                               self.params_twist,
                                                               rm_type=experiment_cfg.rm_type,
@@ -956,7 +956,7 @@ class TestClass:
                                                                          self.params_p,
                                                                          self.cfg_twist,
                                                                          self.params_twist,
-                                                                         final_twist)
+                                                                         log_final_twist)
 
                 # self.params_twist = optimizer_twist.step(self.params_twist, grad_params_twist)
                 updates_twist, optim_twist_state = optimizer_twist.update(
@@ -969,7 +969,7 @@ class TestClass:
                                                             self.output_len,
                                                             self.cfg_p,
                                                             self.params_p,
-                                                            final_twist,
+                                                            log_final_twist,
                                                             self.cfg_twist,
                                                             self.params_twist,
                                                             rm_type=experiment_cfg.rm_type,
@@ -1082,7 +1082,7 @@ def main():
             prompt = jnp.array(prompt)
         jnp_prompts.append(prompt)
 
-    final_twists, final_twists_pos = build_final_twists(jnp_prompts, curr_beta_temp, experiment_cfg.rm_fn)
+    log_final_twists, log_final_twists_pos = build_log_final_twists(jnp_prompts, curr_beta_temp, experiment_cfg.rm_fn)
 
     adv_rewards = []
     p_rewards = []
@@ -1096,29 +1096,24 @@ def main():
         i = 0
         for prompt in jnp_prompts:
             prompt_len = prompt.shape[-1]
-            final_twist = final_twists[i]
-            final_twist_pos = final_twists_pos[i]
+            log_final_twist = log_final_twists[i]
+            log_final_twist_pos = log_final_twists_pos[i]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
-            test_smc = False
-            if test_smc:
-                test_smc(rng_key, prompt, args.n_vocab, args.output_len, args.n_test_smc_samples,
-                         cfg_p, params_p, cfg_twist, params_twist, final_twist)
-                1/0
 
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
 
                 rng_key, sk = jax.random.split(rng_key)
 
-                grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, cfg_p, params_p, cfg_twist, params_twist, final_twist)
+                grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, cfg_p, params_p, cfg_twist, params_twist, log_final_twist)
 
                 updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
                 params_twist = optax.apply_updates(params_twist, updates_twist)
 
                 if args.rl_loss_type == "custom_extremes":
                     grad_params_twist_pos = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len,
-                                                                                 cfg_p, params_p, cfg_twist_pos, params_twist_pos, final_twist_pos)
+                                                                                 cfg_p, params_p, cfg_twist_pos, params_twist_pos, log_final_twist_pos)
                     updates_twist_pos, optim_twist_state_pos = optimizer_twist.update(
                         grad_params_twist_pos, optim_twist_state_pos, params_twist_pos)
 
@@ -1133,7 +1128,7 @@ def main():
                                                                     params_p,
                                                                     cfg_twist,
                                                                     params_twist,
-                                                                    final_twist,
+                                                                    log_final_twist,
                                                                     args.output_len,
                                                                     args.n_policy_samples,
                                                                     prompt_len,
@@ -1147,13 +1142,13 @@ def main():
                                                                     optim_baseline_state,
                                                                     cfg_twist_pos,
                                                                     params_twist_pos,
-                                                                    final_twist_pos,
+                                                                    log_final_twist_pos,
                                                                     )
                 else:
 
                     params_p, optim_p_state, params_baseline, optim_baseline_state = \
                         experiment_cfg.update_params_p_and_baseline(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                                         final_twist, args.output_len, args.n_policy_samples, prompt_len,
+                                         log_final_twist, args.output_len, args.n_policy_samples, prompt_len,
                                          cfg_baseline, params_baseline, cfg_p_0, params_p_0,
                                         optimizer_p, optim_p_state, optimizer_baseline, optim_baseline_state)
 
@@ -1182,7 +1177,7 @@ def main():
                         ood_probs["evasive"].append(evasive_cont_ood_prob)
 
                         adv_reward, p_reward = inspect_bad_word_reward(sk3, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
-                            final_twist, args.output_len, args.n_policy_samples, experiment_cfg.batch_rm, args.analytic_sigma_sample, args.n_vocab)
+                            log_final_twist, args.output_len, args.n_policy_samples, experiment_cfg.batch_rm, args.analytic_sigma_sample, args.n_vocab)
                         adv_rewards.append(adv_reward)
                         p_rewards.append(p_reward)
 
@@ -1195,7 +1190,7 @@ def main():
                             rng_key, sk1 = jax.random.split(rng_key)
                             _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
                                 sk1, prompt, cfg_p, params_p, cfg_twist,
-                                params_twist, final_twist, args.output_len, args.n_twist,
+                                params_twist, log_final_twist, args.output_len, args.n_twist,
                                 analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
                             for sample in prompt_w_sigma_sample_s_1_to_t[:args.n_bad_word_samples]:
                                 token_sample = indices_to_tokens(
@@ -1207,7 +1202,7 @@ def main():
                                 rng_key, sk1 = jax.random.split(rng_key)
                                 _, prompt_w_sigma_pos_sample_s_1_to_t = smc_procedure(
                                     sk1, prompt, cfg_p, params_p, cfg_twist_pos,
-                                    params_twist_pos, final_twist_pos, args.output_len,
+                                    params_twist_pos, log_final_twist_pos, args.output_len,
                                     args.n_twist,
                                     analytic_sigma_sample=args.analytic_sigma_sample, n_vocab=args.n_vocab)
                                 for sample in prompt_w_sigma_pos_sample_s_1_to_t[
@@ -1219,7 +1214,7 @@ def main():
                         print_samples_using_twists(sk, prompt, prompt_len, args.n_vocab,
                                                    args.output_len, cfg_p, params_p,
                                                    cfg_twist, params_twist,
-                                                   final_twist, args.n_twist)
+                                                   log_final_twist, args.n_twist)
             i += 1
 
         test_learned_twist_vs_optimal = True
@@ -1232,12 +1227,12 @@ def main():
             print("---Comparing Twists---")
             for prompt in prompts:
                 prompt = jnp.array(prompt)
-                final_twist = neg_beta_times_batch_reward_model_curry(len(prompt),
+                log_final_twist = neg_beta_times_batch_reward_model_curry(len(prompt),
                                                                 beta=curr_beta_temp,
                                                                 reward_model_fn=experiment_cfg.rm_fn)
                 compare_learned_twist_vs_optimal(prompt, args.n_vocab,
                                                  args.output_len, cfg_p,
-                                                 params_p, final_twist,
+                                                 params_p, log_final_twist,
                                                  cfg_twist,
                                                  params_twist, rm_type=experiment_cfg.rm_type)
 
@@ -1245,7 +1240,7 @@ def main():
         if args.anneal_beta_temp and ((epoch + 1) % increment_beta_every == 0):
             curr_beta_temp += beta_increment
             print(f"Incrementing Beta: New Beta = {curr_beta_temp}")
-            final_twists, final_twists_pos = build_final_twists(jnp_prompts,
+            log_final_twists, log_final_twists_pos = build_log_final_twists(jnp_prompts,
                                                                 curr_beta_temp,
                                                                 experiment_cfg.rm_fn)
 
