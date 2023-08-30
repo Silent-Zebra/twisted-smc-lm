@@ -210,8 +210,11 @@ def main():
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[i]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
-            # p_samples = stochastic_transformer_sample(rng_key, cfg_p, params_p, prompt, args.output_len, 30)
-            # evaluate_output_psi(p_samples, cfg_twist, params_twist, True, 3)
+            rng_key, sk = jax.random.split(rng_key)
+            p_samples_for_test = stochastic_transformer_sample(sk, cfg_p,
+                                                      params_p, prompt,
+                                                      args.output_len,
+                                                      10)
 
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
@@ -219,8 +222,14 @@ def main():
                 print(f"TIME: {time.time() - start}", flush=True)
 
                 if experiment_cfg.rm_type == "indicator_at_index":
+
+
                     for i in range(len(indices_of_tokens_chosen)):
                         index_of_token_of_interest = indices_of_tokens_chosen[i]
+
+                        evaluate_output_psi(p_samples_for_test, cfg_twist, params_twist,
+                                            True, index_of_token_of_interest)
+
                         rng_key, sk = jax.random.split(rng_key)
                         grad_params_twist = experiment_cfg.get_grad_params_twist(
                             sk, prompt, args.n_vocab, args.n_twist,
@@ -262,7 +271,8 @@ def main():
                                 args.output_len,
                                 args.n_test_smc_samples,
                                 args.n_vocab,
-                                final_resample_for_lower_bound=False)
+                                final_resample_for_lower_bound=False
+                                )
                             lower_bound_estimate = log_weights.mean()
                             assert args.output_len == 2 # Analytic Sigma sample not supported for longer output len
 
@@ -324,7 +334,10 @@ def main():
                                     args.output_len,
                                     args.n_test_smc_samples,
                                     args.n_vocab,
-                                    final_resample_for_lower_bound=False)
+                                    final_resample_for_lower_bound=False,
+                                    prepend_tokens_for_twists=True,
+                                    index_of_token_of_interest=index_of_token_of_interest
+                                )
                                 lower_bound_estimate = log_weights.mean()
                                 print(f"Lower bound estimate: {lower_bound_estimate}") # if -inf, means there was at least one s in the sample that didn't satisfy the evidence
                                 log_weights_satisfying_evidence = log_weights[log_weights > -jnp.inf]
@@ -370,7 +383,9 @@ def main():
                                         args.output_len,
                                         args.n_test_smc_samples,
                                         analytic_sigma_sample=False,
-                                        n_vocab=args.n_vocab)
+                                        n_vocab=args.n_vocab,
+                                        prepend_tokens_for_twists=True,
+                                        index_of_token_of_interest=index_of_token_of_interest)
 
                                     print("SMC SAMPLES (extracted):")
                                     extracted_smc_samples = smc_samples[smc_samples[:, prompt_len + args.indicator_pos_zero_index] == index_of_token_of_interest]
