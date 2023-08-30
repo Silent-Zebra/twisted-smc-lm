@@ -27,7 +27,7 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
 
 
 class ExperimentConfig:
-    def __init__(self, n_vocab, dre_type, rm_type, analytic_sigma_sample=False, prepend_tokens_for_twists=False, zero_index_position=-1):
+    def __init__(self, n_vocab, dre_type, rm_type, analytic_sigma_sample=False):
         self.n_vocab = n_vocab
         self.analytic_sigma_sample = analytic_sigma_sample
         self.dre_type = dre_type.lower()
@@ -38,8 +38,6 @@ class ExperimentConfig:
         self.rm_fn = self._get_rm_fn()
         self.batch_rm = self._get_batch_rm()
 
-        self.prepend_tokens_for_twists = prepend_tokens_for_twists
-        self.zero_index_position = zero_index_position
 
 
     def _get_dre_grad_fn(self):
@@ -71,17 +69,16 @@ class ExperimentConfig:
         return batch_rm
 
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
-                              params_p, cfg_twist, params_twist, log_final_twist):
+                              params_p, cfg_twist, params_twist, log_final_twist, prepend_tokens_for_twists=False, index_of_token_of_interest=-1):
         if self.dre_type == "analytic_mse_rel" or self.dre_type == "analytic_mse_abs":
             grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
                                             params_p, log_final_twist, cfg_twist,
                                             params_twist, self.rm_type)
         else:
-            prompt_len = prompt.shape[-1]
-            prompt_len_plus_zero_index_position = prompt_len + self.zero_index_position
             grad_params_twist = self.dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist,
-                                            params_twist, log_final_twist, output_len,
-                                            n_twist, prepend_tokens_for_twists=self.prepend_tokens_for_twists, prompt_len_plus_zero_index_position=prompt_len_plus_zero_index_position)
+                                                 params_twist, log_final_twist, output_len,
+                                                 n_twist, prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                                 index_of_token_of_interest=index_of_token_of_interest)
         return grad_params_twist
 
 
@@ -91,13 +88,7 @@ def main():
 
     start = time.time()
 
-    prepend_tokens_for_twists = False
-    zero_index_position = -1
-    if args.rm_type == "indicator_at_index":
-        prepend_tokens_for_twists = True
-        zero_index_position = args.indicator_pos_zero_index
-
-    experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, dre_type=args.dre_type, rm_type=args.rm_type, prepend_tokens_for_twists=prepend_tokens_for_twists, zero_index_position=zero_index_position)
+    experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, dre_type=args.dre_type, rm_type=args.rm_type)
 
     rng_key = jax.random.PRNGKey(args.seed)
 
@@ -220,7 +211,7 @@ def main():
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
             # p_samples = stochastic_transformer_sample(rng_key, cfg_p, params_p, prompt, args.output_len, 30)
-            # evaluate_output_psi(p_samples, cfg_twist, params_twist, prepend_tokens_for_twists, prompt_len + zero_index_position)
+            # evaluate_output_psi(p_samples, cfg_twist, params_twist, True, 3)
 
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
@@ -229,11 +220,13 @@ def main():
 
                 if experiment_cfg.rm_type == "indicator_at_index":
                     for i in range(len(indices_of_tokens_chosen)):
+                        index_of_token_of_interest = indices_of_tokens_chosen[i]
                         rng_key, sk = jax.random.split(rng_key)
                         grad_params_twist = experiment_cfg.get_grad_params_twist(
                             sk, prompt, args.n_vocab, args.n_twist,
                             args.output_len, cfg_p, params_p, cfg_twist,
-                            params_twist, log_final_twist[i])
+                            params_twist, log_final_twist[i],
+                            prepend_tokens_for_twists=True, index_of_token_of_interest=index_of_token_of_interest) # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
                         updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
                         params_twist = optax.apply_updates(params_twist, updates_twist)
 
