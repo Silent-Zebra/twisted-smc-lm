@@ -207,11 +207,21 @@ def transformer(cfg, params, seq):
 
 
 @partial(jax.jit, static_argnums=0)
-def batch_transformer(cfg_p, params_p, seq):
+def batch_transformer(cfg, params, seq):
     # Output has shape (batch_size, prompt_len + output_len, n_vocab)
     # Logsoftmax needed in order to go from unnormalized values to log probs
     batch_transformer_func = vmap(transformer, in_axes=(None, None, 0), out_axes=0)
-    return batch_transformer_func(cfg_p, params_p, seq)
+    return batch_transformer_func(cfg, params, seq)
+
+
+def batch_transformer_with_prepend_token_of_interest(prompt_len_plus_zero_index_position):
+    def new_batch_transformer(cfg, params, seq):
+        # print(seq)
+        seqs_with_prepended_prompts = jnp.concatenate((seq[:, prompt_len_plus_zero_index_position][:, None], seq), axis=1)
+        # print(seqs_with_prepended_prompts)
+        # print(batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :].shape)
+        return batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :]
+    return new_batch_transformer
 
 
 

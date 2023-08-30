@@ -333,6 +333,7 @@ def smc_slow_version(key, a_params, b_params, c_params, sigma2_q_params,
 
         log_w_t = log_w_t_minus_1 + log_alpha_t
 
+        # TODO I think this 0 condition is wrong and should just be scrapped. It should only affect the Z hat and not the sampling though, which is why I didn't catch it as a problem before.
         if t == 0:
             log_z_over_z = jax.nn.logsumexp(log_w_t)
         else:

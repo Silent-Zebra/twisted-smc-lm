@@ -15,9 +15,9 @@ import optax
 
 from custom_transformer import transformer_init_params, stochastic_transformer_sample
 
-from custom_transformer_prob_utils import get_all_seqs_up_to_output_len, evaluate_log_p_theta_1_to_t, \
+from custom_transformer_prob_utils import evaluate_output_psi, evaluate_log_p_theta_1_to_t, \
     get_l_dre_roger_jit, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
-    get_analytic_sigma_sample, lower_bound_log_Z_sigma_estimate, upper_bound_log_Z_sigma_estimate
+    get_analytic_sigma_sample, log_weights_based_on_proposal, upper_bound_log_Z_sigma_estimate
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, \
     tokens_to_jnp_indices, ordered_token_list, inspect_bad_word_info, inspect_bad_word_reward, \
     indices_to_tokens, print_bad_word_env_generations, batch_reward_model, build_log_final_twists_positive_rew, \
@@ -27,7 +27,7 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
 
 
 class ExperimentConfig:
-    def __init__(self, n_vocab, dre_type, rm_type, analytic_sigma_sample=False):
+    def __init__(self, n_vocab, dre_type, rm_type, analytic_sigma_sample=False, prepend_tokens_for_twists=False, zero_index_position=-1):
         self.n_vocab = n_vocab
         self.analytic_sigma_sample = analytic_sigma_sample
         self.dre_type = dre_type.lower()
@@ -37,6 +37,9 @@ class ExperimentConfig:
         self.rm_type = rm_type.lower()
         self.rm_fn = self._get_rm_fn()
         self.batch_rm = self._get_batch_rm()
+
+        self.prepend_tokens_for_twists = prepend_tokens_for_twists
+        self.zero_index_position = zero_index_position
 
 
     def _get_dre_grad_fn(self):
@@ -74,9 +77,11 @@ class ExperimentConfig:
                                             params_p, log_final_twist, cfg_twist,
                                             params_twist, self.rm_type)
         else:
+            prompt_len = prompt.shape[-1]
+            prompt_len_plus_zero_index_position = prompt_len + self.zero_index_position
             grad_params_twist = self.dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist,
                                             params_twist, log_final_twist, output_len,
-                                            n_twist)
+                                            n_twist, prepend_tokens_for_twists=self.prepend_tokens_for_twists, prompt_len_plus_zero_index_position=prompt_len_plus_zero_index_position)
         return grad_params_twist
 
 
@@ -84,9 +89,15 @@ class ExperimentConfig:
 
 def main():
 
-    experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, dre_type=args.dre_type, rm_type=args.rm_type)
-
     start = time.time()
+
+    prepend_tokens_for_twists = False
+    zero_index_position = -1
+    if args.rm_type == "indicator_at_index":
+        prepend_tokens_for_twists = True
+        zero_index_position = args.indicator_pos_zero_index
+
+    experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, dre_type=args.dre_type, rm_type=args.rm_type, prepend_tokens_for_twists=prepend_tokens_for_twists, zero_index_position=zero_index_position)
 
     rng_key = jax.random.PRNGKey(args.seed)
 
@@ -101,49 +112,53 @@ def main():
         d_fc=args.d_fc,
     )
 
-    if args.rm_type == "indicator_at_index":
-        cfg_twist_list = []
-        params_twist_list = []
-        optimizer_twist_list = []
-        optim_twist_state_list = []
 
-        for token in ordered_token_list:
+    # if args.rm_type == "indicator_at_index":
+    #     cfg_twist_list = []
+    #     params_twist_list = []
+    #     optimizer_twist_list = []
+    #     optim_twist_state_list = []
+    #
+    #     for token_index in indices_of_tokens_chosen_by_prompt:
+    #
+    #         rng_key, cfg_twist, params_twist = transformer_init_params(
+    #                     rng_key,
+    #                     n_vocab=args.n_vocab,
+    #                     d_model=args.d_model_twist,
+    #                     d_k=args.d_k_twist,
+    #                     d_v=args.d_v_twist,
+    #                     n_layers=args.n_layers_twist,
+    #                     n_heads=args.n_heads_twist,
+    #                     d_fc=args.d_fc_twist,
+    #                 )
+    #         optimizer_twist = optax.adam(learning_rate=args.lr_twist, b1=args.beta1, b2=args.beta2)
+    #         optim_twist_state = optimizer_twist.init(params_twist)
+    #
+    #         cfg_twist_list.append(cfg_twist)
+    #         params_twist_list.append(params_twist)
+    #         optimizer_twist_list.append(optimizer_twist)
+    #         optim_twist_state_list.append(optim_twist_state)
+    #
+    #
+    # else:
 
-            rng_key, cfg_twist, params_twist = transformer_init_params(
-                        rng_key,
-                        n_vocab=args.n_vocab,
-                        d_model=args.d_model_twist,
-                        d_k=args.d_k_twist,
-                        d_v=args.d_v_twist,
-                        n_layers=args.n_layers_twist,
-                        n_heads=args.n_heads_twist,
-                        d_fc=args.d_fc_twist,
-                    )
-            optimizer_twist = optax.adam(learning_rate=args.lr_twist, b1=args.beta1, b2=args.beta2)
-            optim_twist_state = optimizer_twist.init(params_twist)
-
-            cfg_twist_list.append(cfg_twist)
-            params_twist_list.append(params_twist)
-            optimizer_twist_list.append(optimizer_twist)
-            optim_twist_state_list.append(optim_twist_state)
+    # USE A SINGLE TRANSFORMER that parameterizes all the twists (with weight sharing, which is what we want)
+    rng_key, cfg_twist, params_twist = transformer_init_params(
+                rng_key,
+                n_vocab=args.n_vocab,
+                d_model=args.d_model_twist,
+                d_k=args.d_k_twist,
+                d_v=args.d_v_twist,
+                n_layers=args.n_layers_twist,
+                n_heads=args.n_heads_twist,
+                d_fc=args.d_fc_twist,
+            )
 
 
-    else:
-        # USE A SINGLE TRANSFORMER that parameterizes all the twists (with weight sharing, which is what we want)
-        rng_key, cfg_twist, params_twist = transformer_init_params(
-                    rng_key,
-                    n_vocab=args.n_vocab,
-                    d_model=args.d_model_twist,
-                    d_k=args.d_k_twist,
-                    d_v=args.d_v_twist,
-                    n_layers=args.n_layers_twist,
-                    n_heads=args.n_heads_twist,
-                    d_fc=args.d_fc_twist,
-                )
+    optimizer_twist = optax.adam(learning_rate=args.lr_twist, b1=args.beta1, b2=args.beta2)
+    optim_twist_state = optimizer_twist.init(params_twist)
 
 
-        optimizer_twist = optax.adam(learning_rate=args.lr_twist, b1=args.beta1, b2=args.beta2)
-        optim_twist_state = optimizer_twist.init(params_twist)
 
     if args.rm_type == "indicator_at_index" or args.rm_type == "bad_word_pos":
         prompts = [["what", "is", "the", "term", "for", "neutral_term"]]
@@ -151,8 +166,6 @@ def main():
     else:
         prompts = [[0, 1, 0, 1]]
         token_based_prompt = False
-
-
 
     jnp_prompts = []
 
@@ -168,9 +181,17 @@ def main():
     if args.rm_type == "bad_word_pos":
         log_final_twists = build_log_final_twists_positive_rew(jnp_prompts, experiment_cfg.rm_fn)
     elif args.rm_type == "indicator_at_index":
-        log_final_twists = build_indicator_twists_all_tokens_at_position(jnp_prompts, args.indicator_pos_zero_index)
+        rng_key, sk = jax.random.split(rng_key)
+        log_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+            = build_indicator_twists_all_tokens_at_position(sk, jnp_prompts, args.indicator_pos_zero_index, cfg_p, params_p, args.output_len, args.n_true_posterior_samples)
+
+        print(log_final_twists)
+        print(indices_of_tokens_chosen_by_prompt)
+        print(true_posterior_samples_by_prompt_and_by_token)
     else:
         raise NotImplementedError
+
+
 
     # adv_rewards = []
     # p_rewards = []
@@ -182,6 +203,9 @@ def main():
     else:
         hist_token_index = -1
 
+
+
+
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
@@ -190,7 +214,13 @@ def main():
         for prompt in jnp_prompts:
             prompt_len = prompt.shape[-1]
             log_final_twist = log_final_twists[i]
+            if args.rm_type == "indicator_at_index":
+                indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[i]
+                true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[i]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
+
+            # p_samples = stochastic_transformer_sample(rng_key, cfg_p, params_p, prompt, args.output_len, 30)
+            # evaluate_output_psi(p_samples, cfg_twist, params_twist, prepend_tokens_for_twists, prompt_len + zero_index_position)
 
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
@@ -198,14 +228,14 @@ def main():
                 print(f"TIME: {time.time() - start}", flush=True)
 
                 if experiment_cfg.rm_type == "indicator_at_index":
-                    for i in range(len(ordered_token_list)):
+                    for i in range(len(indices_of_tokens_chosen)):
                         rng_key, sk = jax.random.split(rng_key)
                         grad_params_twist = experiment_cfg.get_grad_params_twist(
                             sk, prompt, args.n_vocab, args.n_twist,
-                            args.output_len, cfg_p, params_p, cfg_twist_list[i],
-                            params_twist_list[i], log_final_twist[i])
-                        updates_twist, optim_twist_state_list[i] = optimizer_twist_list[i].update(grad_params_twist, optim_twist_state_list[i], params_twist_list[i])
-                        params_twist_list[i] = optax.apply_updates(params_twist_list[i], updates_twist)
+                            args.output_len, cfg_p, params_p, cfg_twist,
+                            params_twist, log_final_twist[i])
+                        updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
+                        params_twist = optax.apply_updates(params_twist, updates_twist)
 
                 else:
 
@@ -229,7 +259,8 @@ def main():
                             rng_key, sk_l, sk_exact_sigma, sk_u_approx = jax.random.split(
                                 rng_key, 4)
 
-                            lower_bound_estimate, lower_bound_estimate_using_those_satisfying_evidence = lower_bound_log_Z_sigma_estimate(
+
+                            log_weights = log_weights_based_on_proposal(
                                 sk_l, prompt,
                                 cfg_p, params_p,
                                 cfg_twist,
@@ -239,6 +270,7 @@ def main():
                                 args.n_test_smc_samples,
                                 args.n_vocab,
                                 final_resample_for_lower_bound=False)
+                            lower_bound_estimate = log_weights.mean()
                             assert args.output_len == 2 # Analytic Sigma sample not supported for longer output len
 
                             analytic_sigma_samples = get_analytic_sigma_sample(sk_exact_sigma, prompt, prompt_len,
@@ -270,37 +302,50 @@ def main():
 
 
                         elif experiment_cfg.rm_type == "indicator_at_index":
-                            rng_key, sk = jax.random.split(rng_key)
-                            # Get a bunch of samples
-                            # Using those samples, call each one of them the posterior for whatever token value is there in that index
-                            use_scaling_factor = True # to compensate sort of for the fact that we have smaller effective sample size since we only extract according to certain indices
-                            n_p_samples = args.n_test_smc_samples
-                            if use_scaling_factor:
-                                n_p_samples *= args.n_vocab
-                            p_samples = stochastic_transformer_sample(sk, cfg_p, params_p, prompt, args.output_len, n_p_samples)
+                            # rng_key, sk = jax.random.split(rng_key)
+                            # # Get a bunch of samples
+                            # # Using those samples, call each one of them the posterior for whatever token value is there in that index
+                            # use_scaling_factor = True # to compensate sort of for the fact that we have smaller effective sample size since we only extract according to certain indices
+                            # n_p_samples = args.n_test_smc_samples
+                            # if use_scaling_factor:
+                            #     n_p_samples *= args.n_vocab
+                            # p_samples = stochastic_transformer_sample(sk, cfg_p, params_p, prompt, args.output_len, n_p_samples)
 
-                            for i in range(len(ordered_token_list)):
-                                print(f"Estimating lower bound on token: {ordered_token_list[i]}")
+
+
+                            for i in range(len(indices_of_tokens_chosen)):
+                                index_of_token_of_interest = indices_of_tokens_chosen[i]
+                                token_of_interest = ordered_token_list[index_of_token_of_interest]
+                                extracted_samples = true_posterior_samples_by_token[i]
+                                # print(extracted_samples)
+
+                                print(f"Estimating lower bound on token: {token_of_interest}")
 
                                 rng_key, sk_l = jax.random.split(rng_key)
 
-                                lower_bound_estimate, lower_bound_estimate_using_those_satisfying_evidence = lower_bound_log_Z_sigma_estimate(
+                                log_weights = log_weights_based_on_proposal(
                                     sk_l, prompt,
                                     cfg_p, params_p,
-                                    cfg_twist_list[i], params_twist_list[i],
+                                    cfg_twist, params_twist,
                                     log_final_twist[i],
                                     args.output_len,
                                     args.n_test_smc_samples,
                                     args.n_vocab,
                                     final_resample_for_lower_bound=False)
+                                lower_bound_estimate = log_weights.mean()
                                 print(f"Lower bound estimate: {lower_bound_estimate}") # if -inf, means there was at least one s in the sample that didn't satisfy the evidence
-                                print(f"Num of lower bound estimate that satisfy the evidence): {lower_bound_estimate_using_those_satisfying_evidence.shape[0]}")
-                                print(f"Lower bound estimate (using only those satisfying the evidence): {lower_bound_estimate_using_those_satisfying_evidence.mean()}") # if -inf, means no posterior samples, e.g. we want to sample from P(s|E) but E was never observed in any of the samples
+                                log_weights_satisfying_evidence = log_weights[log_weights > -jnp.inf]
 
-                                print(f"Estimating upper bound on token: {ordered_token_list[i]}")
-                                # Extract the samples that have token at the position indicator_pos_zero_index
-                                extracted_samples = p_samples[p_samples[:, prompt_len + args.indicator_pos_zero_index] == i]
-                                print(f"Number of extracted samples (true posterior for upper bound): {extracted_samples.shape[0]}")
+                                print(f"Num of lower bound estimate that satisfy the evidence): {log_weights_satisfying_evidence.shape[0]}")
+                                print(f"Lower bound estimate (using only those satisfying the evidence): {log_weights_satisfying_evidence.mean()}") # if -inf, means no posterior samples, e.g. we want to sample from P(s|E) but E was never observed in any of the samples
+                                iwae_style_lower_bound = jax.nn.logsumexp(log_weights) - jnp.log(log_weights.shape[0]) # This is a single estimate of the outer expectation, but using an average over K inside the expectation
+                                print(f"IWAE-style lower bound estimate: {iwae_style_lower_bound}")
+
+                                print(f"Estimating upper bound on token: {token_of_interest}")
+                                # Extract the samples that have token at the position indicator_pos_zero_index - no longer needed anymore
+                                # extracted_samples = p_samples[p_samples[:, prompt_len + args.indicator_pos_zero_index] == i]
+                                # print(f"Number of extracted samples (true posterior for upper bound): {extracted_samples.shape[0]}")
+                                print(f"Num of true posterior samples for token {token_of_interest}: {extracted_samples.shape[0]}")
 
                                 if extracted_samples.shape[0] > 0:
                                     # Check on the last token, the approximate distribution statistics
@@ -311,23 +356,23 @@ def main():
 
                                     true_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
                                         extracted_samples, log_final_twist[i], cfg_p,
-                                        params_p, cfg_twist_list[i], params_twist_list[i], prompt_len,
+                                        params_p, cfg_twist, params_twist, prompt_len,
                                         args.output_len)
                                     print(f"True upper bound estimate: {true_upper_bound_estimate}")
 
                                     kl_q_sigma_estimate = true_upper_bound_estimate - lower_bound_estimate
-                                    print("Gap in bounds (KL(q||sigma) estimate)")
-                                    print(kl_q_sigma_estimate)
+                                    print(f"Gap in bounds (KL(q||sigma) estimate): {kl_q_sigma_estimate}")
 
-                                    kl_q_sigma_estimate_evidence_only = true_upper_bound_estimate - lower_bound_estimate_using_those_satisfying_evidence.mean()
-                                    print(
-                                        "Gap in bounds (KL(q_evidence_only||sigma) estimate)")
-                                    print(kl_q_sigma_estimate_evidence_only)
+                                    kl_q_sigma_estimate_iwae = true_upper_bound_estimate - iwae_style_lower_bound
+                                    print(f"Gap in bounds (KL(q_iwae||sigma) estimate): {kl_q_sigma_estimate_iwae}")
+
+                                    kl_q_sigma_estimate_evidence_only = true_upper_bound_estimate - log_weights_satisfying_evidence.mean()
+                                    print(f"Gap in bounds (KL(q_evidence_only||sigma) estimate): {kl_q_sigma_estimate_evidence_only}")
 
                                     rng_key, sk_smc = jax.random.split(rng_key)
                                     _, smc_samples = smc_procedure(
                                         sk_smc, prompt, cfg_p, params_p,
-                                        cfg_twist_list[i], params_twist_list[i],
+                                        cfg_twist, params_twist,
                                         log_final_twist[i],
                                         args.output_len,
                                         args.n_test_smc_samples,
@@ -335,7 +380,7 @@ def main():
                                         n_vocab=args.n_vocab)
 
                                     print("SMC SAMPLES (extracted):")
-                                    extracted_smc_samples = smc_samples[smc_samples[:, prompt_len + args.indicator_pos_zero_index] == i]
+                                    extracted_smc_samples = smc_samples[smc_samples[:, prompt_len + args.indicator_pos_zero_index] == index_of_token_of_interest]
                                     print(f"Num extracted Samples: {extracted_smc_samples.shape[0]}")
                                     print(f"Num total Samples: {smc_samples.shape[0]}")
                                     # print(smc_samples) # TODO AUG 27 check that these approximately match the true posterior. Devise a counting test over marginal probabilities to make sure this is the case (print it first, then turn it into a test case)
@@ -471,6 +516,7 @@ if __name__ == "__main__":
     parser.add_argument("--analytic_sigma_sample", action="store_true", help="Use analytic sigma sampling. Do not use together with twist learning.")
 
     parser.add_argument("--indicator_pos_zero_index", type=int, default=0)
+    parser.add_argument("--n_true_posterior_samples", type=int, default=10)
 
     args = parser.parse_args()
 
