@@ -494,7 +494,9 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_final_twist", "use_log_final_twist", 'output_len', 'n_smc_samples', "intermediate_sample_history", "final_resample_for_lower_bound", "prepend_tokens_for_twists", "index_of_token_of_interest"])
-def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, output_len, n_smc_samples, use_log_final_twist=True, intermediate_sample_history=False, final_resample_for_lower_bound=False, prepend_tokens_for_twists=False, index_of_token_of_interest=-1):
+def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, output_len,
+            n_smc_samples, use_log_final_twist=True, intermediate_sample_history=False,
+            final_resample_for_lower_bound=False, prepend_tokens_for_twists=False, index_of_token_of_interest=-1):
     # Generate samples using SMC with twists (learned and final, if use_log_final_twist)
     # log_z_hat_t unused for now
     prompt_len = prompt.shape[-1]
@@ -535,9 +537,16 @@ def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final
     return log_w_t_no_reset, full_seq
 
 
-def log_weights_based_on_proposal(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, output_len, n_smc_samples, n_vocab=0, final_resample_for_lower_bound=False):
+def log_weights_based_on_proposal(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist,
+                                  output_len, n_smc_samples, n_vocab=0, final_resample_for_lower_bound=False,
+                                  prepend_tokens_for_twists=False, index_of_token_of_interest=-1):
     log_w_t_no_reset, full_seq = smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist,
-                                               output_len, n_smc_samples, use_log_final_twist=True, analytic_sigma_sample=False, n_vocab=n_vocab, final_resample_for_lower_bound=final_resample_for_lower_bound)
+                                               output_len, n_smc_samples, use_log_final_twist=True, analytic_sigma_sample=False,
+                                               intermediate_sample_history=False,
+                                               n_vocab=n_vocab, final_resample_for_lower_bound=final_resample_for_lower_bound,
+                                               prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                               index_of_token_of_interest=index_of_token_of_interest)
+
 
     # print(log_w_t_no_reset > -jnp.inf)
     # print(log_w_t_no_reset[log_w_t_no_reset > -jnp.inf])
@@ -681,7 +690,10 @@ def calculate_entropy_gradient_term(seqs_p, cfg_p, params_p, prompt_len, output_
     return ent_term
 
 
-def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, output_len, n_smc_samples, use_log_final_twist=True, analytic_sigma_sample=False, n_vocab=0, final_resample_for_lower_bound=False):
+def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist,
+                  output_len, n_smc_samples, use_log_final_twist=True, analytic_sigma_sample=False, n_vocab=0,
+                  intermediate_sample_history=False, final_resample_for_lower_bound=False,
+                  prepend_tokens_for_twists=False, index_of_token_of_interest=-1):
     if analytic_sigma_sample:
         assert n_vocab > 0
         prompt_len = prompt.shape[-1]
@@ -690,7 +702,9 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                                      n_smc_samples)
 
     else:
-        return smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, output_len, n_smc_samples, use_log_final_twist, final_resample_for_lower_bound)
+        return smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist,
+                       output_len, n_smc_samples, use_log_final_twist, intermediate_sample_history,
+                       final_resample_for_lower_bound, prepend_tokens_for_twists, index_of_token_of_interest)
     # return smc_non_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, output_len, n_smc_samples, use_log_final_twist)
 
 
@@ -744,7 +758,9 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
-    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, output_len, n_twist)
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist,
+                                                      params_twist, log_final_twist, output_len, n_twist,
+                                                      prepend_tokens_for_twists=prepend_tokens_for_twists, index_of_token_of_interest=index_of_token_of_interest)
     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist)
 
     l_dre = 0.
@@ -786,17 +802,17 @@ def get_l_dre_roger_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twis
                                                          params_p, cfg_twist,
                                                          params_twist,
                                                          log_final_twist,
-                                                         output_len, n_twist)
+                                                         output_len, n_twist,
+                                                      prepend_tokens_for_twists=prepend_tokens_for_twists, index_of_token_of_interest=index_of_token_of_interest)
 
     l_dre = 0.
 
     _, log_final_twist_samples, intermediate_twist_samples_hist = smc_jit(rng_key, prompt,
-                             cfg_p,
-                             params_p,
+                             cfg_p, params_p,
                              cfg_twist, params_twist,
                              log_final_twist,
-                             output_len,
-                             n_twist, use_log_final_twist=False, intermediate_sample_history=True)
+                             output_len, n_twist, use_log_final_twist=False, intermediate_sample_history=True,
+                             prepend_tokens_for_twists=prepend_tokens_for_twists, index_of_token_of_interest=index_of_token_of_interest)
 
     scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len))
 

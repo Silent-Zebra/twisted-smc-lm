@@ -218,9 +218,12 @@ def batch_transformer_with_prepend_token_of_interest(index_of_token_of_interest)
     def new_batch_transformer(cfg, params, seq):
         # print(seq)
         seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + index_of_token_of_interest, seq), axis=1)
-        # print(seqs_with_prepended_prompts)
-        # print(batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :].shape)
-        return batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :]
+        # print(seqs_with_prepended_prompts[0])
+        output = batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :]
+        # print(output[0, -3, :])
+        # print(output[0, -3, index_of_token_of_interest])
+        # print(output.shape)
+        return output # batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :]
     return new_batch_transformer
 
 
