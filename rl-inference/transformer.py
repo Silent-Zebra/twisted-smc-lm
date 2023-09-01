@@ -296,7 +296,7 @@ def print_samples_using_twists(rng_key, prompt, prompt_len, n_vocab, output_len,
                                                             None,
                                                             output_len - 1,
                                                             n_twist,
-                                                            use_log_final_twist=False)
+                                                            use_log_final_twist_for_final_weight_calc=False)
 
     # all_seqs = get_all_seqs_up_to_output_len(prompt, n_vocab, output_len)
     # log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,

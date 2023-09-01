@@ -148,17 +148,35 @@ def indicator_token_position(seq, prompt_len, token, zero_index_position):
 def log_indicator_token_position(seq, prompt_len, token, zero_index_position):
     return jnp.log(indicator_token_position(seq, prompt_len, token, zero_index_position))
 
-
-def curried_indicator_token_position(token, zero_index_position):
-    def new_fn(seq, prompt_len):
-        return indicator_token_position(seq, prompt_len, token, zero_index_position)
-    return new_fn
-
 def curried_log_indicator_token_position(token, zero_index_position):
     def new_fn(seq, prompt_len):
         return log_indicator_token_position(seq, prompt_len, token, zero_index_position)
     return new_fn
 
+def reward_model_log_p_of_token(seq, cfg_p, params_p, index_of_fixed_token):
+    do_reshape = False
+    if len(seq.shape) == 3:
+        original_shape = seq.shape
+        do_reshape = True
+        seq = seq.reshape(-1, seq.shape[-1])
+
+    seq = jnp.concatenate((seq, jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + index_of_fixed_token), axis=1)
+    # print(seq.shape)
+
+    log_prob_of_fixed_token = evaluate_log_p_theta_t(seq, cfg_p, params_p)
+
+    if do_reshape:
+        print(log_prob_of_fixed_token.shape)
+        print(log_prob_of_fixed_token.reshape(original_shape[0], original_shape[1]).reshape)
+        1/0
+        return log_prob_of_fixed_token.reshape(original_shape[0], original_shape[1])
+
+    return log_prob_of_fixed_token
+
+def curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token):
+    def new_rm(seq):
+        return reward_model_log_p_of_token(seq, cfg_p, params_p, index_of_fixed_token)
+    return new_rm
 
 
 # Just check the all 0s string and adjacent probabilities
@@ -340,7 +358,7 @@ def build_log_final_twists_positive_rew(jnp_prompts, rm_fn):
 
 def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_index_position, cfg_p, params_p, output_len, n_true_posterior_samples):
     log_final_twists = []
-    indices_of_tokens_chosen_by_prompt = []
+    indices_of_tokens_chosen_by_prompt = [] # indices of tokens chosen; a separate list per prompt
     true_posterior_samples_by_prompt_and_by_token = []
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
@@ -372,6 +390,42 @@ def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_ind
         true_posterior_samples_by_prompt_and_by_token.append(true_posterior_samples_split_by_tokens)
 
     return log_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
+
+
+def build_log_p_token_last_pos_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_true_posterior_samples):
+    log_final_twists = []
+    indices_of_tokens_chosen_by_prompt = [] # indices of tokens chosen; a separate list per prompt
+    true_posterior_samples_by_prompt_and_by_token = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+
+        rng_key, sk = jax.random.split(rng_key)
+        true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
+                                                               params_p, jnp_prompt,
+                                                               output_len,
+                                                               n_true_posterior_samples)
+        # Define the evidence based on the true posterior samples (only care about the words that we actually got from the true posterior samples
+
+        twists_all_tokens = []
+        indices_all_tokens = []
+        true_posterior_samples_split_by_tokens = []
+        for i in range(len(ordered_token_list)):
+            # token = ordered_token_list[i]
+            extracted_true_posterior_samples = true_posterior_samples[true_posterior_samples[:, -1] == i]
+            if extracted_true_posterior_samples.shape[0] != 0:
+                # rm_fn = curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token=i)
+                log_final_twist = curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token=i)
+                twists_all_tokens.append(log_final_twist)
+                indices_all_tokens.append(i)
+                true_posterior_samples_split_by_tokens.append(extracted_true_posterior_samples)
+
+        log_final_twists.append(twists_all_tokens)
+        indices_of_tokens_chosen_by_prompt.append(indices_all_tokens)
+        true_posterior_samples_by_prompt_and_by_token.append(true_posterior_samples_split_by_tokens)
+
+    return log_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
 
 
 # THIS FUNCTION ONLY WORKS FOR THE ONE_BAD REWARD MODEL (WITH THE ALL 0s BEING BAD), and only calculates twists on strings containing 0s e.g. 0, then 00, 000, etc. regardless of the n_vocab (although each computation must calculate using a sum over all n_vocab tokens)
