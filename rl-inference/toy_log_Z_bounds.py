@@ -17,7 +17,7 @@ from custom_transformer import transformer_init_params, stochastic_transformer_s
 
 from custom_transformer_prob_utils import evaluate_output_psi, evaluate_log_p_theta_1_to_t, \
     get_l_dre_roger_jit, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
-    get_analytic_sigma_sample, log_weights_based_on_proposal, upper_bound_log_Z_sigma_estimate, \
+    get_analytic_sigma_sample, upper_bound_log_Z_sigma_estimate, \
     iwae_log_weights_proposal_dist, forward_and_backward_iwae
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, \
     tokens_to_jnp_indices, ordered_token_list, inspect_bad_word_info, inspect_bad_word_reward, \
@@ -221,10 +221,10 @@ def main():
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
 
             rng_key, sk = jax.random.split(rng_key)
-            p_samples_for_test = stochastic_transformer_sample(sk, cfg_p,
-                                                      params_p, prompt,
-                                                      args.output_len,
-                                                      10)
+            # p_samples_for_test = stochastic_transformer_sample(sk, cfg_p,
+            #                                           params_p, prompt,
+            #                                           args.output_len,
+            #                                           10)
 
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
@@ -234,10 +234,21 @@ def main():
                 if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index":
 
                     for i in range(len(indices_of_tokens_chosen)):
-                        token_of_interest_as_int = indices_of_tokens_chosen[i]
 
+                        token_of_interest_as_int = indices_of_tokens_chosen[i]
                         # evaluate_output_psi(p_samples_for_test, cfg_twist, params_twist,
                         #                     True, token_of_interest_as_int)
+
+
+                        # smc_samples_test = smc_procedure(sk, prompt, cfg_p,
+                        #                                  params_p, cfg_twist,
+                        #                                  params_twist,
+                        #                                  log_final_twist[i], args.output_len, args.n_test_smc_samples, use_log_final_twist_for_final_weight_calc=True,
+                        #                                  analytic_sigma_sample=False, n_vocab=args.n_vocab,
+                        #                                  intermediate_sample_history=False, final_resample_for_lower_bound=False,
+                        #                                  prepend_tokens_for_twists=True, token_of_interest_as_int=token_of_interest_as_int, resample=True)
+                        # print(smc_samples_test)
+                        # 1/0
 
                         rng_key, sk = jax.random.split(rng_key)
                         grad_params_twist = experiment_cfg.get_grad_params_twist(
@@ -268,50 +279,6 @@ def main():
 
                     if experiment_cfg.rm_type == "bad_word_pos":
                         raise NotImplementedError # TODO reimplement/fix if you want to use this
-                        rng_key, sk_l, sk_exact_sigma, sk_u_approx = jax.random.split(
-                            rng_key, 4)
-
-
-                        log_weights = log_weights_based_on_proposal(
-                            sk_l, prompt,
-                            cfg_p, params_p,
-                            cfg_twist,
-                            params_twist,
-                            log_final_twist,
-                            args.output_len,
-                            args.n_test_smc_samples,
-                            args.n_vocab,
-                            final_resample_for_lower_bound=False
-                            )
-                        lower_bound_estimate = log_weights.mean()
-                        assert args.output_len == 2 # Analytic Sigma sample not supported for longer output len
-
-                        analytic_sigma_samples = get_analytic_sigma_sample(sk_exact_sigma, prompt, prompt_len,
-                                                  args.n_vocab, args.output_len, cfg_p, params_p,
-                                                  log_final_twist, args.n_test_smc_samples)
-                        true_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
-                            analytic_sigma_samples, log_final_twist, cfg_p,
-                            params_p, cfg_twist, params_twist, prompt_len,
-                            args.output_len)
-                        _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(
-                            sk_u_approx, prompt, cfg_p, params_p, cfg_twist,
-                            params_twist, log_final_twist, args.output_len,
-                            args.n_test_smc_samples,
-                            analytic_sigma_sample=False,
-                            n_vocab=args.n_vocab)
-                        approximate_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
-                            prompt_w_sigma_sample_s_1_to_t, log_final_twist,
-                            cfg_p, params_p, cfg_twist, params_twist,
-                            prompt_len, args.output_len)
-
-                        print("BOUNDS")
-                        print(lower_bound_estimate)
-                        print(true_upper_bound_estimate)
-                        print(approximate_upper_bound_estimate)
-
-                        kl_q_sigma_estimate = true_upper_bound_estimate - lower_bound_estimate
-                        print("Gap in bounds (KL(q||sigma) estimate)")
-                        print(kl_q_sigma_estimate)
 
 
                     elif experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index":
@@ -333,29 +300,29 @@ def main():
 
                             print(f"Estimating lower bound on token: {token_of_interest}")
 
-                            rng_key, sk_l = jax.random.split(rng_key)
-
-                            log_weights = log_weights_based_on_proposal(
-                                sk_l, prompt,
-                                cfg_p, params_p,
-                                cfg_twist, params_twist,
-                                log_final_twist[i],
-                                args.output_len,
-                                args.n_test_smc_samples,
-                                args.n_vocab,
-                                final_resample_for_lower_bound=False,
-                                prepend_tokens_for_twists=True,
-                                token_of_interest_as_int=token_of_interest_as_int
-                            )
-                            lower_bound_estimate = log_weights.mean()
-                            print(f"Lower bound estimate: {lower_bound_estimate}") # if -inf, means there was at least one s in the sample that didn't satisfy the evidence
-
-                            if experiment_cfg.rm_type == "indicator_at_index":
-                                log_weights_satisfying_evidence = log_weights[log_weights > -jnp.inf]
-                                print(f"Num of lower bound estimate that satisfy the evidence): {log_weights_satisfying_evidence.shape[0]}")
-                                print(f"Lower bound estimate (using only those satisfying the evidence): {log_weights_satisfying_evidence.mean()}") # if -inf, means no posterior samples, e.g. we want to sample from P(s|E) but E was never observed in any of the samples
-                                incorrect_iwae_style_lower_bound = jax.nn.logsumexp(log_weights) - jnp.log(log_weights.shape[0]) # This is a single estimate of the outer expectation, but using an average over K inside the expectation
-                                print(f"Incorrect IWAE-style lower bound estimate: {incorrect_iwae_style_lower_bound}")
+                            # rng_key, sk_l = jax.random.split(rng_key)
+                            #
+                            # log_weights = log_weights_based_on_proposal(
+                            #     sk_l, prompt,
+                            #     cfg_p, params_p,
+                            #     cfg_twist, params_twist,
+                            #     log_final_twist[i],
+                            #     args.output_len,
+                            #     args.n_test_smc_samples,
+                            #     args.n_vocab,
+                            #     final_resample_for_lower_bound=False,
+                            #     prepend_tokens_for_twists=True,
+                            #     token_of_interest_as_int=token_of_interest_as_int
+                            # )
+                            # lower_bound_estimate = log_weights.mean()
+                            # print(f"Lower bound estimate: {lower_bound_estimate}") # if -inf, means there was at least one s in the sample that didn't satisfy the evidence
+                            #
+                            # if experiment_cfg.rm_type == "indicator_at_index":
+                            #     log_weights_satisfying_evidence = log_weights[log_weights > -jnp.inf]
+                            #     print(f"Num of lower bound estimate that satisfy the evidence): {log_weights_satisfying_evidence.shape[0]}")
+                            #     print(f"Lower bound estimate (using only those satisfying the evidence): {log_weights_satisfying_evidence.mean()}") # if -inf, means no posterior samples, e.g. we want to sample from P(s|E) but E was never observed in any of the samples
+                            #     incorrect_iwae_style_lower_bound = jax.nn.logsumexp(log_weights) - jnp.log(log_weights.shape[0]) # This is a single estimate of the outer expectation, but using an average over K inside the expectation
+                            #     print(f"Incorrect IWAE-style lower bound estimate: {incorrect_iwae_style_lower_bound}")
 
                             if extracted_samples.shape[0] > 0:
 
@@ -411,8 +378,8 @@ def main():
                                     args.output_len)
                                 print(f"True upper bound estimate (avg over only posterior): {true_upper_bound_estimate}")
 
-                                kl_q_sigma_estimate = true_upper_bound_estimate - lower_bound_estimate
-                                print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
+                                # kl_q_sigma_estimate = true_upper_bound_estimate - lower_bound_estimate
+                                # print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
 
                                 print(f"IWAE Upper Bound Estimate: {iwae_upper_bound}")
 
@@ -427,7 +394,7 @@ def main():
                                 print(f"Gap in bounds (KL(prop_iwae||target_iwae) + KL(target_iwae||prop_iwae) estimate): {kl_estimate_iwae}")
 
                                 rng_key, sk_smc = jax.random.split(rng_key)
-                                _, smc_samples = smc_procedure(
+                                (_, _, log_z_hat_t), smc_samples = smc_procedure(
                                     sk_smc, prompt, cfg_p, params_p,
                                     cfg_twist, params_twist,
                                     log_final_twist[i],
@@ -437,6 +404,10 @@ def main():
                                     n_vocab=args.n_vocab,
                                     prepend_tokens_for_twists=True,
                                     token_of_interest_as_int=token_of_interest_as_int)
+
+                                smc_lower_bound_estimate = log_z_hat_t
+                                print(f"SMC lower bound estimate: {smc_lower_bound_estimate}")
+
 
                                 if experiment_cfg.rm_type == "indicator_at_index":
                                     print("SMC SAMPLES (extracted):")
