@@ -8,11 +8,11 @@ from flax.training import checkpoints
 
 load_dir = "."
 
-epochs = 2
-
+epochs = 20
 load_prefixes_to_use = [
-    "checkpoint_2023-09-05_00-05_seed42_prompt0_epoch2",
+    "checkpoint_2023-09-04_23-46_seed42_prompt0_epoch20",
 ]
+total_n_twists = 9
 
 records_labels_list = ["True Log Z",
                        "Upper Bound Estimate (One Posterior)",
@@ -29,8 +29,7 @@ records_labels_list = ["True Log Z",
                        "KL(q||sigma) Lower Bound Estimate (SMC)",
                        ]
 
-def load_from_checkpoint(load_dir, load_prefix):
-    n_twists = 3
+def load_from_checkpoint(load_dir, n_twists, twist_of_interest_zero_index):
     records_list_by_twist = [[[jnp.zeros((1,))] * epochs for _ in records_labels_list] for _ in range(n_twists)]
 
     print(checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=None))
@@ -38,7 +37,7 @@ def load_from_checkpoint(load_dir, load_prefix):
     restored = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=records_list_by_twist)
     print(restored)
 
-    twist_of_interest_zero_index = 1
+
 
     jnp_list = []
 
@@ -90,7 +89,7 @@ def setup_plots(titles):
     return fig, axs
 
 
-def plot_results(axs, load_prefixes, nfigs, max_iter_plot, z_score=1.96, skip_step=10, linestyle='solid'):
+def plot_results(axs, load_prefixes, max_iter_plot, z_score=1.96, skip_step=10, n_twists=9, twist_of_interest_zero_index=0):
 
     n_ckpts = len(load_prefixes)
 
@@ -102,7 +101,7 @@ def plot_results(axs, load_prefixes, nfigs, max_iter_plot, z_score=1.96, skip_st
     for pref in load_prefixes:
         print(pref)
 
-        jnp_lists = load_from_checkpoint(load_dir, pref)
+        jnp_lists = load_from_checkpoint(load_dir, n_twists, twist_of_interest_zero_index)
 
         for i in range(len(jnp_lists)):
             record_total_lists[i].append(jnp_lists[i])
@@ -114,13 +113,16 @@ def plot_results(axs, load_prefixes, nfigs, max_iter_plot, z_score=1.96, skip_st
     for i in range(len(record_total_lists)):
         record_total_lists[i] = jnp.stack(record_total_lists[i])
 
-    plot_items_indices = [[0, 1, 2, 3, 4, 5, 6], [7], [8, 9, 10, 11, 12]]
+    plot_items_indices = [[0, 3, 4, 5, 6], [7], [8, 9, 10, 11, 12]]
+    linestyles = [['solid', 'dashed', 'dashed', 'dotted', 'dotted'], ['solid'], ['solid', 'dashed', 'dashed', 'dotted', 'dotted']]
 
     true_log_Z_record_total = record_total_lists[0]
+    true_kl_record_total = record_total_lists[8]
 
     for plot_to_use in range(len(plot_items_indices)):
         plot_list = [record_total_lists[i] for i in plot_items_indices[plot_to_use]]
         label_list = [records_labels_list[i] for i in plot_items_indices[plot_to_use]]
+        linestyle_list = linestyles[plot_to_use]
 
         for i in range(len(plot_list)):
             print(f"{label_list[i]} Average: {plot_list[i].mean()}")
@@ -128,13 +130,17 @@ def plot_results(axs, load_prefixes, nfigs, max_iter_plot, z_score=1.96, skip_st
                 print(f"{label_list[i]}: Difference of Average from True Log Z: {plot_list[i].mean() - true_log_Z_record_total.mean():.5f}")
             # print(f"Stdev: {jnp.std(x)}")
 
+            if plot_to_use == 2:
+                print(f"{label_list[i]}: Difference of Average from True KL: {plot_list[i].mean() - true_kl_record_total.mean():.5f}")
+
+
             # half_x = x[:, x.shape[1] // 2 :]
             # print(f"Avg over last half: {half_x.mean()}")
             # print(f"Diff from True Log Z over last half: {half_x.mean() - true_log_Z_record_total[:, true_log_Z_record_total.shape[1] // 2 :].mean()}")
             # print(f"Stdev over last half: {jnp.std(half_x)}")
             plot_with_conf_bounds(plot_list[i], max_iter_plot, n_ckpts, label_list[i],
                                   skip_step, z_score, use_ax=True,
-                                  ax=axs[plot_to_use], linestyle=linestyle)
+                                  ax=axs[plot_to_use], linestyle=linestyle_list[i])
             axs[plot_to_use].legend()
         # if len(titles) > 1:
         #     for i in range(len(plot_list)):
@@ -150,20 +156,17 @@ def plot_results(axs, load_prefixes, nfigs, max_iter_plot, z_score=1.96, skip_st
 if __name__ == "__main__":
     # titles = ("Log Probability of Bad Word", "Reward Under Adversarial Sampling", "Reward Under Standard Sampling")
     titles = ("Log Z Estimates", "F(q) Estimate", "KL Estimates")
-    fig, axs = setup_plots(titles)
 
-    plot_results(axs, load_prefixes_to_use, nfigs=len(titles), max_iter_plot=epochs, linestyle='dashed', skip_step=5)
-    # plot_results(axs, load_prefixes_ppo_3steps, nfigs=len(titles), max_iter_plot=epochs, label="Standard RL - PPO 3 Steps", linestyle='dashed')
-    # # plot_results(axs, load_prefixes_custom, nfigs=len(titles), max_iter_plot=epochs, label="Adversarial Sampling", linestyle='dashed')
-    # plot_results(axs, load_prefixes_custom_kl_01, nfigs=len(titles), max_iter_plot=epochs, label="Adversarial Sampling with 0.01 KL", linestyle='dashed') # Sampled from p_0
-    # # plot_results(axs, load_prefixes_extremes, nfigs=len(titles), max_iter_plot=epochs, label="Extremes Sampling", linestyle='dashed')
-    # # plot_results(axs, load_prefixes_extremes_kl_01, nfigs=len(titles), max_iter_plot=epochs, label="Extremes Sampling with 0.01 KL", linestyle='dashed')
-    # # plot_results(axs, load_prefixes_anneal, nfigs=len(titles), max_iter_plot=epochs, label="Adv. Annealed Beta 0 to 1", linestyle='dashed')
-    # plot_results(axs, load_prefixes_anneal_kl_01, nfigs=len(titles), max_iter_plot=epochs, label="Adv. Annealed Beta 0 to 1 with 0.01 KL", linestyle='dashed')
+    for i in range(total_n_twists):
+
+        fig, axs = setup_plots(titles)
+
+        plot_results(axs, load_prefixes_to_use, max_iter_plot=epochs, skip_step=10, n_twists=total_n_twists, twist_of_interest_zero_index=i)
+
+        fig.savefig(f'fig_{i}.png')
+
 
     # axs[1].set_ylim([-2.5, 2.5])
     # axs[2].set_ylim([-2.5, 2.5])
 
-    plt.show()
 
-    fig.savefig('fig.png')

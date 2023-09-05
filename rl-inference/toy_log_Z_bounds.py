@@ -556,13 +556,23 @@ def main():
 
 
             prompt_num += 1
+            if (epoch + 1) % args.ckpt_every == 0:
+                for prompt_num in range(len(prompts)):
+                    print(f"Prompt: {prompts[prompt_num]}")
+                    records_list_by_twist = records_list_by_prompt_then_twist[
+                        prompt_num]
+                    print(records_list_by_twist)
+                    checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                                target=records_list_by_twist,
+                                                step=epoch + 1,
+                                                prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
 
     # print(records_list)
     # print("---")
     # print(*records_list)
     # print("---
     for prompt_num in range(len(prompts)):
-        print(f"Prompt: {prompt}")
+        print(f"Prompt: {prompts[prompt_num]}")
         records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
         print(records_list_by_twist)
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
@@ -570,20 +580,7 @@ def main():
                                     step=epoch + 1,
                                     prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
 
-        # for twist_num in range(len(records_list_by_twist)):
-        #     token_index = indices_of_tokens_chosen_by_prompt[prompt_num][twist_num]
-        #     print(f"Twist for token index: {token_index}")
-        #     records_list = records_list_by_twist[twist_num]
-        #     for j in range(len(records_list)):
-        #         print(records_labels_list[j])
-        #         print(records_list[j])
-        #
-        #     print(records_list)
-        #     print(*records_list)
-        #     checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-        #                                 target=(*records_list,),
-        #                                 step=epoch + 1,
-        #                                 prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_token{token_index}_epoch")
+
     end = time.time()
     total_time = end - start
     print("TIME: " + str(total_time))
@@ -606,6 +603,7 @@ if __name__ == "__main__":
     parser.add_argument("--beta2", type=float, help="Adam beta2", default=0.99)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--print_every", type=int, default=1)
+    parser.add_argument("--ckpt_every", type=int, default=40)
 
     # Initialize the model params
     # IN THE ORIGINAL TRANSFORMER PAPER d_k = d_v = d_model / n_heads
