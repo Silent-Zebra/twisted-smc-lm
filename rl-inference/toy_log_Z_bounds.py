@@ -15,6 +15,8 @@ import optax
 from flax.training import checkpoints
 import datetime
 
+import numpy as np
+
 
 from custom_transformer import transformer_init_params, stochastic_transformer_sample
 
@@ -86,6 +88,263 @@ class ExperimentConfig:
                                                  token_of_interest_as_int=token_of_interest_as_int)
         return grad_params_twist
 
+
+@partial(jax.jit, static_argnames=["log_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len", "cfg_p", "cfg_twist", "hist_token_index", "token_of_interest", "token_of_interest_as_int"])
+def inspect_and_record_evidence_setting_for_index(rng_key,
+                                        prompt,
+                                        prompt_len, cfg_p, params_p, cfg_twist,
+                                        params_twist, n_vocab, output_len,
+                                        log_final_twist,
+                                        n_test_smc_samples, hist_token_index, token_of_interest_as_int,
+                                                  token_of_interest, extracted_samples, true_log_z, analytic_kl_q_sigma):
+
+    # print(extracted_samples)
+    print(f"Currently investigating token: {token_of_interest}")
+
+    # _, _, true_log_z = \
+    #     calc_analytic_sigma_vals(prompt, prompt_len, n_vocab,
+    #                              output_len, cfg_p, params_p,
+    #                              log_final_twist, return_log=True)
+
+    # analytic_kl_q_sigma = calc_analytic_kl(prompt, prompt_len, n_vocab,
+    #                                        output_len,
+    #                                        cfg_p, params_p, cfg_twist,
+    #                                        params_twist,
+    #                                        log_final_twist,
+    #                                        prepend_tokens_for_twists=True,
+    #                                        token_of_interest_as_int=token_of_interest_as_int)
+
+    print(f"True log Z value: {true_log_z}")
+
+    print(f"Estimating lower bound on token: {token_of_interest}")
+
+    # rng_key, sk_l = jax.random.split(rng_key)
+    #
+    # log_weights = log_weights_based_on_proposal(
+    #     sk_l, prompt,
+    #     cfg_p, params_p,
+    #     cfg_twist, params_twist,
+    #     log_final_twist[i],
+    #     args.output_len,
+    #     args.n_test_smc_samples,
+    #     args.n_vocab,
+    #
+    #     prepend_tokens_for_twists=True,
+    #     token_of_interest_as_int=token_of_interest_as_int
+    # )
+    # lower_bound_estimate = log_weights.mean()
+    # print(f"Lower bound estimate: {lower_bound_estimate}") # if -inf, means there was at least one s in the sample that didn't satisfy the evidence
+    #
+    # if experiment_cfg.rm_type == "indicator_at_index":
+    #     log_weights_satisfying_evidence = log_weights[log_weights > -jnp.inf]
+    #     print(f"Num of lower bound estimate that satisfy the evidence): {log_weights_satisfying_evidence.shape[0]}")
+    #     print(f"Lower bound estimate (using only those satisfying the evidence): {log_weights_satisfying_evidence.mean()}") # if -inf, means no posterior samples, e.g. we want to sample from P(s|E) but E was never observed in any of the samples
+    #     incorrect_iwae_style_lower_bound = jax.nn.logsumexp(log_weights) - jnp.log(log_weights.shape[0]) # This is a single estimate of the outer expectation, but using an average over K inside the expectation
+    #     print(f"Incorrect IWAE-style lower bound estimate: {incorrect_iwae_style_lower_bound}")
+
+    assert extracted_samples.shape[0] > 0
+
+    posterior_sample = extracted_samples[0]
+    rng_key, sk_i = jax.random.split(rng_key)
+    iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
+        sk_i, posterior_sample, prompt, cfg_p,
+        params_p, cfg_twist,
+        params_twist, log_final_twist,
+        output_len, n_test_smc_samples,
+        n_vocab,
+
+        prepend_tokens_for_twists=True,
+        token_of_interest_as_int=token_of_interest_as_int)
+    iwae_lower_bound_estimate = jax.nn.logsumexp(
+        iwae_log_w_lower) - jnp.log(
+        iwae_log_w_lower.shape[0])
+    iwae_upper_bound_estimate = jax.nn.logsumexp(
+        iwae_log_w_upper) - jnp.log(
+        iwae_log_w_upper.shape[0])
+    print(f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")
+    print(f"IWAE Upper Bound Estimate: {iwae_upper_bound_estimate}")
+
+    # else:
+    #     rng_key, sk_l = jax.random.split(rng_key)
+    #     iwae_log_w_lower, f_q_estimate = iwae_log_weights_proposal_dist(sk_l, prompt, cfg_p,
+    #                      params_p, cfg_twist,
+    #                      params_twist, log_final_twist[i],
+    #                      args.output_len, args.n_test_smc_samples,
+    #                      args.n_vocab,
+    #
+    #                      prepend_tokens_for_twists=True,
+    #                      token_of_interest_as_int=token_of_interest_as_int)
+    #
+    #     iwae_lower_bound_estimate = jax.nn.logsumexp(iwae_log_w_lower) - jnp.log(iwae_log_w_lower.shape[0])
+    #     print(f"IWAE lower bound estimate: {iwae_lower_bound_estimate}")
+
+    print(f"Estimating upper bound on token: {token_of_interest}")
+    # Extract the samples that have token at the position indicator_pos_zero_index - no longer needed anymore
+    # extracted_samples = p_samples[p_samples[:, prompt_len + args.indicator_pos_zero_index] == i]
+    # print(f"Number of extracted samples (true posterior for upper bound): {extracted_samples.shape[0]}")
+    print(
+        f"Num of true posterior samples for token {token_of_interest}: {extracted_samples.shape[0]}")
+
+    # if extracted_samples.shape[0] > 0:
+    # Check on the last token, the approximate distribution statistics
+
+
+    true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
+        extracted_samples, log_final_twist, cfg_p,
+        params_p, cfg_twist, params_twist, prompt_len,
+        output_len)
+
+    true_one_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
+        posterior_sample[None, :], log_final_twist, cfg_p,
+        params_p, cfg_twist, params_twist, prompt_len,
+        output_len)
+    print(
+        f"True upper bound estimate (avg over all posterior): {true_all_post_upper_bound_estimate}")
+    print(
+        f"True upper bound estimate (only one posterior): {true_one_post_upper_bound_estimate}")
+
+    # kl_q_sigma_estimate = true_all_post_upper_bound_estimate - lower_bound_estimate
+    # print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
+
+    kl_q_sigma_iwae_upper_bound_estimate = iwae_upper_bound_estimate - f_q_estimate
+    kl_q_sigma_iwae_lower_bound_estimate = iwae_lower_bound_estimate - f_q_estimate
+
+    print(f"F(q) (= E[log w]) estimate: {f_q_estimate}")
+
+    print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}")
+
+    print(
+        f"KL(q||sigma) estimate using true log Z: {true_log_z - f_q_estimate}")
+
+    print(
+        f"KL(q||sigma) upper bound (using all true posterior bound on log Z): {true_all_post_upper_bound_estimate - f_q_estimate}")
+
+    print(
+        f"KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_q_sigma_iwae_upper_bound_estimate}")
+    print(
+        f"KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_q_sigma_iwae_lower_bound_estimate}")
+
+    kl_estimate_iwae = iwae_upper_bound_estimate - iwae_lower_bound_estimate
+    print(
+        f"Gap in bounds (KL(prop_iwae||target_iwae) + KL(target_iwae||prop_iwae) estimate): {kl_estimate_iwae}")
+
+    rng_key, sk_smc = jax.random.split(rng_key)
+    (_, log_z_hat_t), smc_samples = smc_procedure(
+        sk_smc, prompt, cfg_p, params_p,
+        cfg_twist, params_twist,
+        log_final_twist,
+        output_len,
+        n_test_smc_samples,
+        analytic_sigma_sample=False,
+        n_vocab=n_vocab,
+        prepend_tokens_for_twists=True,
+        token_of_interest_as_int=token_of_interest_as_int)
+
+    smc_lower_bound_estimate = log_z_hat_t
+    print(f"SMC lower bound estimate: {smc_lower_bound_estimate}")
+
+    rng_key, sk_smc = jax.random.split(rng_key)
+    smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
+                                            prompt, cfg_p, params_p,
+                                            cfg_twist, params_twist,
+                                            log_final_twist,
+                                            output_len,
+                                            n_test_smc_samples,
+                                            n_vocab,
+                                            prepend_tokens_for_twists=True,
+                                            token_of_interest_as_int=token_of_interest_as_int)
+    print(f"SMC upper bound estimate: {smc_upper_bound_estimate}")
+
+    kl_q_sigma_smc_upper_bound_estimate = smc_upper_bound_estimate - f_q_estimate
+    kl_q_sigma_smc_lower_bound_estimate = smc_lower_bound_estimate - f_q_estimate
+    print(
+        f"KL(q||sigma) upper bound (using SMC bound on log Z): {kl_q_sigma_smc_upper_bound_estimate}")
+    print(
+        f"KL(q||sigma) lower bound (using SMC bound on log Z): {kl_q_sigma_smc_lower_bound_estimate}")
+
+    kl_estimate_smc = smc_upper_bound_estimate - smc_lower_bound_estimate
+    print(
+        f"Gap in bounds (KL(prop_smc||target_smc) + KL(target_smc||prop_smc) estimate): {kl_estimate_smc}")
+
+
+    list_of_things_to_append_for_record_list = \
+        [true_log_z, true_one_post_upper_bound_estimate,
+         true_all_post_upper_bound_estimate,
+         iwae_upper_bound_estimate, iwae_lower_bound_estimate,
+         smc_upper_bound_estimate, smc_lower_bound_estimate,
+         f_q_estimate, analytic_kl_q_sigma,
+         kl_q_sigma_iwae_upper_bound_estimate,
+         kl_q_sigma_iwae_lower_bound_estimate,
+         kl_q_sigma_smc_upper_bound_estimate,
+         kl_q_sigma_smc_lower_bound_estimate]
+
+    return list_of_things_to_append_for_record_list, smc_samples
+
+def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_posterior_samples_by_token, prompt, prompt_len, cfg_p, params_p, cfg_twist,
+                             params_twist, n_vocab, output_len, log_final_twist_not_yet_indexed, n_test_smc_samples, hist_token_index, records_list_by_twist):
+
+    # Note: mutuates records_list_by_twist
+
+    for i in range(len(indices_of_tokens_chosen)):
+        rng_key, sk = jax.random.split(rng_key)
+
+        log_final_twist = log_final_twist_not_yet_indexed[i]
+
+        token_of_interest_as_int = indices_of_tokens_chosen[i]
+        token_of_interest = ordered_token_list[token_of_interest_as_int]
+        extracted_samples = true_posterior_samples_by_token[i]
+
+        _, _, true_log_z = \
+            calc_analytic_sigma_vals(prompt, prompt_len, n_vocab,
+                                     output_len, cfg_p, params_p,
+                                     log_final_twist, return_log=True)
+
+        analytic_kl_q_sigma = calc_analytic_kl(prompt, prompt_len, n_vocab,
+                                               output_len,
+                                               cfg_p, params_p, cfg_twist,
+                                               params_twist,
+                                               log_final_twist,
+                                               prepend_tokens_for_twists=True,
+                                               token_of_interest_as_int=token_of_interest_as_int)
+
+        list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_for_index(
+            sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist, n_vocab,
+            output_len, log_final_twist, n_test_smc_samples, hist_token_index,
+            token_of_interest_as_int, token_of_interest, extracted_samples,
+            true_log_z, analytic_kl_q_sigma)
+
+        # if i == 0: # only check a single set of twists for now
+        for j in range(len(list_of_things_to_append_for_record_list)):
+            records_list_by_twist[i][j].append(
+                np.array(list_of_things_to_append_for_record_list[j]))
+            # records_list_by_twist[i][j].append(list_of_things_to_append_for_record_list[j])
+
+        # else:
+        #     print("No samples to estimate this upper bound on")
+
+        extracted_samples_hist = hist_by_token_index(
+            extracted_samples, token_index=hist_token_index)
+        print("Extracted samples proportion by last token")
+        print(extracted_samples_hist)
+
+        if args.rm_type == "indicator_at_index":
+            print("SMC SAMPLES (extracted):")
+            extracted_smc_samples = smc_samples[smc_samples[:,
+                                                prompt_len + args.indicator_pos_zero_index] == token_of_interest_as_int]
+            print(f"Num extracted Samples: {extracted_smc_samples.shape[0]}")
+            print(f"Num total Samples: {smc_samples.shape[0]}")
+            # print(smc_samples) # TODO AUG 27 check that these approximately match the true posterior. Devise a counting test over marginal probabilities to make sure this is the case (print it first, then turn it into a test case)
+            smc_samples_hist = hist_by_token_index(
+                extracted_smc_samples, token_index=hist_token_index)
+            print(
+                "SMC samples (extracted) proportion by marginal of last token (or second last, if last is the chosen token)")
+            print(smc_samples_hist)
+        elif args.rm_type == "p_token_last_index":
+            smc_samples_hist = hist_by_token_index(
+                smc_samples,
+                token_index=hist_token_index)
+            print("SMC samples proportion by marginal of last token")
+            print(smc_samples_hist)
 
 
 
@@ -222,7 +481,7 @@ def main():
         hist_token_index = -1 # Build an illustrative histogram just to check that SMC dist approximately matches true posterior. Check the marginal distribution over the token at the position of hist_token_index. -1 is just a design choice (last token)
 
 
-
+    last_ckpt_epoch = -1
 
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
@@ -325,204 +584,19 @@ def main():
 
 
                     elif experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index":
-                        # rng_key, sk = jax.random.split(rng_key)
-                        # # Get a bunch of samples
-                        # # Using those samples, call each one of them the posterior for whatever token value is there in that index
-                        # use_scaling_factor = True # to compensate sort of for the fact that we have smaller effective sample size since we only extract according to certain indices
-                        # n_p_samples = args.n_test_smc_samples
-                        # if use_scaling_factor:
-                        #     n_p_samples *= args.n_vocab
-                        # p_samples = stochastic_transformer_sample(sk, cfg_p, params_p, prompt, args.output_len, n_p_samples)
-
-
-                        for i in range(len(indices_of_tokens_chosen)):
-                            token_of_interest_as_int = indices_of_tokens_chosen[i]
-                            token_of_interest = ordered_token_list[token_of_interest_as_int]
-                            extracted_samples = true_posterior_samples_by_token[i]
-                            # print(extracted_samples)
-                            print(f"Currently investigating token: {token_of_interest}")
-
-                            _, _, true_log_z = \
-                                calc_analytic_sigma_vals(prompt, prompt_len, args.n_vocab, args.output_len, cfg_p, params_p,
-                                                     log_final_twist[i], return_log=True)
-
-                            analytic_kl_q_sigma = calc_analytic_kl(prompt, prompt_len, args.n_vocab, args.output_len,
-                                               cfg_p, params_p, cfg_twist, params_twist,
-                                               log_final_twist[i],
-                                               prepend_tokens_for_twists=True, token_of_interest_as_int=token_of_interest_as_int)
-
-
-                            print(f"True log Z value: {true_log_z}")
-
-                            print(f"Estimating lower bound on token: {token_of_interest}")
-
-                            # rng_key, sk_l = jax.random.split(rng_key)
-                            #
-                            # log_weights = log_weights_based_on_proposal(
-                            #     sk_l, prompt,
-                            #     cfg_p, params_p,
-                            #     cfg_twist, params_twist,
-                            #     log_final_twist[i],
-                            #     args.output_len,
-                            #     args.n_test_smc_samples,
-                            #     args.n_vocab,
-                            #
-                            #     prepend_tokens_for_twists=True,
-                            #     token_of_interest_as_int=token_of_interest_as_int
-                            # )
-                            # lower_bound_estimate = log_weights.mean()
-                            # print(f"Lower bound estimate: {lower_bound_estimate}") # if -inf, means there was at least one s in the sample that didn't satisfy the evidence
-                            #
-                            # if experiment_cfg.rm_type == "indicator_at_index":
-                            #     log_weights_satisfying_evidence = log_weights[log_weights > -jnp.inf]
-                            #     print(f"Num of lower bound estimate that satisfy the evidence): {log_weights_satisfying_evidence.shape[0]}")
-                            #     print(f"Lower bound estimate (using only those satisfying the evidence): {log_weights_satisfying_evidence.mean()}") # if -inf, means no posterior samples, e.g. we want to sample from P(s|E) but E was never observed in any of the samples
-                            #     incorrect_iwae_style_lower_bound = jax.nn.logsumexp(log_weights) - jnp.log(log_weights.shape[0]) # This is a single estimate of the outer expectation, but using an average over K inside the expectation
-                            #     print(f"Incorrect IWAE-style lower bound estimate: {incorrect_iwae_style_lower_bound}")
-
-                            assert extracted_samples.shape[0] > 0
-
-                            posterior_sample = extracted_samples[0]
-                            rng_key, sk_i = jax.random.split(rng_key)
-                            iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
-                                sk_i, posterior_sample, prompt, cfg_p,
-                                params_p, cfg_twist,
-                                params_twist, log_final_twist[i],
-                                args.output_len, args.n_test_smc_samples,
-                                args.n_vocab,
-
-                                prepend_tokens_for_twists=True,
-                                token_of_interest_as_int=token_of_interest_as_int)
-                            iwae_lower_bound_estimate = jax.nn.logsumexp(
-                                iwae_log_w_lower) - jnp.log(
-                                iwae_log_w_lower.shape[0])
-                            iwae_upper_bound_estimate = jax.nn.logsumexp(
-                                iwae_log_w_upper) - jnp.log(
-                                iwae_log_w_upper.shape[0])
-                            print(f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")
-                            print(f"IWAE Upper Bound Estimate: {iwae_upper_bound_estimate}")
-
-                            # else:
-                            #     rng_key, sk_l = jax.random.split(rng_key)
-                            #     iwae_log_w_lower, f_q_estimate = iwae_log_weights_proposal_dist(sk_l, prompt, cfg_p,
-                            #                      params_p, cfg_twist,
-                            #                      params_twist, log_final_twist[i],
-                            #                      args.output_len, args.n_test_smc_samples,
-                            #                      args.n_vocab,
-                            #
-                            #                      prepend_tokens_for_twists=True,
-                            #                      token_of_interest_as_int=token_of_interest_as_int)
-                            #
-                            #     iwae_lower_bound_estimate = jax.nn.logsumexp(iwae_log_w_lower) - jnp.log(iwae_log_w_lower.shape[0])
-                            #     print(f"IWAE lower bound estimate: {iwae_lower_bound_estimate}")
-
-                            print(f"Estimating upper bound on token: {token_of_interest}")
-                            # Extract the samples that have token at the position indicator_pos_zero_index - no longer needed anymore
-                            # extracted_samples = p_samples[p_samples[:, prompt_len + args.indicator_pos_zero_index] == i]
-                            # print(f"Number of extracted samples (true posterior for upper bound): {extracted_samples.shape[0]}")
-                            print(f"Num of true posterior samples for token {token_of_interest}: {extracted_samples.shape[0]}")
-
-                            # if extracted_samples.shape[0] > 0:
-                            # Check on the last token, the approximate distribution statistics
-                            extracted_samples_hist = hist_by_token_index(
-                                extracted_samples, token_index=hist_token_index)
-                            print("Extracted samples proportion by last token")
-                            print(extracted_samples_hist)
-
-                            true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
-                                extracted_samples, log_final_twist[i], cfg_p,
-                                params_p, cfg_twist, params_twist, prompt_len,
-                                args.output_len)
-
-                            true_one_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
-                                posterior_sample[None, :], log_final_twist[i], cfg_p,
-                                params_p, cfg_twist, params_twist, prompt_len,
-                                args.output_len)
-                            print(f"True upper bound estimate (avg over all posterior): {true_all_post_upper_bound_estimate}")
-                            print(f"True upper bound estimate (only one posterior): {true_one_post_upper_bound_estimate}")
-
-                            # kl_q_sigma_estimate = true_all_post_upper_bound_estimate - lower_bound_estimate
-                            # print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
-
-                            kl_q_sigma_iwae_upper_bound_estimate = iwae_upper_bound_estimate - f_q_estimate
-                            kl_q_sigma_iwae_lower_bound_estimate = iwae_lower_bound_estimate - f_q_estimate
-
-                            print(f"F(q) (= E[log w]) estimate: {f_q_estimate}")
-
-                            print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}")
-
-                            print(f"KL(q||sigma) estimate using true log Z: {true_log_z - f_q_estimate}")
-
-                            print(f"KL(q||sigma) upper bound (using all true posterior bound on log Z): {true_all_post_upper_bound_estimate - f_q_estimate}")
-
-                            print(f"KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_q_sigma_iwae_upper_bound_estimate}")
-                            print(f"KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_q_sigma_iwae_lower_bound_estimate}")
-
-                            kl_estimate_iwae = iwae_upper_bound_estimate - iwae_lower_bound_estimate
-                            print(f"Gap in bounds (KL(prop_iwae||target_iwae) + KL(target_iwae||prop_iwae) estimate): {kl_estimate_iwae}")
-
-                            rng_key, sk_smc = jax.random.split(rng_key)
-                            (_, log_z_hat_t), smc_samples = smc_procedure(
-                                sk_smc, prompt, cfg_p, params_p,
-                                cfg_twist, params_twist,
-                                log_final_twist[i],
-                                args.output_len,
-                                args.n_test_smc_samples,
-                                analytic_sigma_sample=False,
-                                n_vocab=args.n_vocab,
-                                prepend_tokens_for_twists=True,
-                                token_of_interest_as_int=token_of_interest_as_int)
-
-                            smc_lower_bound_estimate = log_z_hat_t
-                            print(f"SMC lower bound estimate: {smc_lower_bound_estimate}")
-
-                            rng_key, sk_smc = jax.random.split(rng_key)
-                            smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample, prompt, cfg_p, params_p,
-                                                                    cfg_twist, params_twist, log_final_twist[i], args.output_len,
-                                                                    args.n_test_smc_samples, args.n_vocab,
-                                                                    prepend_tokens_for_twists=True, token_of_interest_as_int=token_of_interest_as_int)
-                            print(f"SMC upper bound estimate: {smc_upper_bound_estimate}")
-
-                            kl_q_sigma_smc_upper_bound_estimate = smc_upper_bound_estimate - f_q_estimate
-                            kl_q_sigma_smc_lower_bound_estimate = smc_lower_bound_estimate - f_q_estimate
-                            print(f"KL(q||sigma) upper bound (using SMC bound on log Z): {kl_q_sigma_smc_upper_bound_estimate}")
-                            print(f"KL(q||sigma) lower bound (using SMC bound on log Z): {kl_q_sigma_smc_lower_bound_estimate}")
-
-                            kl_estimate_smc = smc_upper_bound_estimate - smc_lower_bound_estimate
-                            print(f"Gap in bounds (KL(prop_smc||target_smc) + KL(target_smc||prop_smc) estimate): {kl_estimate_smc}")
-
-                            if experiment_cfg.rm_type == "indicator_at_index":
-                                print("SMC SAMPLES (extracted):")
-                                extracted_smc_samples = smc_samples[smc_samples[:, prompt_len + args.indicator_pos_zero_index] == token_of_interest_as_int]
-                                print(f"Num extracted Samples: {extracted_smc_samples.shape[0]}")
-                                print(f"Num total Samples: {smc_samples.shape[0]}")
-                                # print(smc_samples) # TODO AUG 27 check that these approximately match the true posterior. Devise a counting test over marginal probabilities to make sure this is the case (print it first, then turn it into a test case)
-                                smc_samples_hist = hist_by_token_index(
-                                    extracted_smc_samples, token_index=hist_token_index)
-                                print("SMC samples (extracted) proportion by marginal of last token (or second last, if last is the chosen token)")
-                                print(smc_samples_hist)
-                            elif experiment_cfg.rm_type == "p_token_last_index":
-                                smc_samples_hist = hist_by_token_index(
-                                    smc_samples,
-                                    token_index=hist_token_index)
-                                print("SMC samples proportion by marginal of last token")
-                                print(smc_samples_hist)
-
-                            list_of_things_to_append_for_record_list = \
-                                [true_log_z, true_one_post_upper_bound_estimate,
-                                 true_all_post_upper_bound_estimate,
-                                 iwae_upper_bound_estimate, iwae_lower_bound_estimate,
-                                 smc_upper_bound_estimate, smc_lower_bound_estimate,
-                                 f_q_estimate, analytic_kl_q_sigma,
-                                 kl_q_sigma_iwae_upper_bound_estimate, kl_q_sigma_iwae_lower_bound_estimate,
-                                 kl_q_sigma_smc_upper_bound_estimate, kl_q_sigma_smc_lower_bound_estimate]
-
-                            # if i == 0: # only check a single set of twists for now
-                            for j in range(len(list_of_things_to_append_for_record_list)):
-                                records_list_by_twist[i][j].append(list_of_things_to_append_for_record_list[j])
-
-                            # else:
-                            #     print("No samples to estimate this upper bound on")
+                        rng_key, sk = jax.random.split(rng_key)
+                        inspect_and_record_evidence_setting(sk,
+                                                            indices_of_tokens_chosen,
+                                                            true_posterior_samples_by_token,
+                                                            prompt, prompt_len,
+                                                            cfg_p, params_p,
+                                                            cfg_twist,
+                                                            params_twist,
+                                                            args.n_vocab, args.output_len,
+                                                            log_final_twist,
+                                                            args.n_test_smc_samples,
+                                                            hist_token_index,
+                                                            records_list_by_twist)
 
 
                     # bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
@@ -566,19 +640,21 @@ def main():
                                                 target=records_list_by_twist,
                                                 step=epoch + 1,
                                                 prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
+                last_ckpt_epoch = epoch
 
     # print(records_list)
     # print("---")
     # print(*records_list)
     # print("---
-    for prompt_num in range(len(prompts)):
-        print(f"Prompt: {prompts[prompt_num]}")
-        records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
-        print(records_list_by_twist)
-        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                    target=records_list_by_twist,
-                                    step=epoch + 1,
-                                    prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
+    if last_ckpt_epoch != epoch:
+        for prompt_num in range(len(prompts)):
+            print(f"Prompt: {prompts[prompt_num]}")
+            records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
+            print(records_list_by_twist)
+            checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                        target=records_list_by_twist,
+                                        step=epoch + 1,
+                                        prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
 
 
     end = time.time()
