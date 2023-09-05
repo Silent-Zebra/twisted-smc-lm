@@ -403,26 +403,36 @@ def build_log_p_token_last_pos_twists(rng_key, jnp_prompts, cfg_p, params_p, out
         rng_key, sk = jax.random.split(rng_key)
         true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
                                                                params_p, jnp_prompt,
-                                                               output_len,
+                                                               output_len + 1, # This +1 is important here! In this new formulation where we care about the kth token, so we only generate up to the k-1 token. In this codebase, k = output_len + 1, so we generate k-1 = output_len tokens from p during the normal SMC/sampling procedures
                                                                n_true_posterior_samples)
         # Define the evidence based on the true posterior samples (only care about the words that we actually got from the true posterior samples
+
 
         twists_all_tokens = []
         indices_all_tokens = []
         true_posterior_samples_split_by_tokens = []
+
+        print(true_posterior_samples)
+
         for i in range(len(ordered_token_list)):
             # token = ordered_token_list[i]
-            extracted_true_posterior_samples = true_posterior_samples[true_posterior_samples[:, -1] == i]
+            extracted_true_posterior_samples = true_posterior_samples[true_posterior_samples[:, -1] == i][:, :-1]
             if extracted_true_posterior_samples.shape[0] != 0:
                 # rm_fn = curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token=i)
+                # TODO SEP 4 THIS IS WRONG TOO. GO THROUGH EVERYTHING IN THE CODE, IN THE ENVIRONMENT SETUP TO MAKE SURE IT'S CORRECT.
+                # INDEX OF FIXED TOKEN - WHAT SWHOULD IT BE? JUST CHECK EVERYTHING, PRINT AND CHECK EVERYTHING.
                 log_final_twist = curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token=i)
                 twists_all_tokens.append(log_final_twist)
                 indices_all_tokens.append(i)
+                # print(extracted_true_posterior_samples)
                 true_posterior_samples_split_by_tokens.append(extracted_true_posterior_samples)
 
         log_final_twists.append(twists_all_tokens)
         indices_of_tokens_chosen_by_prompt.append(indices_all_tokens)
         true_posterior_samples_by_prompt_and_by_token.append(true_posterior_samples_split_by_tokens)
+
+    print(indices_of_tokens_chosen_by_prompt)
+    print(true_posterior_samples_by_prompt_and_by_token)
 
     return log_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
 

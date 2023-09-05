@@ -7,6 +7,11 @@ import jax
 from custom_transformer import batch_transformer, stochastic_transformer_sample, batch_transformer_with_prepend_token_of_interest
 
 
+def kl_div_jax(log_p_target, log_p_curr):
+    kl_div = (jnp.exp(log_p_target) * (log_p_target - log_p_curr)).sum()
+    return kl_div
+
+
 def get_full_list_of_all_seqs_up_to_output_len(prompt, n_vocab, output_len):
     # Needs prompt[None, :] for unprocessed (jnp) prompt
     seq = prompt[None, :]
@@ -889,6 +894,21 @@ def get_analytic_sigma_sample(subkey, jnp_prompt, prompt_len, n_vocab, output_le
     # print(samples.shape)
 
     return samples
+
+
+def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
+    analytic_log_sigma_vals, all_seqs, _ = \
+        calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_final_twist, return_log=True)
+
+    analytic_log_q_t_vals = evaluate_normalized_log_q_1_to_t(all_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len, prepend_tokens_for_twists, token_of_interest_as_int)
+
+    # print(analytic_log_sigma_vals.shape)
+    # print(analytic_log_q_t_vals.shape)
+
+    kl_div = kl_div_jax(analytic_log_q_t_vals, analytic_log_sigma_vals)
+
+    return kl_div
+    # then do the KL calc
 
 
 def calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_final_twist, return_log=False):
