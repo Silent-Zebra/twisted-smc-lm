@@ -89,58 +89,14 @@ class ExperimentConfig:
         return grad_params_twist
 
 
-@partial(jax.jit, static_argnames=["log_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len", "cfg_p", "cfg_twist", "hist_token_index", "token_of_interest", "token_of_interest_as_int"])
+@partial(jax.jit, static_argnames=["log_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len", "cfg_p", "cfg_twist", "token_of_interest_as_int"])
 def inspect_and_record_evidence_setting_for_index(rng_key,
                                         prompt,
                                         prompt_len, cfg_p, params_p, cfg_twist,
                                         params_twist, n_vocab, output_len,
                                         log_final_twist,
-                                        n_test_smc_samples, hist_token_index, token_of_interest_as_int,
-                                                  token_of_interest, extracted_samples, true_log_z, analytic_kl_q_sigma):
-
-    # print(extracted_samples)
-    print(f"Currently investigating token: {token_of_interest}")
-
-    # _, _, true_log_z = \
-    #     calc_analytic_sigma_vals(prompt, prompt_len, n_vocab,
-    #                              output_len, cfg_p, params_p,
-    #                              log_final_twist, return_log=True)
-
-    # analytic_kl_q_sigma = calc_analytic_kl(prompt, prompt_len, n_vocab,
-    #                                        output_len,
-    #                                        cfg_p, params_p, cfg_twist,
-    #                                        params_twist,
-    #                                        log_final_twist,
-    #                                        prepend_tokens_for_twists=True,
-    #                                        token_of_interest_as_int=token_of_interest_as_int)
-
-    print(f"True log Z value: {true_log_z}")
-
-    print(f"Estimating lower bound on token: {token_of_interest}")
-
-    # rng_key, sk_l = jax.random.split(rng_key)
-    #
-    # log_weights = log_weights_based_on_proposal(
-    #     sk_l, prompt,
-    #     cfg_p, params_p,
-    #     cfg_twist, params_twist,
-    #     log_final_twist[i],
-    #     args.output_len,
-    #     args.n_test_smc_samples,
-    #     args.n_vocab,
-    #
-    #     prepend_tokens_for_twists=True,
-    #     token_of_interest_as_int=token_of_interest_as_int
-    # )
-    # lower_bound_estimate = log_weights.mean()
-    # print(f"Lower bound estimate: {lower_bound_estimate}") # if -inf, means there was at least one s in the sample that didn't satisfy the evidence
-    #
-    # if experiment_cfg.rm_type == "indicator_at_index":
-    #     log_weights_satisfying_evidence = log_weights[log_weights > -jnp.inf]
-    #     print(f"Num of lower bound estimate that satisfy the evidence): {log_weights_satisfying_evidence.shape[0]}")
-    #     print(f"Lower bound estimate (using only those satisfying the evidence): {log_weights_satisfying_evidence.mean()}") # if -inf, means no posterior samples, e.g. we want to sample from P(s|E) but E was never observed in any of the samples
-    #     incorrect_iwae_style_lower_bound = jax.nn.logsumexp(log_weights) - jnp.log(log_weights.shape[0]) # This is a single estimate of the outer expectation, but using an average over K inside the expectation
-    #     print(f"Incorrect IWAE-style lower bound estimate: {incorrect_iwae_style_lower_bound}")
+                                        n_test_smc_samples, token_of_interest_as_int,
+                                                  extracted_samples, true_log_z, analytic_kl_q_sigma):
 
     assert extracted_samples.shape[0] > 0
 
@@ -152,7 +108,6 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         params_twist, log_final_twist,
         output_len, n_test_smc_samples,
         n_vocab,
-
         prepend_tokens_for_twists=True,
         token_of_interest_as_int=token_of_interest_as_int)
     iwae_lower_bound_estimate = jax.nn.logsumexp(
@@ -161,33 +116,6 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     iwae_upper_bound_estimate = jax.nn.logsumexp(
         iwae_log_w_upper) - jnp.log(
         iwae_log_w_upper.shape[0])
-    print(f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")
-    print(f"IWAE Upper Bound Estimate: {iwae_upper_bound_estimate}")
-
-    # else:
-    #     rng_key, sk_l = jax.random.split(rng_key)
-    #     iwae_log_w_lower, f_q_estimate = iwae_log_weights_proposal_dist(sk_l, prompt, cfg_p,
-    #                      params_p, cfg_twist,
-    #                      params_twist, log_final_twist[i],
-    #                      args.output_len, args.n_test_smc_samples,
-    #                      args.n_vocab,
-    #
-    #                      prepend_tokens_for_twists=True,
-    #                      token_of_interest_as_int=token_of_interest_as_int)
-    #
-    #     iwae_lower_bound_estimate = jax.nn.logsumexp(iwae_log_w_lower) - jnp.log(iwae_log_w_lower.shape[0])
-    #     print(f"IWAE lower bound estimate: {iwae_lower_bound_estimate}")
-
-    print(f"Estimating upper bound on token: {token_of_interest}")
-    # Extract the samples that have token at the position indicator_pos_zero_index - no longer needed anymore
-    # extracted_samples = p_samples[p_samples[:, prompt_len + args.indicator_pos_zero_index] == i]
-    # print(f"Number of extracted samples (true posterior for upper bound): {extracted_samples.shape[0]}")
-    print(
-        f"Num of true posterior samples for token {token_of_interest}: {extracted_samples.shape[0]}")
-
-    # if extracted_samples.shape[0] > 0:
-    # Check on the last token, the approximate distribution statistics
-
 
     true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
         extracted_samples, log_final_twist, cfg_p,
@@ -198,35 +126,12 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         posterior_sample[None, :], log_final_twist, cfg_p,
         params_p, cfg_twist, params_twist, prompt_len,
         output_len)
-    print(
-        f"True upper bound estimate (avg over all posterior): {true_all_post_upper_bound_estimate}")
-    print(
-        f"True upper bound estimate (only one posterior): {true_one_post_upper_bound_estimate}")
 
     # kl_q_sigma_estimate = true_all_post_upper_bound_estimate - lower_bound_estimate
     # print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
 
     kl_q_sigma_iwae_upper_bound_estimate = iwae_upper_bound_estimate - f_q_estimate
     kl_q_sigma_iwae_lower_bound_estimate = iwae_lower_bound_estimate - f_q_estimate
-
-    print(f"F(q) (= E[log w]) estimate: {f_q_estimate}")
-
-    print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}")
-
-    print(
-        f"KL(q||sigma) estimate using true log Z: {true_log_z - f_q_estimate}")
-
-    print(
-        f"KL(q||sigma) upper bound (using all true posterior bound on log Z): {true_all_post_upper_bound_estimate - f_q_estimate}")
-
-    print(
-        f"KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_q_sigma_iwae_upper_bound_estimate}")
-    print(
-        f"KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_q_sigma_iwae_lower_bound_estimate}")
-
-    kl_estimate_iwae = iwae_upper_bound_estimate - iwae_lower_bound_estimate
-    print(
-        f"Gap in bounds (KL(prop_iwae||target_iwae) + KL(target_iwae||prop_iwae) estimate): {kl_estimate_iwae}")
 
     rng_key, sk_smc = jax.random.split(rng_key)
     (_, log_z_hat_t), smc_samples = smc_procedure(
@@ -241,7 +146,6 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         token_of_interest_as_int=token_of_interest_as_int)
 
     smc_lower_bound_estimate = log_z_hat_t
-    print(f"SMC lower bound estimate: {smc_lower_bound_estimate}")
 
     rng_key, sk_smc = jax.random.split(rng_key)
     smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
@@ -253,18 +157,10 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
                                             n_vocab,
                                             prepend_tokens_for_twists=True,
                                             token_of_interest_as_int=token_of_interest_as_int)
-    print(f"SMC upper bound estimate: {smc_upper_bound_estimate}")
+
 
     kl_q_sigma_smc_upper_bound_estimate = smc_upper_bound_estimate - f_q_estimate
     kl_q_sigma_smc_lower_bound_estimate = smc_lower_bound_estimate - f_q_estimate
-    print(
-        f"KL(q||sigma) upper bound (using SMC bound on log Z): {kl_q_sigma_smc_upper_bound_estimate}")
-    print(
-        f"KL(q||sigma) lower bound (using SMC bound on log Z): {kl_q_sigma_smc_lower_bound_estimate}")
-
-    kl_estimate_smc = smc_upper_bound_estimate - smc_lower_bound_estimate
-    print(
-        f"Gap in bounds (KL(prop_smc||target_smc) + KL(target_smc||prop_smc) estimate): {kl_estimate_smc}")
 
 
     list_of_things_to_append_for_record_list = \
@@ -294,6 +190,8 @@ def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_
         token_of_interest = ordered_token_list[token_of_interest_as_int]
         extracted_samples = true_posterior_samples_by_token[i]
 
+        print(f"Currently investigating token: {token_of_interest}", flush=True)
+
         _, _, true_log_z = \
             calc_analytic_sigma_vals(prompt, prompt_len, n_vocab,
                                      output_len, cfg_p, params_p,
@@ -309,8 +207,8 @@ def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_
 
         list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_for_index(
             sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist, n_vocab,
-            output_len, log_final_twist, n_test_smc_samples, hist_token_index,
-            token_of_interest_as_int, token_of_interest, extracted_samples,
+            output_len, log_final_twist, n_test_smc_samples,
+            token_of_interest_as_int, extracted_samples,
             true_log_z, analytic_kl_q_sigma)
 
         # if i == 0: # only check a single set of twists for now
@@ -319,8 +217,38 @@ def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_
                 np.array(list_of_things_to_append_for_record_list[j]))
             # records_list_by_twist[i][j].append(list_of_things_to_append_for_record_list[j])
 
-        # else:
-        #     print("No samples to estimate this upper bound on")
+        true_log_z, true_one_post_upper_bound_estimate, \
+        true_all_post_upper_bound_estimate, \
+        iwae_upper_bound_estimate, iwae_lower_bound_estimate, \
+        smc_upper_bound_estimate, smc_lower_bound_estimate, \
+        f_q_estimate, analytic_kl_q_sigma, \
+        kl_q_sigma_iwae_upper_bound_estimate, \
+        kl_q_sigma_iwae_lower_bound_estimate, \
+        kl_q_sigma_smc_upper_bound_estimate, \
+        kl_q_sigma_smc_lower_bound_estimate = (*list_of_things_to_append_for_record_list,)
+
+        print(f"True log Z value: {true_log_z}")
+        print(f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")
+        print(f"IWAE Upper Bound Estimate: {iwae_upper_bound_estimate}")
+        print(f"Num of true posterior samples for token {token_of_interest}: {extracted_samples.shape[0]}")
+        print(f"True upper bound estimate (avg over all posterior): {true_all_post_upper_bound_estimate}")
+        print(f"True upper bound estimate (only one posterior): {true_one_post_upper_bound_estimate}")
+        print(f"F(q) (= E[log w]) estimate: {f_q_estimate}")
+        print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}")
+        print(f"KL(q||sigma) estimate using true log Z: {true_log_z - f_q_estimate}")
+        print(f"KL(q||sigma) upper bound (using all true posterior bound on log Z): {true_all_post_upper_bound_estimate - f_q_estimate}")
+        print(f"KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_q_sigma_iwae_upper_bound_estimate}")
+        print(f"KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_q_sigma_iwae_lower_bound_estimate}")
+        kl_estimate_smc = smc_upper_bound_estimate - smc_lower_bound_estimate
+        kl_estimate_iwae = iwae_upper_bound_estimate - iwae_lower_bound_estimate
+        print(f"SMC lower bound estimate: {smc_lower_bound_estimate}")
+        print(f"SMC upper bound estimate: {smc_upper_bound_estimate}")
+        print(f"KL(q||sigma) upper bound (using SMC bound on log Z): {kl_q_sigma_smc_upper_bound_estimate}")
+        print(f"KL(q||sigma) lower bound (using SMC bound on log Z): {kl_q_sigma_smc_lower_bound_estimate}")
+
+        print(f"Gap in bounds (KL(prop_iwae||target_iwae) + KL(target_iwae||prop_iwae) estimate): {kl_estimate_iwae}")
+        print(f"Gap in bounds (KL(prop_smc||target_smc) + KL(target_smc||prop_smc) estimate): {kl_estimate_smc}")
+
 
         extracted_samples_hist = hist_by_token_index(
             extracted_samples, token_index=hist_token_index)
