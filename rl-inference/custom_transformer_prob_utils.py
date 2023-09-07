@@ -722,7 +722,10 @@ def iwae_forward_and_backward(rng_key, posterior_sample, prompt, cfg_p, params_p
 
     log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p, prompt_len, output_len) \
                                   + evaluate_log_phi_final(combined_seqs, log_final_twist)
-    log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(combined_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len, prepend_tokens_for_twists, token_of_interest_as_int)
+    if proposal_is_p:
+        log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p, prompt_len, output_len)
+    else:
+        log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(combined_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len, prepend_tokens_for_twists, token_of_interest_as_int)
     target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
 
     return proposal_dist_weights, target_dist_weights, f_q_estimate
@@ -772,10 +775,14 @@ def smc_backward(rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, 
 #     return log_w_t_no_reset.mean(), log_w_t_no_reset[log_w_t_no_reset > -jnp.inf]
 
 
-def upper_bound_log_Z_sigma_estimate(posterior_samples, log_final_twist, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
+def upper_bound_log_Z_sigma_estimate(posterior_samples, log_final_twist, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
+                                     output_len, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, proposal_is_p=False):
     log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(posterior_samples, cfg_p, params_p, prompt_len, output_len) \
                                   + evaluate_log_phi_final(posterior_samples, log_final_twist)
-    log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(posterior_samples, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len, prepend_tokens_for_twists, token_of_interest_as_int)
+    if proposal_is_p:
+        log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(posterior_samples, cfg_p, params_p, prompt_len, output_len)
+    else:
+        log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(posterior_samples, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len, prepend_tokens_for_twists, token_of_interest_as_int)
 
     # print(log_unnormalized_sigma_vals)
     # print(log_unnormalized_sigma_vals.shape)
@@ -937,10 +944,15 @@ def get_analytic_sigma_sample(subkey, jnp_prompt, prompt_len, n_vocab, output_le
     return samples
 
 
-def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist, log_final_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
+def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist,
+                     log_final_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, # proposal_is_p=False
+                     ):
     analytic_log_sigma_vals, all_seqs, _ = \
         calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_final_twist, return_log=True)
 
+    # if proposal_is_p:
+    #     analytic_log_q_t_vals = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p, prompt_len, output_len)
+    # else:
     analytic_log_q_t_vals = evaluate_normalized_log_q_1_to_t(all_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len, prepend_tokens_for_twists, token_of_interest_as_int)
 
     # print(analytic_log_sigma_vals.shape)
