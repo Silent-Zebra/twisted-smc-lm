@@ -20,7 +20,7 @@ import numpy as np
 
 from custom_transformer import transformer_init_params, stochastic_transformer_sample
 
-from custom_transformer_prob_utils import calc_analytic_kl, \
+from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_final, smc_scan_iter_final, \
     get_l_dre_roger_jit, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
     get_analytic_sigma_sample, upper_bound_log_Z_sigma_estimate, \
     iwae_forward_and_backward, smc_backward
@@ -76,7 +76,8 @@ class ExperimentConfig:
         return batch_rm
 
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
-                              params_p, cfg_twist, params_twist, log_final_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
+                              params_p, cfg_twist, params_twist, log_final_twist, prepend_tokens_for_twists=False,
+                              token_of_interest_as_int=-1, proposal_is_p=False):
         if self.dre_type == "analytic_mse_rel" or self.dre_type == "analytic_mse_abs":
             grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
                                             params_p, log_final_twist, cfg_twist,
@@ -85,18 +86,21 @@ class ExperimentConfig:
             grad_params_twist = self.dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist,
                                                  params_twist, log_final_twist, output_len,
                                                  n_twist, prepend_tokens_for_twists=prepend_tokens_for_twists,
-                                                 token_of_interest_as_int=token_of_interest_as_int)
+                                                 token_of_interest_as_int=token_of_interest_as_int,
+                                                 proposal_is_p=proposal_is_p)
         return grad_params_twist
 
 
-@partial(jax.jit, static_argnames=["log_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len", "cfg_p", "cfg_twist", "token_of_interest_as_int"])
+@partial(jax.jit, static_argnames=["log_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
+                                   "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p"])
 def inspect_and_record_evidence_setting_for_index(rng_key,
                                         prompt,
                                         prompt_len, cfg_p, params_p, cfg_twist,
                                         params_twist, n_vocab, output_len,
                                         log_final_twist,
                                         n_test_smc_samples, token_of_interest_as_int,
-                                                  extracted_samples, true_log_z, analytic_kl_q_sigma):
+                                                  extracted_samples, true_log_z, analytic_kl_q_sigma,
+                                                  proposal_is_p=False):
 
     assert extracted_samples.shape[0] > 0
 
@@ -109,7 +113,8 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         output_len, n_test_smc_samples,
         n_vocab,
         prepend_tokens_for_twists=True,
-        token_of_interest_as_int=token_of_interest_as_int)
+        token_of_interest_as_int=token_of_interest_as_int,
+        proposal_is_p=proposal_is_p)
     iwae_lower_bound_estimate = jax.nn.logsumexp(
         iwae_log_w_lower) - jnp.log(
         iwae_log_w_lower.shape[0])
@@ -143,7 +148,8 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         analytic_sigma_sample=False,
         n_vocab=n_vocab,
         prepend_tokens_for_twists=True,
-        token_of_interest_as_int=token_of_interest_as_int)
+        token_of_interest_as_int=token_of_interest_as_int,
+    proposal_is_p=proposal_is_p)
 
     smc_lower_bound_estimate = log_z_hat_t
 
@@ -177,7 +183,8 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     return list_of_things_to_append_for_record_list, smc_samples
 
 def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_posterior_samples_by_token, prompt, prompt_len, cfg_p, params_p, cfg_twist,
-                             params_twist, n_vocab, output_len, log_final_twist_not_yet_indexed, n_test_smc_samples, hist_token_index, records_list_by_twist):
+                             params_twist, n_vocab, output_len, log_final_twist_not_yet_indexed, n_test_smc_samples, hist_token_index,
+                                        records_list_by_twist, proposal_is_p=False):
 
     # Note: mutuates records_list_by_twist
 
@@ -209,7 +216,7 @@ def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_
             sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist, n_vocab,
             output_len, log_final_twist, n_test_smc_samples,
             token_of_interest_as_int, extracted_samples,
-            true_log_z, analytic_kl_q_sigma)
+            true_log_z, analytic_kl_q_sigma, proposal_is_p)
 
         # if i == 0: # only check a single set of twists for now
         for j in range(len(list_of_things_to_append_for_record_list)):
@@ -392,16 +399,6 @@ def main():
 
     records_list_by_prompt_then_twist = [[[[] for _ in records_labels_list] for _ in log_final_twists[prompt_num]] for prompt_num in range(len(prompts))]
 
-    # # adv_rewards = []
-    # # p_rewards = []
-    # # indist_probs = {"bad":[], "good":[], "evasive":[]}
-    # # ood_probs = {"bad":[], "good":[], "evasive":[]}
-    # true_log_Z_record = []
-    # upper_bound_one_posterior_record = []
-    # upper_bound_iwae_record = []
-    # upper_bound_smc_record = []
-    # lower_bound_iwae_record = []
-    # lower_bound_smc_record = []
 
     if args.rm_type == "indicator_at_index" and args.indicator_pos_zero_index == args.output_len - 1:
         hist_token_index = -2
@@ -462,14 +459,34 @@ def main():
                         # full_seq = jnp.concatenate((batch_prompt, output),
                         #                            axis=1)
                         # t = 0
-                        # carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_w_t_no_reset, args.output_len,
+                        # carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, args.output_len,
                         #          params_p, params_twist, prompt_len, log_z_hat_t)
+                        # carry, _ = smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist,
+                        #                         prepend_tokens_for_twists=True,
+                        #                         token_of_interest_as_int=token_of_interest_as_int,
+                        #                         resample=True, proposal_is_p=True
+                        #                         )
+                        # t += 1
+                        # carry, _ = smc_scan_iter_non_final(carry, t, cfg_p,
+                        #                                    cfg_twist,
+                        #                                    prepend_tokens_for_twists=True,
+                        #                                    token_of_interest_as_int=token_of_interest_as_int,
+                        #                                    resample=True, proposal_is_p=True
+                        #                                    )
+                        # smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, args.output_len,
+                        #          cfg_p, params_p, cfg_twist, params_twist, prompt_len, True, log_final_twist[i], log_z_hat_t,
+                        #                         prepend_tokens_for_twists=True,
+                        #                         token_of_interest_as_int=token_of_interest_as_int,
+                        #                         resample=True, proposal_is_p=True
+                        #                         )
+                        # 1/0
+
                         # smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist,
                         #                         prepend_tokens_for_twists=True,
                         #                         token_of_interest_as_int=token_of_interest_as_int,
                         #                         resample=True,
                         #                         true_posterior_sample=posterior_sample)
-                        #
+                        # #
                         # smc_samples_test = smc_procedure(sk, prompt, cfg_p,
                         #                                  params_p, cfg_twist,
                         #                                  params_twist,
@@ -478,14 +495,17 @@ def main():
                         #                                  intermediate_sample_history=False,
                         #                                  prepend_tokens_for_twists=True, token_of_interest_as_int=token_of_interest_as_int,
                         #                                  resample=True, posterior_sample=posterior_sample)
-                        # print(smc_samples_test)
+
 
                         rng_key, sk = jax.random.split(rng_key)
                         grad_params_twist = experiment_cfg.get_grad_params_twist(
                             sk, prompt, args.n_vocab, args.n_twist,
                             args.output_len, cfg_p, params_p, cfg_twist,
                             params_twist, log_final_twist[i],
-                            prepend_tokens_for_twists=True, token_of_interest_as_int=token_of_interest_as_int) # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
+                            prepend_tokens_for_twists=True,
+                            token_of_interest_as_int=token_of_interest_as_int,
+                            proposal_is_p=args.proposal_is_p
+                        ) # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
                         updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
                         params_twist = optax.apply_updates(params_twist, updates_twist)
 
@@ -493,7 +513,11 @@ def main():
 
                     rng_key, sk = jax.random.split(rng_key)
 
-                    grad_params_twist = experiment_cfg.get_grad_params_twist(sk, prompt, args.n_vocab, args.n_twist, args.output_len, cfg_p, params_p, cfg_twist, params_twist, log_final_twist)
+                    grad_params_twist = experiment_cfg.get_grad_params_twist(
+                        sk, prompt, args.n_vocab, args.n_twist, args.output_len,
+                        cfg_p, params_p, cfg_twist, params_twist, log_final_twist,
+                        proposal_is_p=args.proposal_is_p
+                    )
 
                     updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
                     params_twist = optax.apply_updates(params_twist, updates_twist)
@@ -524,7 +548,8 @@ def main():
                                                             log_final_twist,
                                                             args.n_test_smc_samples,
                                                             hist_token_index,
-                                                            records_list_by_twist)
+                                                            records_list_by_twist,
+                                                            args.proposal_is_p)
 
 
                     # bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
@@ -668,6 +693,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--indicator_pos_zero_index", type=int, default=0)
     parser.add_argument("--n_true_posterior_samples", type=int, default=10)
+    parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
 
     args = parser.parse_args()
 
