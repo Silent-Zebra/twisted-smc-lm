@@ -125,12 +125,12 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
         extracted_samples, log_final_twist, cfg_p,
         params_p, cfg_twist, params_twist, prompt_len,
-        output_len)
+        output_len, proposal_is_p=proposal_is_p)
 
     true_one_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
         posterior_sample[None, :], log_final_twist, cfg_p,
         params_p, cfg_twist, params_twist, prompt_len,
-        output_len)
+        output_len, proposal_is_p=proposal_is_p)
 
     # kl_q_sigma_estimate = true_all_post_upper_bound_estimate - lower_bound_estimate
     # print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
@@ -162,7 +162,8 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
                                             n_test_smc_samples,
                                             n_vocab,
                                             prepend_tokens_for_twists=True,
-                                            token_of_interest_as_int=token_of_interest_as_int)
+                                            token_of_interest_as_int=token_of_interest_as_int,
+                                            proposal_is_p=proposal_is_p)
 
 
     kl_q_sigma_smc_upper_bound_estimate = smc_upper_bound_estimate - f_q_estimate
