@@ -152,13 +152,13 @@ def get_l_dre_sixo(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_par
 
 
 
-def get_l_dre_roger_no_scan(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
+def get_l_dre_ebm_ml_no_scan(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
     key, sk1, sk2 = jax.random.split(key, 3)
     x, y = get_p_theta_x_y_samples(sk2, alpha, n, T)
     x_f = x # idea here is we can use the same x; x is drawn the same way; just now we need to draw a y at every point in time, based on the twists
     # Can also try using separately drawn x, like in the SIXO formulation, and throwing away y
     # and for the xs that we have drawn
-    # f is like the f in Roger's doc (may not be exactly analogous here, but similar idea)
+    # f is like the f in ebm's doc (may not be exactly analogous here, but similar idea)
     l_dre = 0.
     for t in range(T):
         key, subkey = jax.random.split(key)
@@ -177,7 +177,7 @@ def get_l_dre_roger_no_scan(key, alpha, n, T, g_coeff_params, g_bias_params, sig
     return l_dre
 
 @jit
-def get_l_dre_roger_t(carry, scanned):
+def get_l_dre_ebm_ml_t(carry, scanned):
     prev_l_dre, y_T, key = carry
     x_f_t, x_t, g_c_t, g_b_t, sigma2_r_t = scanned
     key, subkey = jax.random.split(key)
@@ -189,21 +189,21 @@ def get_l_dre_roger_t(carry, scanned):
 
 
 @partial(jax.jit, static_argnames=['n', 'T'])
-def get_l_dre_roger(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
+def get_l_dre_ebm_ml(key, alpha, n, T, g_coeff_params, g_bias_params, sigma2_r_params):
     key, sk1, sk2 = jax.random.split(key, 3)
     x, y = get_p_theta_x_y_samples(sk1, alpha, n, T)
     # x_f = x # idea here is we can use the same x; x is drawn the same way; just now we need to draw a y at every point in time, based on the twists
     # Can also try using separately drawn x, like in the SIXO formulation, and throwing away y
     x_f, _ = get_p_theta_x_y_samples(sk2, alpha, n, T)
     # and for the xs that we have drawn
-    # f is like the f in Roger's doc (may not be exactly analogous here, but similar idea)
+    # f is like the f in ebm's doc (may not be exactly analogous here, but similar idea)
     l_dre = 0.
     scan_over = [x_f, x, g_coeff_params, g_bias_params, sigma2_r_params]
-    (l_dre, _, _), _ = jax.lax.scan(get_l_dre_roger_t, (l_dre, y, key), scan_over, T)
+    (l_dre, _, _), _ = jax.lax.scan(get_l_dre_ebm_ml_t, (l_dre, y, key), scan_over, T)
     l_dre /= T
 
     # scan_over = [x_f[:-1], x[:-1], g_coeff_params[:-1], g_bias_params[:-1], sigma2_r_params[:-1]]
-    # (l_dre, _, _), _ = jax.lax.scan(get_l_dre_roger_t, (l_dre, y, key),
+    # (l_dre, _, _), _ = jax.lax.scan(get_l_dre_ebm_ml_t, (l_dre, y, key),
     #                                 scan_over, T - 1)
     # l_dre /= (T - 1)
 
@@ -718,9 +718,9 @@ if __name__ == "__main__":
 
         smc_p_grad_fn = jax.grad(smc_wrapper, argnums=[1, 2, 3, 4, 6])
 
-        use_roger_dre = True
-        if use_roger_dre:
-            dre_grad_fn = jax.grad(get_l_dre_roger, argnums=[4, 5, 6])
+        use_ebm_dre = True
+        if use_ebm_dre:
+            dre_grad_fn = jax.grad(get_l_dre_ebm_ml, argnums=[4, 5, 6])
 
         else:
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=[4, 5, 6])

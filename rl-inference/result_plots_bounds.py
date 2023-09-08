@@ -8,11 +8,12 @@ from flax.training import checkpoints
 
 load_dir = "."
 
-epochs = 20
+epochs = 40
 load_prefixes_to_use = [
-    "checkpoint_2023-09-04_23-46_seed42_prompt0_epoch20",
+    "checkpoint_2023-09-07_03-14_seed42_prompt0_epoch40",
 ]
 total_n_twists = 9
+
 
 records_labels_list = ["True Log Z",
                        "Upper Bound Estimate (One Posterior)",
