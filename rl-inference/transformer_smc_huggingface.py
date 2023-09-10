@@ -415,7 +415,7 @@ def get_all_new_seqs_single_t(seq, n_vocab):
 
 
 
-def get_proposal_q_sample_for_scan(rng_key, full_seq, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, t):
+def get_proposal_q_sample(rng_key, full_seq, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, prompt_len, t):
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
     # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
     # TODO NOTE train = False here for better sampling, but that means no dropout - if you were to train on this (right now I don't), you might want to set train=True for dropout regularization
@@ -570,7 +570,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     # else:
     # New implementation: do the below always, (proposal always from twists, to avoid absurd amounts of calculation on n_vocab * batch number of seqs for the reward model)
     # If using final twist (ie. sigma samples, the positive samples), the only difference will be in the psi_t_eval later:
-    rng_key, full_seq, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+    rng_key, full_seq, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample(
         rng_key, full_seq, trainstate_p, params_of_trainstate_p,
         trainstate_twist, params_of_trainstate_twist, prompt_len, t)
 
@@ -641,7 +641,7 @@ def smc_scan_iter_non_final(carry, t):
 
     log_w_t_minus_1 = log_w_t
 
-    rng_key, full_seq, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample_for_scan(
+    rng_key, full_seq, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample(
         rng_key, full_seq, trainstate_p, params_of_trainstate_p,
         trainstate_twist, params_of_trainstate_twist, prompt_len, t)
 

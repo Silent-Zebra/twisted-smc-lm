@@ -21,7 +21,8 @@ import numpy as np
 from custom_transformer import transformer_init_params, stochastic_transformer_sample
 
 from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_final, smc_scan_iter_final, \
-    get_l_dre_ebm_ml_jit, get_l_dre_ebm_ml_w_q_resample_jit, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
+    get_l_dre_ebm_ml_jit, get_l_dre_ebm_ml_w_q_resample_jit, get_l_dre_one_total_kl, \
+    get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
     get_analytic_sigma_sample, upper_bound_log_Z_sigma_estimate, \
     iwae_forward_and_backward, smc_backward
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, \
@@ -38,7 +39,6 @@ class ExperimentConfig:
         self.n_vocab = n_vocab
         self.analytic_sigma_sample = analytic_sigma_sample
         self.dre_type = dre_type.lower()
-        assert self.dre_type in ["ebm", "ebm_q_rsmp", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
         self.dre_grad_fn = self._get_dre_grad_fn()
 
         self.rm_type = rm_type.lower()
@@ -53,6 +53,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_dre_ebm_ml_jit, argnums=5)
         elif self.dre_type == "ebm_q_rsmp":
             dre_grad_fn = jax.grad(get_l_dre_ebm_ml_w_q_resample_jit, argnums=5)
+        elif self.dre_type == "one_total_kl":
+            dre_grad_fn = jax.grad(get_l_dre_one_total_kl, argnums=5)
         elif self.dre_type == "sixo":
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         elif self.dre_type == "analytic_mse_rel":
@@ -689,7 +691,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_vocab", type=int, default=2,
                         help="Num of tokens in vocab")
 
-    parser.add_argument("--dre_type", type=str, default="ebm", choices=["ebm", "ebm_q_rsmp", "sixo"])
+    parser.add_argument("--dre_type", type=str, default="ebm", choices=["ebm", "ebm_q_rsmp", "one_total_kl", "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=42)
