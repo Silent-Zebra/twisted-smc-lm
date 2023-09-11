@@ -54,7 +54,7 @@ def get_all_new_seqs_single_t(seq, n_vocab):
     return all_new_seqs
 
 
-def evaluate_output_psi(seq, cfg_twist, params_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
+def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
     if prepend_tokens_for_twists:
         assert token_of_interest_as_int >= 0
         return batch_transformer_with_prepend_token_of_interest(token_of_interest_as_int)(cfg_twist, params_twist, seq)
@@ -66,7 +66,7 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
     # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
 
-    log_p_plus_log_psi = get_log_p_plus_psi(full_seq, params_p, params_twist, prompt_len, t,
+    log_p_plus_log_psi = get_log_p_plus_log_psi(full_seq, params_p, params_twist, prompt_len, t,
                                             cfg_p, cfg_twist, prepend_tokens_for_twists, token_of_interest_as_int)
 
     rng_key, subkey = jax.random.split(rng_key)
@@ -126,12 +126,12 @@ def get_proposal_q_sample_naive(rng_key, full_seq, cfg_p, params_p, prompt_len, 
 #
 #     # print(all_new_seqs.shape) # shape (batch, n_vocab, seq_len) (seq len includes the prompt len and output len)
 #
-#     output_psi_batch = final_twist(all_new_seqs)
+#     log_psi_batch = final_twist(all_new_seqs)
 #
 #     # Again the output_unnormalized_batch[:,-1,:] needs a log_softmax for the log probabilities to be correct
 #     # However the final twist is just the - beta r(s) which is the same as exp of that followed by log.
 #     # So no additional transformations needed, just add it directly to the logsoftmax of the output of the model
-#     log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]) + output_psi_batch # psi is already in log space
+#     log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,-1,:]) + log_psi_batch # psi is already in log space
 #     indices_to_use = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(output_unnormalized_batch.shape[0],))
 #
 #     seq = jnp.concatenate((seq, indices_to_use[:, None]), axis=1)
@@ -148,10 +148,10 @@ def get_proposal_q_sample_naive(rng_key, full_seq, cfg_p, params_p, prompt_len, 
 #
 #     return rng_key, seq, log_Z_s_1_to_t_minus_1
 
-def get_log_p_plus_psi(full_seq, params_p, params_twist, prompt_len, t, cfg_p, cfg_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
+def get_log_p_plus_log_psi(full_seq, params_p, params_twist, prompt_len, t, cfg_p, cfg_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
     output_unnormalized_batch = batch_transformer(cfg_p, params_p, full_seq)
 
-    output_psi_batch = evaluate_output_psi(full_seq, cfg_twist, params_twist,
+    log_psi_batch = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
                                            prepend_tokens_for_twists,
                                            token_of_interest_as_int)
 
@@ -159,13 +159,13 @@ def get_log_p_plus_psi(full_seq, params_p, params_twist, prompt_len, t, cfg_p, c
     # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
     # And then we set full_seq at index 4 with the newly generated tokens
     log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,prompt_len + t - 1,:]) \
-                         + output_psi_batch[:,prompt_len + t - 1,:] # psi is already in log space
+                         + log_psi_batch[:,prompt_len + t - 1,:] # psi is already in log space
 
     return log_p_plus_log_psi
 
 
 def evaluate_normalized_log_q_t_given_1_to_t_minus_1(full_seq, params_p, params_twist, prompt_len, t, cfg_p, cfg_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
-    log_p_plus_log_psi = get_log_p_plus_psi(full_seq, params_p, params_twist, prompt_len, t,
+    log_p_plus_log_psi = get_log_p_plus_log_psi(full_seq, params_p, params_twist, prompt_len, t,
                                             cfg_p, cfg_twist, prepend_tokens_for_twists, token_of_interest_as_int)
 
     log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
@@ -187,9 +187,9 @@ def evaluate_and_add_normalized_log_q_t_given_1_to_t_minus_1(carry, t, cfg_p, cf
 
     # output_unnormalized_batch = batch_transformer(cfg_p, params_p, full_seq)
     #
-    # output_psi_batch = evaluate_output_psi(full_seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int)
+    # log_psi_batch = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int)
     #
-    # log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,prompt_len + t - 1,:]) + output_psi_batch[:,prompt_len + t - 1,:] # psi is already in log space
+    # log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,prompt_len + t - 1,:]) + log_psi_batch[:,prompt_len + t - 1,:] # psi is already in log space
     #
     # log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
     #
@@ -233,7 +233,7 @@ def evaluate_normalized_log_q_1_to_t(full_seq, cfg_p, params_p, cfg_twist, param
 def evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
     # Takes in sequences s_{1:t} of (n_batch, seq_length) shape
     # Evaluate log psi (s_{1:t})
-    output_psi = evaluate_output_psi(seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int)
+    log_psi = get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int)
 
     # If I use a single transformer, essentially I am doing a kind of weight tying between the different psi_t (which should be desirable)
     # I could use a separate transformer for each psi_t but that seems a little inefficient
@@ -250,7 +250,7 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists=F
     # we cannot constrain the psi (psi, or at least the output from the twist, is not a probability). We also have a choice: we can make the twist directly
     # represent exp(-beta r(s)), or we can make it represent the log of that, -beta r(s).
     # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
-    return output_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
+    return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
 def evaluate_log_phi_final(seq, log_true_final_twist):
     return log_true_final_twist(seq) # THIS ONLY WORKS ASSUMING in the case e.g. of phi = e^(-beta r(s)), then log phi = -beta r(s)
@@ -335,17 +335,18 @@ def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t
 def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
     # see def evaluate_log_psi_t for more comments/detail
     # Similar also to evaluate_log_p_theta_t_full_seq, except adapting evaluate_log_psi_t instead of adapting evaluate_log_p_theta_t
-    output_psi = evaluate_output_psi(full_seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int)
+    log_psi = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int)
     token_indices = full_seq[:,prompt_len_plus_t]
-    return output_psi[:,prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
+    return log_psi[:,prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
 
-# TODO THink about - there's probably some way to avoid having to train a separate positive twist but maybe we can just do that at first as a proof of concept for the idea even if inefficient.
-# Remember that when psi is trained it is prop to phi, which is e^(-beta r(s)). So if we want something prop to e^(beta r(s)), then we need...?
-# Well, if psi = c e^ (-beta r(s)), then log psi = log c  - beta r(s). So if you want log_neg_psi = log c + beta r(s) and you have log c - beta r(s)...
-# def evaluate_log_neg_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t):
-#     log_psi_t = evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t)
-#     log_neg_psi_t = jnp.exp(log_psi_t) * -1.
-
+def evaluate_log_psi_t_for_scan(carry, t, cfg_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
+    # see def evaluate_log_psi_t for more comments/detail
+    # Similar also to evaluate_log_psi_t_full_seq, just in a scan loop
+    full_seq, prompt_len, params_twist = carry
+    output_value = evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len + t,
+                                               prepend_tokens_for_twists, token_of_interest_as_int)
+    carry = (full_seq, prompt_len, params_twist)
+    return carry, output_value
 
 
 def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, resample=True,
@@ -1053,6 +1054,7 @@ def get_l_dre_ebm_ml_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twi
 
     l_dre = 0.
 
+    # Get q samples with no resampling anywhere
     _, _, (intermediate_twist_samples_hist, intermediate_log_w_t_hist) = smc_procedure(
         sk2, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len, n_twist,
         get_intermediate_sample_history_based_on_learned_twists=True,
@@ -1119,41 +1121,6 @@ def get_l_dre_ebm_ml_w_q_resample_jit(rng_key, prompt, cfg_p, params_p, cfg_twis
 
 
 
-def get_proposal_q_sample_all_t(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
-    # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
-    # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
-
-    output_unnormalized_batch = batch_transformer(cfg_p, params_p, full_seq)
-
-    output_psi_batch = evaluate_output_psi(full_seq, cfg_twist, params_twist,
-                                           prepend_tokens_for_twists,
-                                           token_of_interest_as_int)
-
-    print(output_unnormalized_batch.shape)
-
-    log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch, axis=-1) + output_psi_batch  # psi is already in log space
-
-    print(log_p_plus_log_psi.shape)
-    print(log_p_plus_log_psi.shape[0:2])
-    1/0
-
-    rng_key, subkey = jax.random.split(rng_key)
-
-    indices_to_use = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(log_p_plus_log_psi.shape[0:2]))
-
-    print(indices_to_use)
-    1/0
-
-    full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
-
-    log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
-
-    unnormalized_log_q_t = log_p_plus_log_psi[
-        jnp.arange(indices_to_use.shape[0]), indices_to_use]
-
-    normalized_log_q_t = unnormalized_log_q_t - log_Z_s_1_to_t_minus_1
-
-    return rng_key, full_seq, normalized_log_q_t
 
 # def get_l_dre_one_total_kl_scan_iter(carry, scan_over, cfg_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
 #     l_dre, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, rng_key = carry
@@ -1229,4 +1196,79 @@ def get_l_dre_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_t
 
     l_dre /= (output_len)
     return -l_dre  # negative because now we have a loss
+
+
+
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p", "evaluate_over_samples_from"])
+def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                        output_len, n_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, proposal_is_p=False,
+                            evaluate_over_samples_from="p"):
+    prompt_len = prompt.shape[-1]
+
+    rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
+
+    if evaluate_over_samples_from == "p":
+        samples_to_evaluate_over = stochastic_transformer_sample(sk1, cfg_p, params_p, prompt, output_len, n_twist)
+    elif evaluate_over_samples_from == "q":
+        # Get q samples with no resampling anywhere
+        _, _, (intermediate_twist_samples_hist,
+               intermediate_log_w_t_hist) = smc_procedure(
+            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            log_true_final_twist, output_len, n_twist,
+            get_intermediate_sample_history_based_on_learned_twists=True,
+            prepend_tokens_for_twists=prepend_tokens_for_twists,
+            token_of_interest_as_int=token_of_interest_as_int,
+            proposal_is_p=proposal_is_p,
+            resample=False
+        )
+        samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
+        print(samples_to_evaluate_over.shape)
+    elif evaluate_over_samples_from == "sigma":
+        # Approximate sigma samples
+        _, samples_to_evaluate_over = smc_procedure(
+            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            log_true_final_twist, output_len, n_twist,
+            prepend_tokens_for_twists=prepend_tokens_for_twists,
+            token_of_interest_as_int=token_of_interest_as_int,
+            proposal_is_p=proposal_is_p,
+            resample=True
+        )
+    else:
+        raise NotImplementedError
+
+    log_psi = get_log_psi_all_vocab(samples_to_evaluate_over, cfg_twist, params_twist,
+                                     prepend_tokens_for_twists,
+                                     token_of_interest_as_int)
+
+    output_unnormalized = batch_transformer(cfg_p, params_p, samples_to_evaluate_over)
+    log_p = jax.nn.log_softmax(output_unnormalized, axis=-1) # gives you the normalized p values, since the regular output is the unnormalized log p values
+
+    target_term = jax.nn.logsumexp((log_p + log_psi)[:, prompt_len:], axis=-1) # first we get log(p psi), then we do exp, so we have p psi (psi = e^V), then we sum all the (p psi), then we log again. Therefore logsumexp. We use axis = -1 because we want to preserve the different values across different time steps. Essentially doing all the different time steps in one go
+    # Note that both log p and log psi are over the set of next tokens. E.g. at the very last time step T they are both over T+1
+    # This is in contrast to the evaluation (the "values" below which are evaluating the token at time step T using the twist T-1.
+    # So we already have everything we need, no need to shift time steps by 1 or whatever
+    # However, the T+1 twists are never trained (ie the output of psi at the last token s_T). So perhaps what we need to do is for the learned twists at time T, simply do a mean square error
+    # with the actual twist at time T, the true log phi value.
+    # So just replace the last time step target with the log phi value.
+    target_term = target_term.at[:, -1].set(evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist))
+    target_term = jax.lax.stop_gradient(target_term)
+
+
+    carry = (samples_to_evaluate_over, prompt_len, params_twist)
+    scan_over = jnp.arange(output_len) # The last item is a dummy value, since we aren't resampling the prompt with twist sample anyway, so we don't need it
+    _, values = jax.lax.scan(partial(evaluate_log_psi_t_for_scan,
+                                    cfg_twist=cfg_twist,
+                                    prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                    token_of_interest_as_int=token_of_interest_as_int),
+                            carry, scan_over,
+                            output_len)
+
+    values = jnp.transpose(values)
+
+    squared_error_loss = ((values - target_term) ** 2).sum(axis=-1).mean()
+
+    # TODO afterwards: logsumexp or whatever the other RL formulation was.
+
+    return squared_error_loss
 

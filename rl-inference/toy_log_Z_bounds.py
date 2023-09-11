@@ -22,7 +22,7 @@ from custom_transformer import transformer_init_params, stochastic_transformer_s
 
 from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_final, smc_scan_iter_final, \
     get_l_dre_ebm_ml_jit, get_l_dre_ebm_ml_w_q_resample_jit, get_l_dre_one_total_kl, \
-    get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
+    get_twist_loss_rl_based, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
     get_analytic_sigma_sample, upper_bound_log_Z_sigma_estimate, \
     iwae_forward_and_backward, smc_backward
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, \
@@ -55,6 +55,12 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_dre_ebm_ml_w_q_resample_jit, argnums=5)
         elif self.dre_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_dre_one_total_kl, argnums=5)
+        elif self.dre_type == "rl_based_p_sample":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p"), argnums=5)
+        elif self.dre_type == "rl_based_q_sample":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q"), argnums=5)
+        elif self.dre_type == "rl_based_sigma_sample":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma"), argnums=5)
         elif self.dre_type == "sixo":
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         elif self.dre_type == "analytic_mse_rel":
@@ -445,7 +451,7 @@ def main():
 
                         token_of_interest_as_int = indices_of_tokens_chosen[i]
 
-                        # # evaluate_output_psi(p_samples_for_test, cfg_twist, params_twist,
+                        # # get_log_psi_all_vocab(p_samples_for_test, cfg_twist, params_twist,
                         # #                     True, token_of_interest_as_int)
                         #
                         # extracted_samples = true_posterior_samples_by_token[i]
@@ -691,7 +697,10 @@ if __name__ == "__main__":
     parser.add_argument("--n_vocab", type=int, default=2,
                         help="Num of tokens in vocab")
 
-    parser.add_argument("--dre_type", type=str, default="ebm", choices=["ebm", "ebm_q_rsmp", "one_total_kl", "sixo"])
+    parser.add_argument("--dre_type", type=str, default="ebm",
+                        choices=["ebm", "ebm_q_rsmp", "one_total_kl",
+                                 "rl_based_p_sample", "rl_based_q_sample",
+                                 "rl_based_sigma_sample", "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=42)

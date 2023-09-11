@@ -424,14 +424,14 @@ def get_proposal_q_sample(rng_key, full_seq, trainstate_p, params_of_trainstate_
     # print(output_unnormalized_batch.shape)
 
 
-    output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq, params=params_of_trainstate_twist, train=False)
+    log_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq, params=params_of_trainstate_twist, train=False)
 
     rng_key, subkey = jax.random.split(rng_key)
 
     # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
     # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
     # And then we set full_seq at index 4 with the newly generated tokens
-    log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:, prompt_len + t - 1,:]) + output_psi_batch[:, prompt_len + t - 1,:] # psi is already in log space
+    log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:, prompt_len + t - 1,:]) + log_psi_batch[:, prompt_len + t - 1,:] # psi is already in log space
     indices_to_use = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(output_unnormalized_batch.shape[0],))
 
     full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
@@ -537,15 +537,15 @@ def evaluate_log_psi_t_full_seq(full_seq, trainstate_twist, params_of_trainstate
     # see def evaluate_log_psi_t for more comments/detail
     # Similar also to evaluate_log_p_theta_t_full_seq, except adapting evaluate_log_psi_t instead of adapting evaluate_log_p_theta_t
     if args.use_dropout:
-        output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
+        log_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
                                                           params=params_of_trainstate_twist,
                                                           train=True, dropout_rng=dropout_rng)
     else:
-        output_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
+        log_psi_batch = trainstate_twist.apply_fn(input_ids=full_seq,
                                                      params=params_of_trainstate_twist,
                                                      train=False)
     token_indices = full_seq[:, prompt_len_plus_t]
-    return output_psi_batch[:, prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
+    return log_psi_batch[:, prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
 
 
 def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, log_z_hat_t,
