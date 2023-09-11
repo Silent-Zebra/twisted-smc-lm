@@ -23,7 +23,7 @@ from custom_transformer import transformer_init_params
 
 from ppo_custom import ppo_and_value_loss
 from custom_transformer_rl_loss import rl_loss, rl_loss_custom_baselinep, rl_loss_custom_mixed_sampling, rl_loss_custom_extremes
-from custom_transformer_prob_utils import get_all_seqs_up_to_output_len, evaluate_log_p_theta_1_to_t, get_l_dre_ebm_ml_jit, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals
+from custom_transformer_prob_utils import get_all_seqs_up_to_output_len, evaluate_log_p_theta_1_to_t, get_l_ebm_ml_jit, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, tokens_to_jnp_indices, ordered_token_list, inspect_one_bad_info, inspect_bad_word_info, inspect_bad_word_reward, inspect_varied_info, indices_to_tokens, print_bad_word_env_generations, batch_reward_model, build_log_true_final_twists, neg_beta_times_batch_reward_model_curry, reward_model_one_bad, reward_model_varied, reward_model_bad_word
 
 
@@ -64,11 +64,11 @@ def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state
 
 
 class ExperimentConfig:
-    def __init__(self, n_vocab, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0, analytic_sigma_sample=False):
+    def __init__(self, n_vocab, twist_learn_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0, analytic_sigma_sample=False):
         self.n_vocab = n_vocab
         self.analytic_sigma_sample = analytic_sigma_sample
-        self.dre_type = dre_type.lower()
-        assert self.dre_type in ["ebm", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
+        self.twist_learn_type = twist_learn_type.lower()
+        assert self.twist_learn_type in ["ebm", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
         self.dre_grad_fn = self._get_dre_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
@@ -105,15 +105,15 @@ class ExperimentConfig:
             raise NotImplementedError
 
     def _get_dre_grad_fn(self):
-        if self.dre_type == "ebm":
-            # dre_grad_fn = jax.grad(get_l_dre_ebm_ml, argnums=5)
-            dre_grad_fn = jax.grad(get_l_dre_ebm_ml_jit, argnums=5)
-        elif self.dre_type == "sixo":
+        if self.twist_learn_type == "ebm":
+            # dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
+            dre_grad_fn = jax.grad(get_l_ebm_ml_jit, argnums=5)
+        elif self.twist_learn_type == "sixo":
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
-        elif self.dre_type == "analytic_mse_rel":
+        elif self.twist_learn_type == "analytic_mse_rel":
             dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
                                    argnums=7)
-        elif self.dre_type == "analytic_mse_abs":
+        elif self.twist_learn_type == "analytic_mse_abs":
             dre_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal,
                                    argnums=7)
         else:
@@ -136,7 +136,7 @@ class ExperimentConfig:
 
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
                               params_p, cfg_twist, params_twist, log_true_final_twist):
-        if self.dre_type == "analytic_mse_rel" or self.dre_type == "analytic_mse_abs":
+        if self.twist_learn_type == "analytic_mse_rel" or self.twist_learn_type == "analytic_mse_abs":
             grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
                                             params_p, log_true_final_twist, cfg_twist,
                                             params_twist, self.rm_type)
@@ -396,7 +396,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="ebm", rm_type="one_bad",
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, twist_learn_type="ebm", rm_type="one_bad",
                                           rl_loss_type="custom", beta_kl=0.)
 
         num_epochs = 50
@@ -448,7 +448,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="ebm", rm_type="varied",
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, twist_learn_type="ebm", rm_type="varied",
                                           rl_loss_type="custom", beta_kl=0.)
 
         num_epochs = 50
@@ -503,7 +503,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="ebm", rm_type="one_bad",
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, twist_learn_type="ebm", rm_type="one_bad",
                                           rl_loss_type="ppo", ppo_steps=5, gamma=1., gae_lambda=1.)
 
         num_epochs = 50
@@ -561,7 +561,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="ebm", rm_type="varied",
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, twist_learn_type="ebm", rm_type="varied",
                                           rl_loss_type="ppo", ppo_steps=5, gamma=1., gae_lambda=1.)
 
         num_epochs = 100
@@ -644,7 +644,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="ebm", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, twist_learn_type="ebm", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
 
         log_true_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1.,
@@ -699,7 +699,7 @@ class TestClass:
         optimizer_baseline = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_baseline_state = optimizer_baseline.init(self.params_baseline)
 
-        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="ebm", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, twist_learn_type="ebm", rm_type="varied", rl_loss_type="custom", beta_kl=beta_kl)
 
         log_true_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1.,
@@ -815,7 +815,7 @@ class TestClass:
         optimizer_twist = optax.adam(learning_rate=lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
-        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="analytic_mse_rel", rm_type="one_bad")
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, twist_learn_type="analytic_mse_rel", rm_type="one_bad")
 
         log_true_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len,
                                                         beta=1., reward_model_fn=experiment_cfg.rm_fn)
@@ -873,7 +873,7 @@ class TestClass:
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
         optim_twist_state = optimizer_twist.init(self.params_twist)
 
-        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="ebm", rm_type="varied")
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, twist_learn_type="ebm", rm_type="varied")
         log_true_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
 
         avg_rel_diff_start = compare_learned_twist_vs_optimal(self.prompt, self.n_vocab, self.output_len, self.cfg_p,
@@ -921,7 +921,7 @@ class TestClass:
     def test_sixo_dre(self):
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
 
-        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, dre_type="sixo", rm_type="varied")
+        experiment_cfg = ExperimentConfig(n_vocab=self.n_vocab, twist_learn_type="sixo", rm_type="varied")
 
         log_true_final_twist = neg_beta_times_batch_reward_model_curry(self.prompt_len, beta=1., reward_model_fn=experiment_cfg.rm_fn)
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
@@ -989,7 +989,7 @@ class TestClass:
 
 def main():
 
-    experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, dre_type=args.dre_type, rm_type=args.rm_type, rl_loss_type=args.rl_loss_type,
+    experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, twist_learn_type=args.twist_learn_type, rm_type=args.rm_type, rl_loss_type=args.rl_loss_type,
                                       beta_kl=args.beta_kl, ppo_steps=args.ppo_steps, clip_epsilon=args.clip_epsilon,
                                       gamma=args.gamma, gae_lambda=args.gae_lambda, beta_ent=args.beta_ent)
 
@@ -1354,7 +1354,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_vocab", type=int, default=2,
                         help="Num of tokens in vocab")
 
-    parser.add_argument("--dre_type", type=str, default="ebm", choices=["ebm", "sixo"])
+    parser.add_argument("--twist_learn_type", type=str, default="ebm", choices=["ebm", "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=42)

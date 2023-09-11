@@ -986,11 +986,23 @@ def calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p,
 
 
 
+def get_l_dre_sixo_scan_iter(carry, t, cfg_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1):
+    l_dre, prompt_w_sigma_sample_s_1_to_t, prompt_w_p_sample_s_1_to_t, params_twist, prompt_len, rng_key = carry
+
+    l_dre += (jax.nn.log_sigmoid(evaluate_log_psi_t_full_seq(prompt_w_sigma_sample_s_1_to_t, cfg_twist, params_twist, prompt_len + t, prepend_tokens_for_twists, token_of_interest_as_int)) +
+              jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t_full_seq(prompt_w_p_sample_s_1_to_t, cfg_twist, params_twist, prompt_len + t, prepend_tokens_for_twists, token_of_interest_as_int)))).mean()
+
+    carry = l_dre, prompt_w_sigma_sample_s_1_to_t, prompt_w_p_sample_s_1_to_t, params_twist, prompt_len, rng_key
+    return carry, None
+
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p"])
 def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                   output_len, n_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, proposal_is_p=False):
+                   output_len, n_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1,
+                   proposal_is_p=False):
     prompt_len = prompt.shape[-1]
 
-    rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
+    rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist,
                                                       params_twist, log_true_final_twist, output_len, n_twist,
                                                       prepend_tokens_for_twists=prepend_tokens_for_twists,
@@ -1000,22 +1012,25 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 
     l_dre = 0.
 
-    for t in range(prompt_len + 1, prompt_len + 1 + output_len - 1): # start with +1 so that you pass in the first generated token; s_{prompt_len + 1} is essentially s_1, the first generated token. end with -1 because the final step uses the true phi, so we aren't updating twist parameters for that
+    scan_over = jnp.arange(output_len)
 
-        # Having the log on psi makes sense: as training psi = log density ratio, so then training log psi = log density ratio gets psi = density ratio
-        # Passing in the full sequence up to time step t is correct, because the evalute_log_psi_t only evaluates the very last logit
-        # l_dre += (jax.nn.log_sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist))) + \
-        #          jnp.log(1 - jax.nn.sigmoid(jnp.exp(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist))))).mean()
-        l_dre += (jax.nn.log_sigmoid(evaluate_log_psi_t(prompt_w_sigma_sample_s_1_to_t[:, :t], cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int)) + \
-                 jnp.log(1 - jax.nn.sigmoid(evaluate_log_psi_t(prompt_w_p_sample_s_1_to_t[:, :t], cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int)))).mean()
+    carry = (l_dre, prompt_w_sigma_sample_s_1_to_t, prompt_w_p_sample_s_1_to_t, params_twist, prompt_len, sk3)
 
-    l_dre /= (output_len - 1)
+    carry, _ = jax.lax.scan(partial(get_l_dre_sixo_scan_iter, cfg_twist=cfg_twist,
+                                    prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                    token_of_interest_as_int=token_of_interest_as_int),
+                            carry, scan_over, output_len)
+
+    l_dre, _, _, _, _, _ = carry
+
+    l_dre /= output_len
+
     return -l_dre # negative because now we have a loss
 
 
 
-def get_l_dre_ebm_ml_scan_iter(carry, scan_over, cfg_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, resample_prompt_w_twist_sample=True):
-    l_dre, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, rng_key = carry
+def get_l_ebm_ml_scan_iter(carry, scan_over, cfg_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, resample_prompt_w_twist_sample=True):
+    l_ebm, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, rng_key = carry
     prompt_w_twist_sample_s_1_to_t_full_seq, t, intermediate_log_w_t = scan_over
 
     if resample_prompt_w_twist_sample:
@@ -1024,20 +1039,20 @@ def get_l_dre_ebm_ml_scan_iter(carry, scan_over, cfg_twist, prepend_tokens_for_t
         a_t = jax.random.categorical(subkey, intermediate_log_w_t, shape=intermediate_log_w_t.shape)
         prompt_w_twist_sample_s_1_to_t_full_seq = prompt_w_twist_sample_s_1_to_t_full_seq[a_t]
 
-    l_dre += (
+    l_ebm += (
         evaluate_log_psi_t_full_seq(prompt_w_sigma_sample_s_1_to_t,
         cfg_twist, params_twist, prompt_len + t, prepend_tokens_for_twists, token_of_interest_as_int)
         - evaluate_log_psi_t_full_seq(prompt_w_twist_sample_s_1_to_t_full_seq,
                                       cfg_twist, params_twist, prompt_len + t, prepend_tokens_for_twists, token_of_interest_as_int)
     ).mean()
-    carry = l_dre, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, rng_key
+    carry = l_ebm, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, rng_key
     return carry, None
 
 
 # This is the EBM Maximum Likelihood approach (previously called Roger's approach).
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p"])
-def get_l_dre_ebm_ml_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def get_l_ebm_ml_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, proposal_is_p=False):
     prompt_len = prompt.shape[-1]
 
@@ -1052,7 +1067,7 @@ def get_l_dre_ebm_ml_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twi
                                                       proposal_is_p=proposal_is_p,
                                                       resample=True)
 
-    l_dre = 0.
+    l_ebm = 0.
 
     # Get q samples with no resampling anywhere
     _, _, (intermediate_twist_samples_hist, intermediate_log_w_t_hist) = smc_procedure(
@@ -1066,17 +1081,17 @@ def get_l_dre_ebm_ml_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twi
 
     scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len), intermediate_log_w_t_hist)
 
-    carry = (l_dre, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, sk3)
+    carry = (l_ebm, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, sk3)
 
-    carry, _ = jax.lax.scan(partial(get_l_dre_ebm_ml_scan_iter, cfg_twist=cfg_twist,
+    carry, _ = jax.lax.scan(partial(get_l_ebm_ml_scan_iter, cfg_twist=cfg_twist,
                                     prepend_tokens_for_twists=prepend_tokens_for_twists,
                                     token_of_interest_as_int=token_of_interest_as_int,
                                     resample_prompt_w_twist_sample=True), carry, scan_over, output_len)
 
-    l_dre, _, _, _, _ = carry
+    l_ebm, _, _, _, _ = carry
 
-    l_dre /= (output_len)
-    return -l_dre  # negative because now we have a loss
+    l_ebm /= (output_len)
+    return -l_ebm  # negative because now we have a loss
 
 
 
@@ -1085,13 +1100,13 @@ def get_l_dre_ebm_ml_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twi
 # Possibly less theoretically justified, but saves one call to SMC
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p"])
-def get_l_dre_ebm_ml_w_q_resample_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def get_l_ebm_ml_w_q_resample_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, proposal_is_p=False):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
-    l_dre = 0.
+    l_ebm = 0.
 
     _, prompt_w_sigma_sample_s_1_to_t, (intermediate_twist_samples_hist, intermediate_log_w_t_hist) = smc_procedure(
         sk2, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len, n_twist,
@@ -1104,18 +1119,18 @@ def get_l_dre_ebm_ml_w_q_resample_jit(rng_key, prompt, cfg_p, params_p, cfg_twis
 
     scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len), intermediate_log_w_t_hist)
 
-    carry = (l_dre, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, sk3)
+    carry = (l_ebm, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, sk3)
 
-    carry, _ = jax.lax.scan(partial(get_l_dre_ebm_ml_scan_iter,
+    carry, _ = jax.lax.scan(partial(get_l_ebm_ml_scan_iter,
                                     cfg_twist=cfg_twist,
                                     prepend_tokens_for_twists=prepend_tokens_for_twists,
                                     token_of_interest_as_int=token_of_interest_as_int,
                                     resample_prompt_w_twist_sample=False), carry, scan_over, output_len)
 
-    l_dre, _, _, _, _ = carry
+    l_ebm, _, _, _, _ = carry
 
-    l_dre /= (output_len)
-    return -l_dre  # negative because now we have a loss
+    l_ebm /= (output_len)
+    return -l_ebm  # negative because now we have a loss
 
 
 
@@ -1155,13 +1170,13 @@ def get_proposal_q_sample_in_scan_non_modify(carry, t, cfg_p, cfg_twist, prepend
 # This is Rob's approach
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p"])
-def get_l_dre_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=-1, proposal_is_p=False):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
-    l_dre = 0.
+    l_kl = 0.
 
     # The first part is the same as Roger's/EBM-ML approach; the first term is going to be the same
     _, prompt_w_sigma_sample_s_1_to_t, (intermediate_twist_samples_hist, intermediate_log_w_t_hist) = smc_procedure(
@@ -1184,18 +1199,18 @@ def get_l_dre_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_t
     # print(new_seqs)
 
     scan_over = (new_seqs, jnp.arange(output_len), jnp.zeros(output_len)) # The last item is a dummy value, since we aren't resampling the prompt with twist sample anyway, so we don't need it
-    carry = (l_dre, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, sk3)
+    carry = (l_kl, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, sk3)
 
-    carry, _ = jax.lax.scan(partial(get_l_dre_ebm_ml_scan_iter,
+    carry, _ = jax.lax.scan(partial(get_l_ebm_ml_scan_iter,
                                     cfg_twist=cfg_twist,
                                     prepend_tokens_for_twists=prepend_tokens_for_twists,
                                     token_of_interest_as_int=token_of_interest_as_int,
                                     resample_prompt_w_twist_sample=False), carry, scan_over, output_len) # can use the same calculation because it's the same grad of log twist, only difference is the expectation (choice of samples) we are evaluating over
 
-    l_dre, _, _, _, _ = carry
+    l_kl, _, _, _, _ = carry
 
-    l_dre /= (output_len)
-    return -l_dre  # negative because now we have a loss
+    l_kl /= (output_len)
+    return -l_kl  # negative because now we have a loss
 
 
 
@@ -1266,7 +1281,8 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
 
     values = jnp.transpose(values)
 
-    squared_error_loss = ((values - target_term) ** 2).sum(axis=-1).mean()
+    # squared_error_loss = ((values - target_term) ** 2).sum(axis=-1).mean()
+    squared_error_loss = ((values - target_term) ** 2).mean() # Use mean to be consistent with the scale of the DRE/EBM updates
 
     # TODO afterwards: logsumexp or whatever the other RL formulation was.
 

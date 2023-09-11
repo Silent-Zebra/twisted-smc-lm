@@ -21,7 +21,7 @@ import numpy as np
 from custom_transformer import transformer_init_params, stochastic_transformer_sample
 
 from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_final, smc_scan_iter_final, \
-    get_l_dre_ebm_ml_jit, get_l_dre_ebm_ml_w_q_resample_jit, get_l_dre_one_total_kl, \
+    get_l_ebm_ml_jit, get_l_ebm_ml_w_q_resample_jit, get_l_one_total_kl, \
     get_twist_loss_rl_based, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
     get_analytic_sigma_sample, upper_bound_log_Z_sigma_estimate, \
     iwae_forward_and_backward, smc_backward
@@ -35,10 +35,10 @@ from result_plots_bounds import records_labels_list
 
 
 class ExperimentConfig:
-    def __init__(self, n_vocab, dre_type, rm_type, analytic_sigma_sample=False):
+    def __init__(self, n_vocab, twist_learn_type, rm_type, analytic_sigma_sample=False):
         self.n_vocab = n_vocab
         self.analytic_sigma_sample = analytic_sigma_sample
-        self.dre_type = dre_type.lower()
+        self.twist_learn_type = twist_learn_type.lower()
         self.dre_grad_fn = self._get_dre_grad_fn()
 
         self.rm_type = rm_type.lower()
@@ -48,25 +48,25 @@ class ExperimentConfig:
 
 
     def _get_dre_grad_fn(self):
-        if self.dre_type == "ebm":
-            # dre_grad_fn = jax.grad(get_l_dre_ebm_ml, argnums=5)
-            dre_grad_fn = jax.grad(get_l_dre_ebm_ml_jit, argnums=5)
-        elif self.dre_type == "ebm_q_rsmp":
-            dre_grad_fn = jax.grad(get_l_dre_ebm_ml_w_q_resample_jit, argnums=5)
-        elif self.dre_type == "one_total_kl":
-            dre_grad_fn = jax.grad(get_l_dre_one_total_kl, argnums=5)
-        elif self.dre_type == "rl_based_p_sample":
+        if self.twist_learn_type == "ebm":
+            # dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
+            dre_grad_fn = jax.grad(get_l_ebm_ml_jit, argnums=5)
+        elif self.twist_learn_type == "ebm_q_rsmp":
+            dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=5)
+        elif self.twist_learn_type == "one_total_kl":
+            dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
+        elif self.twist_learn_type == "rl_based_p_sample":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p"), argnums=5)
-        elif self.dre_type == "rl_based_q_sample":
+        elif self.twist_learn_type == "rl_based_q_sample":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q"), argnums=5)
-        elif self.dre_type == "rl_based_sigma_sample":
+        elif self.twist_learn_type == "rl_based_sigma_sample":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma"), argnums=5)
-        elif self.dre_type == "sixo":
+        elif self.twist_learn_type == "sixo":
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
-        elif self.dre_type == "analytic_mse_rel":
+        elif self.twist_learn_type == "analytic_mse_rel":
             dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
                                    argnums=7)
-        elif self.dre_type == "analytic_mse_abs":
+        elif self.twist_learn_type == "analytic_mse_abs":
             dre_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal,
                                    argnums=7)
         else:
@@ -88,7 +88,7 @@ class ExperimentConfig:
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
                               params_p, cfg_twist, params_twist, log_true_final_twist, prepend_tokens_for_twists=False,
                               token_of_interest_as_int=-1, proposal_is_p=False):
-        if self.dre_type == "analytic_mse_rel" or self.dre_type == "analytic_mse_abs":
+        if self.twist_learn_type == "analytic_mse_rel" or self.twist_learn_type == "analytic_mse_abs":
             grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
                                             params_p, log_true_final_twist, cfg_twist,
                                             params_twist, self.rm_type)
@@ -298,7 +298,7 @@ def main():
 
     start = time.time()
 
-    experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, dre_type=args.dre_type, rm_type=args.rm_type)
+    experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, twist_learn_type=args.twist_learn_type, rm_type=args.rm_type)
 
     rng_key = jax.random.PRNGKey(args.seed)
 
@@ -697,7 +697,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_vocab", type=int, default=2,
                         help="Num of tokens in vocab")
 
-    parser.add_argument("--dre_type", type=str, default="ebm",
+    parser.add_argument("--twist_learn_type", type=str, default="ebm",
                         choices=["ebm", "ebm_q_rsmp", "one_total_kl",
                                  "rl_based_p_sample", "rl_based_q_sample",
                                  "rl_based_sigma_sample", "sixo"])

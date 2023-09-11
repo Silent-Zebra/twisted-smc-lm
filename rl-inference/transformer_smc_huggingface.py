@@ -55,9 +55,9 @@ def kl_div_jax_sum_last_axis(log_p, log_q):
 
 
 class ExperimentConfig:
-    def __init__(self, dre_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0,
+    def __init__(self, twist_learn_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0,
                  toxicityModel=None, tokenizer_RM=None, device=None, tokenizer=None):
-        self.dre_type = dre_type.lower()
+        self.twist_learn_type = twist_learn_type.lower()
 
         self.dre_grad_fn = self._get_dre_grad_fn()
 
@@ -99,15 +99,15 @@ class ExperimentConfig:
             raise NotImplementedError
 
     def _get_dre_grad_fn(self):
-        if self.dre_type == "ebm":
-            # dre_grad_fn = jax.grad(get_l_dre_ebm_ml_jit, argnums=5)
-            dre_grad_fn = jax.grad(get_l_dre_ebm_ml_partial_jit, argnums=5)
-        # elif self.dre_type == "sixo":
+        if self.twist_learn_type == "ebm":
+            # dre_grad_fn = jax.grad(get_l_ebm_ml_jit, argnums=5)
+            dre_grad_fn = jax.grad(get_l_ebm_ml_partial_jit, argnums=5)
+        # elif self.twist_learn_type == "sixo":
         #     dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
-        # elif self.dre_type == "analytic_mse_rel":
+        # elif self.twist_learn_type == "analytic_mse_rel":
         #     dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
         #                            argnums=7)
-        # elif self.dre_type == "analytic_mse_abs":
+        # elif self.twist_learn_type == "analytic_mse_abs":
         #     dre_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal,
         #                            argnums=7)
         else:
@@ -134,7 +134,7 @@ class ExperimentConfig:
 
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, trainstate_p, params_of_trainstate_p,
                               trainstate_twist, params_of_trainstate_twist, log_true_final_twist):
-        if self.dre_type == "analytic_mse_rel" or self.dre_type == "analytic_mse_abs":
+        if self.twist_learn_type == "analytic_mse_rel" or self.twist_learn_type == "analytic_mse_abs":
             grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len,
                                                  trainstate_p, params_of_trainstate_p, log_true_final_twist, trainstate_twist, params_of_trainstate_twist, self.rm_type)
         else:
@@ -770,7 +770,7 @@ def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, trainstate
     print(log_p)
 
 
-def get_l_dre_ebm_ml_scan_iter(carry, scan_over):
+def get_l_ebm_ml_scan_iter(carry, scan_over):
     l_dre, prompt_w_sigma_sample_s_1_to_t, trainstate_twist, params_of_trainstate_twist, prompt_len, dropout_rng = carry
     prompt_w_twist_sample_s_1_to_t_full_seq, t = scan_over
     dropout_rng, dropout_rng2, dropout_rng3 = jax.random.split(dropout_rng, 3)
@@ -785,7 +785,7 @@ def get_l_dre_ebm_ml_scan_iter(carry, scan_over):
     return carry, None
 
 
-def get_l_dre_ebm_ml_partial_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, log_true_final_twist, output_len, n_twist):
+def get_l_ebm_ml_partial_jit(rng_key, prompt, trainstate_p, params_of_trainstate_p, trainstate_twist, params_of_trainstate_twist, log_true_final_twist, output_len, n_twist):
 
     rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, trainstate_p,
@@ -802,13 +802,13 @@ def get_l_dre_ebm_ml_partial_jit(rng_key, prompt, trainstate_p, params_of_trains
                              output_len,
                              n_twist, use_log_true_final_twist=False, get_intermediate_sample_history_based_on_learned_twists=True)
 
-    l_dre = get_l_dre_ebm_ml_jitted_part(rng_key, prompt, trainstate_twist, params_of_trainstate_twist, output_len, prompt_w_sigma_sample_s_1_to_t, intermediate_twist_samples_hist)
+    l_dre = get_l_ebm_ml_jitted_part(rng_key, prompt, trainstate_twist, params_of_trainstate_twist, output_len, prompt_w_sigma_sample_s_1_to_t, intermediate_twist_samples_hist)
     return l_dre
 
 
 # This is the EBM Maximum Likelihood approach
 @partial(jax.jit, static_argnames=["output_len"])
-def get_l_dre_ebm_ml_jitted_part(rng_key, prompt, trainstate_twist, params_of_trainstate_twist, output_len, prompt_w_sigma_sample_s_1_to_t, intermediate_twist_samples_hist):
+def get_l_ebm_ml_jitted_part(rng_key, prompt, trainstate_twist, params_of_trainstate_twist, output_len, prompt_w_sigma_sample_s_1_to_t, intermediate_twist_samples_hist):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, dropout_rng = jax.random.split(rng_key, 4)
@@ -823,7 +823,7 @@ def get_l_dre_ebm_ml_jitted_part(rng_key, prompt, trainstate_twist, params_of_tr
 
     carry = (l_dre, prompt_w_sigma_sample_s_1_to_t, trainstate_twist, params_of_trainstate_twist, prompt_len, dropout_rng)
 
-    carry, _ = jax.lax.scan(get_l_dre_ebm_ml_scan_iter, carry, scan_over, output_len)
+    carry, _ = jax.lax.scan(get_l_ebm_ml_scan_iter, carry, scan_over, output_len)
 
     l_dre, _, _, _, _, _ = carry
 
@@ -1386,7 +1386,7 @@ def main():
             print("Loaded model")
 
 
-    experiment_cfg = ExperimentConfig(dre_type=args.dre_type, rm_type=args.rm_type, rl_loss_type=args.rl_loss_type,
+    experiment_cfg = ExperimentConfig(twist_learn_type=args.twist_learn_type, rm_type=args.rm_type, rl_loss_type=args.rl_loss_type,
                                       beta_kl=args.beta_kl, ppo_steps=args.ppo_steps, clip_epsilon=args.clip_epsilon,
                                       gamma=args.gamma, gae_lambda=args.gae_lambda, beta_ent=args.beta_ent,
                                       toxicityModel=toxicityModel, tokenizer_RM=tokenizer_RM, device=device, tokenizer=tokenizer)
@@ -1581,7 +1581,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_vocab", type=int, default=50257,
                         help="Num of tokens in vocab")
 
-    parser.add_argument("--dre_type", type=str, default="ebm", choices=["ebm", "sixo"])
+    parser.add_argument("--twist_learn_type", type=str, default="ebm", choices=["ebm", "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=1)
