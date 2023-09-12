@@ -575,7 +575,8 @@ def main():
     jnp_prompts = get_jnp_prompts_from_prompts(prompts, token_based_prompt)
 
     log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-        = get_log_true_final_twists(rng_key, jnp_prompts, experiment_cfg, cfg_p, params_p, args.rm_type)
+        = get_log_true_final_twists(rng_key, jnp_prompts, experiment_cfg, cfg_p, params_p,
+                                    args.rm_type, args.indicator_pos_zero_index, args.output_len, args.n_true_posterior_samples)
 
     # records_list_by_prompt_then_twist = []
     # for _ in jnp_prompts:
@@ -735,6 +736,8 @@ def main():
 
                     elif experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index":
                         rng_key, sk = jax.random.split(rng_key)
+                        print("Inspecting STUFF")
+                        print(f"TIME: {time.time() - start}", flush=True)
                         inspect_and_record_evidence_setting(sk,
                                                             indices_of_tokens_chosen,
                                                             true_posterior_samples_by_token,
@@ -750,6 +753,7 @@ def main():
                                                             args.proposal_is_p)
 
                         print("--- COMPARING VS OPTIMAL TWISTS ---")
+                        print(f"TIME: {time.time() - start}", flush=True)
                         for i in range(len(indices_of_tokens_chosen)):
                             avg_rel_diff = compare_learned_twist_vs_optimal(
                                 prompt,
@@ -764,7 +768,7 @@ def main():
                                 verbose=True,
                                 relative_diff_loss=True)
                             print(avg_rel_diff)
-
+                        print(f"TIME: {time.time() - start}", flush=True)
 
                     # bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
                     # bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob = inspect_bad_word_info(prompt_len, cfg_p, params_p)
