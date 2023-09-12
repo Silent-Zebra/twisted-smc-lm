@@ -396,7 +396,8 @@ class TestClass:
                         params_twist,
                         rm_type=rm_type,
                         verbose=True,
-                        relative_diff_loss=True)
+                        relative_diff_loss=True,
+                    stop_grad=True)
                     avg_rel_diff_list = [avg_rel_diff_start]
                     print(avg_rel_diff_list)
 
@@ -435,7 +436,8 @@ class TestClass:
                             params_twist,
                             rm_type=rm_type,
                             verbose=True,
-                            relative_diff_loss=True)
+                            relative_diff_loss=True,
+                        stop_grad=True)
                         avg_rel_diff_list.append(avg_rel_diff)
                         print(avg_rel_diff_list)
 
@@ -766,8 +768,10 @@ def main():
                                 params_twist,
                                 rm_type=args.rm_type,
                                 verbose=True,
-                                relative_diff_loss=True)
-                            print(avg_rel_diff)
+                                relative_diff_loss=True,
+                            stop_grad=True
+                            )
+                            print(f"AVG REL DIFF (averaged with equal weight per time step (averaged within a time step)): {avg_rel_diff}")
                         print(f"TIME: {time.time() - start}", flush=True)
 
                     # bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \

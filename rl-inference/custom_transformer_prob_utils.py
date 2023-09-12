@@ -952,7 +952,8 @@ def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_
     return kl_div
     # then do the KL calc
 
-
+@partial(jax.jit, static_argnames=["cfg_p", "log_true_final_twist", "prompt_len",
+                                   "output_len", "n_vocab", "return_log"])
 def calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, return_log=False):
     # This manually enumerates all possible sequences up to the output_len
     # And then calculates log_p and log_phi (where phi = e^(-beta r(s)) ) on each of those sequences.
