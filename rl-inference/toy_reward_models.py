@@ -475,7 +475,7 @@ def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p
     return opt_log_twist_array_list
 
 # Check the model twists in a similar manner to the optimal twists for the one_bad reward model
-def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params_twist):
+def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params_twist, stop_grad=False):
     # Add output_len-1 zeros first
     seq = jnp.concatenate(
         (jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
@@ -500,6 +500,9 @@ def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params
             -1])  # turn into (batch_size = n_vocab, seq_len) shape
 
         model_twist = evaluate_log_psi_t(seq, cfg_twist, params_twist)
+
+        if stop_grad:
+            model_twist = jax.lax.stop_gradient(model_twist)
 
         model_twist_array_list.append(model_twist)
 
@@ -610,7 +613,7 @@ def l_abs_compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
 
 def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
                                      params_p, log_true_final_twist, cfg_twist, params_twist, rm_type,
-                                     verbose=True, relative_diff_loss=True):
+                                     verbose=True, relative_diff_loss=True, stop_grad=False):
     if rm_type == "one_bad":
         opt_log_twist_array_list = calc_optimal_twists_one_bad(prompt, n_vocab,
                                                    output_len, cfg_p,
@@ -630,7 +633,7 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
 
     if rm_type == "one_bad":
         model_twist_array_list = calc_model_twists_one_bad(prompt, n_vocab, output_len,
-                                                   cfg_twist, params_twist)
+                                                   cfg_twist, params_twist, stop_grad)
     else:
         # NEXT generate all seqs, and compare the model twists on all 1:t for all t on all seqs.
         model_twist_array_list = calc_model_twists(prompt, n_vocab, output_len,
@@ -662,6 +665,7 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
 
     # print(total_size)
     # print(sum_diff / total_size)
+
 
     return sum_diff / total_size
 
