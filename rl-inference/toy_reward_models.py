@@ -548,10 +548,7 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_tr
 
     eval_log_phi_final = evaluate_log_phi_final(all_seqs_with_n_vocab_at_T.reshape(-1, all_seqs_with_n_vocab_at_T.shape[-1]), log_true_final_twist)
 
-    # TODO JULY 1 can I vmap this loop too? Seems not so trivial to do.
     # The above section calculates the optimal twists for the t-1 time step
-    # (again remember no need to calculate for t as we use the final twist there,
-    # also we never train any twists for time t in the way I currently have the code setup anyway)
     # The below now takes those, and recursively calculates the optimal twists for time step t-2, and so on, decrementing by 1 each time.
     j = 2
     while (j < output_len):
@@ -581,7 +578,7 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_tr
 
         j += 1
 
-    opt_log_twist_array_list.insert(0, eval_log_phi_final)
+    opt_log_twist_array_list.insert(0, eval_log_phi_final) # This inserts the twist values at time T
     # print(eval_log_phi_final)
     # print(opt_log_twist_array_list)
 
@@ -655,12 +652,13 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
             print(diff_i)
             print(diff_i - diff_i.mean())
             print((jnp.abs(diff_i - diff_i.mean())).mean()) # This is useful because adding a constant to log twists changes nothing (like multiplying unnormalized probabilities by a constant). Therefore we should not be concerned if the learned twists differ from the optimal only by a constant amount across all entries. What we care about are RELATIVE differences - after removing a constant shift (using the mean of the differences, to give the most charitable interpretation), how much remaining differences are left?
+            print(((diff_i - diff_i.mean()) ** 2).mean())
 
         if relative_diff_loss:
-            sum_diff += ((diff_i - diff_i.mean()) ** 2).sum()
+            sum_diff += ((diff_i - diff_i.mean()) ** 2).mean() # Using mean instead of sum here helps us avoid overweighting the later twists
         else:
-            sum_diff += (diff_i ** 2).sum()
-        total_size += opt_log_twist_array_list[i].shape[0]
+            sum_diff += (diff_i ** 2).mean()
+        total_size += 1
 
     # print(total_size)
     # print(sum_diff / total_size)

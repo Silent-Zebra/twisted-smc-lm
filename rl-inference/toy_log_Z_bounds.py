@@ -292,6 +292,210 @@ def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_
             print("SMC samples proportion by marginal of last token")
             print(smc_samples_hist)
 
+class TestClass:
+    output_len = 2
+    # I cannot declare final twist here for it to work
+    lr = 0.0005
+    n_twist = 1000  # for the training procedure
+    n_policy_samples = 1000
+
+
+    def test_twist_learning_rl_p(self):
+        self._test_twist_learning(twist_learn_type="rl_based_p_sample")
+
+    def test_twist_learning_rl_q(self):
+        self._test_twist_learning(twist_learn_type="rl_based_q_sample")
+
+    def test_twist_learning_rl_sigma(self):
+        self._test_twist_learning(twist_learn_type="rl_based_sigma_sample")
+
+    def test_twist_learning_ebm(self):
+        self._test_twist_learning(twist_learn_type="ebm")
+
+    def test_twist_learning_ebm_q_rsmp(self):
+        self._test_twist_learning(twist_learn_type="ebm_q_rsmp")
+
+    def test_twist_learning_one_total_kl(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl")
+
+    def test_twist_learning_sixo(self):
+        self._test_twist_learning(twist_learn_type="sixo")
+
+    def _test_twist_learning(self, twist_learn_type, rm_type="p_token_last_index", seed=1):
+        # Test that the DRE learns close to the optimal twists. Takes a bit of time.
+        rng_key = jax.random.PRNGKey(seed)
+        n_true_posterior_samples = 1
+
+        n_vocab = len(ordered_token_list)
+
+        rng_key, cfg_p, params_p = transformer_init_params(
+            rng_key,
+            n_vocab=n_vocab,
+            d_model=64,
+            d_k=16,
+            n_layers=2,
+            n_heads=4,
+            d_v=16,
+            d_fc=64,
+        )
+        rng_key, cfg_twist, params_twist = transformer_init_params(
+            rng_key,
+            n_vocab=n_vocab,
+            d_model=64,
+            d_k=16,
+            n_layers=2,
+            n_heads=4,
+            d_v=16,
+            d_fc=64,
+        )
+
+        proposal_is_p = False
+
+        if rm_type == "indicator_at_index" or rm_type == "bad_word_pos" or rm_type == "p_token_last_index":
+            prompts = [["what", "is", "the", "term", "for", "neutral_term"]]
+            token_based_prompt = True
+        else:
+            prompts = [[0, 1, 0, 1]]
+            token_based_prompt = False
+        jnp_prompts = get_jnp_prompts_from_prompts(prompts, token_based_prompt)
+
+        optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
+        optim_twist_state = optimizer_twist.init(params_twist)
+
+        experiment_cfg = ExperimentConfig(n_vocab=n_vocab, twist_learn_type=twist_learn_type, rm_type=rm_type)
+
+        rng_key, sk = jax.random.split(rng_key)
+        log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+            = get_log_true_final_twists(sk, jnp_prompts, experiment_cfg,
+                                        cfg_p, params_p, rm_type,
+                                        indicator_pos_zero_index=3, # CHANGE THIS LATER
+                                        output_len=self.output_len,
+                                        n_true_posterior_samples=n_true_posterior_samples)
+
+        twist_updates_per_epoch = 100
+        num_epochs = 3
+
+        prompt_num = 0
+        for prompt in jnp_prompts:
+
+            prompt_len = prompt.shape[-1]
+            log_true_final_twist = log_true_final_twists[prompt_num]
+            if rm_type == "indicator_at_index" or rm_type == "p_token_last_index":
+                indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
+                true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
+
+                for i in range(len(indices_of_tokens_chosen)):
+                    avg_rel_diff_start = compare_learned_twist_vs_optimal(
+                        prompt,
+                        n_vocab,
+                        self.output_len,
+                        cfg_p,
+                        params_p,
+                        log_true_final_twist[i],
+                        cfg_twist,
+                        params_twist,
+                        rm_type=rm_type,
+                        verbose=True,
+                        relative_diff_loss=True)
+                    avg_rel_diff_list = [avg_rel_diff_start]
+                    print(avg_rel_diff_list)
+
+                rng_key, sk = jax.random.split(rng_key)
+                for epoch in range(num_epochs):
+                    for twist_update in range(twist_updates_per_epoch):
+
+                        if rm_type == "indicator_at_index" or rm_type == "p_token_last_index":
+
+                            for i in range(len(indices_of_tokens_chosen)):
+                                token_of_interest_as_int = indices_of_tokens_chosen[i]
+
+                                rng_key, sk = jax.random.split(rng_key)
+                                grad_params_twist = experiment_cfg.get_grad_params_twist(
+                                    sk, prompt, n_vocab, self.n_twist,
+                                    self.output_len, cfg_p, params_p, cfg_twist,
+                                    params_twist, log_true_final_twist[i],
+                                    prepend_tokens_for_twists=True,
+                                    token_of_interest_as_int=token_of_interest_as_int,
+                                    proposal_is_p=proposal_is_p
+                                ) # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
+                                updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
+                                params_twist = optax.apply_updates(params_twist, updates_twist)
+                        else:
+                            raise NotImplementedError
+
+                    for i in range(len(indices_of_tokens_chosen)):
+                        avg_rel_diff = compare_learned_twist_vs_optimal(
+                            prompt,
+                            n_vocab,
+                            self.output_len,
+                            cfg_p,
+                            params_p,
+                            log_true_final_twist[i],
+                            cfg_twist,
+                            params_twist,
+                            rm_type=rm_type,
+                            verbose=True,
+                            relative_diff_loss=True)
+                        avg_rel_diff_list.append(avg_rel_diff)
+                        print(avg_rel_diff_list)
+
+            else:
+                raise NotImplementedError
+            prompt_num += 1
+
+            print(avg_rel_diff_list)
+            # assert avg_rel_diff_list[0] > avg_rel_diff_list[1]
+            # assert avg_rel_diff_list[1] > avg_rel_diff_list[2]
+            # assert avg_rel_diff_list[2] > avg_rel_diff_list[3]
+
+            # assert avg_rel_diff_list[-1] < 0.001
+
+            assert avg_rel_diff_list[-1] < 0.4
+
+
+
+
+def get_jnp_prompts_from_prompts(prompts, token_based_prompt):
+    jnp_prompts = []
+
+    for prompt in prompts:
+        if token_based_prompt:
+            index_based_prompt = tokens_to_jnp_indices(ordered_token_list,
+                                                       prompt)
+            prompt = index_based_prompt
+        else:
+            prompt = jnp.array(prompt)
+        jnp_prompts.append(prompt)
+
+    return jnp_prompts
+
+def get_log_true_final_twists(rng_key, jnp_prompts, experiment_cfg, cfg_p, params_p, rm_type, indicator_pos_zero_index, output_len, n_true_posterior_samples):
+    if rm_type == "bad_word_pos":
+        log_true_final_twists = build_log_true_final_twists_positive_rew(jnp_prompts, experiment_cfg.rm_fn)
+        return log_true_final_twists, None, None
+
+    elif rm_type == "indicator_at_index":
+        rng_key, sk = jax.random.split(rng_key)
+        log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+            = build_indicator_twists_all_tokens_at_position(sk, jnp_prompts, indicator_pos_zero_index, cfg_p, params_p, output_len, n_true_posterior_samples)
+
+        print(log_true_final_twists)
+        print(indices_of_tokens_chosen_by_prompt)
+        print(true_posterior_samples_by_prompt_and_by_token)
+        return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+    elif rm_type == "p_token_last_index":
+        rng_key, sk = jax.random.split(rng_key)
+        log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+            = build_log_p_token_last_pos_twists(sk, jnp_prompts, cfg_p, params_p,
+                                                            output_len,
+                                                            n_true_posterior_samples)
+        print(log_true_final_twists)
+        print(indices_of_tokens_chosen_by_prompt)
+        print(true_posterior_samples_by_prompt_and_by_token)
+        return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+    else:
+        raise NotImplementedError
+
 
 
 def main():
@@ -368,38 +572,10 @@ def main():
         prompts = [[0, 1, 0, 1]]
         token_based_prompt = False
 
-    jnp_prompts = []
+    jnp_prompts = get_jnp_prompts_from_prompts(prompts, token_based_prompt)
 
-    for prompt in prompts:
-        if token_based_prompt:
-            index_based_prompt = tokens_to_jnp_indices(ordered_token_list,
-                                                       prompt)
-            prompt = index_based_prompt
-        else:
-            prompt = jnp.array(prompt)
-        jnp_prompts.append(prompt)
-
-    if args.rm_type == "bad_word_pos":
-        log_true_final_twists = build_log_true_final_twists_positive_rew(jnp_prompts, experiment_cfg.rm_fn)
-    elif args.rm_type == "indicator_at_index":
-        rng_key, sk = jax.random.split(rng_key)
-        log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-            = build_indicator_twists_all_tokens_at_position(sk, jnp_prompts, args.indicator_pos_zero_index, cfg_p, params_p, args.output_len, args.n_true_posterior_samples)
-
-        print(log_true_final_twists)
-        print(indices_of_tokens_chosen_by_prompt)
-        print(true_posterior_samples_by_prompt_and_by_token)
-    elif args.rm_type == "p_token_last_index":
-        rng_key, sk = jax.random.split(rng_key)
-        log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-            = build_log_p_token_last_pos_twists(sk, jnp_prompts, cfg_p, params_p,
-                                                            args.output_len,
-                                                            args.n_true_posterior_samples)
-        print(log_true_final_twists)
-        print(indices_of_tokens_chosen_by_prompt)
-        print(true_posterior_samples_by_prompt_and_by_token)
-    else:
-        raise NotImplementedError
+    log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+        = get_log_true_final_twists(rng_key, jnp_prompts, experiment_cfg, cfg_p, params_p, args.rm_type)
 
     # records_list_by_prompt_then_twist = []
     # for _ in jnp_prompts:
@@ -573,6 +749,22 @@ def main():
                                                             records_list_by_twist,
                                                             args.proposal_is_p)
 
+                        print("--- COMPARING VS OPTIMAL TWISTS ---")
+                        for i in range(len(indices_of_tokens_chosen)):
+                            avg_rel_diff = compare_learned_twist_vs_optimal(
+                                prompt,
+                                args.n_vocab,
+                                args.output_len,
+                                cfg_p,
+                                params_p,
+                                log_true_final_twist[i],
+                                cfg_twist,
+                                params_twist,
+                                rm_type=args.rm_type,
+                                verbose=True,
+                                relative_diff_loss=True)
+                            print(avg_rel_diff)
+
 
                     # bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
                     # bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob = inspect_bad_word_info(prompt_len, cfg_p, params_p)
@@ -703,7 +895,7 @@ if __name__ == "__main__":
                                  "rl_based_sigma_sample", "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=0)
 
     parser.add_argument("--twist_updates_per_epoch", type=int, default=100)
 
