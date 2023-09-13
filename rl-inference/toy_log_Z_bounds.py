@@ -29,7 +29,8 @@ from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_fi
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, \
     tokens_to_jnp_indices, ordered_token_list, batch_reward_model, build_log_true_final_twists_positive_rew, \
     build_indicator_twists_all_tokens_at_position, reward_model_bad_word, \
-    hist_by_token_index, build_log_p_token_last_pos_twists, build_contains_token_twists
+    hist_by_token_index, build_log_p_token_last_pos_twists, build_contains_token_twists, \
+    build_only_contains_token_twists
 # Update the twists, update the whole framework for the Bayesian thing.
 
 from result_plots_bounds import records_labels_list
@@ -75,7 +76,8 @@ class ExperimentConfig:
         return dre_grad_fn
 
     def _get_rm_fn(self):
-        if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" or self.rm_type == "contains_token":
+        if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
+            or self.rm_type == "contains_token" or self.rm_type == "only_contains_token":
             return None
         elif self.rm_type == "bad_word_pos":
             return reward_model_bad_word
@@ -105,15 +107,28 @@ class ExperimentConfig:
 def compare_iwae_vs_smc(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
                         params_twist, n_vocab, output_len,
                         log_true_final_twist, n_test_smc_samples, token_of_interest_as_int,
-                        extracted_samples, proposal_is_p=False ):
+                        extracted_samples, proposal_is_p=False, prepend_tokens_for_twists=True ):
     posterior_sample = extracted_samples[0]
+
+    smc_upper_bound_estimate = smc_backward(rng_key, posterior_sample,
+                                            prompt, cfg_p, params_p,
+                                            cfg_twist, params_twist,
+                                            log_true_final_twist,
+                                            output_len,
+                                            n_test_smc_samples,
+                                            n_vocab,
+                                            prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                            token_of_interest_as_int=token_of_interest_as_int,
+                                            proposal_is_p=proposal_is_p)
+    print(smc_upper_bound_estimate)
+
     iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
         rng_key, posterior_sample, prompt, cfg_p,
         params_p, cfg_twist,
         params_twist, log_true_final_twist,
         output_len, n_test_smc_samples,
         n_vocab,
-        prepend_tokens_for_twists=True,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p)
     iwae_lower_bound_estimate = jax.nn.logsumexp(
@@ -125,20 +140,9 @@ def compare_iwae_vs_smc(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
     print(iwae_log_w_upper)
     print(iwae_upper_bound_estimate)
 
-    smc_upper_bound_estimate = smc_backward(rng_key, posterior_sample,
-                                            prompt, cfg_p, params_p,
-                                            cfg_twist, params_twist,
-                                            log_true_final_twist,
-                                            output_len,
-                                            n_test_smc_samples,
-                                            n_vocab,
-                                            prepend_tokens_for_twists=True,
-                                            token_of_interest_as_int=token_of_interest_as_int,
-                                            proposal_is_p=proposal_is_p)
-    print(smc_upper_bound_estimate)
 
 @partial(jax.jit, static_argnames=["log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
-                                   "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p"])
+                                   "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",  "prepend_tokens_for_twists"])
 def inspect_and_record_evidence_setting_for_index(rng_key,
                                         prompt,
                                         prompt_len, cfg_p, params_p, cfg_twist,
@@ -146,7 +150,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
                                         log_true_final_twist,
                                         n_test_smc_samples, token_of_interest_as_int,
                                                   extracted_samples, true_log_z, analytic_kl_q_sigma,
-                                                  proposal_is_p=False):
+                                                  proposal_is_p=False, prepend_tokens_for_twists=True):
 
     assert extracted_samples.shape[0] > 0
 
@@ -158,7 +162,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         params_twist, log_true_final_twist,
         output_len, n_test_smc_samples,
         n_vocab,
-        prepend_tokens_for_twists=True,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p)
     iwae_lower_bound_estimate = jax.nn.logsumexp(
@@ -171,14 +175,14 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
         extracted_samples, log_true_final_twist, cfg_p,
         params_p, cfg_twist, params_twist, prompt_len,
-        output_len, prepend_tokens_for_twists=True,
+        output_len, prepend_tokens_for_twists=prepend_tokens_for_twists,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p)
 
     true_one_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
         posterior_sample[None, :], log_true_final_twist, cfg_p,
         params_p, cfg_twist, params_twist, prompt_len,
-        output_len, prepend_tokens_for_twists=True,
+        output_len, prepend_tokens_for_twists=prepend_tokens_for_twists,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p)
 
@@ -197,7 +201,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         n_test_smc_samples,
         analytic_sigma_sample=False,
         n_vocab=n_vocab,
-        prepend_tokens_for_twists=True,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
         token_of_interest_as_int=token_of_interest_as_int,
     proposal_is_p=proposal_is_p)
 
@@ -211,7 +215,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
                                             output_len,
                                             n_test_smc_samples,
                                             n_vocab,
-                                            prepend_tokens_for_twists=True,
+                                            prepend_tokens_for_twists=prepend_tokens_for_twists,
                                             token_of_interest_as_int=token_of_interest_as_int,
                                             proposal_is_p=proposal_is_p)
 
@@ -235,7 +239,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
 
 def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_posterior_samples_by_token, prompt, prompt_len, cfg_p, params_p, cfg_twist,
                              params_twist, n_vocab, output_len, log_true_final_twist_not_yet_indexed, n_test_smc_samples, hist_token_index,
-                                        records_list_by_twist, proposal_is_p=False):
+                                        records_list_by_twist, proposal_is_p=False, prepend_tokens_for_twists=True):
 
     # Note: mutuates records_list_by_twist
 
@@ -245,10 +249,10 @@ def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_
         log_true_final_twist = log_true_final_twist_not_yet_indexed[i]
 
         token_of_interest_as_int = indices_of_tokens_chosen[i]
-        token_of_interest = ordered_token_list[token_of_interest_as_int]
+        # token_of_interest = ordered_token_list[token_of_interest_as_int]
         extracted_samples = true_posterior_samples_by_token[i]
 
-        print(f"Currently investigating token: {token_of_interest}", flush=True)
+        print(f"Currently investigating token: {token_of_interest_as_int}", flush=True)
 
         _, _, true_log_z = \
             calc_analytic_sigma_vals(prompt, prompt_len, n_vocab,
@@ -260,14 +264,14 @@ def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_
                                                cfg_p, params_p, cfg_twist,
                                                params_twist,
                                                log_true_final_twist,
-                                               prepend_tokens_for_twists=True,
+                                               prepend_tokens_for_twists=prepend_tokens_for_twists,
                                                token_of_interest_as_int=token_of_interest_as_int)
 
         list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_for_index(
             sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist, n_vocab,
             output_len, log_true_final_twist, n_test_smc_samples,
             token_of_interest_as_int, extracted_samples,
-            true_log_z, analytic_kl_q_sigma, proposal_is_p)
+            true_log_z, analytic_kl_q_sigma, proposal_is_p, prepend_tokens_for_twists=prepend_tokens_for_twists)
 
         # if i == 0: # only check a single set of twists for now
         for j in range(len(list_of_things_to_append_for_record_list)):
@@ -334,11 +338,12 @@ def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_
         #     print("SMC samples proportion by marginal of last token")
         #     print(smc_samples_hist)
 
-def make_hists(extracted_samples, smc_samples, prompt_len, token_of_interest_as_int, hist_token_index):
+def make_hists(extracted_samples, smc_samples, prompt_len, token_of_interest_as_int, n_vocab, hist_token_index):
     extracted_samples_hist = hist_by_token_index(
-        extracted_samples, token_index=hist_token_index)
-    print("Extracted samples proportion by last token")
+        extracted_samples, n_vocab, token_index=hist_token_index)
+    print("Extracted samples proportion by first token")
     print(extracted_samples_hist)
+    print(extracted_samples_hist[token_of_interest_as_int])
 
     if args.rm_type == "indicator_at_index":
         print("SMC SAMPLES (extracted):")
@@ -348,16 +353,18 @@ def make_hists(extracted_samples, smc_samples, prompt_len, token_of_interest_as_
         print(f"Num total Samples: {smc_samples.shape[0]}")
         # print(smc_samples) # TODO AUG 27 check that these approximately match the true posterior. Devise a counting test over marginal probabilities to make sure this is the case (print it first, then turn it into a test case)
         smc_samples_hist = hist_by_token_index(
-            extracted_smc_samples, token_index=hist_token_index)
+            extracted_smc_samples, n_vocab, token_index=hist_token_index)
         print(
-            "SMC samples (extracted) proportion by marginal of last token (or second last, if last is the chosen token)")
+            "SMC samples (extracted) proportion by marginal of first token")
         print(smc_samples_hist)
+        print(smc_samples_hist[token_of_interest_as_int])
     elif args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
         smc_samples_hist = hist_by_token_index(
-            smc_samples,
+            smc_samples, n_vocab,
             token_index=hist_token_index)
-        print("SMC samples proportion by marginal of last token")
+        print("SMC samples proportion by marginal of first token")
         print(smc_samples_hist)
+        print(smc_samples_hist[token_of_interest_as_int])
 
 class TestClass:
     output_len = 2
@@ -405,7 +412,7 @@ class TestClass:
         rng_key = jax.random.PRNGKey(seed)
         n_true_posterior_samples = 1
 
-        n_vocab = len(ordered_token_list)
+        n_vocab = 9
 
         rng_key, cfg_p, params_p = transformer_init_params(
             rng_key,
@@ -431,11 +438,14 @@ class TestClass:
         proposal_is_p = False
 
         if rm_type == "indicator_at_index" or rm_type == "bad_word_pos" or rm_type == "p_token_last_index" or rm_type == "contains_token":
-            prompts = [["what", "is", "the", "term", "for", "neutral_term"]]
-            token_based_prompt = True
+            # prompts = [["what", "is", "the", "term", "for", "neutral_term"]]
+            # token_based_prompt = True
+            prompts = [[0, 1, 2, 3, 4, 5]]
+            token_based_prompt = False
         else:
             prompts = [[0, 1, 0, 1]]
             token_based_prompt = False
+
         jnp_prompts = get_jnp_prompts_from_prompts(prompts, token_based_prompt)
 
         optimizer_twist = optax.adam(learning_rate=self.lr, b1=0.9, b2=0.99)
@@ -550,6 +560,10 @@ def get_jnp_prompts_from_prompts(prompts, token_based_prompt):
 
     return jnp_prompts
 
+
+indexes_of_tokens_for_only_contains_token = [6, 8]
+
+
 def get_log_true_final_twists(rng_key, jnp_prompts, experiment_cfg, cfg_p, params_p, rm_type, indicator_pos_zero_index, output_len, n_true_posterior_samples):
     if rm_type == "bad_word_pos":
         log_true_final_twists = build_log_true_final_twists_positive_rew(jnp_prompts, experiment_cfg.rm_fn)
@@ -586,6 +600,16 @@ def get_log_true_final_twists(rng_key, jnp_prompts, experiment_cfg, cfg_p, param
         print(indices_of_tokens_chosen_by_prompt)
         print(true_posterior_samples_by_prompt_and_by_token)
         return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+    elif rm_type == "only_contains_token":
+        rng_key, sk = jax.random.split(rng_key)
+        log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
+            = build_only_contains_token_twists(sk, jnp_prompts, cfg_p,
+                                          params_p, output_len,
+                                          n_samples_at_a_time=n_true_posterior_samples,
+                                          indexes_of_tokens=indexes_of_tokens_for_only_contains_token)
+        print(log_true_final_twists)
+        print(true_posterior_samples_by_prompt_and_by_token)
+        return log_true_final_twists, None, true_posterior_samples_by_prompt_and_by_token
     else:
         raise NotImplementedError
 
@@ -605,6 +629,186 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
              label=label)
     plt.fill_between(x_range, lower_conf_bound,
                      upper_conf_bound, alpha=0.3)
+
+
+def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_posterior_samples_by_token, prompt, prompt_len, cfg_p,
+                     params_p, cfg_twist, params_twist, log_true_final_twist, start, hist_token_index, epoch, prepend_tokens_for_twists=True):
+
+
+
+    # for x in range(10):
+    #     rng_key, sk = jax.random.split(rng_key)
+    #     compare_iwae_vs_smc(sk, prompt, prompt_len, cfg_p,
+    #                         params_p, cfg_twist,
+    #                         params_twist, args.n_vocab,
+    #                         args.output_len,
+    #                         log_true_final_twist[i],
+    #                         args.n_test_smc_samples,
+    #                         token_of_interest_as_int,
+    #                         extracted_samples,
+    #                         proposal_is_p=args.proposal_is_p)
+    #
+    # 1/0
+
+    _, _, true_log_z = \
+        calc_analytic_sigma_vals(prompt, prompt_len,
+                                 args.n_vocab,
+                                 args.output_len, cfg_p,
+                                 params_p,
+                                 log_true_final_twist,
+                                 return_log=True)
+
+    analytic_kl_q_sigma = calc_analytic_kl(prompt,
+                                           prompt_len,
+                                           args.n_vocab,
+                                           args.output_len,
+                                           cfg_p, params_p,
+                                           cfg_twist,
+                                           params_twist,
+                                           log_true_final_twist,
+                                           prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                           token_of_interest_as_int=token_of_interest_as_int)
+
+    analytic_kl_p_sigma = calc_analytic_kl(prompt,
+                                           prompt_len,
+                                           args.n_vocab,
+                                           args.output_len,
+                                           cfg_p, params_p,
+                                           cfg_twist,
+                                           params_twist,
+                                           log_true_final_twist,
+                                           prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                           token_of_interest_as_int=token_of_interest_as_int,
+                                           calc_kl_with_p_and_sigma=True)
+
+    print("TOKEN OF INTEREST")
+    print(token_of_interest_as_int)
+    print(f"Analytic KL(p||sigma): {analytic_kl_p_sigma}")
+    print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}")
+
+    n_samples = [4, 16, 64, 256]  # [4, 8, 16, 32, 64, 128]
+    iwae_lbs_across_seeds = []
+    iwae_ubs_across_seeds = []
+    smc_lbs_across_seeds = []
+    smc_ubs_across_seeds = []
+    n_seeds = 2
+    print(f"Sampling Runs Starting")
+    print(f"TIME: {time.time() - start}", flush=True)
+
+    for seed in range(n_seeds):
+
+        iwae_lbs = []
+        iwae_ubs = []
+        smc_lbs = []
+        smc_ubs = []
+        for n_test_smc_samples in n_samples:
+
+            rng_key, sk = jax.random.split(rng_key)
+
+            # print(f"Number of Particles: {n_test_smc_samples}")
+            list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_for_index(
+                sk, prompt, prompt_len, cfg_p, params_p, cfg_twist,
+                params_twist, args.n_vocab,
+                args.output_len, log_true_final_twist,
+                n_test_smc_samples,
+                token_of_interest_as_int, extracted_samples,
+                true_log_z, analytic_kl_q_sigma, args.proposal_is_p, prepend_tokens_for_twists=prepend_tokens_for_twists)
+            (true_log_z, true_one_post_upper_bound_estimate,
+             true_all_post_upper_bound_estimate,
+             iwae_upper_bound_estimate, iwae_lower_bound_estimate,
+             smc_upper_bound_estimate, smc_lower_bound_estimate,
+             f_q_estimate, _, _, _, _,
+             _) = list_of_things_to_append_for_record_list
+
+            # print(f"True log Z value: {true_log_z}")
+            # print(
+            #     f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")
+            # print(
+            #     f"IWAE Upper Bound Estimate: {iwae_upper_bound_estimate}")
+            # print(
+            #     f"True upper bound estimate (only one posterior): {true_one_post_upper_bound_estimate}")
+            # print(
+            #     f"SMC lower bound estimate: {smc_lower_bound_estimate}")
+            # print(
+            #     f"SMC upper bound estimate: {smc_upper_bound_estimate}")
+
+            iwae_lbs.append(iwae_lower_bound_estimate)
+            iwae_ubs.append(iwae_upper_bound_estimate)
+            smc_lbs.append(smc_lower_bound_estimate)
+            smc_ubs.append(smc_upper_bound_estimate)
+
+            if seed == 0:
+                # VIEW These things just once to get a better understanding of what's happening
+                # # TODO remove later
+                # print(smc_samples)
+                print("SMC")
+                make_hists(extracted_samples, smc_samples,
+                           prompt_len,
+                           token_of_interest_as_int, args.n_vocab,
+                           hist_token_index)
+
+                rng_key, sk = jax.random.split(rng_key)
+                _, no_resample_samples = smc_procedure(sk, prompt, cfg_p,
+                                                       params_p, cfg_twist,
+                                                       params_twist,
+                                                       log_true_final_twist,
+                                                       args.output_len,
+                                                       n_test_smc_samples,
+                                                       n_vocab=args.n_vocab,
+                                                       prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                                       token_of_interest_as_int=token_of_interest_as_int,
+                                                       resample=False,
+                                                       proposal_is_p=args.proposal_is_p)
+                # (log_w_t,
+                #  _), full_seq_from_twist_since_no_resample = smc_procedure(
+                #     rng_key, prompt, cfg_p, params_p,
+                #     cfg_twist, params_twist,
+                #     log_true_final_twist,
+                #     args.output_len, args.n_test_smc_samples,
+                #     analytic_sigma_sample=False,
+                #     get_intermediate_sample_history_based_on_learned_twists=False,
+                #     n_vocab=args.n_vocab,
+                #     prepend_tokens_for_twists=True,
+                #     token_of_interest_as_int=token_of_interest_as_int,
+                #     resample=False,
+                #     # NO resample is very important here
+                #     proposal_is_p=proposal_is_p)
+                print("No resample")
+                make_hists(extracted_samples, no_resample_samples,
+                           prompt_len,
+                           token_of_interest_as_int, args.n_vocab,
+                           hist_token_index)
+
+        iwae_lbs_across_seeds.append(np.stack(iwae_lbs))
+        iwae_ubs_across_seeds.append(np.stack(iwae_ubs))
+        smc_lbs_across_seeds.append(np.stack(smc_lbs))
+        smc_ubs_across_seeds.append(np.stack(smc_ubs))
+
+    # np_n_samples = np.stack(n_samples)
+    x_range = np.arange(len(n_samples)) + 1  # use 10^ essentially
+
+    plt.clf()
+
+    print(iwae_ubs_across_seeds)
+    print(np.stack(iwae_ubs_across_seeds).shape)
+    print(smc_ubs_across_seeds)
+    print(np.stack(smc_ubs_across_seeds).shape)
+
+    plot_with_conf_bounds(np.stack(iwae_ubs_across_seeds), x_range,
+                          label="IWAE Upper bounds", z_score=1.96)
+    plot_with_conf_bounds(np.stack(iwae_lbs_across_seeds), x_range,
+                          label="IWAE Lower bounds", z_score=1.96)
+    plot_with_conf_bounds(np.stack(smc_ubs_across_seeds), x_range,
+                          label="SMC Upper bounds", z_score=1.96)
+    plot_with_conf_bounds(np.stack(smc_lbs_across_seeds), x_range,
+                          label="SMC Lower bounds", z_score=1.96)
+
+    plt.plot(x_range, np.ones_like(x_range) * true_log_z,
+             label="True Log Z")
+    plt.xlabel("4^ Number of Particles")
+
+    plt.legend()
+    plt.savefig(f"fig_epoch{epoch + 1}.png")
 
 
 def main():
@@ -674,9 +878,10 @@ def main():
 
 
 
-    if args.rm_type == "indicator_at_index" or args.rm_type == "bad_word_pos" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
-        prompts = [["what", "is", "the", "term", "for", "neutral_term"]]
-        token_based_prompt = True
+    if args.rm_type == "indicator_at_index" or args.rm_type == "bad_word_pos" or \
+        args.rm_type == "p_token_last_index" or args.rm_type == "contains_token" or args.rm_type == "only_contains_token":
+        prompts = [[0, 1, 2, 3, 4, 5]]
+        token_based_prompt = False
     else:
         prompts = [[0, 1, 0, 1]]
         token_based_prompt = False
@@ -694,13 +899,15 @@ def main():
     #         records_list_by_twist.append([[] for _ in records_labels_list])
     #     records_list_by_prompt_then_twist.append(records_list_by_twist)
 
-    records_list_by_prompt_then_twist = [[[[] for _ in records_labels_list] for _ in log_true_final_twists[prompt_num]] for prompt_num in range(len(prompts))]
+    if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+
+        records_list_by_prompt_then_twist = [[[[] for _ in records_labels_list] for _ in log_true_final_twists[prompt_num]] for prompt_num in range(len(prompts))]
 
 
-    if args.rm_type == "indicator_at_index" and args.indicator_pos_zero_index == args.output_len - 1:
-        hist_token_index = -2
+    if args.rm_type == "indicator_at_index" and args.indicator_pos_zero_index == 0:
+        hist_token_index = -args.output_len + 1 # check second token if indicator_pos is 0
     else:
-        hist_token_index = -1 # Build an illustrative histogram just to check that SMC dist approximately matches true posterior. Check the marginal distribution over the token at the position of hist_token_index. -1 is just a design choice (last token)
+        hist_token_index = -args.output_len # check the first token, to really test the effects of twists learning # Build an illustrative histogram just to check that SMC dist approximately matches true posterior. Check the marginal distribution over the token at the position of hist_token_index. -1 is just a design choice (last token)
 
 
     last_ckpt_epoch = -1
@@ -717,6 +924,8 @@ def main():
                 indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
+            elif args.rm_type == "only_contains_token":
+                true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
 
             rng_key, sk = jax.random.split(rng_key)
             # p_samples_for_test = stochastic_transformer_sample(sk, cfg_p,
@@ -724,12 +933,15 @@ def main():
             #                                           args.output_len,
             #                                           10)
 
-            records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
+            if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
 
+                records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
+
+            print(f"TWIST UPDATES STARTING", flush=True)
+            print(f"TIME: {time.time() - start}", flush=True)
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
-                print(f"TWIST UPDATE {twist_update}", flush=True)
-                print(f"TIME: {time.time() - start}", flush=True)
+
 
                 if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index":
 
@@ -831,6 +1043,20 @@ def main():
                         grad_params_twist, optim_twist_state, params_twist)
                     params_twist = optax.apply_updates(params_twist,
                                                        updates_twist)
+                elif experiment_cfg.rm_type == "only_contains_token":
+                    rng_key, sk = jax.random.split(rng_key)
+                    grad_params_twist = experiment_cfg.get_grad_params_twist(
+                        sk, prompt, args.n_vocab, args.n_twist,
+                        args.output_len, cfg_p, params_p, cfg_twist,
+                        params_twist, log_true_final_twist,
+                        # Only one set of log final twists (for the token we are interested in)
+                        prepend_tokens_for_twists=False,
+                        proposal_is_p=args.proposal_is_p
+                    )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
+                    updates_twist, optim_twist_state = optimizer_twist.update(
+                        grad_params_twist, optim_twist_state, params_twist)
+                    params_twist = optax.apply_updates(params_twist,
+                                                       updates_twist)
 
                 else:
 
@@ -852,187 +1078,33 @@ def main():
             if (epoch + 1) % args.print_every == 0:
                 if test_info:
                     if plot_logZ_bounds_only:
-                        i = 0 # Just check the first twist, that's fine for this illustration
+                        if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
 
-                        token_of_interest_as_int = indices_of_tokens_chosen[i]
-                        token_of_interest = ordered_token_list[
-                            token_of_interest_as_int]
-                        extracted_samples = true_posterior_samples_by_token[i]
+                            i = 0 # Just check the first twist, that's fine for this illustration
+                            token_of_interest_as_int = indices_of_tokens_chosen[i]
+                            extracted_samples = true_posterior_samples_by_token[i]
 
-                        # rng_key, sk = jax.random.split(rng_key)
-                        # compare_iwae_vs_smc(sk, prompt, prompt_len, cfg_p, params_p, cfg_twist,
-                        # params_twist, args.n_vocab, args.output_len,
-                        # log_true_final_twist[i], args.n_test_smc_samples,
-                        # token_of_interest_as_int,
-                        # extracted_samples, proposal_is_p=args.proposal_is_p)
-                        # rng_key, sk = jax.random.split(rng_key)
-                        # compare_iwae_vs_smc(sk, prompt, prompt_len, cfg_p,
-                        #                     params_p, cfg_twist,
-                        #                     params_twist, args.n_vocab,
-                        #                     args.output_len,
-                        #                     log_true_final_twist[i],
-                        #                     args.n_test_smc_samples,
-                        #                     token_of_interest_as_int,
-                        #                     extracted_samples,
-                        #                     proposal_is_p=args.proposal_is_p)
-                        # rng_key, sk = jax.random.split(rng_key)
-                        # compare_iwae_vs_smc(sk, prompt, prompt_len, cfg_p,
-                        #                     params_p, cfg_twist,
-                        #                     params_twist, args.n_vocab,
-                        #                     args.output_len,
-                        #                     log_true_final_twist[i],
-                        #                     args.n_test_smc_samples,
-                        #                     token_of_interest_as_int,
-                        #                     extracted_samples,
-                        #                     proposal_is_p=args.proposal_is_p)
+                            rng_key, sk = jax.random.split(rng_key)
 
+                            plot_logZ_bounds(sk, extracted_samples, token_of_interest_as_int,
+                                             true_posterior_samples_by_token,
+                                             prompt, prompt_len, cfg_p,
+                                             params_p, cfg_twist, params_twist,
+                                             log_true_final_twist[i], start,
+                                             hist_token_index, epoch, prepend_tokens_for_twists=True)
+                        elif args.rm_type == "only_contains_token":
 
-                        _, _, true_log_z = \
-                            calc_analytic_sigma_vals(prompt, prompt_len,
-                                                     args.n_vocab,
-                                                     args.output_len, cfg_p,
-                                                     params_p,
-                                                     log_true_final_twist[i],
-                                                     return_log=True)
+                            token_of_interest_as_int = indexes_of_tokens_for_only_contains_token[0] # arbitrarily pick the first one as the one we'll inspect for the hists etc.
+                            extracted_samples = true_posterior_samples_by_prompt_and_by_token[prompt_num]
+                            rng_key, sk = jax.random.split(rng_key)
 
-                        analytic_kl_q_sigma = calc_analytic_kl(prompt,
-                                                               prompt_len,
-                                                               args.n_vocab,
-                                                               args.output_len,
-                                                               cfg_p, params_p,
-                                                               cfg_twist,
-                                                               params_twist,
-                                                               log_true_final_twist[i],
-                                                               prepend_tokens_for_twists=True,
-                                                               token_of_interest_as_int=token_of_interest_as_int)
-
-                        analytic_kl_p_sigma = calc_analytic_kl(prompt,
-                                                               prompt_len,
-                                                               args.n_vocab,
-                                                               args.output_len,
-                                                               cfg_p, params_p,
-                                                               cfg_twist,
-                                                               params_twist,
-                                                               log_true_final_twist[
-                                                                   i],
-                                                               prepend_tokens_for_twists=True,
-                                                               token_of_interest_as_int=token_of_interest_as_int,
-                                                               calc_kl_with_p_and_sigma=True)
-
-                        print("TOKEN OF INTEREST")
-                        print(token_of_interest_as_int)
-                        print(f"Analytic KL(p||sigma): {analytic_kl_p_sigma}")
-                        print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}")
-
-                        n_samples = [4, 8, 16] #[4, 8, 16, 32, 64, 128]
-                        iwae_lbs_across_seeds = []
-                        iwae_ubs_across_seeds = []
-                        smc_lbs_across_seeds = []
-                        smc_ubs_across_seeds = []
-                        n_seeds = 100
-
-                        for seed in range(n_seeds):
-                            print(f"Sampling Run {seed}")
-
-                            iwae_lbs = []
-                            iwae_ubs = []
-                            smc_lbs = []
-                            smc_ubs = []
-                            for n_test_smc_samples in n_samples:
-
-                                rng_key, sk = jax.random.split(rng_key)
-
-                                # print(f"Number of Particles: {n_test_smc_samples}")
-                                list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_for_index(
-                                    sk, prompt, prompt_len, cfg_p, params_p, cfg_twist,
-                                    params_twist, args.n_vocab,
-                                    args.output_len, log_true_final_twist[i],
-                                    n_test_smc_samples,
-                                    token_of_interest_as_int, extracted_samples,
-                                    true_log_z, analytic_kl_q_sigma, args.proposal_is_p)
-                                (true_log_z, true_one_post_upper_bound_estimate,
-                                 true_all_post_upper_bound_estimate,
-                                 iwae_upper_bound_estimate, iwae_lower_bound_estimate,
-                                 smc_upper_bound_estimate, smc_lower_bound_estimate,
-                                 f_q_estimate, _, _, _, _, _) = list_of_things_to_append_for_record_list
-
-                                # print(f"True log Z value: {true_log_z}")
-                                # print(
-                                #     f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")
-                                # print(
-                                #     f"IWAE Upper Bound Estimate: {iwae_upper_bound_estimate}")
-                                # print(
-                                #     f"True upper bound estimate (only one posterior): {true_one_post_upper_bound_estimate}")
-                                # print(
-                                #     f"SMC lower bound estimate: {smc_lower_bound_estimate}")
-                                # print(
-                                #     f"SMC upper bound estimate: {smc_upper_bound_estimate}")
-
-                                iwae_lbs.append(iwae_lower_bound_estimate)
-                                iwae_ubs.append(iwae_upper_bound_estimate)
-                                smc_lbs.append(smc_lower_bound_estimate)
-                                smc_ubs.append(smc_upper_bound_estimate)
-
-                                # # TODO remove later
-                                # # print(smc_samples)
-                                # print("SMC")
-                                # make_hists(extracted_samples, smc_samples,
-                                #            prompt_len,
-                                #            token_of_interest_as_int,
-                                #            hist_token_index)
-                                #
-                                # rng_key, sk = jax.random.split(rng_key)
-                                # _, no_resample_samples = smc_procedure(sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                                #                 log_true_final_twist[i], args.output_len, args.n_test_smc_samples, n_vocab=args.n_vocab, prepend_tokens_for_twists=True,
-                                #                 token_of_interest_as_int=token_of_interest_as_int, resample=False, proposal_is_p=args.proposal_is_p)
-                                # # (log_w_t,
-                                # #  _), full_seq_from_twist_since_no_resample = smc_procedure(
-                                # #     rng_key, prompt, cfg_p, params_p,
-                                # #     cfg_twist, params_twist,
-                                # #     log_true_final_twist,
-                                # #     args.output_len, args.n_test_smc_samples,
-                                # #     analytic_sigma_sample=False,
-                                # #     get_intermediate_sample_history_based_on_learned_twists=False,
-                                # #     n_vocab=args.n_vocab,
-                                # #     prepend_tokens_for_twists=True,
-                                # #     token_of_interest_as_int=token_of_interest_as_int,
-                                # #     resample=False,
-                                # #     # NO resample is very important here
-                                # #     proposal_is_p=proposal_is_p)
-                                # print("No resample")
-                                # make_hists(extracted_samples, no_resample_samples,
-                                #            prompt_len,
-                                #            token_of_interest_as_int,
-                                #            hist_token_index)
-
-
-                            iwae_lbs_across_seeds.append(np.stack(iwae_lbs))
-                            iwae_ubs_across_seeds.append(np.stack(iwae_ubs))
-                            smc_lbs_across_seeds.append(np.stack(smc_lbs))
-                            smc_ubs_across_seeds.append(np.stack(smc_ubs))
-
-                        # np_n_samples = np.stack(n_samples)
-                        x_range = np.arange(len(n_samples)) + 2 # use 10^ essentially
-
-                        plt.clf()
-
-                        print(iwae_ubs_across_seeds)
-                        print(np.stack(iwae_ubs_across_seeds).shape)
-                        print(smc_ubs_across_seeds)
-                        print(np.stack(smc_ubs_across_seeds).shape)
-
-                        plot_with_conf_bounds(np.stack(iwae_ubs_across_seeds), x_range, label="IWAE Upper bounds", z_score=1.96)
-                        plot_with_conf_bounds(np.stack(iwae_lbs_across_seeds), x_range, label="IWAE Lower bounds", z_score=1.96)
-                        plot_with_conf_bounds(np.stack(smc_ubs_across_seeds), x_range, label="SMC Upper bounds", z_score=1.96)
-                        plot_with_conf_bounds(np.stack(smc_lbs_across_seeds), x_range, label="SMC Lower bounds", z_score=1.96)
-
-                        plt.plot(x_range, np.ones_like(x_range) * true_log_z,
-                                 label="True Log Z")
-                        plt.xlabel("2^ Number of Particles")
-
-                        plt.legend()
-                        plt.savefig(f"fig_epoch{epoch + 1}.png")
-
+                            plot_logZ_bounds(sk, extracted_samples, token_of_interest_as_int,
+                                             true_posterior_samples_by_token,
+                                             prompt, prompt_len, cfg_p,
+                                             params_p, cfg_twist, params_twist,
+                                             log_true_final_twist, start,
+                                             hist_token_index, epoch,
+                                             prepend_tokens_for_twists=False)
 
                     else:
 
@@ -1060,7 +1132,8 @@ def main():
                                                                 args.n_test_smc_samples,
                                                                 hist_token_index,
                                                                 records_list_by_twist,
-                                                                args.proposal_is_p)
+                                                                args.proposal_is_p,
+                                                                prepend_tokens_for_twists=True)
 
                             print("--- COMPARING VS OPTIMAL TWISTS ---")
                             print(f"TIME: {time.time() - start}", flush=True)
@@ -1081,6 +1154,8 @@ def main():
                                 )
                                 print(f"AVG REL DIFF (averaged with equal weight per time step (averaged within a time step)): {avg_rel_diff}")
                             print(f"TIME: {time.time() - start}", flush=True)
+                        else:
+                            raise NotImplementedError
 
                     # bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
                     # bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob = inspect_bad_word_info(prompt_len, cfg_p, params_p)
@@ -1114,15 +1189,17 @@ def main():
 
             prompt_num += 1
             if (epoch + 1) % args.ckpt_every == 0:
-                for prompt_num in range(len(prompts)):
-                    print(f"Prompt: {prompts[prompt_num]}")
-                    records_list_by_twist = records_list_by_prompt_then_twist[
-                        prompt_num]
-                    print(records_list_by_twist)
-                    checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                                target=records_list_by_twist,
-                                                step=epoch + 1,
-                                                prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
+                if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+                    for prompt_num in range(len(prompts)):
+
+                        print(f"Prompt: {prompts[prompt_num]}")
+                        records_list_by_twist = records_list_by_prompt_then_twist[
+                            prompt_num]
+                        print(records_list_by_twist)
+                        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                                    target=records_list_by_twist,
+                                                    step=epoch + 1,
+                                                    prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
                 last_ckpt_epoch = epoch
 
     # print(records_list)
@@ -1130,14 +1207,15 @@ def main():
     # print(*records_list)
     # print("---
     if last_ckpt_epoch != epoch:
-        for prompt_num in range(len(prompts)):
-            print(f"Prompt: {prompts[prompt_num]}")
-            records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
-            print(records_list_by_twist)
-            checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                        target=records_list_by_twist,
-                                        step=epoch + 1,
-                                        prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
+        if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+            for prompt_num in range(len(prompts)):
+                print(f"Prompt: {prompts[prompt_num]}")
+                records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
+                print(records_list_by_twist)
+                checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                            target=records_list_by_twist,
+                                            step=epoch + 1,
+                                            prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
 
 
     end = time.time()
@@ -1179,17 +1257,17 @@ if __name__ == "__main__":
     parser.add_argument("--n_layers", type=int, default=2,
                         help="Number of layers")
 
-    parser.add_argument("--n_heads_twist", type=int, default=4,
+    parser.add_argument("--n_heads_twist", type=int, default=8,
                         help="Number of attention heads")
     parser.add_argument("--d_model_twist", type=int, default=64,
                         help="Embedding dimension")
-    parser.add_argument("--d_k_twist", type=int, default=16,
+    parser.add_argument("--d_k_twist", type=int, default=8,
                         help="Attention head dimension for Q and K")
-    parser.add_argument("--d_v_twist", type=int, default=16,
+    parser.add_argument("--d_v_twist", type=int, default=8,
                         help="Attention head dimension for V")
     parser.add_argument("--d_fc_twist", type=int, default=64,
                         help="Feedforward layer dimension")
-    parser.add_argument("--n_layers_twist", type=int, default=2,
+    parser.add_argument("--n_layers_twist", type=int, default=4,
                         help="Number of layers")
 
     parser.add_argument("--output_len", type=int, default=5,
@@ -1215,7 +1293,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--twist_updates_per_epoch", type=int, default=100)
 
-    parser.add_argument("--rm_type", type=str, default="p_token_last_index", choices=["bad_word_pos", "indicator_at_index", "p_token_last_index", "contains_token"])
+    parser.add_argument("--rm_type", type=str, default="p_token_last_index",
+                        choices=["bad_word_pos", "indicator_at_index", "p_token_last_index", "contains_token", "only_contains_token"])
 
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
@@ -1231,15 +1310,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.rm_type == "bad_word_pos" or args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
-        print(f"Len of ordered_token_list (should be = n_vocab): {len(ordered_token_list)}")
-        assert args.n_vocab == len(ordered_token_list)
+
 
     if args.analytic_sigma_sample:
         assert args.twist_updates_per_epoch == 0
 
     assert args.indicator_pos_zero_index < args.output_len
 
+
+    if args.rm_type == "only_contains_token":
+        assert args.n_vocab > max(indexes_of_tokens_for_only_contains_token)
 
 
     main()

@@ -223,6 +223,38 @@ def curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token, pro
     return new_rm
 
 
+def check_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
+    total_contains_token = jnp.ones((seq.shape[0],), dtype=jnp.int32)
+
+    for index_of_token in indexes_of_tokens:
+        contains_token = batch_check_contains_token(seq[:, prompt_len:],
+                                                    index_of_token)
+        total_contains_token *= contains_token
+
+    return total_contains_token
+
+
+def reward_model_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
+    do_reshape = False
+    if len(seq.shape) == 3:
+        original_shape = seq.shape
+        do_reshape = True
+        seq = seq.reshape(-1, seq.shape[-1])
+        1/0
+
+    total_contains_token = check_only_contains_tokens(seq, indexes_of_tokens, prompt_len)
+
+    eps = 1e-8 # just to avoid inf when taking log of 0
+
+    indicator_only_contains_tokens_plus_eps = total_contains_token + eps
+
+    return jnp.log(indicator_only_contains_tokens_plus_eps)
+
+def curried_reward_only_contains_tokens(indexes_of_tokens, prompt_len):
+    def new_rm(seq):
+        return reward_model_only_contains_tokens(seq, indexes_of_tokens, prompt_len)
+    return new_rm
+
 
 # Just check the all 0s string and adjacent probabilities
 def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p):
@@ -529,6 +561,46 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
     return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
 
 
+def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indexes_of_tokens):
+    log_true_final_twists = []
+    true_posterior_samples_by_prompt_and_by_token = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+
+        num_samples_only_containing_token = 0
+
+        while num_samples_only_containing_token == 0:
+            rng_key, sk = jax.random.split(rng_key)
+            true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
+                                                                   params_p, jnp_prompt,
+                                                                   output_len, # No +1 here, just have eps to deal with the log 0 issue.
+                                                                   n_samples_at_a_time)
+
+            posterior_samples_only_containing_token = true_posterior_samples[(check_only_contains_tokens(true_posterior_samples, indexes_of_tokens, prompt_len) == 1)]
+
+            print(posterior_samples_only_containing_token)
+            print(posterior_samples_only_containing_token.shape)
+
+            num_samples_only_containing_token = posterior_samples_only_containing_token.shape[0]
+
+
+
+        print(true_posterior_samples)
+
+        # token = ordered_token_list[i]
+        assert posterior_samples_only_containing_token.shape[0] != 0
+        log_true_final_twist = curried_reward_only_contains_tokens(indexes_of_tokens, prompt_len=prompt_len)
+
+        log_true_final_twists.append(log_true_final_twist)
+
+        true_posterior_samples_by_prompt_and_by_token.append(posterior_samples_only_containing_token)
+
+    print(true_posterior_samples_by_prompt_and_by_token)
+
+    return log_true_final_twists, true_posterior_samples_by_prompt_and_by_token
+
+
+
 
 
 
@@ -764,10 +836,10 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
     return sum_diff / total_size
 
 
-def hist_by_token_index(samples, token_index=-1):
+def hist_by_token_index(samples, n_vocab, token_index=-1):
     # Do the summary by last token by default
     samples_hist = [samples[samples[:, token_index] == i].shape[0] for i in
-                              range(len(ordered_token_list))]
+                              range(n_vocab)]
     samples_hist = jnp.array(samples_hist)
     if samples_hist.sum() == 0:
         return samples_hist
