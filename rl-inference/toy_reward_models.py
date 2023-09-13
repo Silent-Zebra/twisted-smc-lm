@@ -179,6 +179,51 @@ def curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token):
     return new_rm
 
 
+def batch_check_contains_token(seq, index_of_token):
+    contains_token = jnp.where(jnp.abs(seq - index_of_token) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
+
+    return jnp.minimum(contains_token.sum(axis=-1), jnp.ones_like(contains_token.shape[0]))
+
+
+def reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len):
+    do_reshape = False
+    if len(seq.shape) == 3:
+        original_shape = seq.shape
+        do_reshape = True
+        seq = seq.reshape(-1, seq.shape[-1])
+
+
+    contains_token = batch_check_contains_token(seq[:, prompt_len:], index_of_fixed_token)
+
+    # print(contains_token)
+    # print(contains_token.shape)
+
+    seq_for_last_prob_eval = jnp.concatenate((seq, jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + index_of_fixed_token), axis=1)
+    # print(seq.shape)
+
+    log_prob_of_fixed_token = evaluate_log_p_theta_t(seq_for_last_prob_eval, cfg_p, params_p)
+
+    log_p_contains_token = jnp.maximum(log_prob_of_fixed_token, jnp.log(contains_token))
+
+    # print(log_p_contains_token)
+    # print(log_p_contains_token.shape)
+
+    if do_reshape:
+        print(log_p_contains_token.shape)
+        print(log_p_contains_token.reshape(original_shape[0], original_shape[1]).reshape)
+        1/0
+        return log_p_contains_token.reshape(original_shape[0], original_shape[1])
+
+    return log_p_contains_token
+
+
+def curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token, prompt_len):
+    def new_rm(seq):
+        return reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len)
+    return new_rm
+
+
+
 # Just check the all 0s string and adjacent probabilities
 def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p):
     print("--INSPECT ONE_BAD PROGRESS--")
@@ -419,8 +464,6 @@ def build_log_p_token_last_pos_twists(rng_key, jnp_prompts, cfg_p, params_p, out
             extracted_true_posterior_samples = true_posterior_samples[true_posterior_samples[:, -1] == i][:, :-1]
             if extracted_true_posterior_samples.shape[0] != 0:
                 # rm_fn = curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token=i)
-                # TODO SEP 4 THIS IS WRONG TOO. GO THROUGH EVERYTHING IN THE CODE, IN THE ENVIRONMENT SETUP TO MAKE SURE IT'S CORRECT.
-                # INDEX OF FIXED TOKEN - WHAT SWHOULD IT BE? JUST CHECK EVERYTHING, PRINT AND CHECK EVERYTHING.
                 log_true_final_twist = curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token=i)
                 twists_all_tokens.append(log_true_final_twist)
                 indices_all_tokens.append(i)
@@ -435,6 +478,57 @@ def build_log_p_token_last_pos_twists(rng_key, jnp_prompts, cfg_p, params_p, out
     print(true_posterior_samples_by_prompt_and_by_token)
 
     return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
+
+def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, index_of_token_of_interest):
+    log_true_final_twists = []
+    indices_of_tokens_chosen_by_prompt = [] # indices of tokens chosen; a separate list per prompt
+    true_posterior_samples_by_prompt_and_by_token = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+
+        num_samples_containing_token = 0
+
+        while num_samples_containing_token == 0:
+            rng_key, sk = jax.random.split(rng_key)
+            true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
+                                                                   params_p, jnp_prompt,
+                                                                   output_len + 1, # This +1 is important here! In this new formulation where we care about the kth token, so we only generate up to the k-1 token. In this codebase, k = output_len + 1, so we generate k-1 = output_len tokens from p during the normal SMC/sampling procedures
+                                                                   n_samples_at_a_time)
+
+            posterior_samples_containing_token = true_posterior_samples[(batch_check_contains_token(true_posterior_samples, index_of_token_of_interest) == 1)]
+
+            print(posterior_samples_containing_token)
+            print(posterior_samples_containing_token.shape)
+
+            num_samples_containing_token = posterior_samples_containing_token.shape[0]
+
+
+        twists_all_tokens = []
+        indices_all_tokens = []
+        true_posterior_samples_split_by_tokens = []
+
+        print(true_posterior_samples)
+
+        i = index_of_token_of_interest
+        # token = ordered_token_list[i]
+        extracted_true_posterior_samples = posterior_samples_containing_token[:, :-1]
+        assert extracted_true_posterior_samples.shape[0] != 0
+        log_true_final_twist = curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token=i, prompt_len=prompt_len)
+        twists_all_tokens.append(log_true_final_twist)
+        indices_all_tokens.append(i)
+        true_posterior_samples_split_by_tokens.append(extracted_true_posterior_samples)
+
+        log_true_final_twists.append(twists_all_tokens)
+        indices_of_tokens_chosen_by_prompt.append(indices_all_tokens)
+        true_posterior_samples_by_prompt_and_by_token.append(true_posterior_samples_split_by_tokens)
+
+    print(indices_of_tokens_chosen_by_prompt)
+    print(true_posterior_samples_by_prompt_and_by_token)
+
+    return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
+
 
 
 

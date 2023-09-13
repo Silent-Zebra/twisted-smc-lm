@@ -10,6 +10,7 @@ load_dir = "."
 
 epochs = 40
 load_prefixes_to_use = [
+    "checkpoint_2023-09-06_22-30_seed42_prompt0_epoch40",
     "checkpoint_2023-09-07_03-14_seed42_prompt0_epoch40",
 ]
 total_n_twists = 9
@@ -112,6 +113,7 @@ def plot_results(axs, load_prefixes, max_iter_plot, z_score=1.96, skip_step=10, 
     # print(true_log_Z_record_total)
 
     for i in range(len(record_total_lists)):
+
         record_total_lists[i] = jnp.stack(record_total_lists[i])
 
     plot_items_indices = [[0, 3, 4, 5, 6], [7], [8, 9, 10, 11, 12]]
@@ -133,7 +135,6 @@ def plot_results(axs, load_prefixes, max_iter_plot, z_score=1.96, skip_step=10, 
 
             if plot_to_use == 2:
                 print(f"{label_list[i]}: Difference of Average from True KL: {plot_list[i].mean() - true_kl_record_total.mean():.5f}")
-
 
             # half_x = x[:, x.shape[1] // 2 :]
             # print(f"Avg over last half: {half_x.mean()}")
