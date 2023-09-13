@@ -180,9 +180,9 @@ def curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token):
 
 
 def batch_check_contains_token(seq, index_of_token):
-    contains_token = jnp.where(jnp.abs(seq - index_of_token) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
+    is_token = jnp.where(jnp.abs(seq - index_of_token) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
 
-    return jnp.minimum(contains_token.sum(axis=-1), jnp.ones_like(contains_token.shape[0]))
+    return jnp.minimum(is_token.sum(axis=-1), jnp.ones_like(is_token.shape[0]))
 
 
 def reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len):
@@ -223,15 +223,26 @@ def curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token, pro
     return new_rm
 
 
+def batch_check_contains_token(seq, index_of_token):
+    is_token = jnp.where(jnp.abs(seq - index_of_token) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
+
+    return jnp.minimum(is_token.sum(axis=-1), jnp.ones_like(is_token.shape[0]))
+
 def check_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
-    total_contains_token = jnp.ones((seq.shape[0],), dtype=jnp.int32)
+    output_to_check = seq[:, prompt_len:]
+
+    is_one_of_the_tokens = jnp.zeros_like(output_to_check, dtype=jnp.int32)
 
     for index_of_token in indexes_of_tokens:
-        contains_token = batch_check_contains_token(seq[:, prompt_len:],
-                                                    index_of_token)
-        total_contains_token *= contains_token
+        is_token = jnp.where(
+            jnp.abs(output_to_check - index_of_token) == jnp.zeros_like(output_to_check),
+            jnp.ones_like(output_to_check), jnp.zeros_like(output_to_check))
 
-    return total_contains_token
+        is_one_of_the_tokens += is_token
+
+    contains_only_tokens = (is_one_of_the_tokens.sum(axis=-1) == is_one_of_the_tokens.shape[-1])
+
+    return contains_only_tokens
 
 
 def reward_model_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
@@ -569,23 +580,21 @@ def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, outp
 
         num_samples_only_containing_token = 0
 
+        # Rejection sampling to get true posterior. A bit clunky but meh, we only need 1 posterior sample
         while num_samples_only_containing_token == 0:
             rng_key, sk = jax.random.split(rng_key)
-            true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
+            p_samples = stochastic_transformer_sample(sk, cfg_p,
                                                                    params_p, jnp_prompt,
                                                                    output_len, # No +1 here, just have eps to deal with the log 0 issue.
                                                                    n_samples_at_a_time)
 
-            posterior_samples_only_containing_token = true_posterior_samples[(check_only_contains_tokens(true_posterior_samples, indexes_of_tokens, prompt_len) == 1)]
+            posterior_samples_only_containing_token = p_samples[(check_only_contains_tokens(p_samples, indexes_of_tokens, prompt_len) == 1)]
 
             print(posterior_samples_only_containing_token)
             print(posterior_samples_only_containing_token.shape)
 
             num_samples_only_containing_token = posterior_samples_only_containing_token.shape[0]
 
-
-
-        print(true_posterior_samples)
 
         # token = ordered_token_list[i]
         assert posterior_samples_only_containing_token.shape[0] != 0

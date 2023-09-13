@@ -747,6 +747,8 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
                            token_of_interest_as_int, args.n_vocab,
                            hist_token_index)
 
+                print(smc_samples)
+
                 rng_key, sk = jax.random.split(rng_key)
                 _, no_resample_samples = smc_procedure(sk, prompt, cfg_p,
                                                        params_p, cfg_twist,
@@ -778,6 +780,9 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
                            prompt_len,
                            token_of_interest_as_int, args.n_vocab,
                            hist_token_index)
+
+                print(no_resample_samples)
+
 
         iwae_lbs_across_seeds.append(np.stack(iwae_lbs))
         iwae_ubs_across_seeds.append(np.stack(iwae_ubs))
@@ -1306,7 +1311,7 @@ if __name__ == "__main__":
     parser.add_argument("--indicator_pos_zero_index", type=int, default=0)
     parser.add_argument("--n_true_posterior_samples", type=int, default=10)
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
-    parser.add_argument("--index_of_token_contained", type=int, default=6)
+    parser.add_argument("--index_of_token_contained", type=int, default=6, help="for the contains_token environment, the token we are interested in checking")
 
     args = parser.parse_args()
 
