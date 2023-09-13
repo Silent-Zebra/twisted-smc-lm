@@ -358,7 +358,7 @@ def make_hists(extracted_samples, smc_samples, prompt_len, token_of_interest_as_
             "SMC samples (extracted) proportion by marginal of first token")
         print(smc_samples_hist)
         print(smc_samples_hist[token_of_interest_as_int])
-    elif args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+    elif args.rm_type == "p_token_last_index" or args.rm_type == "contains_token" or args.rm_type == "only_contains_token":
         smc_samples_hist = hist_by_token_index(
             smc_samples, n_vocab,
             token_index=hist_token_index)
@@ -441,6 +441,9 @@ class TestClass:
             # prompts = [["what", "is", "the", "term", "for", "neutral_term"]]
             # token_based_prompt = True
             prompts = [[0, 1, 2, 3, 4, 5]]
+            token_based_prompt = False
+        elif rm_type == "only_contains_token":
+            prompts = [[0, 1]]
             token_based_prompt = False
         else:
             prompts = [[0, 1, 0, 1]]
@@ -691,7 +694,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
     iwae_ubs_across_seeds = []
     smc_lbs_across_seeds = []
     smc_ubs_across_seeds = []
-    n_seeds = 2
+    n_seeds = 500
     print(f"Sampling Runs Starting")
     print(f"TIME: {time.time() - start}", flush=True)
 
@@ -884,8 +887,11 @@ def main():
 
 
     if args.rm_type == "indicator_at_index" or args.rm_type == "bad_word_pos" or \
-        args.rm_type == "p_token_last_index" or args.rm_type == "contains_token" or args.rm_type == "only_contains_token":
+        args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
         prompts = [[0, 1, 2, 3, 4, 5]]
+        token_based_prompt = False
+    elif args.rm_type == "only_contains_token":
+        prompts = [[0, 1]]
         token_based_prompt = False
     else:
         prompts = [[0, 1, 0, 1]]
