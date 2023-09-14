@@ -816,7 +816,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
     plt.xlabel("4^ Number of Particles")
 
     plt.legend()
-    plt.savefig(f"fig_epoch{epoch + 1}.png")
+    plt.savefig(f"{args.save_dir}/fig_epoch{epoch + 1}.png")
 
 
 def main():
@@ -1310,7 +1310,7 @@ if __name__ == "__main__":
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
     # parser.add_argument("--ckpt_every", type=int, default=50, help="Epochs between checkpoint save")
-    parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints")
+    parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
 
     parser.add_argument("--analytic_sigma_sample", action="store_true", help="Use analytic sigma sampling. Do not use together with twist learning.")
 
