@@ -219,9 +219,9 @@ def reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, 
     return log_p_contains_token
 
 
-def curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token, prompt_len):
+def curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface=False):
     def new_rm(seq):
-        return reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len)
+        return reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface)
     return new_rm
 
 
@@ -574,7 +574,7 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
         # token = ordered_token_list[i]
         extracted_true_posterior_samples = posterior_samples_containing_token[:, :-1]
         assert extracted_true_posterior_samples.shape[0] != 0
-        log_true_final_twist = curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token=i, prompt_len=prompt_len)
+        log_true_final_twist = curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token=i, prompt_len=prompt_len, huggingface=huggingface)
         twists_all_tokens.append(log_true_final_twist)
         indices_all_tokens.append(i)
         true_posterior_samples_split_by_tokens.append(extracted_true_posterior_samples)
