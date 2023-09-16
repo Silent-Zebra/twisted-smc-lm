@@ -35,8 +35,21 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
 
 from huggingface_models_custom import CustomLMWithTwistHead, get_tokenizer
 
-from result_plots_bounds import records_labels_list
-
+# from result_plots_bounds import records_labels_list
+records_labels_list = ["True Log Z",
+                       "Upper Bound Estimate (One Posterior)",
+                       "Upper Bound Estimate (All Posterior)",
+                       "Upper Bound Estimate (IWAE)",
+                       "Lower Bound Estimate (IWAE)",
+                       "Upper Bound Estimate (SMC)",
+                       "Lower Bound Estimate (SMC)",
+                       "F(q) Estimate",
+                       "True KL(q||sigma)",
+                       "KL(q||sigma) Upper Bound Estimate (IWAE)",
+                       "KL(q||sigma) Lower Bound Estimate (IWAE)",
+                       "KL(q||sigma) Upper Bound Estimate (SMC)",
+                       "KL(q||sigma) Lower Bound Estimate (SMC)",
+                       ] # TODO Sep 16 make dynamic later
 
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, analytic_sigma_sample=False):
