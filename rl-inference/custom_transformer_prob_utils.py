@@ -60,7 +60,7 @@ def get_all_new_seqs_single_t(seq, n_vocab):
 
 
 def get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=None):
-    if huggingface_model: # huggingface model
+    if huggingface_model is not None: # huggingface model
         p_logits = huggingface_model(input_ids=full_seq, ret="p", hface_model_params=params_p)
     else:
         p_logits = batch_transformer(cfg_p, params_p, full_seq)
@@ -70,7 +70,7 @@ def get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=None):
 
 def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int=-1, huggingface_model=None):
     # produces output of size (batch, n_vocab)
-    if huggingface_model: # huggingface model
+    if huggingface_model is not None: # huggingface model
         if prepend_tokens_for_twists:
             seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1),
                 dtype=jnp.int32) + token_of_interest_as_int, seq), axis=1)
@@ -89,7 +89,7 @@ def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twist
 
 def get_log_p_plus_log_psi(full_seq, params_p, params_twist, prompt_len, t, cfg_p_or_hface_model, cfg_twist_or_hface_model,
                            prepend_tokens_for_twists, token_of_interest_as_int=-1, huggingface_model=None):
-    if huggingface_model: # huggingface model
+    if huggingface_model is not None: # huggingface model
         if prepend_tokens_for_twists:
             log_psi_all_vocab = get_log_psi_all_vocab(full_seq, params_p, params_twist,
                                   prepend_tokens_for_twists,

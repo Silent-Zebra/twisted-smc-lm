@@ -724,7 +724,7 @@ def calc_opt_twist_helper_mapped(seqs_3d, cfg_p, params_p, log_true_final_twist,
 
 
 def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
-    if huggingface_model:
+    if huggingface_model is not None:
         1/0 # Don't do this with huggingface. It will take forever.
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len - 1)
 

@@ -410,7 +410,7 @@ class TestClass:
     #                         args.n_test_smc_samples,
     #                         token_of_interest_as_int,
     #                         extracted_samples,
-    #                         proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model)
+    #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
 
     def test_twist_learning_rl_p(self):
         self._test_twist_learning(twist_learn_type="rl_based_p_sample")
@@ -678,7 +678,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
     #                         args.n_test_smc_samples,
     #                         token_of_interest_as_int,
     #                         extracted_samples,
-    #                         proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model)
+    #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
     #
     # 1/0
 
@@ -800,7 +800,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
                                                        prepend_tokens_for_twists=prepend_tokens_for_twists,
                                                        token_of_interest_as_int=token_of_interest_as_int,
                                                        resample=False,
-                                                       proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model)
+                                                       proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
                 # (log_w_t,
                 #  _), full_seq_from_twist_since_no_resample = smc_procedure(
                 #     rng_key, prompt, cfg_p, params_p,
@@ -865,7 +865,7 @@ def main():
 
     rng_key = jax.random.PRNGKey(args.seed)
 
-    if args.huggingface_model:
+    if args.huggingface:
         model_config = "distilgpt2"
         tokenizer = get_tokenizer(model_config)
         rng_key, sk = jax.random.split(rng_key, 2)
@@ -878,6 +878,7 @@ def main():
         optimizer_twist = optax.adamw(learning_rate=args.lr_twist, b1=args.beta1,
                                   b2=args.beta2, eps=eps,
                                   weight_decay=args.weight_decay)
+        huggingface_model = model
 
     else: # Custom transformer
         rng_key, cfg_p, params_p = transformer_init_params(
@@ -936,7 +937,7 @@ def main():
         optimizer_twist = optax.adam(learning_rate=args.lr_twist, b1=args.beta1, b2=args.beta2)
         optim_twist_state = optimizer_twist.init(params_twist)
 
-    if args.huggingface_model:
+    if args.huggingface:
         prompts = [
             "This man is a",
             # "This woman is a"
@@ -964,7 +965,7 @@ def main():
     log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
         = get_log_true_final_twists(rng_key, jnp_prompts, experiment_cfg, cfg_p, params_p,
                                     args.rm_type, args.indicator_pos_zero_index, args.output_len,
-                                    args.n_true_posterior_samples, args.huggingface_model)
+                                    args.n_true_posterior_samples, args.huggingface)
 
     # records_list_by_prompt_then_twist = []
     # for _ in jnp_prompts:
@@ -1164,7 +1165,7 @@ def main():
                             params_twist, log_true_final_twist[i],
                             prepend_tokens_for_twists=True,
                             token_of_interest_as_int=token_of_interest_as_int,
-                            proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model
+                            proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model
                         ) # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
                         updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
                         params_twist = optax.apply_updates(params_twist, updates_twist)
@@ -1177,7 +1178,7 @@ def main():
                         params_twist, log_true_final_twist[0], # Only one set of log final twists (for the token we are interested in)
                         prepend_tokens_for_twists=True,
                         token_of_interest_as_int=token_of_interest_as_int,
-                        proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model
+                        proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model
                     )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
                     updates_twist, optim_twist_state = optimizer_twist.update(
                         grad_params_twist, optim_twist_state, params_twist)
@@ -1189,7 +1190,7 @@ def main():
                                           cfg_twist, params_twist, prompt_len,
                                           3,
                                           prepend_tokens_for_twists=False,
-                                          proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model
+                                          proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model
                                           )
                     _, smc_samples_test = smc_procedure(sk, prompt, cfg_p,
                                                         params_p, cfg_twist,
@@ -1201,7 +1202,7 @@ def main():
                                                         n_vocab=args.n_vocab,
                                                         get_intermediate_sample_history_based_on_learned_twists=False,
                                                         prepend_tokens_for_twists=False,
-                                                        proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model
+                                                        proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model
                                                         )
                     print(smc_samples_test)
                     extracted_samples = \
@@ -1218,7 +1219,7 @@ def main():
                                                             args.n_test_smc_samples,
                                                             args.n_vocab,
                                                             prepend_tokens_for_twists=False,
-                                                            proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model)
+                                                            proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
                     print(smc_upper_bound_estimate)
                     1 / 0
 
@@ -1230,7 +1231,7 @@ def main():
                         params_twist, log_true_final_twist,
                         # Only one set of log final twists (for the token we are interested in)
                         prepend_tokens_for_twists=False,
-                        proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model
+                        proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model
                     )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
                     updates_twist, optim_twist_state = optimizer_twist.update(
                         grad_params_twist, optim_twist_state, params_twist)
@@ -1244,7 +1245,7 @@ def main():
                     grad_params_twist = experiment_cfg.get_grad_params_twist(
                         sk, prompt, args.n_vocab, args.n_twist, args.output_len,
                         cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                        proposal_is_p=args.proposal_is_p, huggingface_model=args.huggingface_model
+                        proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model
                     )
 
                     updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
@@ -1270,7 +1271,7 @@ def main():
                                              prompt, prompt_len, cfg_p,
                                              params_p, cfg_twist, params_twist,
                                              log_true_final_twist[i], start,
-                                             hist_token_index, epoch, prepend_tokens_for_twists=True, huggingface_model=args.huggingface_model)
+                                             hist_token_index, epoch, prepend_tokens_for_twists=True, huggingface_model=huggingface_model)
                         elif args.rm_type == "only_contains_token":
 
                             token_of_interest_as_int = indexes_of_tokens_for_only_contains_token[0] # arbitrarily pick the first one as the one we'll inspect for the hists etc.
@@ -1283,7 +1284,7 @@ def main():
                                              params_p, cfg_twist, params_twist,
                                              log_true_final_twist, start,
                                              hist_token_index, epoch,
-                                             prepend_tokens_for_twists=False, huggingface_model=args.huggingface_model)
+                                             prepend_tokens_for_twists=False, huggingface_model=huggingface_model)
 
                     else:
 
@@ -1489,7 +1490,7 @@ if __name__ == "__main__":
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
     parser.add_argument("--index_of_token_contained", type=int, default=6, help="for the contains_token environment, the token we are interested in checking")
 
-    parser.add_argument("--huggingface_model", action="store_true", help="Use huggingface transformer. Obviates the need for setting transformer parameters")
+    parser.add_argument("--huggingface", action="store_true", help="Use huggingface transformer. Obviates the need for setting transformer parameters")
     # TODO SEP 15; add flags for different models.
 
     args = parser.parse_args()
@@ -1505,7 +1506,7 @@ if __name__ == "__main__":
     if args.rm_type == "only_contains_token":
         assert args.n_vocab > max(indexes_of_tokens_for_only_contains_token)
 
-    if args.huggingface_model:
+    if args.huggingface:
         assert args.n_vocab == 50257
 
     main()
