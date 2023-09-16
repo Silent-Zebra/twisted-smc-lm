@@ -214,10 +214,10 @@ def batch_transformer(cfg, params, seq):
     return batch_transformer_func(cfg, params, seq)
 
 
-def batch_transformer_with_prepend_token_of_interest(index_of_token_of_interest):
+def batch_transformer_with_prepend_token_of_interest(token_of_interest_as_int):
     def new_batch_transformer(cfg, params, seq):
         # print(seq)
-        seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + index_of_token_of_interest, seq), axis=1)
+        seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + token_of_interest_as_int, seq), axis=1)
         # print(seqs_with_prepended_prompts[0])
         output = batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :]
         # print(output[0, -3, :])
@@ -228,45 +228,4 @@ def batch_transformer_with_prepend_token_of_interest(index_of_token_of_interest)
 
 
 
-
-def stochastic_transformer_sample_iter(carry, t, cfg):
-    # Essentially the way this works is we pass in a full computation (eg full prompt_len + output_len)
-    # but we only use the logit for the time step t, and discard the rest of the computation
-    # That is, we are computing logits on the full sequence of length prompt_len + output_len
-    # where the first prompt_len + t tokens have meaningful values that we previously computed
-    # and the later tokens are unitialized (some garbage value)
-    # so we end up wasting computation on those later tokens, as we only use the logit at time step t
-    # but this is still faster than not using scan+jit
-    # Now we don't have dynamic arrays, and since the indexing uses [:, prompt_len + t - 1, :],
-    # the only changing part of the index still doesn't change shape. The key point is that no shapes are changing anywhere.
-    # So this works with jit, at the cost of a bit of wasted computation
-    # This is the approach that I saw people taking online with transformers.
-    # As of May 2023 there did not seem to be a better approach in jax (some discussion of jax.mask didn't end up going anywhere)
-    rng_key, params, full_seq, prompt_len = carry
-    output_unnormalized_batch = batch_transformer(cfg, params, full_seq)
-    rng_key, subkey = jax.random.split(rng_key)
-    # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax.
-    # I needed log_softmax on the other ones in order to properly combine with the other log term.
-    indices_to_use = jax.random.categorical(subkey, output_unnormalized_batch[:, prompt_len + t - 1, :],
-                                 shape=(output_unnormalized_batch.shape[0],))
-    full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
-    carry = (rng_key, params, full_seq, prompt_len)
-    return carry, None
-
-
-# lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
-@partial(jax.jit, static_argnums=[1, 4, 5])
-def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples):
-    prompt_len = prompt.shape[0]
-    # print(prompt_len)
-    batch_prompt = jnp.full((n_samples, prompt.shape[0]), prompt)
-    output = jnp.zeros((n_samples, output_len), dtype=jnp.int32)
-    full_seq = jnp.concatenate((batch_prompt, output), axis=1)
-
-    carry = (rng_key, params, full_seq, prompt_len)
-    carry, _ =  jax.lax.scan(partial(stochastic_transformer_sample_iter, cfg=cfg), carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
-
-    rng_key, params, full_seq, _ = carry
-
-    return full_seq
 
