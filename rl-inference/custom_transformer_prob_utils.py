@@ -77,7 +77,7 @@ def get_log_psi_all_vocab(seq, cfg_twist_or_hface_model, params_twist, prepend_t
         if prepend_tokens_for_twists:
             seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1),
                 dtype=jnp.int32) + token_of_interest_as_int, seq), axis=1)
-            return hface_model(input_ids=seqs_with_prepended_prompts, ret="twist", params_twist_head=params_twist)
+            return hface_model(input_ids=seqs_with_prepended_prompts, ret="twist", params_twist_head=params_twist)[:, 1:]
         else:
             return hface_model(input_ids=seq, ret="twist", params_twist_head=params_twist)
 
