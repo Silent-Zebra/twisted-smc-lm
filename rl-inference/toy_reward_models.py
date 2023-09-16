@@ -155,7 +155,7 @@ def curried_log_indicator_token_position(token, zero_index_position):
         return log_indicator_token_position(seq, prompt_len, token, zero_index_position)
     return new_fn
 
-def reward_model_log_p_of_token(seq, cfg_p, params_p, index_of_fixed_token, huggingface=False):
+def reward_model_log_p_of_token(seq, cfg_p, params_p, index_of_fixed_token, huggingface_model=None):
     do_reshape = False
     if len(seq.shape) == 3:
         original_shape = seq.shape
@@ -165,7 +165,7 @@ def reward_model_log_p_of_token(seq, cfg_p, params_p, index_of_fixed_token, hugg
     seq = jnp.concatenate((seq, jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + index_of_fixed_token), axis=1)
     # print(seq.shape)
 
-    log_prob_of_fixed_token = evaluate_log_p_theta_t(seq, cfg_p, params_p, huggingface=huggingface)
+    log_prob_of_fixed_token = evaluate_log_p_theta_t(seq, cfg_p, params_p, huggingface_model=huggingface_model)
 
     if do_reshape:
         print(log_prob_of_fixed_token.shape)
@@ -187,7 +187,7 @@ def batch_check_contains_token(seq, index_of_token):
     return jnp.minimum(is_token.sum(axis=-1), jnp.ones_like(is_token.shape[0]))
 
 
-def reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface=False):
+def reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface_model=None):
     do_reshape = False
     if len(seq.shape) == 3:
         original_shape = seq.shape
@@ -203,7 +203,7 @@ def reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, 
     seq_for_last_prob_eval = jnp.concatenate((seq, jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + index_of_fixed_token), axis=1)
     # print(seq.shape)
 
-    log_prob_of_fixed_token = evaluate_log_p_theta_t(seq_for_last_prob_eval, cfg_p, params_p, huggingface=huggingface)
+    log_prob_of_fixed_token = evaluate_log_p_theta_t(seq_for_last_prob_eval, cfg_p, params_p, huggingface_model=huggingface_model)
 
     log_p_contains_token = jnp.maximum(log_prob_of_fixed_token, jnp.log(contains_token))
 
@@ -219,9 +219,9 @@ def reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, 
     return log_p_contains_token
 
 
-def curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface=False):
+def curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface_model=None):
     def new_rm(seq):
-        return reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface)
+        return reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface_model)
     return new_rm
 
 
@@ -285,14 +285,14 @@ def curried_reward_only_contains_tokens(indexes_of_tokens, prompt_len):
 
 
 # Just check the all 0s string and adjacent probabilities
-def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, huggingface=False):
+def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, huggingface_model=None):
     print("--INSPECT ONE_BAD PROGRESS--")
     seq = jnp.concatenate((jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
     seq = seq[None, :]
     seq = get_all_new_seqs_single_t(seq, n_vocab)
     seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
     # Seq is the all zeros sequence (following the prompt) along with all zeros except for the last token, for which we check all the n_vocab possibilities
-    log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len, huggingface=huggingface)
+    log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
     # log_psi = evaluate_log_phi_final(seq, log_true_final_twist)
     print(log_p)
 
@@ -305,15 +305,15 @@ def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, par
 #     print(log_p_all_seqs)
 
 
-def inspect_varied_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, huggingface=False):
+def inspect_varied_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, huggingface_model=None):
     print("--INSPECT VARIED PROGRESS--")
     all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len)
     log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
-                                                 prompt_len, output_len, huggingface=huggingface)
+                                                 prompt_len, output_len, huggingface_model=huggingface_model)
     print(log_p_all_seqs)
 
 
-def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface=False):
+def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface_model=None):
     print("--INSPECT BAD WORD PROGRESS--")
     # test_seqs = [
     #     ["what", "is", "the", "term", "for", "neutral_term", "the", "term",
@@ -340,7 +340,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface=False):
     jnp_indices_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_seqs])
 
     log_p_all_seqs = evaluate_log_p_theta_1_to_t(jnp_indices_seqs, cfg_p, params_p,
-                                                 prompt_len, output_len, huggingface=huggingface)
+                                                 prompt_len, output_len, huggingface_model=huggingface_model)
     print(log_p_all_seqs)
     print(reward_model_bad_word(jnp_indices_seqs, prompt_len))
     desired_cont_indist_prob = jnp.exp(log_p_all_seqs[0])
@@ -356,7 +356,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface=False):
             test_bad_seqs.append(seq)
     jnp_ind_test_bad_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_bad_seqs])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_bad_seqs, cfg_p, params_p,
-                                                 prompt_len, 2, huggingface=False)
+                                                 prompt_len, 2, huggingface_model=None)
     print("BAD WORD In dist Prob")
     bad_word_indist_prob = jnp.exp(log_p).sum()
     print(bad_word_indist_prob) # total sum prob of bad term in the ood prompt case
@@ -374,7 +374,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface=False):
 
     jnp_ind_test_ood_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_bad_seqs])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_seqs, cfg_p, params_p,
-                                                 ood_prompt_len, output_len, huggingface=huggingface)
+                                                 ood_prompt_len, output_len, huggingface_model=huggingface_model)
     print("BAD WORD OOD Prob")
     bad_word_ood_prob = jnp.exp(log_p).sum()
     print(bad_word_ood_prob) # total sum prob of bad term in the ood prompt case
@@ -382,7 +382,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface=False):
     test_ood_good_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "neutral_term", "_" ]]
     jnp_ind_test_ood_good_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_good_seq])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_good_seq, cfg_p, params_p,
-                                        ood_prompt_len, output_len, huggingface=huggingface) # prompt_len = 6, 6+3=9
+                                        ood_prompt_len, output_len, huggingface_model=huggingface_model) # prompt_len = 6, 6+3=9
     print("Desired continuation OOD Prob")
     desired_cont_ood_prob = jnp.exp(log_p)
     print(desired_cont_ood_prob)
@@ -390,7 +390,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface=False):
     test_ood_evasive_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "unsure", "_" ]]
     jnp_ind_test_ood_evasive_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_evasive_seq])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_evasive_seq, cfg_p, params_p,
-                                        ood_prompt_len, output_len, huggingface=huggingface) # prompt_len = 6, 6+3=9
+                                        ood_prompt_len, output_len, huggingface_model=huggingface_model) # prompt_len = 6, 6+3=9
     print("Evasive continuation OOD Prob")
     evasive_cont_ood_prob = jnp.exp(log_p)
     print(evasive_cont_ood_prob)
@@ -461,7 +461,7 @@ def build_log_true_final_twists_positive_rew(jnp_prompts, rm_fn):
     return log_true_final_twists
 
 
-def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_index_position, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface=False):
+def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_index_position, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model=None):
     log_true_final_twists = []
     indices_of_tokens_chosen_by_prompt = [] # indices of tokens chosen; a separate list per prompt
     true_posterior_samples_by_prompt_and_by_token = []
@@ -472,7 +472,7 @@ def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_ind
         true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
                                                                params_p, jnp_prompt,
                                                                output_len,
-                                                               n_true_posterior_samples, huggingface=huggingface)
+                                                               n_true_posterior_samples, huggingface_model=huggingface_model)
         # Define the evidence based on the true posterior samples (only care about the words that we actually got from the true posterior samples
 
         twists_all_tokens = []
@@ -498,7 +498,7 @@ def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_ind
 
 
 
-def build_log_p_token_last_pos_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface=False):
+def build_log_p_token_last_pos_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model=None):
     log_true_final_twists = []
     indices_of_tokens_chosen_by_prompt = [] # indices of tokens chosen; a separate list per prompt
     true_posterior_samples_by_prompt_and_by_token = []
@@ -509,7 +509,7 @@ def build_log_p_token_last_pos_twists(rng_key, jnp_prompts, cfg_p, params_p, out
         true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
                                                                params_p, jnp_prompt,
                                                                output_len + 1, # This +1 is important here! In this new formulation where we care about the kth token, so we only generate up to the k-1 token. In this codebase, k = output_len + 1, so we generate k-1 = output_len tokens from p during the normal SMC/sampling procedures
-                                                               n_true_posterior_samples, huggingface=huggingface)
+                                                               n_true_posterior_samples, huggingface_model=huggingface_model)
         # Define the evidence based on the true posterior samples (only care about the words that we actually got from the true posterior samples
 
 
@@ -540,7 +540,7 @@ def build_log_p_token_last_pos_twists(rng_key, jnp_prompts, cfg_p, params_p, out
     return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
 
 
-def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, index_of_token_of_interest, huggingface=False):
+def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, index_of_token_of_interest, huggingface_model=None):
     log_true_final_twists = []
     indices_of_tokens_chosen_by_prompt = [] # indices of tokens chosen; a separate list per prompt
     true_posterior_samples_by_prompt_and_by_token = []
@@ -554,7 +554,7 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
             true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
                                                                    params_p, jnp_prompt,
                                                                    output_len + 1, # This +1 is important here! In this new formulation where we care about the kth token, so we only generate up to the k-1 token. In this codebase, k = output_len + 1, so we generate k-1 = output_len tokens from p during the normal SMC/sampling procedures
-                                                                   n_samples_at_a_time, huggingface=huggingface)
+                                                                   n_samples_at_a_time, huggingface_model=huggingface_model)
 
             posterior_samples_containing_token = true_posterior_samples[(batch_check_contains_token(true_posterior_samples, index_of_token_of_interest) == 1)]
 
@@ -574,7 +574,7 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
         # token = ordered_token_list[i]
         extracted_true_posterior_samples = posterior_samples_containing_token[:, :-1]
         assert extracted_true_posterior_samples.shape[0] != 0
-        log_true_final_twist = curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token=i, prompt_len=prompt_len, huggingface=huggingface)
+        log_true_final_twist = curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token=i, prompt_len=prompt_len, huggingface_model=huggingface_model)
         twists_all_tokens.append(log_true_final_twist)
         indices_all_tokens.append(i)
         true_posterior_samples_split_by_tokens.append(extracted_true_posterior_samples)
@@ -589,7 +589,7 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
     return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
 
 
-def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indexes_of_tokens, huggingface=False):
+def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indexes_of_tokens, huggingface_model=None):
     log_true_final_twists = []
     true_posterior_samples_by_prompt_and_by_token = []
     for jnp_prompt in jnp_prompts:
@@ -603,7 +603,7 @@ def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, outp
             p_samples = stochastic_transformer_sample(sk, cfg_p,
                                                                    params_p, jnp_prompt,
                                                                    output_len, # No +1 here, just have eps to deal with the log 0 issue.
-                                                                   n_samples_at_a_time, huggingface=huggingface)
+                                                                   n_samples_at_a_time, huggingface_model=huggingface_model)
 
             posterior_samples_only_containing_token = p_samples[(check_only_contains_tokens(p_samples, indexes_of_tokens, prompt_len) == 1)]
 
@@ -631,7 +631,7 @@ def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, outp
 
 
 # THIS FUNCTION ONLY WORKS FOR THE ONE_BAD REWARD MODEL (WITH THE ALL 0s BEING BAD), and only calculates twists on strings containing 0s e.g. 0, then 00, 000, etc. regardless of the n_vocab (although each computation must calculate using a sum over all n_vocab tokens)
-def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, huggingface=False):
+def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
     # Add output_len-1 zeros first
     seq = jnp.concatenate((jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
     seq = seq[None, :]
@@ -656,7 +656,7 @@ def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p
         seq = get_all_new_seqs_single_t(seq, n_vocab)
         seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
 
-        eval_log_p_t = evaluate_log_p_theta_t(seq, cfg_p, params_p, huggingface=huggingface)
+        eval_log_p_t = evaluate_log_p_theta_t(seq, cfg_p, params_p, huggingface_model=huggingface_model)
 
         # optimal_twist = (jnp.exp(eval_log_p + opt_log_twist_array[i * args.n_vocab:(i+1) * args.n_vocab])).sum()
         opt_log_twist_single = jax.nn.logsumexp(eval_log_p_t + opt_log_twist_array)
@@ -667,7 +667,7 @@ def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p
     return opt_log_twist_array_list
 
 # Check the model twists in a similar manner to the optimal twists for the one_bad reward model
-def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params_twist, stop_grad=False, huggingface=False):
+def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params_twist, stop_grad=False, huggingface_model=None):
     # Add output_len-1 zeros first
     seq = jnp.concatenate(
         (jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
@@ -679,7 +679,7 @@ def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params
 
     model_twist_array_list = []
 
-    model_twist = evaluate_log_psi_t(seq, cfg_twist, params_twist, huggingface=huggingface)
+    model_twist = evaluate_log_psi_t(seq, cfg_twist, params_twist, huggingface_model=huggingface_model)
 
     model_twist_array_list.append(model_twist)
 
@@ -691,7 +691,7 @@ def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params
         seq = seq.reshape(-1, seq.shape[
             -1])  # turn into (batch_size = n_vocab, seq_len) shape
 
-        model_twist = evaluate_log_psi_t(seq, cfg_twist, params_twist, huggingface=huggingface)
+        model_twist = evaluate_log_psi_t(seq, cfg_twist, params_twist, huggingface_model=huggingface_model)
 
         if stop_grad:
             model_twist = jax.lax.stop_gradient(model_twist)
@@ -703,9 +703,9 @@ def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params
 
 
 
-def calc_opt_twist_helper(seqs_2d, cfg_p, params_p, log_true_final_twist, huggingface=False):
+def calc_opt_twist_helper(seqs_2d, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
     eval_log_p_t = evaluate_log_p_theta_t(
-        seqs_2d, cfg_p, params_p, huggingface=huggingface)
+        seqs_2d, cfg_p, params_p, huggingface_model=huggingface_model)
 
     eval_log_psi = evaluate_log_phi_final(
         seqs_2d, log_true_final_twist)
@@ -715,16 +715,16 @@ def calc_opt_twist_helper(seqs_2d, cfg_p, params_p, log_true_final_twist, huggin
 
     return optimal_log_twist
 
-def calc_opt_twist_helper_mapped(seqs_3d, cfg_p, params_p, log_true_final_twist, huggingface=False):
-    return jax.vmap(calc_opt_twist_helper, in_axes=(0, None, None, None))(seqs_3d, cfg_p, params_p, log_true_final_twist, huggingface=huggingface)
+def calc_opt_twist_helper_mapped(seqs_3d, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
+    return jax.vmap(calc_opt_twist_helper, in_axes=(0, None, None, None))(seqs_3d, cfg_p, params_p, log_true_final_twist, huggingface_model=huggingface_model)
 
 
 
 
 
 
-def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, huggingface=False):
-    if huggingface:
+def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
+    if huggingface_model:
         1/0 # Don't do this with huggingface. It will take forever.
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len - 1)
 
@@ -758,7 +758,7 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_tr
             all_seqs_to_T_minus_j, n_vocab)
         for i in range(all_seqs_with_n_vocab_at_t.shape[0]):
             eval_log_p_t = evaluate_log_p_theta_t(
-                all_seqs_with_n_vocab_at_t[i, :, :], cfg_p, params_p, huggingface=huggingface)
+                all_seqs_with_n_vocab_at_t[i, :, :], cfg_p, params_p, huggingface_model=huggingface_model)
             # optimal_twist = (jnp.exp(eval_log_p + opt_log_twist_array[i * args.n_vocab:(i+1) * args.n_vocab])).sum()
             optimal_log_twist = jax.nn.logsumexp(
                 eval_log_p_t + opt_log_twist_array[
@@ -781,7 +781,7 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_tr
 
     return opt_log_twist_array_list
 
-def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist, huggingface=False):
+def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist, huggingface_model=None):
     # Calculates on all possible sequences (not practical for large n_vocab or large output_len)
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(
         prompt, n_vocab, output_len)
@@ -790,7 +790,7 @@ def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist, hugg
 
     for j in range(1, output_len + 1):
         all_seqs = all_seqs_list[-j]
-        model_twist = evaluate_log_psi_t(all_seqs, cfg_twist, params_twist, huggingface=huggingface)
+        model_twist = evaluate_log_psi_t(all_seqs, cfg_twist, params_twist, huggingface_model=huggingface_model)
         model_twist_array_list.append(model_twist)
 
     return model_twist_array_list
