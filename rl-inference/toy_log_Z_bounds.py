@@ -12,7 +12,7 @@ import jax
 
 import optax
 
-from flax.training import checkpoints
+# from flax.training import checkpoints # TODO SEP 16 FIX THE CHECKPOINTING ISSUE (maybe use Orbax?)
 import datetime
 
 import numpy as np
@@ -1359,10 +1359,10 @@ def main():
                         records_list_by_twist = records_list_by_prompt_then_twist[
                             prompt_num]
                         print(records_list_by_twist)
-                        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                                    target=records_list_by_twist,
-                                                    step=epoch + 1,
-                                                    prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
+                        # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                        #                             target=records_list_by_twist,
+                        #                             step=epoch + 1,
+                        #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
                 last_ckpt_epoch = epoch
 
     # print(records_list)
@@ -1375,10 +1375,10 @@ def main():
                 print(f"Prompt: {prompts[prompt_num]}")
                 records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
                 print(records_list_by_twist)
-                checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                            target=records_list_by_twist,
-                                            step=epoch + 1,
-                                            prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
+                # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                #                             target=records_list_by_twist,
+                #                             step=epoch + 1,
+                #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
 
 
     end = time.time()
@@ -1489,5 +1489,7 @@ if __name__ == "__main__":
     if args.rm_type == "only_contains_token":
         assert args.n_vocab > max(indexes_of_tokens_for_only_contains_token)
 
+    if args.huggingface:
+        assert args.n_vocab == 50257
 
     main()
