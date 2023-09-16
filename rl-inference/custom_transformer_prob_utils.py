@@ -1406,11 +1406,13 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     log_psi = get_log_psi_all_vocab(samples_to_evaluate_over, cfg_twist, params_twist,
                                      prepend_tokens_for_twists,
                                      token_of_interest_as_int, huggingface=huggingface)
+    log_psi = log_psi[:, prompt_len:]
 
     p_logits = get_transformer_p_logits(cfg_p, params_p, samples_to_evaluate_over, huggingface=huggingface)
     log_p = jax.nn.log_softmax(p_logits, axis=-1) # gives you the normalized p values, since the regular output is the unnormalized log p values
+    log_p = log_p[:, prompt_len:]
 
-    target_term = jax.nn.logsumexp((log_p + log_psi)[:, prompt_len:], axis=-1) # first we get log(p psi), then we do exp, so we have p psi (psi = e^V), then we sum all the (p psi), then we log again. Therefore logsumexp. We use axis = -1 because we want to preserve the different values across different time steps. Essentially doing all the different time steps in one go
+    target_term = jax.nn.logsumexp((log_p + log_psi), axis=-1) # first we get log(p psi), then we do exp, so we have p psi (psi = e^V), then we sum all the (p psi), then we log again. Therefore logsumexp. We use axis = -1 because we want to preserve the different values across different time steps. Essentially doing all the different time steps in one go
     # Note that both log p and log psi are over the set of next tokens. E.g. at the very last time step T they are both over T+1
     # This is in contrast to the evaluation (the "values" below which are evaluating the token at time step T using the twist T-1.
     # So we already have everything we need, no need to shift time steps by 1 or whatever
