@@ -1,3 +1,6 @@
+import torch
+# For some reason my dependencies are messed up, so torch has to go first?
+
 from jax import vmap, jit
 
 import time
