@@ -878,7 +878,7 @@ def main():
         optimizer_twist = optax.adamw(learning_rate=args.lr_twist, b1=args.beta1,
                                   b2=args.beta2, eps=eps,
                                   weight_decay=args.weight_decay)
-        huggingface_model = model
+        huggingface_model = model.__call__
 
     else: # Custom transformer
         rng_key, cfg_p, params_p = transformer_init_params(

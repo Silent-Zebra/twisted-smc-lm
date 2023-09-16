@@ -61,6 +61,7 @@ def get_all_new_seqs_single_t(seq, n_vocab):
 
 def get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=None):
     if huggingface_model is not None: # huggingface model
+        # should really be an apply_fn here...
         p_logits = huggingface_model(input_ids=full_seq, ret="p", hface_model_params=params_p)
     else:
         p_logits = batch_transformer(cfg_p, params_p, full_seq)
@@ -147,7 +148,7 @@ def stochastic_transformer_sample_iter(carry, t, cfg, huggingface_model=None):
 
 
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
-@partial(jax.jit, static_argnames=["cfg", "output_len", "n_samples"])
+@partial(jax.jit, static_argnames=["cfg", "output_len", "n_samples", "huggingface_model"])
 def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples, huggingface_model=None):
     prompt_len = prompt.shape[0]
     # print(prompt_len)
@@ -237,7 +238,7 @@ def evaluate_and_add_normalized_log_q_t_given_1_to_t_minus_1(carry, t, cfg_p, cf
     return carry, None
 
 
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'output_len', "prepend_tokens_for_twists", "token_of_interest_as_int"])
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'output_len', "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model"])
 def evaluate_normalized_log_q_1_to_t(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len,
                                      prepend_tokens_for_twists, token_of_interest_as_int=-1, huggingface_model=None):
     normalized_log_q_1_to_t = jnp.zeros((full_seq.shape[0]))
@@ -664,7 +665,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", 'output_len', 'n_smc_samples', "get_intermediate_sample_history_based_on_learned_twists",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p"])
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p", "huggingface_model"])
 def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
             n_smc_samples, get_intermediate_sample_history_based_on_learned_twists=False,
             prepend_tokens_for_twists=False, token_of_interest_as_int=-1,
@@ -1136,7 +1137,7 @@ def get_l_dre_sixo_scan_iter(carry, t, cfg_twist, prepend_tokens_for_twists, tok
     return carry, None
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p"])
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p", "huggingface_model"])
 def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                    output_len, n_twist, prepend_tokens_for_twists, token_of_interest_as_int=-1,
                    proposal_is_p=False, huggingface_model=None):
@@ -1191,7 +1192,7 @@ def get_l_ebm_ml_scan_iter(carry, scan_over, cfg_twist, prepend_tokens_for_twist
 
 # This is the EBM Maximum Likelihood approach (previously called Roger's approach).
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p"])
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p", "huggingface_model"])
 def get_l_ebm_ml_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, token_of_interest_as_int=-1, proposal_is_p=False, huggingface_model=None):
     prompt_len = prompt.shape[-1]
@@ -1239,7 +1240,7 @@ def get_l_ebm_ml_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, 
 # This is the EBM Maximum Likelihood approach, but with resampling on the proposal distribution.
 # Possibly less theoretically justified, but saves one call to SMC
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p"])
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p", "huggingface_model"])
 def get_l_ebm_ml_w_q_resample_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, token_of_interest_as_int=-1, proposal_is_p=False, huggingface_model=None):
     prompt_len = prompt.shape[-1]
@@ -1309,7 +1310,7 @@ def get_proposal_q_sample_in_scan_non_modify(carry, t, cfg_p, cfg_twist, prepend
 
 # This is Rob's approach
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p"])
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p", "huggingface_model"])
 def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, token_of_interest_as_int=-1, proposal_is_p=False, huggingface_model=None):
     prompt_len = prompt.shape[-1]
@@ -1361,7 +1362,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p",
-                                   "evaluate_over_samples_from"])
+                                   "evaluate_over_samples_from", "huggingface_model"])
 def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, token_of_interest_as_int=-1, proposal_is_p=False,
                             evaluate_over_samples_from="p", huggingface_model=None):
