@@ -965,7 +965,7 @@ def main():
     log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
         = get_log_true_final_twists(rng_key, jnp_prompts, experiment_cfg, cfg_p, params_p,
                                     args.rm_type, args.indicator_pos_zero_index, args.output_len,
-                                    args.n_true_posterior_samples, args.huggingface)
+                                    args.n_true_posterior_samples, huggingface_model)
 
     # records_list_by_prompt_then_twist = []
     # for _ in jnp_prompts:
