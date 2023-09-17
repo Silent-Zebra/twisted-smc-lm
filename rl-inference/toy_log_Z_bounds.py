@@ -162,7 +162,7 @@ def compare_iwae_vs_smc(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
 
 
 @partial(jax.jit, static_argnames=["log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
-                                   "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",  "prepend_tokens_for_twists"])
+                                   "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",  "prepend_tokens_for_twists", "huggingface_model"])
 def inspect_and_record_evidence_setting_for_index(rng_key,
                                         prompt,
                                         prompt_len, cfg_p, params_p, cfg_twist,

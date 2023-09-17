@@ -526,7 +526,8 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
         rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t,
-        prepend_tokens_for_twists, token_of_interest_as_int, proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample)
+        prepend_tokens_for_twists, token_of_interest_as_int, proposal_is_p=proposal_is_p,
+        huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample)
 
     log_p_theta_t_eval = log_p_eval_of_new_seqs
 
@@ -713,9 +714,11 @@ def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     output_len, params_p, params_twist, prompt_len, log_z_hat_t = carry
 
-    (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
+    (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = smc_scan_iter_final(
+        rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
-        prepend_tokens_for_twists, token_of_interest_as_int, resample, true_posterior_sample, proposal_is_p)
+        prepend_tokens_for_twists, token_of_interest_as_int, resample, true_posterior_sample, proposal_is_p,
+        huggingface_model=huggingface_model)
 
     full_seq_list = jnp.concatenate((full_seq_list, full_seq_based_on_learned_twist[None, :, :]))
 
