@@ -743,6 +743,10 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
         smc_lbs = []
         smc_ubs = []
         for n_test_smc_samples in n_samples:
+            if seed == 0:
+                print(f"n_smc: {n_test_smc_samples}")
+                jax.profiler.save_device_memory_profile(f"memory.prof")
+
 
             rng_key, sk = jax.random.split(rng_key)
 
@@ -1086,8 +1090,8 @@ def main():
             # TODO Jul 17 Consider scan loop and jit these too.
             for twist_update in range(args.twist_updates_per_epoch):
                 print(f"Twist update: {twist_update}")
-                jax.profiler.save_device_memory_profile(
-                    f"memory{twist_update}.prof")
+                # jax.profiler.save_device_memory_profile(f"memory{twist_update}.prof")
+                jax.profiler.save_device_memory_profile(f"memory.prof")
 
                 if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index":
 
