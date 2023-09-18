@@ -754,6 +754,8 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
     print(f"TIME: {time.time() - start}", flush=True)
 
     for seed in range(n_seeds):
+        print(f"Sampling seed {seed}", flush=True)
+        print(f"TIME: {time.time() - start}", flush=True)
 
         iwae_lbs = []
         iwae_ubs = []
@@ -1288,6 +1290,8 @@ def main():
             plot_logZ_bounds_only = True
             if (epoch + 1) % args.print_every == 0:
                 if test_info:
+                    print(f"TEST INFO STARTING", flush=True)
+                    print(f"TIME: {time.time() - start}", flush=True)
                     if plot_logZ_bounds_only:
                         if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
                             or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
