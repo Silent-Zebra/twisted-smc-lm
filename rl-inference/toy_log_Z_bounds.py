@@ -35,7 +35,8 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     tokens_to_jnp_indices, ordered_token_list, batch_reward_model, build_log_true_final_twists_positive_rew, \
     build_indicator_twists_all_tokens_at_position, reward_model_bad_word, \
     hist_by_token_index, build_log_p_token_last_pos_twists, build_contains_token_twists, \
-    build_only_contains_token_twists, check_only_contains_tokens_t_limited
+    build_only_contains_token_twists, build_contains_token_eps_twists,\
+    check_only_contains_tokens_t_limited
 # Update the twists, update the whole framework for the Bayesian thing.
 
 from huggingface_models_custom import CustomLMWithTwistHead, get_tokenizer
@@ -97,7 +98,8 @@ class ExperimentConfig:
 
     def _get_rm_fn(self):
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
-            or self.rm_type == "contains_token" or self.rm_type == "only_contains_token":
+            or self.rm_type == "contains_token" or self.rm_type == "only_contains_token" \
+            or self.rm_type == "contains_token_eps":
             return None
         elif self.rm_type == "bad_word_pos":
             return reward_model_bad_word
@@ -386,7 +388,8 @@ def make_hists(extracted_samples, smc_samples, prompt_len, token_of_interest_as_
             "SMC samples (extracted) proportion by marginal of first token")
         print(smc_samples_hist)
         print(smc_samples_hist[token_of_interest_as_int])
-    elif args.rm_type == "p_token_last_index" or args.rm_type == "contains_token" or args.rm_type == "only_contains_token":
+    elif args.rm_type == "p_token_last_index" or args.rm_type == "contains_token" \
+        or args.rm_type == "only_contains_token" or args.rm_type == "contains_token_eps":
         smc_samples_hist = hist_by_token_index(
             smc_samples, n_vocab,
             token_index=hist_token_index)
@@ -633,6 +636,20 @@ def get_log_true_final_twists(rng_key, jnp_prompts, experiment_cfg, cfg_p, param
         print(indices_of_tokens_chosen_by_prompt)
         print(true_posterior_samples_by_prompt_and_by_token)
         return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+    elif rm_type == "contains_token_eps":
+        rng_key, sk = jax.random.split(rng_key)
+        log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+            = build_contains_token_eps_twists(sk, jnp_prompts, cfg_p,
+                                          params_p,
+                                          output_len,
+                                          n_samples_at_a_time=n_true_posterior_samples,
+                                          # Not quite number of true posterior samples, this naming is misleading here. Here the n true posterior is used as a guideline for which we do rejection sampling until we get the token we want
+                                          index_of_token_of_interest=args.index_of_token_contained,
+                                          huggingface_model=huggingface_model)
+        print(log_true_final_twists)
+        print(indices_of_tokens_chosen_by_prompt)
+        print(true_posterior_samples_by_prompt_and_by_token)
+        return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
     elif rm_type == "only_contains_token":
         rng_key, sk = jax.random.split(rng_key)
         log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
@@ -829,7 +846,6 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
 
                 print(no_resample_samples)
 
-
         iwae_lbs_across_seeds.append(np.stack(iwae_lbs))
         iwae_ubs_across_seeds.append(np.stack(iwae_ubs))
         smc_lbs_across_seeds.append(np.stack(smc_lbs))
@@ -870,6 +886,8 @@ def main():
     experiment_cfg = ExperimentConfig(n_vocab=args.n_vocab, twist_learn_type=args.twist_learn_type, rm_type=args.rm_type)
 
     rng_key = jax.random.PRNGKey(args.seed)
+
+    huggingface_model = None
 
     if args.huggingface:
         model_config = "distilgpt2"
@@ -961,7 +979,7 @@ def main():
             args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
             prompts = [[0, 1, 2, 3, 4, 5]]
             token_based_prompt = False
-        elif args.rm_type == "only_contains_token":
+        elif args.rm_type == "only_contains_token" or args.rm_type == "contains_token_eps":
             prompts = [[0, 1]]
             token_based_prompt = False
         else:
@@ -982,7 +1000,8 @@ def main():
     #         records_list_by_twist.append([[] for _ in records_labels_list])
     #     records_list_by_prompt_then_twist.append(records_list_by_twist)
 
-    if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+    if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
+        or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
 
         records_list_by_prompt_then_twist = [[[[] for _ in records_labels_list] for _ in log_true_final_twists[prompt_num]] for prompt_num in range(len(prompts))]
 
@@ -1003,7 +1022,8 @@ def main():
         for prompt in jnp_prompts:
             prompt_len = prompt.shape[-1]
             log_true_final_twist = log_true_final_twists[prompt_num]
-            if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+            if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
+                or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
                 indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
@@ -1077,7 +1097,8 @@ def main():
             # 1/0
 
 
-            if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+            if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
+                or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
 
                 records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
 
@@ -1179,7 +1200,7 @@ def main():
                         ) # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
                         updates_twist, optim_twist_state = optimizer_twist.update(grad_params_twist, optim_twist_state, params_twist)
                         params_twist = optax.apply_updates(params_twist, updates_twist)
-                elif experiment_cfg.rm_type == "contains_token":
+                elif experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps":
                     token_of_interest_as_int = args.index_of_token_contained
                     rng_key, sk = jax.random.split(rng_key)
                     grad_params_twist = experiment_cfg.get_grad_params_twist(
@@ -1268,7 +1289,8 @@ def main():
             if (epoch + 1) % args.print_every == 0:
                 if test_info:
                     if plot_logZ_bounds_only:
-                        if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+                        if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
+                            or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
 
                             i = 0 # Just check the first twist, that's fine for this illustration
                             token_of_interest_as_int = indices_of_tokens_chosen[i]
@@ -1379,7 +1401,8 @@ def main():
 
             prompt_num += 1
             if (epoch + 1) % args.ckpt_every == 0:
-                if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+                if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
+                    or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
                     for prompt_num in range(len(prompts)):
 
                         print(f"Prompt: {prompts[prompt_num]}")
@@ -1397,7 +1420,8 @@ def main():
     # print(*records_list)
     # print("---
     if last_ckpt_epoch != epoch:
-        if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
+        if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
+            or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
             for prompt_num in range(len(prompts)):
                 print(f"Prompt: {prompts[prompt_num]}")
                 records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
@@ -1486,7 +1510,9 @@ if __name__ == "__main__":
     parser.add_argument("--twist_updates_per_epoch", type=int, default=100)
 
     parser.add_argument("--rm_type", type=str, default="p_token_last_index",
-                        choices=["bad_word_pos", "indicator_at_index", "p_token_last_index", "contains_token", "only_contains_token"])
+                        choices=["bad_word_pos", "indicator_at_index",
+                                 "p_token_last_index", "contains_token",
+                                 "only_contains_token", "contains_token_eps"])
 
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")

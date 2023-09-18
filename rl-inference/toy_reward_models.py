@@ -181,11 +181,6 @@ def curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token):
     return new_rm
 
 
-def batch_check_contains_token(seq, index_of_token):
-    is_token = jnp.where(jnp.abs(seq - index_of_token) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
-
-    return jnp.minimum(is_token.sum(axis=-1), jnp.ones_like(is_token.shape[0]))
-
 
 def reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface_model=None):
     do_reshape = False
@@ -223,6 +218,32 @@ def curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token, pro
     def new_rm(seq):
         return reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface_model)
     return new_rm
+
+
+# Difference is that this one only uses the indicator function throughout (doens't check prob at last token). Avoids log 0 problem with eps
+def reward_model_seq_contains_token_eps(seq, index_of_fixed_token, prompt_len):
+    do_reshape = False
+    if len(seq.shape) == 3:
+        raise NotImplementedError
+        # original_shape = seq.shape
+        # do_reshape = True
+        # seq = seq.reshape(-1, seq.shape[-1])
+
+    contains_token = batch_check_contains_token(seq[:, prompt_len:], index_of_fixed_token)
+
+    jnp.log(contains_token)
+
+    eps = 1e-8  # just to avoid inf when taking log of 0
+
+    indicator_contains_token_plus_eps = contains_token + eps
+
+    return jnp.log(indicator_contains_token_plus_eps)
+
+def curried_reward_seq_contains_token_eps(index_of_fixed_token, prompt_len):
+    def new_rm(seq):
+        return reward_model_seq_contains_token_eps(seq, index_of_fixed_token, prompt_len)
+    return new_rm
+
 
 
 def batch_check_contains_token(seq, index_of_token):
@@ -575,6 +596,58 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
         extracted_true_posterior_samples = posterior_samples_containing_token[:, :-1]
         assert extracted_true_posterior_samples.shape[0] != 0
         log_true_final_twist = curried_reward_seq_contains_token(cfg_p, params_p, index_of_fixed_token=i, prompt_len=prompt_len, huggingface_model=huggingface_model)
+        twists_all_tokens.append(log_true_final_twist)
+        indices_all_tokens.append(i)
+        true_posterior_samples_split_by_tokens.append(extracted_true_posterior_samples)
+
+        log_true_final_twists.append(twists_all_tokens)
+        indices_of_tokens_chosen_by_prompt.append(indices_all_tokens)
+        true_posterior_samples_by_prompt_and_by_token.append(true_posterior_samples_split_by_tokens)
+
+    print(indices_of_tokens_chosen_by_prompt)
+    print(true_posterior_samples_by_prompt_and_by_token)
+
+    return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
+
+# Same as the build_contains_token except we aren't considering the probability at the last token now. We are just using
+# and indicator over whether the token appears in the sequence from beginning to end, and add an eps in order
+# to avoid numerical issues with log(0).
+def build_contains_token_eps_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, index_of_token_of_interest, huggingface_model=None):
+    log_true_final_twists = []
+    indices_of_tokens_chosen_by_prompt = [] # indices of tokens chosen; a separate list per prompt
+    true_posterior_samples_by_prompt_and_by_token = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+
+        num_samples_containing_token = 0
+
+        while num_samples_containing_token == 0:
+            rng_key, sk = jax.random.split(rng_key)
+            true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
+                                                                   params_p, jnp_prompt,
+                                                                   output_len,
+                                                                   n_samples_at_a_time, huggingface_model=huggingface_model)
+
+            posterior_samples_containing_token = true_posterior_samples[(batch_check_contains_token(true_posterior_samples, index_of_token_of_interest) == 1)]
+
+            print(posterior_samples_containing_token)
+            print(posterior_samples_containing_token.shape)
+
+            num_samples_containing_token = posterior_samples_containing_token.shape[0]
+
+
+        twists_all_tokens = []
+        indices_all_tokens = []
+        true_posterior_samples_split_by_tokens = []
+
+        print(true_posterior_samples)
+
+        i = index_of_token_of_interest
+        # token = ordered_token_list[i]
+        extracted_true_posterior_samples = posterior_samples_containing_token
+        assert extracted_true_posterior_samples.shape[0] != 0
+        log_true_final_twist = curried_reward_seq_contains_token_eps(index_of_fixed_token=i, prompt_len=prompt_len)
         twists_all_tokens.append(log_true_final_twist)
         indices_all_tokens.append(i)
         true_posterior_samples_split_by_tokens.append(extracted_true_posterior_samples)
