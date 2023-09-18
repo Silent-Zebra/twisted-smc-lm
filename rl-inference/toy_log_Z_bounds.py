@@ -727,7 +727,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
     else:
         true_log_z, analytic_kl_q_sigma, analytic_kl_p_sigma = - jnp.inf, - jnp.inf, - jnp.inf
 
-    n_samples = [4, 16, 64]  # [4, 8, 16, 32, 64, 128]
+    n_samples = [16, 64]  # [4, 8, 16, 32, 64, 128]
     iwae_lbs_across_seeds = []
     iwae_ubs_across_seeds = []
     smc_lbs_across_seeds = []
@@ -836,7 +836,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
         smc_ubs_across_seeds.append(np.stack(smc_ubs))
 
     # np_n_samples = np.stack(n_samples)
-    x_range = np.arange(len(n_samples)) + 1  # use 10^ essentially
+    x_range = np.arange(len(n_samples)) + 2  # use 10^ essentially
 
     plt.clf()
 
