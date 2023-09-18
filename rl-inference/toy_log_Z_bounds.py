@@ -371,6 +371,8 @@ def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_
 def make_hists(extracted_samples, smc_samples, prompt_len, token_of_interest_as_int, n_vocab, hist_token_index):
     extracted_samples_hist = hist_by_token_index(
         extracted_samples, n_vocab, token_index=hist_token_index)
+    print("Extracted samples", flush=True)
+    print(extracted_samples)
     print("Extracted samples proportion by first token")
     print(extracted_samples_hist)
     print(extracted_samples_hist[token_of_interest_as_int])
@@ -786,16 +788,16 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
              _) = list_of_things_to_append_for_record_list
 
             # print(f"True log Z value: {true_log_z}")
-            # print(
-            #     f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")
-            # print(
-            #     f"IWAE Upper Bound Estimate: {iwae_upper_bound_estimate}")
+            print(
+                f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")
+            print(
+                f"IWAE Upper Bound Estimate: {iwae_upper_bound_estimate}")
             # print(
             #     f"True upper bound estimate (only one posterior): {true_one_post_upper_bound_estimate}")
-            # print(
-            #     f"SMC lower bound estimate: {smc_lower_bound_estimate}")
-            # print(
-            #     f"SMC upper bound estimate: {smc_upper_bound_estimate}")
+            print(
+                f"SMC lower bound estimate: {smc_lower_bound_estimate}")
+            print(
+                f"SMC upper bound estimate: {smc_upper_bound_estimate}")
 
             iwae_lbs.append(iwae_lower_bound_estimate)
             iwae_ubs.append(iwae_upper_bound_estimate)
@@ -1011,7 +1013,8 @@ def main():
     if args.rm_type == "indicator_at_index" and args.indicator_pos_zero_index == 0:
         hist_token_index = -args.output_len + 1 # check second token if indicator_pos is 0
     else:
-        hist_token_index = -args.output_len # check the first token, to really test the effects of twists learning # Build an illustrative histogram just to check that SMC dist approximately matches true posterior. Check the marginal distribution over the token at the position of hist_token_index. -1 is just a design choice (last token)
+        # TODO later change back to first index, is second now
+        hist_token_index = -args.output_len + 1 # check the first token, to really test the effects of twists learning # Build an illustrative histogram just to check that SMC dist approximately matches true posterior. Check the marginal distribution over the token at the position of hist_token_index. -1 is just a design choice (last token)
 
 
     last_ckpt_epoch = -1

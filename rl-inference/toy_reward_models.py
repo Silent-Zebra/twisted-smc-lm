@@ -939,12 +939,7 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
 
 def hist_by_token_index(samples, n_vocab, token_index=-1):
     # Do the summary by last token by default
-    samples_hist = [samples[samples[:, token_index] == i].shape[0] for i in
-                              range(n_vocab)]
-    samples_hist = jnp.array(samples_hist)
-    if samples_hist.sum() == 0:
-        return samples_hist
+    samples_hist = jnp.histogram(samples[:, token_index], bins=jnp.arange(n_vocab + 1), density=True)[0]
 
-    samples_hist /= samples_hist.sum()
     return samples_hist
 
