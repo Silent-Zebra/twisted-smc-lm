@@ -816,39 +816,39 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
 
                 print(smc_samples)
 
-                rng_key, sk = jax.random.split(rng_key)
-                _, no_resample_samples = smc_procedure(sk, prompt, cfg_p,
-                                                       params_p, cfg_twist,
-                                                       params_twist,
-                                                       log_true_final_twist,
-                                                       args.output_len,
-                                                       n_test_smc_samples,
-                                                       n_vocab=args.n_vocab,
-                                                       prepend_tokens_for_twists=prepend_tokens_for_twists,
-                                                       token_of_interest_as_int=token_of_interest_as_int,
-                                                       resample=False,
-                                                       proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
-                # (log_w_t,
-                #  _), full_seq_from_twist_since_no_resample = smc_procedure(
-                #     rng_key, prompt, cfg_p, params_p,
-                #     cfg_twist, params_twist,
-                #     log_true_final_twist,
-                #     args.output_len, args.n_test_smc_samples,
-                #     analytic_sigma_sample=False,
-                #     get_intermediate_sample_history_based_on_learned_twists=False,
-                #     n_vocab=args.n_vocab,
-                #     prepend_tokens_for_twists=True,
-                #     token_of_interest_as_int=token_of_interest_as_int,
-                #     resample=False,
-                #     # NO resample is very important here
-                #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
-                print("No resample")
-                make_hists(extracted_samples, no_resample_samples,
-                           prompt_len,
-                           token_of_interest_as_int, args.n_vocab,
-                           hist_token_index)
-
-                print(no_resample_samples)
+                # rng_key, sk = jax.random.split(rng_key)
+                # _, no_resample_samples = smc_procedure(sk, prompt, cfg_p,
+                #                                        params_p, cfg_twist,
+                #                                        params_twist,
+                #                                        log_true_final_twist,
+                #                                        args.output_len,
+                #                                        n_test_smc_samples,
+                #                                        n_vocab=args.n_vocab,
+                #                                        prepend_tokens_for_twists=prepend_tokens_for_twists,
+                #                                        token_of_interest_as_int=token_of_interest_as_int,
+                #                                        resample=False,
+                #                                        proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+                # # (log_w_t,
+                # #  _), full_seq_from_twist_since_no_resample = smc_procedure(
+                # #     rng_key, prompt, cfg_p, params_p,
+                # #     cfg_twist, params_twist,
+                # #     log_true_final_twist,
+                # #     args.output_len, args.n_test_smc_samples,
+                # #     analytic_sigma_sample=False,
+                # #     get_intermediate_sample_history_based_on_learned_twists=False,
+                # #     n_vocab=args.n_vocab,
+                # #     prepend_tokens_for_twists=True,
+                # #     token_of_interest_as_int=token_of_interest_as_int,
+                # #     resample=False,
+                # #     # NO resample is very important here
+                # #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+                # print("No resample")
+                # make_hists(extracted_samples, no_resample_samples,
+                #            prompt_len,
+                #            token_of_interest_as_int, args.n_vocab,
+                #            hist_token_index)
+                #
+                # print(no_resample_samples)
 
         iwae_lbs_across_seeds.append(np.stack(iwae_lbs))
         iwae_ubs_across_seeds.append(np.stack(iwae_ubs))
@@ -1463,7 +1463,6 @@ if __name__ == "__main__":
 
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--print_every", type=int, default=1)
-    parser.add_argument("--ckpt_every", type=int, default=40)
 
     # Initialize the model params
     # IN THE ORIGINAL TRANSFORMER PAPER d_k = d_v = d_model / n_heads
@@ -1523,7 +1522,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
-    # parser.add_argument("--ckpt_every", type=int, default=50, help="Epochs between checkpoint save")
+    parser.add_argument("--ckpt_every", type=int, default=50, help="Epochs between checkpoint save") # TODO CURRENTLY NOT USEFUL. SHOULD USE TO CHECKPOINT MODEL.
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
 
     parser.add_argument("--analytic_sigma_sample", action="store_true", help="Use analytic sigma sampling. Do not use together with twist learning.")
