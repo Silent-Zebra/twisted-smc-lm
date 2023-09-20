@@ -215,7 +215,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     kl_q_sigma_iwae_lower_bound_estimate = iwae_lower_bound_estimate - f_q_estimate
 
     rng_key, sk_smc = jax.random.split(rng_key)
-    (_, log_z_hat_t), smc_samples = smc_procedure(
+    (_, log_z_hat_t, _), smc_samples = smc_procedure(
         sk_smc, prompt, cfg_p, params_p,
         cfg_twist, params_twist,
         log_true_final_twist,
