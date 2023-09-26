@@ -108,10 +108,10 @@ def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, 
 
     return p_logits, log_psi_all_vocab
 
-def get_log_p_plus_log_psi(full_seq, params_p, params_twist, prompt_len, t, cfg_p_or_hface_model, cfg_twist_or_hface_model,
+def get_log_p_plus_log_psi(full_seq, params_p, params_twist, prompt_len, t, cfg_p, cfg_twist,
                            prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
-        full_seq, params_p, params_twist, cfg_p_or_hface_model, cfg_twist_or_hface_model,
+        full_seq, params_p, params_twist, cfg_p, cfg_twist,
         prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model)
 
     # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
@@ -1389,6 +1389,79 @@ def get_proposal_q_sample_in_scan_non_modify(carry, t, cfg_p, cfg_twist, prepend
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p", "huggingface_model"])
 def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                        output_len, n_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
+    prompt_len = prompt.shape[-1]
+
+    rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
+
+    # The first part is the same as Roger's/EBM-ML approach; the first term is going to be the same
+    _, prompt_w_sigma_sample_s_1_to_t, (intermediate_twist_samples_hist, intermediate_log_w_t_hist) = smc_procedure(
+        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len, n_twist,
+        get_intermediate_sample_history_based_on_learned_twists=True,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        token_of_interest_as_int=token_of_interest_as_int,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+        resample=True
+    )
+    scan_over = jnp.arange(output_len)
+
+    # Instead of sampling, just directly calculate the expectation over sigma samples. Basically for every sigma sample truncated at time step t-1 where t = 1 ... T
+    # We calculate the probability over all the next tokens, and take expectation of
+    # Remember Q = log psi
+    # And we need the expectation over q (the proposal, which is p psi here - regardless of whether we set the proposal is p flag. Remember the derivation has p * psi explicitly )
+    # So we are going to take all the next tokens s_t, calculate the p psi values, (again refer to my derivation in the chat)
+    # And then sum them all up, then take the derivative with respect to that sum (p is fixed, we are training the twist, then we have the derivative through all the psi values)
+
+    p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
+        prompt_w_sigma_sample_s_1_to_t, params_p, params_twist, cfg_p, cfg_twist,
+        prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model)
+
+    # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
+    # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
+    # And then we set full_seq at index 4 with the newly generated tokens
+    log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
+    log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+    log_p_plus_log_psi_all_vocab_for_expectation = jax.lax.stop_gradient(log_p + log_psi) # stop gradient, no gradient on this
+    p_psi_all_vocab_for_expectation = jnp.exp(log_p_plus_log_psi_all_vocab_for_expectation)
+    l_kl_second_term = (p_psi_all_vocab_for_expectation * log_psi).sum() # The log psi is where we'll get the gradient (grad Q), and then the sum does the expectation
+
+    log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
+        token_of_interest_as_int, huggingface_model)
+
+    # carry = (rng_key, prompt_w_sigma_sample_s_1_to_t, params_p, params_twist, prompt_len)
+    # # Then the second part, we need to truncate the sigma samples to t-1, and then sample from the proposal q for the next time step, then those will be our negative samples
+    # carry, new_seqs = jax.lax.scan(
+    #     partial(
+    #         get_proposal_q_sample_in_scan_non_modify, cfg_p=cfg_p, cfg_twist=cfg_twist,
+    #         prepend_tokens_for_twists=prepend_tokens_for_twists, token_of_interest_as_int=token_of_interest_as_int, proposal_is_p=proposal_is_p, huggingface_model=huggingface_model
+    #     ), carry, scan_over, output_len
+    # )
+    # rng_key, original_seq, params_p, params_twist, prompt_len = carry
+    #
+    # # print(prompt_w_sigma_sample_s_1_to_t)
+    # # print(new_seqs)
+    #
+    # scan_over = (new_seqs, jnp.arange(output_len), jnp.zeros(output_len)) # The last item is a dummy value, since we aren't resampling the prompt with twist sample anyway, so we don't need it
+    # carry = (l_kl, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, sk3)
+    #
+    # carry, _ = jax.lax.scan(partial(get_l_ebm_ml_scan_iter,
+    #                                 cfg_twist=cfg_twist,
+    #                                 prepend_tokens_for_twists=prepend_tokens_for_twists,
+    #                                 token_of_interest_as_int=token_of_interest_as_int,
+    #                                 resample_prompt_w_twist_sample=False, huggingface_model=huggingface_model), carry, scan_over, output_len) # can use the same calculation because it's the same grad of log twist, only difference is the expectation (choice of samples) we are evaluating over
+    #
+    # l_kl, _, _, _, _ = carry
+
+    l_kl = log_psi_on_truncated_sigma_samples.sum(axis=1).mean(axis=0) - l_kl_second_term # We can do these terms separately since expectation and sum can both be applied separately
+
+    l_kl /= (output_len)
+    return -l_kl  # negative because now we have a loss
+
+# This is Rob's approach
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p", "huggingface_model"])
+def get_l_one_total_kl_old(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
     prompt_len = prompt.shape[-1]
 

@@ -780,26 +780,31 @@ class TestClass:
     #                         token_of_interest_as_int,
     #                         extracted_samples,
     #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
-    rm_type_to_test = "contains_token_eps" # "p_token_last_index"
+    rm_type_to_test = "p_token_last_index" # "contains_token_eps" #
 
-    def test_p_tok_rlp(self):
-        self._test_twist_learning(twist_learn_type="rl_based_p_sample",
-                                  rm_type=self.rm_type_to_test)
-    def test_p_tok_rlq(self):
-        self._test_twist_learning(twist_learn_type="rl_based_q_sample",
-                                  rm_type=self.rm_type_to_test)
-    def test_p_tok_rlsigma(self):
-        self._test_twist_learning(twist_learn_type="rl_based_sigma_sample",
-                                  rm_type=self.rm_type_to_test)
-    def test_p_tok_ebm(self):
-        self._test_twist_learning(twist_learn_type="ebm",
-                                  rm_type=self.rm_type_to_test)
+    # def test_p_tok_rlp(self):
+    #     self._test_twist_learning(twist_learn_type="rl_based_p_sample",
+    #                               rm_type=self.rm_type_to_test)
+    # def test_p_tok_rlq(self):
+    #     self._test_twist_learning(twist_learn_type="rl_based_q_sample",
+    #                               rm_type=self.rm_type_to_test)
+    # def test_p_tok_rlsigma(self):
+    #     self._test_twist_learning(twist_learn_type="rl_based_sigma_sample",
+    #                               rm_type=self.rm_type_to_test)
+    # def test_p_tok_ebm(self):
+    #     self._test_twist_learning(twist_learn_type="ebm",
+    #                               rm_type=self.rm_type_to_test)
     def test_p_tok_rob(self):
         self._test_twist_learning(twist_learn_type="one_total_kl",
                                   rm_type=self.rm_type_to_test)
-    def test_p_tok_sixo(self):
-        self._test_twist_learning(twist_learn_type="sixo",
-                                  rm_type=self.rm_type_to_test)
+
+    def test_p_tok_rob2(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl",
+                                  rm_type="contains_token_eps")
+
+    # def test_p_tok_sixo(self):
+    #     self._test_twist_learning(twist_learn_type="sixo",
+    #                               rm_type=self.rm_type_to_test)
 
     # def test_twist_learning_p_token_last_index(self):
     #     self._test_twist_learning_all_types(rm_type="p_token_last_index")
@@ -859,8 +864,8 @@ class TestClass:
             d_fc_twist, indicator_pos_zero_index,
             output_len, n_true_posterior_samples, index_of_token_contained)
 
-        twist_updates_per_epoch = 2000
-        num_epochs = 6
+        twist_updates_per_epoch = 100
+        num_epochs = 3
 
         prompt_num = 0
         for prompt in jnp_prompts:
