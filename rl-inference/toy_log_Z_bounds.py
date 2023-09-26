@@ -821,7 +821,7 @@ class TestClass:
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
         # 70 seconds on GPU for 100 twist updates 3 epochs
         output_len = 2
-        lr_twist = 0.0005
+        lr_twist = 0.0001 #0.0005
 
         n_true_posterior_samples = 1
         n_vocab = 9
