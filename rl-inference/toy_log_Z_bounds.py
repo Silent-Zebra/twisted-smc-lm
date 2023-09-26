@@ -864,8 +864,8 @@ class TestClass:
             d_fc_twist, indicator_pos_zero_index,
             output_len, n_true_posterior_samples, index_of_token_contained)
 
-        twist_updates_per_epoch = 100
-        num_epochs = 3
+        twist_updates_per_epoch = 1000
+        num_epochs = 4
 
         prompt_num = 0
         for prompt in jnp_prompts:
