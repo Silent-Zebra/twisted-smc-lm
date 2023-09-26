@@ -246,6 +246,30 @@ def curried_reward_seq_contains_token_eps(index_of_fixed_token, prompt_len):
 
 
 
+def reward_model_redteam_contains(seq, index_of_fixed_token, prompt_len):
+    indexes_of_sure_heres = [10889, 11, 994, 338]
+    # TODO SEP 25 DO THIS
+    1/0
+    do_reshape = False
+    if len(seq.shape) == 3:
+        raise NotImplementedError
+        # original_shape = seq.shape
+        # do_reshape = True
+        # seq = seq.reshape(-1, seq.shape[-1])
+
+    contains_token = batch_check_contains_token(seq[:, prompt_len:], index_of_fixed_token)
+
+    jnp.log(contains_token)
+
+    eps = 1e-8  # just to avoid inf when taking log of 0
+
+    indicator_contains_token_plus_eps = contains_token + eps
+
+    return jnp.log(indicator_contains_token_plus_eps)
+
+
+
+
 def batch_check_contains_token(seq, index_of_token):
     is_token = jnp.where(jnp.abs(seq - index_of_token) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
 
@@ -798,7 +822,7 @@ def calc_opt_twist_helper_mapped(seqs_3d, cfg_p, params_p, log_true_final_twist,
 
 def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
     if huggingface_model is not None:
-        1/0 # Don't do this with huggingface. It will take forever.
+        raise Exception("Don't do this with huggingface transformer. It will take forever and use absurd amounts of memory.") # Don't do this with huggingface. It will take forever.
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len - 1)
 
     all_seqs_to_T_minus_1 = all_seqs_list[-1]
@@ -854,7 +878,8 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_tr
 
     return opt_log_twist_array_list
 
-def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist, huggingface_model=None):
+def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist,
+                      prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=None):
     # Calculates on all possible sequences (not practical for large n_vocab or large output_len)
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(
         prompt, n_vocab, output_len)
@@ -863,7 +888,8 @@ def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist, hugg
 
     for j in range(1, output_len + 1):
         all_seqs = all_seqs_list[-j]
-        model_twist = evaluate_log_psi_t(all_seqs, cfg_twist, params_twist, huggingface_model=huggingface_model)
+        model_twist = evaluate_log_psi_t(all_seqs, cfg_twist, params_twist,
+                                         prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
         model_twist_array_list.append(model_twist)
 
     return model_twist_array_list
@@ -880,6 +906,9 @@ def l_abs_compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
 
 def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
                                      params_p, log_true_final_twist, cfg_twist, params_twist, rm_type,
+                                     prepend_tokens_for_twists,
+                                     token_of_interest_as_int,
+                                     huggingface_model,
                                      verbose=True, relative_diff_loss=True, stop_grad=False):
     if rm_type == "one_bad":
         opt_log_twist_array_list = calc_optimal_twists_one_bad(prompt, n_vocab,
@@ -892,7 +921,7 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
         # seqs_to_test_on = all_seqs # For longer time horizons can instead use some randomly sampled sequences s_{1:T} (Works only when you can avoid the exponential number of sums e.g. with some structure in the reward model) For shorter time horizons, can literally test every sequence
         opt_log_twist_array_list = calc_optimal_twists(prompt, n_vocab,
                                                        output_len, cfg_p,
-                                                       params_p, log_true_final_twist)
+                                                       params_p, log_true_final_twist, huggingface_model=huggingface_model)
 
     if verbose:
         print("OPTIMAL TWISTS")
@@ -904,7 +933,9 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
     else:
         # NEXT generate all seqs, and compare the model twists on all 1:t for all t on all seqs.
         model_twist_array_list = calc_model_twists(prompt, n_vocab, output_len,
-                                                   cfg_twist, params_twist)
+                                                   cfg_twist, params_twist,
+                                                   prepend_tokens_for_twists, token_of_interest_as_int,
+                                                   huggingface_model)
 
     if verbose:
         print("MODEL TWISTS")

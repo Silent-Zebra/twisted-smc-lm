@@ -1359,6 +1359,7 @@ def main():
     # model_lm = FlaxAutoModelForCausalLM.from_pretrained(model_config)
     model_lm = CustomLMHeadModel(model_config)
 
+    # print((model_lm.huggingface_model._params_shape_tree))
 
     rng_key, sk_twist, sk_baseline = jax.random.split(rng_key, 3)
     model_twist = CustomLM(rng_key, model_config, d_model=768, output_size=args.n_vocab)
