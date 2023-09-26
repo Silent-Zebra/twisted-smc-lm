@@ -844,6 +844,7 @@ class TestClass:
         indicator_pos_zero_index = 1
         n_twist = 100
         index_of_token_contained = 6
+        proposal_is_p = False
 
         experiment_cfg, rng_key, huggingface_model, model, cfg_p, params_p, \
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
@@ -858,9 +859,7 @@ class TestClass:
             d_fc_twist, indicator_pos_zero_index,
             output_len, n_true_posterior_samples, index_of_token_contained)
 
-        proposal_is_p = False
-
-        twist_updates_per_epoch = 1000
+        twist_updates_per_epoch = 10000
         num_epochs = 3
 
         prompt_num = 0
