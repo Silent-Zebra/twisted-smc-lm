@@ -291,6 +291,8 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists, 
     # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
     return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
+
+# Evaluate log psi_t for every t from 1 to T for the sequence seq (not including the prompt)
 def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
     log_psi = get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
     log_psi_selected = log_psi[:, prompt_len - 1: -1]
@@ -385,14 +387,14 @@ def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_pl
     token_indices = full_seq[:,prompt_len_plus_t]
     return log_psi[:,prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
 
-def evaluate_log_psi_t_for_scan(carry, t, cfg_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
-    # see def evaluate_log_psi_t for more comments/detail
-    # Similar also to evaluate_log_psi_t_full_seq, just in a scan loop
-    full_seq, prompt_len, params_twist = carry
-    output_value = evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len + t,
-                                               prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
-    carry = (full_seq, prompt_len, params_twist)
-    return carry, output_value
+# def evaluate_log_psi_t_for_scan(carry, t, cfg_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
+#     # see def evaluate_log_psi_t for more comments/detail
+#     # Similar also to evaluate_log_psi_t_full_seq, just in a scan loop
+#     full_seq, prompt_len, params_twist = carry
+#     output_value = evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len + t,
+#                                                prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
+#     carry = (full_seq, prompt_len, params_twist)
+#     return carry, output_value
 
 
 def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, resample=True,
@@ -1480,11 +1482,6 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     else:
         raise NotImplementedError
 
-    # log_psi = get_log_psi_all_vocab(samples_to_evaluate_over, cfg_twist, params_twist,
-    #                                  prepend_tokens_for_twists,
-    #                                  token_of_interest_as_int, huggingface_model=huggingface_model)
-    # p_logits = get_transformer_p_logits(cfg_p, params_p, samples_to_evaluate_over, huggingface_model=huggingface_model)
-
     p_logits, log_psi =\
         get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p, params_twist,
                                        cfg_p, cfg_twist,
@@ -1492,8 +1489,6 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
                                        token_of_interest_as_int,
                                        huggingface_model=huggingface_model)
     log_psi = log_psi[:, prompt_len:]
-    # print(p_logits - p_logits2)
-    # print(log_psi - log_psi2)
 
     log_p = jax.nn.log_softmax(p_logits, axis=-1) # gives you the normalized p values, since the regular output is the unnormalized log p values
     log_p = log_p[:, prompt_len:]
@@ -1508,17 +1503,20 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     target_term = target_term.at[:, -1].set(evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist))
     target_term = jax.lax.stop_gradient(target_term)
 
+    values = evaluate_log_psi_selected_tokens(
+        samples_to_evaluate_over, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
+        token_of_interest_as_int, huggingface_model)
 
-    carry = (samples_to_evaluate_over, prompt_len, params_twist)
-    scan_over = jnp.arange(output_len) # The last item is a dummy value, since we aren't resampling the prompt with twist sample anyway, so we don't need it
-    _, values = jax.lax.scan(partial(evaluate_log_psi_t_for_scan,
-                                    cfg_twist=cfg_twist,
-                                    prepend_tokens_for_twists=prepend_tokens_for_twists,
-                                    token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model),
-                            carry, scan_over,
-                            output_len)
-
-    values = jnp.transpose(values)
+    # carry = (samples_to_evaluate_over, prompt_len, params_twist)
+    # scan_over = jnp.arange(output_len) # The last item is a dummy value, since we aren't resampling the prompt with twist sample anyway, so we don't need it
+    # _, values = jax.lax.scan(partial(evaluate_log_psi_t_for_scan,
+    #                                 cfg_twist=cfg_twist,
+    #                                 prepend_tokens_for_twists=prepend_tokens_for_twists,
+    #                                 token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model),
+    #                         carry, scan_over,
+    #                         output_len)
+    #
+    # values = jnp.transpose(values)
 
     # squared_error_loss = ((values - target_term) ** 2).sum(axis=-1).mean()
     squared_error_loss = ((values - target_term) ** 2).mean() # Use mean to be consistent with the scale of the DRE/EBM updates
