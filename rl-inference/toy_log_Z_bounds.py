@@ -780,25 +780,26 @@ class TestClass:
     #                         token_of_interest_as_int,
     #                         extracted_samples,
     #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+    rm_type_to_test = "contains_token_eps" # "p_token_last_index"
 
     def test_p_tok_rlp(self):
         self._test_twist_learning(twist_learn_type="rl_based_p_sample",
-                                  rm_type="p_token_last_index")
+                                  rm_type=self.rm_type_to_test)
     def test_p_tok_rlq(self):
         self._test_twist_learning(twist_learn_type="rl_based_q_sample",
-                                  rm_type="p_token_last_index")
+                                  rm_type=self.rm_type_to_test)
     def test_p_tok_rlsigma(self):
         self._test_twist_learning(twist_learn_type="rl_based_sigma_sample",
-                                  rm_type="p_token_last_index")
+                                  rm_type=self.rm_type_to_test)
     def test_p_tok_ebm(self):
         self._test_twist_learning(twist_learn_type="ebm",
-                                  rm_type="p_token_last_index")
+                                  rm_type=self.rm_type_to_test)
     def test_p_tok_rob(self):
         self._test_twist_learning(twist_learn_type="one_total_kl",
-                                  rm_type="p_token_last_index")
+                                  rm_type=self.rm_type_to_test)
     def test_p_tok_sixo(self):
         self._test_twist_learning(twist_learn_type="sixo",
-                                  rm_type="p_token_last_index")
+                                  rm_type=self.rm_type_to_test)
 
     # def test_twist_learning_p_token_last_index(self):
     #     self._test_twist_learning_all_types(rm_type="p_token_last_index")
@@ -912,6 +913,48 @@ class TestClass:
                         stop_grad=True)
                         avg_rel_diff_list.append(avg_rel_diff)
                         print(avg_rel_diff_list)
+            elif rm_type == "contains_token" or rm_type == "contains_token_eps":
+                indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
+                token_of_interest_as_int = index_of_token_contained
+
+                avg_rel_diff_start = compare_learned_twist_vs_optimal(
+                    prompt, n_vocab, output_len,
+                    cfg_p, params_p, log_true_final_twist[0],
+                    cfg_twist, params_twist,
+                    rm_type=rm_type,
+                    prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                    token_of_interest_as_int=token_of_interest_as_int,
+                    huggingface_model=huggingface_model,
+                    verbose=True,
+                    relative_diff_loss=True,
+                    stop_grad=True)
+                avg_rel_diff_list = [avg_rel_diff_start]
+                print(avg_rel_diff_list)
+                for epoch in range(num_epochs):
+                    for twist_update in range(twist_updates_per_epoch):
+                        rng_key, params_twist, optim_twist_state = experiment_cfg.update_twist(
+                            rng_key, indices_of_tokens_chosen, prompt,
+                            n_twist, output_len, cfg_p, params_p, cfg_twist,
+                            params_twist, log_true_final_twist, proposal_is_p,
+                            huggingface_model, optimizer_twist,
+                            optim_twist_state,
+                            index_of_token_contained
+                        )
+                    avg_rel_diff = compare_learned_twist_vs_optimal(
+                        prompt, n_vocab, output_len,
+                        cfg_p, params_p, log_true_final_twist[0],
+                        cfg_twist, params_twist,
+                        rm_type=rm_type,
+                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                        token_of_interest_as_int=token_of_interest_as_int,
+                        huggingface_model=huggingface_model,
+                        verbose=True,
+                        relative_diff_loss=True,
+                        stop_grad=True)
+                    avg_rel_diff_list.append(avg_rel_diff)
+                    print(avg_rel_diff_list)
+
+
 
             else:
                 raise NotImplementedError
@@ -922,9 +965,9 @@ class TestClass:
             # assert avg_rel_diff_list[1] > avg_rel_diff_list[2]
             # assert avg_rel_diff_list[2] > avg_rel_diff_list[3]
 
-            assert avg_rel_diff_list[-1] < 0.001
+            # assert avg_rel_diff_list[-1] < 0.005
 
-            # assert avg_rel_diff_list[-1] < 0.4
+            assert avg_rel_diff_list[-1] < 0.000001 # Just to see the results
 
 
 
