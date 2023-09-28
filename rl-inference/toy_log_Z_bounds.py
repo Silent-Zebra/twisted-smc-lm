@@ -397,17 +397,17 @@ class ExperimentConfig:
 
         log_prob_cont_smc_samples = reward_model_p_of_continuation(
             smc_samples, cfg_p, params_p, indexes_of_continuation,
-            huggingface_model=None, return_log_w_no_temp=True)
+            huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
         log_prob_cont_proposal_samples = reward_model_p_of_continuation(
             intermediate_seq_list[-1], cfg_p, params_p, indexes_of_continuation,
-            huggingface_model=None, return_log_w_no_temp=True)
+            huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
         p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
                                                   output_len, n_samples, huggingface_model=huggingface_model)
         log_prob_cont_p_samples = reward_model_p_of_continuation(
             p_samples, cfg_p, params_p, indexes_of_continuation,
-            huggingface_model=None, return_log_w_no_temp=True)
+            huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
         print(log_prob_cont_smc_samples)
         print(log_prob_cont_proposal_samples)
@@ -418,7 +418,7 @@ class ExperimentConfig:
         print(log_prob_cont_p_samples.mean())
 
         # print(intermediate_seq_list[-1])
-        print(smc_samples[:5])
+        print(smc_samples[:10])
 
         return rng_key
 
