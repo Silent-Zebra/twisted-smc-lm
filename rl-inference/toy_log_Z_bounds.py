@@ -1422,7 +1422,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             indexes_of_sure_heres = [10889, 11, 994, 338] # "Sure, here's"
             # print(indexes_of_sure_heres)
             # 1/0
-            indexes_of_continuation = indexes_of_sure_heres
+            indexes_of_continuation = jnp.array(indexes_of_sure_heres, dtype=jnp.int32)
 
         else:
             prompts = [
@@ -1507,6 +1507,9 @@ def main():
         args.beta_temp
     )
 
+    highest_log_prob = - jnp.inf
+    highest_log_prob_sample = None
+
     last_ckpt_epoch = -1
 
     for epoch in range(args.epochs):
@@ -1515,9 +1518,32 @@ def main():
 
         prompt_num = 0
         for prompt in jnp_prompts:
+            if args.rm_type == "p_continuation" and args.rejection_sample_naive:
+                rng_key, sk = jax.random.split(rng_key)
+                p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+                                                          prompt,
+                                                          args.output_len, args.n_twist,
+                                                          huggingface_model=huggingface_model)
+                log_prob_cont_p_samples = reward_model_p_of_continuation(
+                    p_samples, cfg_p, params_p, indexes_of_continuation,
+                    huggingface_model=huggingface_model,
+                    return_log_w_no_temp=True)
+                max_log_prob = jnp.max(log_prob_cont_p_samples)
+                if max_log_prob > highest_log_prob:
+                    highest_log_prob = max_log_prob
+                    max_log_prob_samples = p_samples[(log_prob_cont_p_samples - max_log_prob) == 0]
+                    highest_log_prob_sample = max_log_prob_samples[0]
+                # print(max_log_prob_samples)
+                # print(max_log_prob_samples[0])
+                print(max_log_prob)
+                print(highest_log_prob)
+                print(highest_log_prob_sample)
+                continue
+
             prompt_len = prompt.shape[-1]
             log_true_final_twist = log_true_final_twists[prompt_num]
             indices_of_tokens_chosen = None
+
             if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
                 or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
                 indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
@@ -1527,6 +1553,8 @@ def main():
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
+
+
 
             rng_key, sk = jax.random.split(rng_key)
             # inspect model prob
@@ -1800,7 +1828,8 @@ if __name__ == "__main__":
     parser.add_argument("--beta_temp", type=float, help="beta used for the temperature scaling; right now just for the reward model based on the prob of the continuation",
                         default=1.)
     parser.add_argument("--huggingface", action="store_true", help="Use huggingface transformer. Obviates the need for setting transformer parameters")
-    # TODO SEP 15; add flags for different models.
+    # TODO SEP 15; add flags for different models e.g. GPT2small, GPT2medium, other archs...
+    parser.add_argument("--rejection_sample_naive", action="store_true", help="Only for a specific test/check")
 
     args = parser.parse_args()
 

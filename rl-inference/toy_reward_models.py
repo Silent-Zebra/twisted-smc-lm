@@ -1,6 +1,8 @@
 import jax
 from jax import vmap
 import jax.numpy as jnp
+from functools import partial
+
 from custom_transformer_prob_utils import get_all_seqs_up_to_output_len, \
     evaluate_log_p_theta_1_to_t, get_all_new_seqs_single_t, smc_procedure, \
     get_full_list_of_all_seqs_up_to_output_len, evaluate_log_psi_t, evaluate_log_p_theta_t, \
@@ -245,7 +247,7 @@ def curried_reward_seq_contains_token_eps(index_of_fixed_token, prompt_len):
 
 
 
-
+@partial(jax.jit, static_argnames=["cfg_p", "beta_temp", "huggingface_model", "return_log_w_no_temp"])
 def reward_model_p_of_continuation(
     seq, cfg_p, params_p, indexes_of_continuation, beta_temp=None,
     huggingface_model=None, return_log_w_no_temp=False):
@@ -259,7 +261,7 @@ def reward_model_p_of_continuation(
 
     original_seq_len_incl_prompt = seq.shape[-1]
 
-    jnp_continuation = jnp.array(indexes_of_continuation, dtype=jnp.int32)
+    jnp_continuation = indexes_of_continuation
     batch_continuation = jnp.full((seq.shape[0], jnp_continuation.shape[-1]), jnp_continuation)
 
     seq = jnp.concatenate((seq, batch_continuation), axis=1)
