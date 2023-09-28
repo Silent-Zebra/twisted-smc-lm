@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from custom_transformer_prob_utils import get_all_seqs_up_to_output_len, \
     evaluate_log_p_theta_1_to_t, get_all_new_seqs_single_t, smc_procedure, \
     get_full_list_of_all_seqs_up_to_output_len, evaluate_log_psi_t, evaluate_log_p_theta_t, \
-    evaluate_log_phi_final, stochastic_transformer_sample
+    evaluate_log_phi_final, stochastic_transformer_sample, evaluate_log_p_selected_tokens
 
 
 # curry the prompt_len... TODO think about whether this structure or the one where you pass in (e.g. like batch_reward_model below) makes more sense
@@ -181,7 +181,6 @@ def curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token):
     return new_rm
 
 
-
 def reward_model_seq_contains_token(seq, cfg_p, params_p, index_of_fixed_token, prompt_len, huggingface_model=None):
     do_reshape = False
     if len(seq.shape) == 3:
@@ -246,10 +245,11 @@ def curried_reward_seq_contains_token_eps(index_of_fixed_token, prompt_len):
 
 
 
-def reward_model_redteam_contains(seq, index_of_fixed_token, prompt_len):
-    indexes_of_sure_heres = [10889, 11, 994, 338]
-    # TODO SEP 25 DO THIS
-    1/0
+
+def reward_model_p_of_continuation(
+    seq, cfg_p, params_p, indexes_of_continuation, beta_temp=None,
+    huggingface_model=None, return_log_w_no_temp=False):
+
     do_reshape = False
     if len(seq.shape) == 3:
         raise NotImplementedError
@@ -257,16 +257,27 @@ def reward_model_redteam_contains(seq, index_of_fixed_token, prompt_len):
         # do_reshape = True
         # seq = seq.reshape(-1, seq.shape[-1])
 
-    contains_token = batch_check_contains_token(seq[:, prompt_len:], index_of_fixed_token)
+    original_seq_len_incl_prompt = seq.shape[-1]
 
-    jnp.log(contains_token)
+    jnp_continuation = jnp.array(indexes_of_continuation, dtype=jnp.int32)
+    batch_continuation = jnp.full((seq.shape[0], jnp_continuation.shape[-1]), jnp_continuation)
 
-    eps = 1e-8  # just to avoid inf when taking log of 0
+    seq = jnp.concatenate((seq, batch_continuation), axis=1)
+    # print(seq.shape)
 
-    indicator_contains_token_plus_eps = contains_token + eps
+    # Use original_seq_len_incl_prompt for prompt_len because we only want to evaluate the continuation probability
+    log_prob_of_continuation = evaluate_log_p_selected_tokens(seq, original_seq_len_incl_prompt, cfg_p, params_p, huggingface_model=huggingface_model)
+    if return_log_w_no_temp:
+        return log_prob_of_continuation.sum(axis=-1)
+    else:
+        assert beta_temp is not None
+        return jnp.exp(log_prob_of_continuation.sum(axis=-1)) * beta_temp
 
-    return jnp.log(indicator_contains_token_plus_eps)
 
+def curried_reward_model_p_of_continuation(cfg_p, params_p, indexes_of_continuation, beta_temp, huggingface_model=None):
+    def new_rm(seq):
+        return reward_model_p_of_continuation(seq, cfg_p, params_p, indexes_of_continuation, beta_temp, huggingface_model=huggingface_model)
+    return new_rm
 
 
 
@@ -540,6 +551,25 @@ def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_ind
         true_posterior_samples_by_prompt_and_by_token.append(true_posterior_samples_split_by_tokens)
 
     return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
+
+
+
+def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indexes_of_continuation, beta_temp, huggingface_model=None):
+    # The real problem here is how will you get the true posterior samples. Roger's suggestion seems to be to just use whatever we get and define that as the evidence
+    # That can work, I suppose, but then we don't really care about that.
+    # Alternatively have a flag for no posterior samples and do the rest of the code without the posterior sample/bounds stuff
+    log_true_final_twists = []
+    true_posterior_samples_by_prompt_and_by_token = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+        log_true_final_twist = curried_reward_model_p_of_continuation(
+            cfg_p, params_p, indexes_of_continuation,
+            beta_temp, huggingface_model=huggingface_model)
+
+        log_true_final_twists.append(log_true_final_twist)
+
+    return log_true_final_twists, None, None
 
 
 

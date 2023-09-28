@@ -300,6 +300,15 @@ def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist, p
     return log_psi_selected[jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(seq_selected.shape[1]), seq_selected]
 
 
+def evaluate_log_p_selected_tokens(seq, prompt_len, cfg_p, params_p, huggingface_model=None):
+    p_logits = get_transformer_p_logits(cfg_p, params_p, seq, huggingface_model=huggingface_model)
+    log_p = jax.nn.log_softmax(p_logits, axis=-1)
+    log_p_selected = log_p[:, prompt_len - 1: -1]
+    seq_selected = seq[:, prompt_len: ]
+    return log_p_selected[jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(seq_selected.shape[1]), seq_selected]
+
+
+
 def evaluate_log_phi_final(seq, log_true_final_twist):
     return log_true_final_twist(seq) # THIS ONLY WORKS ASSUMING in the case e.g. of phi = e^(-beta r(s)), then log phi = -beta r(s)
 
