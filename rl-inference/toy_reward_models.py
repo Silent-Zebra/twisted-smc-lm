@@ -234,8 +234,6 @@ def reward_model_seq_contains_token_eps(seq, index_of_fixed_token, prompt_len):
 
     jnp.log(contains_token)
 
-    eps = 1e-8  # just to avoid inf when taking log of 0
-
     indicator_contains_token_plus_eps = contains_token + eps
 
     return jnp.log(indicator_contains_token_plus_eps)
@@ -320,6 +318,66 @@ def check_only_contains_tokens_t_limited(seq, indexes_of_tokens, prompt_len, t_s
 
     return contains_only_tokens
 
+
+# # Checking that the small array is in the big array
+# def check_array_contained_in_other_array(big_array, small_array):
+#     assert len(small_array.shape) == 1
+#
+#     contains_continuation = jnp.zeros(big_array.shape[0])
+#     for i in range(len(big_array) - len(small_array) + 1):
+#         is_continuation = jnp.where(jnp.array_equal(small_array, big_array[i:i + len(small_array)])),
+#                              jnp.ones(big_array.shape[0]), jnp.zeros(big_array.shape[0]))
+#         contains_continuation += is_continuation
+#
+#     return jnp.minimum(contains_continuation, jnp.ones_like(contains_continuation))
+#     #     print(jnp.abs(small_array - big_array[i:i + len(small_array)]).sum() == 0)
+#     #     print((jnp.abs(small_array - big_array[i:i + len(small_array)]).sum() == 0).shape)
+#     #     1/0
+#     #     if jnp.abs(small_array - big_array[i:i + len(small_array)]).sum() == 0:
+#     #         return True
+#     # return False
+#
+# def batch_check_array_contained_in_other_array(seq, indexes_of_continuation):
+#     if len(seq.shape) == 2:
+#         return jax.vmap(check_array_contained_in_other_array, in_axes=(0, None))(seq, indexes_of_continuation)
+#     elif len(seq.shape) == 1:
+#         return check_array_contained_in_other_array(seq, indexes_of_continuation)
+#     else:
+#         raise NotImplementedError
+
+def batch_check_array_contained_in_other_array(big_array, small_array):
+    contains_continuation = jnp.zeros(big_array.shape[0])
+    for i in range((big_array.shape[-1]) - (small_array.shape[-1]) + 1):
+        is_continuation = jnp.where((jnp.abs(big_array[:, i:i + len(small_array)] - small_array).sum(axis=-1) == 0),
+                             jnp.ones(big_array.shape[0]), jnp.zeros(big_array.shape[0]))
+        contains_continuation += is_continuation
+
+    return jnp.minimum(contains_continuation, jnp.ones_like(contains_continuation))
+
+eps = 1e-16 # just to avoid inf when taking log of 0
+
+# TODO do the same thing but now including the above one
+def reward_model_contains_continuation(seq, indexes_of_continuation, prompt_len):
+    if len(seq.shape) == 3:
+        raise NotImplementedError
+
+    contains_continuation = batch_check_array_contained_in_other_array(seq[:, prompt_len:], indexes_of_continuation)
+
+    # Below (commented) prob calc is insufficient because it doesn't consider continuations that are cut off. E.g. if you have the desired continuation starting from the second last token
+    # So for now let's just do the eps check within the sequence.
+    # log_prob_of_continuation_at_end = reward_model_p_of_continuation(seq, cfg_p, params_p, indexes_of_continuation, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
+    # log_p_contains_continuation = jnp.maximum(log_prob_of_continuation_at_end, jnp.log(contains_continuation))
+    log_p_contains_continuation = jnp.log(contains_continuation + eps)
+
+    return log_p_contains_continuation
+
+
+def curried_reward_contains_continuation(indexes_of_continuation, prompt_len):
+    def new_rm(seq):
+        return reward_model_contains_continuation(seq, indexes_of_continuation, prompt_len)
+    return new_rm
+
+
 def reward_model_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
     do_reshape = False
     if len(seq.shape) == 3:
@@ -329,8 +387,6 @@ def reward_model_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
         1/0
 
     total_contains_token = check_only_contains_tokens(seq, indexes_of_tokens, prompt_len)
-
-    eps = 1e-8 # just to avoid inf when taking log of 0
 
     indicator_only_contains_tokens_plus_eps = total_contains_token + eps
 
@@ -664,6 +720,45 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
     print(true_posterior_samples_by_prompt_and_by_token)
 
     return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
+
+
+def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indexes_of_continuation, huggingface_model=None):
+    log_true_final_twists = []
+    true_posterior_samples_by_prompt_and_by_token = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+
+        # num_samples_containing_continuation = 0
+        #
+        # while num_samples_containing_continuation == 0:
+        #     rng_key, sk = jax.random.split(rng_key)
+        #     true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
+        #                                                            params_p, jnp_prompt,
+        #                                                            output_len + len(indexes_of_continuation),
+        #                                                            n_samples_at_a_time, huggingface_model=huggingface_model)
+        #
+        #     posterior_samples_containing_continuation = true_posterior_samples[(batch_check_array_contained_in_other_array(true_posterior_samples, indexes_of_continuation))]
+        #
+        #     print(posterior_samples_containing_continuation)
+        #     print(posterior_samples_containing_continuation.shape)
+        #
+        #     num_samples_containing_continuation = posterior_samples_containing_continuation.shape[0]
+        #
+        #
+        # print(true_posterior_samples)
+
+        # token = ordered_token_list[i]
+        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
+        # assert extracted_true_posterior_samples.shape[0] != 0
+        log_true_final_twist = curried_reward_contains_continuation(indexes_of_continuation, prompt_len=prompt_len)
+
+        log_true_final_twists.append(log_true_final_twist)
+        # true_posterior_samples_by_prompt_and_by_token.append(extracted_true_posterior_samples)
+
+    # print(true_posterior_samples_by_prompt_and_by_token)
+
+    return log_true_final_twists, None, None # true_posterior_samples_by_prompt_and_by_token
 
 
 # Same as the build_contains_token except we aren't considering the probability at the last token now. We are just using
