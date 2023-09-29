@@ -299,10 +299,17 @@ def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist, p
     seq_selected = seq[:, prompt_len: ]
     return log_psi_selected[jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(seq_selected.shape[1]), seq_selected]
 
+def get_log_p_all_tokens(seq, cfg_p, params_p, huggingface_model=None):
+    p_logits = get_transformer_p_logits(cfg_p, params_p, seq,
+                                        huggingface_model=huggingface_model)
+    log_p = jax.nn.log_softmax(p_logits, axis=-1)
+    return log_p
+
 
 def evaluate_log_p_selected_tokens(seq, prompt_len, cfg_p, params_p, huggingface_model=None):
-    p_logits = get_transformer_p_logits(cfg_p, params_p, seq, huggingface_model=huggingface_model)
-    log_p = jax.nn.log_softmax(p_logits, axis=-1)
+    # p_logits = get_transformer_p_logits(cfg_p, params_p, seq, huggingface_model=huggingface_model)
+    # log_p = jax.nn.log_softmax(p_logits, axis=-1)
+    log_p = get_log_p_all_tokens(seq, cfg_p, params_p, huggingface_model)
     log_p_selected = log_p[:, prompt_len - 1: -1]
     seq_selected = seq[:, prompt_len: ]
     return log_p_selected[jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(seq_selected.shape[1]), seq_selected]
@@ -327,8 +334,9 @@ def evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len, ou
         # log_p += evaluate_log_p_theta_t(seq[:, :prompt_len + t + 1], cfg_p, params_p)
 
     # seq has shape (batch, seq_len) (NOTE: seq_len includes prompt_len + output_len)
-    p_logits = get_transformer_p_logits(cfg_p, params_p, seq, huggingface_model=huggingface_model)
-    log_p_all_tokens = jax.nn.log_softmax(p_logits, axis=-1)
+    # p_logits = get_transformer_p_logits(cfg_p, params_p, seq, huggingface_model=huggingface_model)
+    # log_p_all_tokens = jax.nn.log_softmax(p_logits, axis=-1)
+    log_p_all_tokens = get_log_p_all_tokens(seq, cfg_p, params_p, huggingface_model)
     # log_p_all_tokens has shape (batch, seq_len, n_vocab)
 
     output_tokens = seq[:, prompt_len:]

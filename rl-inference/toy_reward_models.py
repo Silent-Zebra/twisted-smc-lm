@@ -356,6 +356,7 @@ def batch_check_array_contained_in_other_array(big_array, small_array):
 
 eps = 1e-16 # just to avoid inf when taking log of 0
 
+@partial(jax.jit, static_argnames=["prompt_len"])
 # TODO do the same thing but now including the above one
 def reward_model_contains_continuation(seq, indexes_of_continuation, prompt_len):
     if len(seq.shape) == 3:

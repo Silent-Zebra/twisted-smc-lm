@@ -30,7 +30,7 @@ from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_fi
     get_l_ebm_ml_jit, get_l_ebm_ml_w_q_resample_jit, get_l_one_total_kl, \
     get_twist_loss_rl_based, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
     get_analytic_sigma_sample, upper_bound_log_Z_sigma_estimate, \
-    iwae_forward_and_backward, smc_backward, stochastic_transformer_sample
+    iwae_forward_and_backward, smc_backward, stochastic_transformer_sample, evaluate_log_p_selected_tokens
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, \
     tokens_to_jnp_indices, ordered_token_list, batch_reward_model, build_log_true_final_twists_positive_rew, \
     build_indicator_twists_all_tokens_at_position, reward_model_bad_word, \
@@ -377,11 +377,13 @@ class ExperimentConfig:
 
     def inspect_prob_of_continuation(
         self, rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
-        log_true_final_twist, output_len, n_samples, indexes_of_continuation,
+        log_true_final_twist, output_len, n_samples, indexes_of_continuation, tokenizer,
         prepend_tokens_for_twists, token_of_interest_as_int,
         proposal_is_p, huggingface_model):
 
         rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
+
+        prompt_len = prompt.shape[-1]
 
         _, smc_samples, (intermediate_seq_list, _) = smc_procedure(
             sk1, prompt, cfg_p, params_p,
@@ -396,34 +398,67 @@ class ExperimentConfig:
             token_of_interest_as_int=token_of_interest_as_int,
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
-        log_prob_cont_smc_samples = reward_model_p_of_continuation(
-            smc_samples, cfg_p, params_p, indexes_of_continuation,
-            huggingface_model=huggingface_model, return_log_w_no_temp=True)
+        if self.rm_type == "p_continuation":
 
-        log_prob_cont_proposal_samples = reward_model_p_of_continuation(
-            intermediate_seq_list[-1], cfg_p, params_p, indexes_of_continuation,
-            huggingface_model=huggingface_model, return_log_w_no_temp=True)
+            log_prob_cont_smc_samples = reward_model_p_of_continuation(
+                smc_samples, cfg_p, params_p, indexes_of_continuation,
+                huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
-        p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
-                                                  output_len, n_samples, huggingface_model=huggingface_model)
-        log_prob_cont_p_samples = reward_model_p_of_continuation(
-            p_samples, cfg_p, params_p, indexes_of_continuation,
-            huggingface_model=huggingface_model, return_log_w_no_temp=True)
+            log_prob_cont_proposal_samples = reward_model_p_of_continuation(
+                intermediate_seq_list[-1], cfg_p, params_p, indexes_of_continuation,
+                huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
-        print(log_prob_cont_smc_samples)
-        print(log_prob_cont_proposal_samples)
-        print(log_prob_cont_p_samples)
+            p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
+                                                      output_len, n_samples, huggingface_model=huggingface_model)
+            log_prob_cont_p_samples = reward_model_p_of_continuation(
+                p_samples, cfg_p, params_p, indexes_of_continuation,
+                huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
-        print(log_prob_cont_smc_samples.mean())
-        print(log_prob_cont_proposal_samples.mean())
-        print(log_prob_cont_p_samples.mean())
+            print(log_prob_cont_smc_samples)
+            print(log_prob_cont_proposal_samples)
+            print(log_prob_cont_p_samples)
 
-        # print(intermediate_seq_list[-1])
-        print(smc_samples[:10])
+            print(log_prob_cont_smc_samples.mean())
+            print(log_prob_cont_proposal_samples.mean())
+            print(log_prob_cont_p_samples.mean())
+
+        text_outputs = tokenizer.batch_decode(smc_samples, skip_special_tokens=True)
+
+        if self.rm_type == "p_continuation":
+            # print(intermediate_seq_list[-1])
+            print(smc_samples[:10])
+            for s in text_outputs:
+                print(s)
 
         if self.rm_type == "contains_continuation":
-            print(intermediate_seq_list)
+            # print(intermediate_seq_list)
+            print("Log indicator (+ eps) on whether sequence contains (0 means contains)")
             print(log_true_final_twist(smc_samples))
+            log_p = evaluate_log_p_selected_tokens(smc_samples, prompt_len, cfg_p, params_p, huggingface_model)
+            print(log_p)
+            # smc_samples = smc_samples[:, prompt_len:]
+            # log_p = log_p[:, prompt_len:]
+            log_p_cont_all_places = jnp.zeros((smc_samples.shape[0]))
+            for i in range(output_len - indexes_of_continuation.shape[-1] + 1):
+                # print(indexes_of_continuation.shape)
+                # print(smc_samples[:, prompt_len + i : prompt_len + i + indexes_of_continuation.shape[-1]].shape)
+                # print((smc_samples[:, prompt_len + i : prompt_len + i + indexes_of_continuation.shape[-1]] - indexes_of_continuation).shape)
+                log_p_continuation = jnp.where((
+                    jnp.abs(smc_samples[:, prompt_len + i : prompt_len + i + indexes_of_continuation.shape[-1]] - indexes_of_continuation).sum(axis=-1) == 0),
+                    log_p[:, i:i + indexes_of_continuation.shape[-1]].sum(axis=-1),
+                    jnp.zeros(smc_samples.shape[0]))
+                log_p_cont_all_places += log_p_continuation
+
+            print("Log prob of continuation, if it appears (0 if doesn't appear)")
+            print(log_p_cont_all_places)
+
+            print("Breakdown by each sample:")
+            for i in range(smc_samples.shape[0]):
+                print(smc_samples[i, prompt_len:])
+                print(text_outputs[i])
+                print(log_p[i])
+                print(log_p_cont_all_places[i])
+            print(f"Max log prob of continuation: {-(-log_p_cont_all_places).max()}")
 
         return rng_key
 
@@ -981,7 +1016,7 @@ class TestClass:
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
         prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
         true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
-        hist_token_index, indexes_of_continuation = setup_cfg(
+        hist_token_index, indexes_of_continuation, tokenizer = setup_cfg(
             n_vocab, twist_learn_type, rm_type, seed,
             huggingface, lr_twist, beta1, beta2,
             weight_decay,
@@ -1353,6 +1388,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
 
     huggingface_model = None
     model = None
+    tokenizer = None
 
     if huggingface:
         model_config = "distilgpt2"
@@ -1505,7 +1541,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
            cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
            prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
            true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
-           hist_token_index, indexes_of_continuation
+           hist_token_index, indexes_of_continuation, tokenizer
 
 
 def main():
@@ -1516,7 +1552,7 @@ def main():
     cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
     prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
     true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
-    hist_token_index, indexes_of_continuation = setup_cfg(
+    hist_token_index, indexes_of_continuation, tokenizer = setup_cfg(
         args.n_vocab, args.twist_learn_type, args.rm_type, args.seed,
         args.huggingface, args.lr_twist, args.beta1, args.beta2, args.weight_decay,
         args.d_model, args.d_k, args.d_v, args.n_layers, args.n_heads, args.d_fc,
@@ -1702,7 +1738,7 @@ def main():
                         rng_key = experiment_cfg.inspect_prob_of_continuation(
                             rng_key, prompt, cfg_p, params_p, cfg_twist,
                             params_twist, log_true_final_twist, args.output_len,
-                            args.n_test_smc_samples, indexes_of_continuation,
+                            args.n_test_smc_samples, indexes_of_continuation, tokenizer,
                             prepend_tokens_for_twists=False, token_of_interest_as_int=None,
                             proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
 
