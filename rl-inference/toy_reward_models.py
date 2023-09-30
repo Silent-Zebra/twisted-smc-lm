@@ -346,13 +346,13 @@ def check_only_contains_tokens_t_limited(seq, indexes_of_tokens, prompt_len, t_s
 #         raise NotImplementedError
 
 def batch_check_array_contained_in_other_array(big_array, small_array):
-    contains_continuation = jnp.zeros(big_array.shape[0])
+    contains_continuation = jnp.zeros(big_array.shape[0], dtype=jnp.int32)
     for i in range((big_array.shape[-1]) - (small_array.shape[-1]) + 1):
         is_continuation = jnp.where((jnp.abs(big_array[:, i:i + len(small_array)] - small_array).sum(axis=-1) == 0),
-                             jnp.ones(big_array.shape[0]), jnp.zeros(big_array.shape[0]))
+                             jnp.ones(big_array.shape[0], dtype=jnp.int32), jnp.zeros(big_array.shape[0], dtype=jnp.int32))
         contains_continuation += is_continuation
 
-    return jnp.minimum(contains_continuation, jnp.ones_like(contains_continuation))
+    return jnp.minimum(contains_continuation, jnp.ones_like(contains_continuation, dtype=jnp.int32))
 
 eps = 1e-16 # just to avoid inf when taking log of 0
 
@@ -724,30 +724,34 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
 
 
 
-def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indexes_of_continuation, huggingface_model=None):
+def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indexes_of_continuation, huggingface_model=None, get_true_posterior_samples=True):
     log_true_final_twists = []
-    true_posterior_samples_by_prompt_and_by_token = []
+    true_posterior_samples_by_prompt = []
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
 
-        # num_samples_containing_continuation = 0
-        #
-        # while num_samples_containing_continuation == 0:
-        #     rng_key, sk = jax.random.split(rng_key)
-        #     true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
-        #                                                            params_p, jnp_prompt,
-        #                                                            output_len + len(indexes_of_continuation),
-        #                                                            n_samples_at_a_time, huggingface_model=huggingface_model)
-        #
-        #     posterior_samples_containing_continuation = true_posterior_samples[(batch_check_array_contained_in_other_array(true_posterior_samples, indexes_of_continuation))]
-        #
-        #     print(posterior_samples_containing_continuation)
-        #     print(posterior_samples_containing_continuation.shape)
-        #
-        #     num_samples_containing_continuation = posterior_samples_containing_continuation.shape[0]
-        #
-        #
-        # print(true_posterior_samples)
+        if get_true_posterior_samples:
+            num_samples_containing_continuation = 0
+
+            while num_samples_containing_continuation == 0:
+                rng_key, sk = jax.random.split(rng_key)
+                true_posterior_samples = stochastic_transformer_sample(sk, cfg_p,
+                                                                       params_p, jnp_prompt,
+                                                                       output_len,
+                                                                       n_samples_at_a_time, huggingface_model=huggingface_model)
+
+                # print(batch_check_array_contained_in_other_array(true_posterior_samples, indexes_of_continuation))
+
+                posterior_samples_containing_continuation = true_posterior_samples[
+                    (batch_check_array_contained_in_other_array(true_posterior_samples, indexes_of_continuation) == 1)]
+
+                print(posterior_samples_containing_continuation)
+                print(posterior_samples_containing_continuation.shape)
+
+                num_samples_containing_continuation = posterior_samples_containing_continuation.shape[0]
+
+
+            print(true_posterior_samples)
 
         # token = ordered_token_list[i]
         # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
@@ -755,11 +759,11 @@ def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, ou
         log_true_final_twist = curried_reward_contains_continuation(indexes_of_continuation, prompt_len=prompt_len)
 
         log_true_final_twists.append(log_true_final_twist)
-        # true_posterior_samples_by_prompt_and_by_token.append(extracted_true_posterior_samples)
+        true_posterior_samples_by_prompt.append(posterior_samples_containing_continuation)
 
     # print(true_posterior_samples_by_prompt_and_by_token)
 
-    return log_true_final_twists, None, None # true_posterior_samples_by_prompt_and_by_token
+    return log_true_final_twists, None, true_posterior_samples_by_prompt
 
 
 # Same as the build_contains_token except we aren't considering the probability at the last token now. We are just using

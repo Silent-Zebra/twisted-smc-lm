@@ -346,7 +346,6 @@ class ExperimentConfig:
             rng_key, sk = jax.random.split(rng_key)
 
             plot_logZ_bounds(sk, extracted_samples, token_of_interest_as_int,
-                             true_posterior_samples_by_token,
                              prompt, prompt_len, cfg_p,
                              params_p, cfg_twist, params_twist,
                              log_true_final_twist[i], start,
@@ -354,7 +353,6 @@ class ExperimentConfig:
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                              huggingface_model=huggingface_model)
         elif args.rm_type == "only_contains_token":
-
             token_of_interest_as_int = \
             indexes_of_tokens_for_only_contains_token[
                 0]  # arbitrarily pick the first one as the one we'll inspect for the hists etc.
@@ -363,7 +361,18 @@ class ExperimentConfig:
             rng_key, sk = jax.random.split(rng_key)
 
             plot_logZ_bounds(sk, extracted_samples, token_of_interest_as_int,
-                             true_posterior_samples_by_token,
+                             prompt, prompt_len, cfg_p,
+                             params_p, cfg_twist, params_twist,
+                             log_true_final_twist, start,
+                             hist_token_index, epoch,
+                             prepend_tokens_for_twists=self.prepend_tokens_for_twists,
+                             huggingface_model=huggingface_model)
+        elif args.rm_type == "contains_continuation":
+            extracted_samples = true_posterior_samples_by_prompt_and_by_token[
+                prompt_num]
+            rng_key, sk = jax.random.split(rng_key)
+
+            plot_logZ_bounds(sk, extracted_samples, None,
                              prompt, prompt_len, cfg_p,
                              params_p, cfg_twist, params_twist,
                              log_true_final_twist, start,
@@ -458,7 +467,7 @@ class ExperimentConfig:
                 print(text_outputs[i])
                 print(log_p[i])
                 print(log_p_cont_all_places[i])
-            print(f"Max log prob of continuation: {-(-log_p_cont_all_places).max()}")
+            # print(f"Max log prob of continuation: {-(-log_p_cont_all_places).max()}")
 
         return rng_key
 
@@ -1174,7 +1183,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
                      upper_conf_bound, alpha=0.3)
 
 
-def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_posterior_samples_by_token, prompt, prompt_len, cfg_p,
+def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, prompt, prompt_len, cfg_p,
                      params_p, cfg_twist, params_twist, log_true_final_twist, start, hist_token_index, epoch,
                      prepend_tokens_for_twists=True, huggingface_model=None):
 
@@ -1300,10 +1309,11 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, true_
                 # # TODO remove later
                 # print(smc_samples)
                 print("SMC")
-                make_hists(extracted_samples, smc_samples,
-                           prompt_len,
-                           token_of_interest_as_int, args.n_vocab,
-                           hist_token_index)
+                if token_of_interest_as_int is not None:
+                    make_hists(extracted_samples, smc_samples,
+                               prompt_len,
+                               token_of_interest_as_int, args.n_vocab,
+                               hist_token_index)
 
                 print(smc_samples)
 
@@ -1611,6 +1621,8 @@ def main():
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
             elif args.rm_type == "only_contains_token":
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
+            elif args.rm_type == "contains_continuation":
+                true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
 
@@ -1734,6 +1746,19 @@ def main():
                             true_posterior_samples_by_prompt_and_by_token,
                             prompt_num
                         )
+                        if args.rm_type == "contains_continuation":
+                            # Inspect the samples also in this setting
+                            rng_key = experiment_cfg.inspect_prob_of_continuation(
+                                rng_key, prompt, cfg_p, params_p, cfg_twist,
+                                params_twist, log_true_final_twist,
+                                args.output_len,
+                                args.n_test_smc_samples,
+                                indexes_of_continuation, tokenizer,
+                                prepend_tokens_for_twists=False,
+                                token_of_interest_as_int=None,
+                                proposal_is_p=args.proposal_is_p,
+                                huggingface_model=huggingface_model)
+
                     elif only_inspect_samples:
                         rng_key = experiment_cfg.inspect_prob_of_continuation(
                             rng_key, prompt, cfg_p, params_p, cfg_twist,
