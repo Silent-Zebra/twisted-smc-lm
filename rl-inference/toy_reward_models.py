@@ -399,6 +399,78 @@ def curried_reward_only_contains_tokens(indexes_of_tokens, prompt_len):
     return new_rm
 
 
+# @partial(jax.jit, static_argnames=["toxicityModel"])
+def get_toxicity_score(tokens, toxicityModel):
+    score = toxicityModel(**tokens)[0]
+    score = score.squeeze(-1)
+    return score
+
+
+def reward_model_toxicity(seq, toxicityModel, tokenizer_RM, tokenizer):
+    if len(seq.shape) == 3:
+        raise NotImplementedError
+        # original_shape = seq.shape
+        # do_reshape = True
+        # seq = seq.reshape(-1, seq.shape[-1])
+
+    text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
+    tokens = tokenizer_RM(text_outputs,
+                          truncation=True,
+                          padding=True,
+                          max_length=512,
+                          return_token_type_ids=False,
+                          return_tensors="np",
+                          return_attention_mask=True)
+
+    score = get_toxicity_score(tokens, toxicityModel)
+
+    return score
+
+def curried_reward_model_toxicity(toxicityModel, tokenizer_RM, tokenizer):
+    def new_rm(seq):
+        return reward_model_toxicity(seq, toxicityModel, tokenizer_RM, tokenizer)
+    return new_rm
+
+def reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True):
+    if len(seq.shape) == 3:
+        raise NotImplementedError
+        # original_shape = seq.shape
+        # do_reshape = True
+        # seq = seq.reshape(-1, seq.shape[-1])
+
+    seq = jax.lax.stop_gradient(seq)
+    text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
+    tokens = tokenizer_RM(text_outputs,
+                          truncation=True,
+                          padding=True,
+                          max_length=512,
+                          return_token_type_ids=False,
+                          return_tensors="np",
+                          return_attention_mask=True)
+
+    score = get_toxicity_score(tokens, toxicityModel)
+
+    if pos_threshold:
+        return (score > threshold)
+    else:
+        return (score < threshold)
+
+
+def curried_reward_model_toxicity_threshold(toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True):
+    def new_rm(seq):
+        return reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
+    return new_rm
+
+# Note that jax.pure_callback requires a fixed size known in advance, however since we can pass in the padded sequences, then that size is just whatever the final padded size is
+def reward_model_toxicity_threshold_w_callback(curried_rm):
+    def new_rm_fn(seq):
+        # print(seq.shape)
+        result_shape = jax.core.ShapedArray(seq.shape[:-1], dtype=jnp.float32)
+        # print(result_shape)
+        return jax.pure_callback(curried_rm, result_shape, seq)
+    return new_rm_fn
+
+
 # Just check the all 0s string and adjacent probabilities
 def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, huggingface_model=None):
     print("--INSPECT ONE_BAD PROGRESS--")
@@ -760,6 +832,63 @@ def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, ou
 
         log_true_final_twists.append(log_true_final_twist)
         true_posterior_samples_by_prompt.append(posterior_samples_containing_continuation)
+
+    # print(true_posterior_samples_by_prompt_and_by_token)
+
+    return log_true_final_twists, None, true_posterior_samples_by_prompt
+
+
+def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time,
+                                    toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True,
+                                    huggingface_model=None, get_true_posterior_samples=True):
+    log_true_final_twists = []
+    true_posterior_samples_by_prompt = []
+    for jnp_prompt in jnp_prompts:
+        # prompt_len = jnp_prompt.shape[-1]
+
+        curried_rm = curried_reward_model_toxicity_threshold(toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
+        log_true_final_twist = curried_rm
+        # log_true_final_twist = reward_model_toxicity_threshold_w_callback(curried_rm)
+
+        log_true_final_twists.append(log_true_final_twist)
+
+        if get_true_posterior_samples:
+            num_samples_satisfying_threshold = 0
+
+            while num_samples_satisfying_threshold == 0:
+                rng_key, sk = jax.random.split(rng_key)
+                p_samples = stochastic_transformer_sample(sk, cfg_p, params_p, jnp_prompt,
+                                                          output_len, n_samples_at_a_time,
+                                                          huggingface_model=huggingface_model)
+
+                # print(batch_check_array_contained_in_other_array(true_posterior_samples, indexes_of_continuation))
+
+                posterior_samples_satisfying_threshold = p_samples[
+                    (log_true_final_twist(p_samples))]
+
+
+
+                num_samples_satisfying_threshold = posterior_samples_satisfying_threshold.shape[0]
+                print("NUM samples")
+                print(num_samples_satisfying_threshold)
+
+            print(posterior_samples_satisfying_threshold)
+            print(posterior_samples_satisfying_threshold.shape)
+            print(log_true_final_twist(posterior_samples_satisfying_threshold))
+            print(log_true_final_twist(p_samples))
+            text_outputs = tokenizer.batch_decode(
+                posterior_samples_satisfying_threshold,
+                skip_special_tokens=True)
+            print(text_outputs)
+            text_outputs = tokenizer.batch_decode(p_samples,
+                                                  skip_special_tokens=True)
+            print(text_outputs)
+
+        # token = ordered_token_list[i]
+        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
+        # assert extracted_true_posterior_samples.shape[0] != 0
+
+        true_posterior_samples_by_prompt.append(posterior_samples_satisfying_threshold)
 
     # print(true_posterior_samples_by_prompt_and_by_token)
 

@@ -36,7 +36,8 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     build_indicator_twists_all_tokens_at_position, reward_model_bad_word, \
     hist_by_token_index, build_log_p_token_last_pos_twists, build_contains_token_twists, \
     build_only_contains_token_twists, build_contains_token_eps_twists,\
-    reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists
+    reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
+    build_toxicity_threshold_twists
 # Update the twists, update the whole framework for the Bayesian thing.
 
 from huggingface_models_custom import CustomLMWithTwistHead, get_tokenizer
@@ -107,7 +108,7 @@ class ExperimentConfig:
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
             or self.rm_type == "contains_token" or self.rm_type == "only_contains_token" \
             or self.rm_type == "contains_token_eps" or self.rm_type == "p_continuation" \
-            or self.rm_type == "contains_continuation":
+            or self.rm_type == "contains_continuation" or self.rm_type == "toxicity_threshold":
             return None
         elif self.rm_type == "bad_word_pos":
             return reward_model_bad_word
@@ -243,7 +244,7 @@ class ExperimentConfig:
                 grad_params_twist, optim_twist_state, params_twist)
             params_twist = optax.apply_updates(params_twist,
                                                updates_twist)
-        elif self.rm_type == "p_continuation" or self.rm_type == "contains_continuation":
+        elif self.rm_type == "p_continuation" or self.rm_type == "contains_continuation" or self.rm_type == "toxicity_threshold":
             # token_of_interest_as_int = index_of_token_contained
             rng_key, sk = jax.random.split(rng_key)
             grad_params_twist = self.get_grad_params_twist(
@@ -367,7 +368,7 @@ class ExperimentConfig:
                              hist_token_index, epoch,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                              huggingface_model=huggingface_model)
-        elif args.rm_type == "contains_continuation":
+        elif args.rm_type == "contains_continuation" or args.rm_type == "toxicity_threshold":
             extracted_samples = true_posterior_samples_by_prompt_and_by_token[
                 prompt_num]
             rng_key, sk = jax.random.split(rng_key)
@@ -539,7 +540,9 @@ class ExperimentConfig:
                                   n_true_posterior_samples,
                                   huggingface_model=None,
                                   index_of_token_contained=None,
-                                  indexes_of_continuation=None):
+                                  indexes_of_continuation=None,
+                                  toxicityModel=None, tokenizer_RM=None, tokenizer=None,
+                                  threshold=0, pos_threshold=True):
         if rm_type == "bad_word_pos":
             log_true_final_twists = build_log_true_final_twists_positive_rew(
                 jnp_prompts, self.rm_fn,
@@ -590,6 +593,18 @@ class ExperimentConfig:
                                                      params_p, output_len,
                                                      n_samples_at_a_time=n_true_posterior_samples,
                                                      indexes_of_continuation=indexes_of_continuation,
+                                                     huggingface_model=huggingface_model)
+            print(log_true_final_twists)
+            print(indices_of_tokens_chosen_by_prompt)
+            print(true_posterior_samples_by_prompt_and_by_token)
+            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+        elif rm_type == "toxicity_threshold":
+            rng_key, sk = jax.random.split(rng_key)
+            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+                = build_toxicity_threshold_twists(sk, jnp_prompts, cfg_p,
+                                                     params_p, output_len,
+                                                     n_true_posterior_samples,
+                                                  toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold,
                                                      huggingface_model=huggingface_model)
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
@@ -676,8 +691,9 @@ def compare_iwae_vs_smc(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
     print(iwae_upper_bound_estimate)
 
 
-@partial(jax.jit, static_argnames=["log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
-                                   "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",  "prepend_tokens_for_twists", "huggingface_model"])
+# TODO SEP 30 CONSIDER REJIT
+# @partial(jax.jit, static_argnames=["log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
+#                                    "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",  "prepend_tokens_for_twists", "huggingface_model"])
 def inspect_and_record_evidence_setting_for_index(rng_key,
                                         prompt,
                                         prompt_len, cfg_p, params_p, cfg_twist,
@@ -1388,7 +1404,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
           beta1, beta2, weight_decay, d_model, d_k, d_v, n_layers, n_heads, d_fc,
           d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist, d_fc_twist,
           indicator_pos_zero_index, output_len, n_true_posterior_samples, index_of_token_contained,
-          beta_temp=1.):
+          beta_temp=1., threshold=0, pos_threshold=True):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
@@ -1475,6 +1491,26 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                      b2=beta2)
         optim_twist_state = optimizer_twist.init(params_twist)
 
+    if rm_type == "toxicity_threshold":
+        from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
+        assert huggingface
+        tokenizer_RM = AutoTokenizer.from_pretrained(
+            "nicholasKluge/ToxicityModel")
+        # toxicityModelpt = AutoModelForSequenceClassification.from_pretrained(
+        #     "nicholasKluge/ToxicityModel")
+
+        load_pt_model = True
+        if load_pt_model:
+            toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "nicholasKluge/ToxicityModel",
+                from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
+            toxicityModel.save_pretrained("./toxicityModelFlax")
+        else:
+            print("Loading model")
+            toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "./toxicityModelFlax")
+            print("Loaded model")
+
     indexes_of_continuation = None
     if huggingface:
         if rm_type == "p_continuation" or rm_type == "contains_continuation":
@@ -1514,6 +1550,29 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
 
         jnp_prompts = get_jnp_prompts_from_prompts(prompts, token_based_prompt)
 
+
+
+    # rng_key, sk = jax.random.split(rng_key)
+    # p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+    #                                           jnp.array([0,1], dtype=jnp.int32),
+    #                                           args.output_len,
+    #                                           2,
+    #                                           huggingface_model=huggingface_model)
+    # print(p_samples)
+    # print("HERE")
+    # from toy_reward_models import curried_reward_model_toxicity_threshold, reward_model_toxicity_threshold_w_callback
+    # curried_rm = curried_reward_model_toxicity_threshold(toxicityModel,
+    #                                                      tokenizer_RM,
+    #                                                      tokenizer, threshold,
+    #                                                      pos_threshold)
+    # log_true_final_twist = curried_rm
+    # # log_true_final_twist = reward_model_toxicity_threshold_w_callback(
+    # #     curried_rm)
+    # x = log_true_final_twist(p_samples)
+    # print(x)
+    # 1/0
+
+
     rng_key, sk = jax.random.split(rng_key)
     log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
         = experiment_cfg.get_log_true_final_twists(sk, jnp_prompts, cfg_p,
@@ -1523,7 +1582,13 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                     n_true_posterior_samples,
                                     huggingface_model,
                                     index_of_token_contained,
-                                                   indexes_of_continuation)
+                                                   indexes_of_continuation,
+                                                   toxicityModel,
+                                                   tokenizer_RM,
+                                                   tokenizer,
+                                                   threshold,
+                                                   pos_threshold
+                                                   )
 
     # records_list_by_prompt_then_twist = []
     # for _ in jnp_prompts:
@@ -1569,7 +1634,7 @@ def main():
         args.d_model_twist, args.d_k_twist, args.d_v_twist, args.n_layers_twist,
         args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
         args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
-        args.beta_temp
+        args.beta_temp, args.threshold, args.pos_threshold
     )
 
     # from toy_reward_models import batch_check_array_contained_in_other_array
@@ -1581,6 +1646,8 @@ def main():
     highest_log_prob_sample = None
 
     last_ckpt_epoch = -1
+
+
 
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
@@ -1621,11 +1688,43 @@ def main():
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
             elif args.rm_type == "only_contains_token":
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
-            elif args.rm_type == "contains_continuation":
+            elif args.rm_type == "contains_continuation" or args.rm_type == "toxicity_threshold":
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
 
+
+            # from custom_transformer_prob_utils import smc_partial_jit
+            # rng_key, sk = jax.random.split(rng_key)
+            # _, smc_samples = smc_partial_jit(
+            #     sk, prompt, cfg_p, params_p,
+            #     cfg_twist, params_twist,
+            #     log_true_final_twist,
+            #     args.output_len,
+            #     args.n_test_smc_samples,
+            #     proposal_is_p=args.proposal_is_p,
+            #     huggingface_model=huggingface_model)
+            # print(smc_samples)
+            # text_outputs = tokenizer.batch_decode(smc_samples,
+            #                                       skip_special_tokens=True)
+            # print(text_outputs)
+            # print(log_true_final_twist(smc_samples))
+            #
+            # _, smc_samples = smc_procedure(
+            #     sk, prompt, cfg_p, params_p,
+            #     cfg_twist, params_twist,
+            #     log_true_final_twist,
+            #     args.output_len,
+            #     args.n_test_smc_samples,
+            #     n_vocab=args.n_vocab,
+            #     proposal_is_p=args.proposal_is_p,
+            #     huggingface_model=huggingface_model)
+            # print(smc_samples)
+            # text_outputs = tokenizer.batch_decode(smc_samples,
+            #                                       skip_special_tokens=True)
+            # print(text_outputs)
+            # print(log_true_final_twist(smc_samples))
+            # 1/0
 
 
             rng_key, sk = jax.random.split(rng_key)
@@ -1758,6 +1857,23 @@ def main():
                                 token_of_interest_as_int=None,
                                 proposal_is_p=args.proposal_is_p,
                                 huggingface_model=huggingface_model)
+                        elif args.rm_type == "toxicity_threshold":
+                            rng_key, sk = jax.random.split(rng_key)
+                            _, smc_samples = smc_procedure(
+                                sk, prompt, cfg_p, params_p,
+                                cfg_twist, params_twist,
+                                log_true_final_twist,
+                                args.output_len,
+                                args.n_test_smc_samples,
+                                n_vocab=args.n_vocab,
+                                proposal_is_p=args.proposal_is_p,
+                                huggingface_model=huggingface_model)
+                            print(smc_samples)
+                            text_outputs = tokenizer.batch_decode(smc_samples,
+                                                                  skip_special_tokens=True)
+                            print(text_outputs)
+                            print(log_true_final_twist(smc_samples))
+
 
                     elif only_inspect_samples:
                         rng_key = experiment_cfg.inspect_prob_of_continuation(
@@ -1897,7 +2013,8 @@ if __name__ == "__main__":
                         choices=["bad_word_pos", "indicator_at_index",
                                  "p_token_last_index", "contains_token",
                                  "only_contains_token", "contains_token_eps",
-                                 "p_continuation", "contains_continuation"])
+                                 "p_continuation", "contains_continuation",
+                                 "toxicity_threshold"])
 
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
@@ -1915,6 +2032,9 @@ if __name__ == "__main__":
     parser.add_argument("--huggingface", action="store_true", help="Use huggingface transformer. Obviates the need for setting transformer parameters")
     # TODO SEP 15; add flags for different models e.g. GPT2small, GPT2medium, other archs...
     parser.add_argument("--rejection_sample_naive", action="store_true", help="Only for a specific test/check")
+
+    parser.add_argument("--threshold", type=float, default=0., help="The threshold for the toxicity score")
+    parser.add_argument("--pos_threshold", action="store_true", help="Use a positive (>) threshold for the toxicity threshold reward model. If not set, then uses negative (<) threshold.")
 
     args = parser.parse_args()
 
