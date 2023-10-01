@@ -456,19 +456,24 @@ def reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer,
         return (score < threshold)
 
 
-def curried_reward_model_toxicity_threshold(toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True):
+def curried_log_toxicity_threshold(toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True):
     def new_rm(seq):
-        return reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
+        return jnp.log(reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold) + eps)
     return new_rm
 
-# Note that jax.pure_callback requires a fixed size known in advance, however since we can pass in the padded sequences, then that size is just whatever the final padded size is
-def reward_model_toxicity_threshold_w_callback(curried_rm):
-    def new_rm_fn(seq):
-        # print(seq.shape)
-        result_shape = jax.core.ShapedArray(seq.shape[:-1], dtype=jnp.float32)
-        # print(result_shape)
-        return jax.pure_callback(curried_rm, result_shape, seq)
-    return new_rm_fn
+# def curried_reward_model_toxicity_threshold(toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True):
+#     def new_rm(seq):
+#         return reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
+#     return new_rm
+
+# # Note that jax.pure_callback requires a fixed size known in advance, however since we can pass in the padded sequences, then that size is just whatever the final padded size is
+# def reward_model_toxicity_threshold_w_callback(curried_rm):
+#     def new_rm_fn(seq):
+#         # print(seq.shape)
+#         result_shape = jax.core.ShapedArray(seq.shape[:-1], dtype=jnp.float32)
+#         # print(result_shape)
+#         return jax.pure_callback(curried_rm, result_shape, seq)
+#     return new_rm_fn
 
 
 # Just check the all 0s string and adjacent probabilities
@@ -586,32 +591,32 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface_model=None):
            bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob
 
 
-def inspect_bad_word_reward(sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
-                            log_true_final_twist, output_len, n_samples, rew_model, analytic_sigma_sample, n_vocab):
-    sk, sk2 = jax.random.split(sk)
-    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
-                                                      cfg_p, params_p,
-                                                      cfg_twist,
-                                                      params_twist,
-                                                      log_true_final_twist,
-                                                      output_len,
-                                                      n_samples, analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
-
-    r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
-
-    model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
-                                               output_len, n_samples)
-    r_seqs_model = rew_model(model_seqs, prompt_len)
-
-    adv_reward = r_seqs_adv.mean()
-    p_reward = r_seqs_model.mean()
-
-    print("Average rewards:")
-    print(adv_reward)
-    print(p_reward)
-
-    return adv_reward, p_reward
-
+# def inspect_bad_word_reward(sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
+#                             log_true_final_twist, output_len, n_samples, rew_model, analytic_sigma_sample, n_vocab):
+#     sk, sk2 = jax.random.split(sk)
+#     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
+#                                                       cfg_p, params_p,
+#                                                       cfg_twist,
+#                                                       params_twist,
+#                                                       log_true_final_twist,
+#                                                       output_len,
+#                                                       n_samples, analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
+#
+#     r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
+#
+#     model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
+#                                                output_len, n_samples)
+#     r_seqs_model = rew_model(model_seqs, prompt_len)
+#
+#     adv_reward = r_seqs_adv.mean()
+#     p_reward = r_seqs_model.mean()
+#
+#     print("Average rewards:")
+#     print(adv_reward)
+#     print(p_reward)
+#
+#     return adv_reward, p_reward
+#
 
 
 def print_bad_word_env_generations(key, indices_prompt, cfg_p, params_p, prompt_len, output_len, n_samples):
@@ -846,7 +851,7 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
     for jnp_prompt in jnp_prompts:
         # prompt_len = jnp_prompt.shape[-1]
 
-        curried_rm = curried_reward_model_toxicity_threshold(toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
+        curried_rm = curried_log_toxicity_threshold(toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
         log_true_final_twist = curried_rm
         # log_true_final_twist = reward_model_toxicity_threshold_w_callback(curried_rm)
 
@@ -863,8 +868,11 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
 
                 # print(batch_check_array_contained_in_other_array(true_posterior_samples, indexes_of_continuation))
 
+                # posterior_samples_satisfying_threshold = p_samples[
+                #     (log_true_final_twist(p_samples))]
+
                 posterior_samples_satisfying_threshold = p_samples[
-                    (log_true_final_twist(p_samples))]
+                    reward_model_toxicity_threshold(p_samples, toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True)]
 
 
 
