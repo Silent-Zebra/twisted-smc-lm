@@ -1267,7 +1267,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
     iwae_ubs_across_seeds = []
     smc_lbs_across_seeds = []
     smc_ubs_across_seeds = []
-    n_seeds = 200
+    n_seeds = 10
     print(f"Sampling Runs Starting")
     print(f"TIME: {time.time() - start}", flush=True)
 
