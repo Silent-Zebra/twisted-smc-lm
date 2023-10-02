@@ -431,7 +431,7 @@ def curried_reward_model_toxicity(toxicityModel, tokenizer_RM, tokenizer):
         return reward_model_toxicity(seq, toxicityModel, tokenizer_RM, tokenizer)
     return new_rm
 
-def reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True):
+def reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold):
     if len(seq.shape) == 3:
         raise NotImplementedError
         # original_shape = seq.shape
@@ -456,7 +456,7 @@ def reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer,
         return (score < threshold)
 
 
-def curried_log_toxicity_threshold(toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True):
+def curried_log_toxicity_threshold(toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold):
     def new_rm(seq):
         return jnp.log(reward_model_toxicity_threshold(seq, toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold) + eps)
     return new_rm
@@ -844,7 +844,7 @@ def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, ou
 
 
 def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time,
-                                    toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True,
+                                    toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold,
                                     huggingface_model=None, get_true_posterior_samples=True):
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
