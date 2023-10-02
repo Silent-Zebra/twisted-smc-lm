@@ -872,7 +872,7 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
                 #     (log_true_final_twist(p_samples))]
 
                 posterior_samples_satisfying_threshold = p_samples[
-                    reward_model_toxicity_threshold(p_samples, toxicityModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True)]
+                    reward_model_toxicity_threshold(p_samples, toxicityModel, tokenizer_RM, tokenizer, threshold, pos_threshold)]
 
 
 
