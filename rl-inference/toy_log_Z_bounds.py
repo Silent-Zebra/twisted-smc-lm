@@ -1286,6 +1286,9 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
     print(f"Sampling Runs Starting")
     print(f"TIME: {time.time() - start}", flush=True)
 
+    # Measure only for the largest number of particles (should be most accurate)
+    kl_lb_iwae_across_seeds, kl_ub_iwae_across_seeds, kl_lb_smc_across_seeds, kl_ub_smc_across_seeds = 0., 0., 0., 0.
+
     for seed in range(n_seeds):
         print(f"Sampling seed {seed}", flush=True)
         print(f"TIME: {time.time() - start}", flush=True)
@@ -1297,7 +1300,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
         for n_test_smc_samples in n_samples:
             if seed == 0:
                 print(f"n_smc: {n_test_smc_samples}")
-                jax.profiler.save_device_memory_profile(f"memory.prof")
+                # jax.profiler.save_device_memory_profile(f"memory.prof")
 
 
             rng_key, sk = jax.random.split(rng_key)
@@ -1335,14 +1338,20 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
             print(
                 f"SMC upper bound estimate: {smc_upper_bound_estimate}")
 
-            print(
-                f"KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_q_sigma_iwae_upper_bound_estimate}")
-            print(
-                f"KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_q_sigma_iwae_lower_bound_estimate}")
-            print(
-                f"KL(q||sigma) upper bound (using SMC bound on log Z): {kl_q_sigma_smc_upper_bound_estimate}")
-            print(
-                f"KL(q||sigma) lower bound (using SMC bound on log Z): {kl_q_sigma_smc_lower_bound_estimate}")
+            if n_test_smc_samples == n_samples[-1]:
+                print(
+                    f"KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_q_sigma_iwae_upper_bound_estimate}")
+                print(
+                    f"KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_q_sigma_iwae_lower_bound_estimate}")
+                print(
+                    f"KL(q||sigma) upper bound (using SMC bound on log Z): {kl_q_sigma_smc_upper_bound_estimate}")
+                print(
+                    f"KL(q||sigma) lower bound (using SMC bound on log Z): {kl_q_sigma_smc_lower_bound_estimate}")
+
+                kl_ub_iwae_across_seeds += kl_q_sigma_iwae_upper_bound_estimate
+                kl_lb_iwae_across_seeds += kl_q_sigma_iwae_lower_bound_estimate
+                kl_ub_smc_across_seeds += kl_q_sigma_smc_upper_bound_estimate
+                kl_lb_smc_across_seeds += kl_q_sigma_smc_lower_bound_estimate
 
             iwae_lbs.append(iwae_lower_bound_estimate)
             iwae_ubs.append(iwae_upper_bound_estimate)
@@ -1400,6 +1409,19 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
         iwae_ubs_across_seeds.append(np.stack(iwae_ubs))
         smc_lbs_across_seeds.append(np.stack(smc_lbs))
         smc_ubs_across_seeds.append(np.stack(smc_ubs))
+
+    kl_ub_iwae_across_seeds /= n_seeds
+    kl_lb_iwae_across_seeds /= n_seeds
+    kl_ub_smc_across_seeds /= n_seeds
+    kl_lb_smc_across_seeds /= n_seeds
+    print(
+        f"Avg KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_ub_iwae_across_seeds}")
+    print(
+        f"Avg KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_lb_iwae_across_seeds}")
+    print(
+        f"Avg KL(q||sigma) upper bound (using SMC bound on log Z): {kl_ub_smc_across_seeds}")
+    print(
+        f"Avg KL(q||sigma) lower bound (using SMC bound on log Z): {kl_lb_smc_across_seeds}")
 
     # np_n_samples = np.stack(n_samples)
     x_range = np.arange(len(n_samples)) + 2  # use 10^ essentially
