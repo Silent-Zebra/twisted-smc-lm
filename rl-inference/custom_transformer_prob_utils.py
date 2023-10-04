@@ -1312,20 +1312,35 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
                                                       proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
 
-    l_dre = 0.
+    # l_dre_old = 0.
+    #
+    # scan_over = jnp.arange(output_len)
+    #
+    # carry = (l_dre_old, prompt_w_sigma_sample_s_1_to_t, prompt_w_p_sample_s_1_to_t, params_twist, prompt_len, sk3)
+    #
+    # carry, _ = jax.lax.scan(partial(get_l_dre_sixo_scan_iter, cfg_twist=cfg_twist,
+    #                                 prepend_tokens_for_twists=prepend_tokens_for_twists,
+    #                                 token_of_interest_as_int=token_of_interest_as_int),
+    #                         carry, scan_over, output_len)
+    #
+    # l_dre_old, _, _, _, _, _ = carry
+    #
+    # l_dre_old /= output_len
 
-    scan_over = jnp.arange(output_len)
+    log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+        prepend_tokens_for_twists,
+        token_of_interest_as_int, huggingface_model)
+    log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
+        prompt_w_p_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+        prepend_tokens_for_twists,
+        token_of_interest_as_int, huggingface_model)
 
-    carry = (l_dre, prompt_w_sigma_sample_s_1_to_t, prompt_w_p_sample_s_1_to_t, params_twist, prompt_len, sk3)
+    l_dre = jax.nn.log_sigmoid(log_psi_on_truncated_sigma_samples) + jnp.log(1 - jax.nn.sigmoid(log_psi_on_p_samples))
+    l_dre = l_dre.mean()
 
-    carry, _ = jax.lax.scan(partial(get_l_dre_sixo_scan_iter, cfg_twist=cfg_twist,
-                                    prepend_tokens_for_twists=prepend_tokens_for_twists,
-                                    token_of_interest_as_int=token_of_interest_as_int),
-                            carry, scan_over, output_len)
-
-    l_dre, _, _, _, _, _ = carry
-
-    l_dre /= output_len
+    # print(l_dre_old)
+    # print(l_dre)
 
     return -l_dre # negative because now we have a loss
 
