@@ -147,6 +147,12 @@ class ExperimentConfig:
                                                  proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
         return grad_params_twist
 
+
+    # @partial(jax.jit, static_argnames=[
+    #     "self", "n_twist", "output_len",
+    #         "cfg_p", "cfg_twist",
+    #         "log_true_final_twist", "proposal_is_p", "huggingface_model",
+    #         "index_of_token_contained", "optimizer_twist"])
     def update_twist(self, rng_key, indices_of_tokens_chosen, prompt, n_twist,
                      output_len, cfg_p, params_p, cfg_twist, params_twist,
                      log_true_final_twist, proposal_is_p, huggingface_model,
@@ -448,13 +454,15 @@ class ExperimentConfig:
             print(log_prob_cont_proposal_samples.mean())
             print(log_prob_cont_p_samples.mean())
 
-        text_outputs = tokenizer.batch_decode(smc_samples, skip_special_tokens=True)
+        if huggingface_model:
+            text_outputs = tokenizer.batch_decode(smc_samples, skip_special_tokens=True)
 
         if self.rm_type == "p_continuation":
             # print(intermediate_seq_list[-1])
             print(smc_samples[:10])
-            for s in text_outputs:
-                print(s)
+            if huggingface_model:
+                for s in text_outputs:
+                    print(s)
 
         if self.rm_type == "contains_continuation":
             # print(intermediate_seq_list)
@@ -481,7 +489,8 @@ class ExperimentConfig:
             print("Breakdown by each sample:")
             for i in range(smc_samples.shape[0]):
                 print(smc_samples[i, prompt_len:])
-                print(text_outputs[i])
+                if huggingface_model:
+                    print(text_outputs[i])
                 print(log_p[i])
                 print(log_p_cont_all_places[i])
             # print(f"Max log prob of continuation: {-(-log_p_cont_all_places).max()}")
@@ -1098,7 +1107,8 @@ class TestClass:
                 rng_key, sk = jax.random.split(rng_key)
                 for epoch in range(num_epochs):
                     for twist_update in range(twist_updates_per_epoch):
-                        rng_key, params_twist, optim_twist_state = experiment_cfg.update_twist(
+                        rng_key, params_twist, optim_twist_state = \
+                            experiment_cfg.update_twist(
                             rng_key, indices_of_tokens_chosen, prompt,
                             n_twist, output_len, cfg_p, params_p, cfg_twist,
                             params_twist, log_true_final_twist, proposal_is_p,
@@ -1139,7 +1149,8 @@ class TestClass:
                 print(avg_rel_diff_list)
                 for epoch in range(num_epochs):
                     for twist_update in range(twist_updates_per_epoch):
-                        rng_key, params_twist, optim_twist_state = experiment_cfg.update_twist(
+                        rng_key, params_twist, optim_twist_state = \
+                            experiment_cfg.update_twist(
                             rng_key, indices_of_tokens_chosen, prompt,
                             n_twist, output_len, cfg_p, params_p, cfg_twist,
                             params_twist, log_true_final_twist, proposal_is_p,
@@ -1278,6 +1289,8 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
         true_log_z, analytic_kl_q_sigma, analytic_kl_p_sigma = -jnp.inf, -jnp.inf, -jnp.inf
 
     n_samples = [64, 256]  # [4, 8, 16, 32, 64, 128]
+    power_base = 4
+    lowest_power = 3
     iwae_lbs_across_seeds = []
     iwae_ubs_across_seeds = []
     smc_lbs_across_seeds = []
@@ -1424,7 +1437,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
         f"Avg KL(q||sigma) lower bound (using SMC bound on log Z): {kl_lb_smc_across_seeds}")
 
     # np_n_samples = np.stack(n_samples)
-    x_range = np.arange(len(n_samples)) + 2  # use 10^ essentially
+    x_range = np.arange(len(n_samples)) + lowest_power
 
     plt.clf()
 
@@ -1445,7 +1458,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
     if not huggingface_model:
         plt.plot(x_range, np.ones_like(x_range) * true_log_z,
                  label="True Log Z")
-    plt.xlabel("4^ Number of Particles")
+    plt.xlabel(f"{power_base}^ Number of Particles")
 
     plt.legend()
     plt.savefig(f"{args.save_dir}/fig_epoch{epoch + 1}.png")
@@ -1600,6 +1613,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         elif rm_type == "p_continuation" or rm_type == "contains_continuation":
             prompts = [[0, 1]]
             indexes_of_continuation = [6, 8]
+            indexes_of_continuation = jnp.array(indexes_of_continuation, dtype=jnp.int32)
         else:
             prompts = [[0, 1, 0, 1]]
 
@@ -1859,7 +1873,7 @@ def main():
             print(f"TWIST UPDATES STARTING", flush=True)
             print(f"TIME: {time.time() - start}", flush=True)
             # TODO Jul 17 Consider scan loop and jit these too.
-            print_every_twist_updates = 50
+            print_every_twist_updates = 1 # 50
             for twist_update in range(args.twist_updates_per_epoch):
                 if (twist_update + 1) % print_every_twist_updates == 0:
                     print(f"Twist update: {twist_update + 1}")
@@ -1867,12 +1881,15 @@ def main():
                     # jax.profiler.save_device_memory_profile(f"memory{twist_update}.prof")
                     # jax.profiler.save_device_memory_profile(f"memory.prof")
 
-                rng_key, params_twist, optim_twist_state = experiment_cfg.update_twist(
-                    rng_key, indices_of_tokens_chosen, prompt, args.n_twist,
+                rng_key, params_twist, optim_twist_state = \
+                    experiment_cfg.update_twist(
+                        rng_key, indices_of_tokens_chosen, prompt, args.n_twist,
                     args.output_len, cfg_p, params_p, cfg_twist, params_twist,
                     log_true_final_twist, args.proposal_is_p, huggingface_model,
                     optimizer_twist, optim_twist_state, args.index_of_token_contained
                 )
+
+            # 1/0
 
             # We should also be seeing this distribution change, with model updates (even without twist updates)
             test_info = True

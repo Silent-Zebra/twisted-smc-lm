@@ -1296,7 +1296,8 @@ def get_l_dre_sixo_scan_iter(carry, t, cfg_twist, prepend_tokens_for_twists, tok
     return carry, None
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p", "huggingface_model"])
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int",
+                                   "smc_procedure_type", "proposal_is_p", "huggingface_model"])
 def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                    output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None,
                    proposal_is_p=False, huggingface_model=None):
