@@ -1835,7 +1835,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         return params_twist, optim_twist_state
 
     # jax.block_until_ready(test_generate(sk, hfacemodel, input_ids=batch_prompt))
-    # jax.block_until_ready(test_twist())
+    jax.block_until_ready(test_twist())
     # x = test_generate(sk, hfacemodel, input_ids=batch_prompt)
     # print(x)
     # 1/0
@@ -1843,7 +1843,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     #     full_fwd_bckwd(params_twist, params_p, optimizer_twist,
     #                    optim_twist_state))
     # jax.block_until_ready(stochastic_transformer_sample(sk, cfg_p, params_p, prompt, output_len, args.n_twist, huggingface_model))
-    jax.block_until_ready(test_func(params_twist, params_p))
+    # jax.block_until_ready(test_func(params_twist, params_p))
     print("hihi", flush=True)
 
 
@@ -1855,12 +1855,12 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         #     full_fwd_bckwd(params_twist, params_p, optimizer_twist,
         #                    optim_twist_state))
         # x = jax.block_until_ready(test_generate(sk, hfacemodel, input_ids=batch_prompt))
-        # x = jax.block_until_ready(test_twist())
+        x = jax.block_until_ready(test_twist())
         # x = jax.block_until_ready(
         #     stochastic_transformer_sample(sk, cfg_p, params_p, prompt,
         #                                   output_len, args.n_twist,
         #                                   huggingface_model))
-        jax.block_until_ready(test_func(params_twist, params_p))
+        # jax.block_until_ready(test_func(params_twist, params_p))
 
         print(time.time() - new_time, flush=True)
     x = time.time() - start_time
