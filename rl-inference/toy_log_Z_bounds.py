@@ -1802,21 +1802,21 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         # # return log_psi_all_vocab.sum()
         # return log_psi.sum()
 
-        # return get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
-        #              log_true_final_twist,
-        #              output_len, args.n_twist, False,
-        #              "partial_jit", token_of_interest_as_int=None,
-        #              proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+        return get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                     log_true_final_twist,
+                     output_len, args.n_twist, False,
+                     "partial_jit", token_of_interest_as_int=None,
+                     proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
 
-        return experiment_cfg.get_grad_params_twist(
-                sk, prompt, experiment_cfg.n_vocab, args.n_twist,
-                output_len, cfg_p, params_p, cfg_twist,
-                params_twist, log_true_final_twist,
-                # Only one set of log final twists (for the token we are interested in)
-                prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
-                proposal_is_p=args.proposal_is_p,
-                huggingface_model=huggingface_model
-            )
+        # return experiment_cfg.get_grad_params_twist(
+        #         sk, prompt, experiment_cfg.n_vocab, args.n_twist,
+        #         output_len, cfg_p, params_p, cfg_twist,
+        #         params_twist, log_true_final_twist,
+        #         # Only one set of log final twists (for the token we are interested in)
+        #         prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+        #         proposal_is_p=args.proposal_is_p,
+        #         huggingface_model=huggingface_model
+        #     )
 
     test_grad_fn = jax.grad(test_func, argnums=0)
 
@@ -1836,7 +1836,6 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
 
     # jax.block_until_ready(test_generate(sk, hfacemodel, input_ids=batch_prompt))
     # jax.block_until_ready(test_twist())
-    print("hihi")
     # x = test_generate(sk, hfacemodel, input_ids=batch_prompt)
     # print(x)
     # 1/0
@@ -1845,6 +1844,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     #                    optim_twist_state))
     # jax.block_until_ready(stochastic_transformer_sample(sk, cfg_p, params_p, prompt, output_len, args.n_twist, huggingface_model))
     jax.block_until_ready(test_func(params_twist, params_p))
+    print("hihi", flush=True)
 
 
     num_iters = 100
@@ -1862,7 +1862,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         #                                   huggingface_model))
         jax.block_until_ready(test_func(params_twist, params_p))
 
-        print(time.time() - new_time)
+        print(time.time() - new_time, flush=True)
     x = time.time() - start_time
     print(x)
     print(x / num_iters)
