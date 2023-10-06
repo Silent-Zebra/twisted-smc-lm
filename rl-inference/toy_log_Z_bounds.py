@@ -346,8 +346,8 @@ class ExperimentConfig:
             #     grad_params_twist, optim_twist_state, params_twist)
             # params_twist = optax.apply_updates(params_twist,
             #                                    updates_twist)
-            print("UPDATE TIME:")
-            print(time.time() - new_time)
+            # print("UPDATE TIME:")
+            # print(time.time() - new_time)
         elif self.rm_type == "only_contains_token":
             # from custom_transformer_prob_utils import get_proposal_q_sample
             # get_proposal_q_sample(rng_key, jnp.ones((7, 5), dtype=jnp.int32), cfg_p, params_p,
