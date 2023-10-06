@@ -1331,7 +1331,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
     else:
         analytic_kl_q_sigma = -jnp.inf
 
-    n_samples = [64, 256]  # [4, 8, 16, 32, 64, 128]
+    n_samples = [64, 256, 1024]  # [4, 8, 16, 32, 64, 128]
     power_base = 4
     lowest_power = 3
     iwae_lbs_across_seeds = []
