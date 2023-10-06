@@ -3,6 +3,8 @@ import jax.numpy as jnp
 from functools import partial
 
 import jax
+import time
+
 
 from custom_transformer import batch_transformer, batch_transformer_with_prepend_token_of_interest
 
@@ -167,7 +169,7 @@ def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, out
 
     return full_seq
 
-
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p", "huggingface_model"])
 def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t,
                           prepend_tokens_for_twists, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None, true_posterior_sample=None):
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
@@ -292,6 +294,7 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists, 
     return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
 
+@partial(jax.jit, static_argnames = ["cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model"])
 # Evaluate log psi_t for every t from 1 to T for the sequence seq (not including the prompt)
 def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
     log_psi = get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
@@ -553,6 +556,144 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
 
 
+@partial(jax.jit, static_argnames=["resample", "resample_for_log_psi_t_eval_list"])
+def smc_scan_iter_final_jitted_part(
+    rng_key, full_seq, log_p_theta_1_to_t_eval,
+    log_z_hat_t, log_psi_eval_of_new_seqs, log_phi_t_eval, log_gamma_1_to_t_minus_1_eval, normalized_log_q_t,
+    log_w_t_minus_1,
+    resample=True, true_posterior_sample=None, resample_for_log_psi_t_eval_list=False
+):
+    log_r_psi_t_eval = log_psi_eval_of_new_seqs
+
+    # log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist,
+    #                                                    params_twist,
+    #                                                    prompt_len + t, prepend_tokens_for_twists, token_of_interest_as_int)
+
+    # print(log_r_psi_t_eval)
+
+    log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_phi_t_eval
+    log_gamma_1_to_t_eval_based_on_learned_twist = log_p_theta_1_to_t_eval + log_r_psi_t_eval
+
+    # print(full_seq)
+    # print(true_posterior_sample)
+    #
+    # print(log_p_theta_1_to_t_eval)
+    # print(log_phi_t_eval)
+    #
+    #
+    #
+    # print(log_gamma_1_to_t_eval)
+    # print(log_gamma_1_to_t_minus_1_eval)
+    # print(normalized_log_q_t)
+
+    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - normalized_log_q_t
+    log_alpha_t_based_on_learned_twist = log_gamma_1_to_t_eval_based_on_learned_twist - log_gamma_1_to_t_minus_1_eval - normalized_log_q_t
+
+    # print(log_alpha_t)
+
+    log_w_t = log_w_t_minus_1 + log_alpha_t
+    log_w_t_based_on_learned_twist = log_w_t_minus_1 + log_alpha_t_based_on_learned_twist
+    # all the weights in the previous time steps are equal regardless of whether I use phi or not because
+    # of the way I defined the proposal to be p psi as well
+    # But in this final time step, there's a difference, depending on whether I want to base the importance weights
+    # on psi_T (learned twist) or on phi (the true twist)
+
+    # print(log_w_t)
+    # print(log_w_t_minus_1)
+    # print(jax.nn.logsumexp(log_w_t))
+    # print(jax.nn.logsumexp(log_w_t_minus_1))
+
+    log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1)
+    # We should only ever evaluate the normalizing constants over the true final twists. Should we?
+
+    # print(log_z_over_z)
+    # print(log_z_hat_t)
+    # 1/0
+
+    log_z_hat_t = log_z_hat_t + log_z_over_z
+
+    # print(full_seq)
+
+    full_seq_based_on_true_twist = full_seq
+    full_seq_based_on_learned_twist = full_seq
+
+    log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval
+
+    if resample:
+        # Do resampling
+
+        if true_posterior_sample is not None:
+            rng_key, subkey = jax.random.split(rng_key)
+            a_t = jax.random.categorical(subkey, log_w_t,
+                                         shape=log_w_t[1:].shape)
+            full_seq_based_on_true_twist = full_seq.at[1:].set(full_seq[a_t])
+
+            rng_key, subkey = jax.random.split(rng_key)
+            a_t_learned = jax.random.categorical(subkey,
+                                                 log_w_t_based_on_learned_twist,
+                                                 shape=log_w_t_based_on_learned_twist[
+                                                       1:].shape)
+            full_seq_based_on_learned_twist = full_seq.at[1:].set(
+                full_seq[a_t_learned])
+
+            log_w_t = jnp.zeros_like(log_w_t)  # still set all the weights to 0
+            log_w_t_based_on_learned_twist = jnp.zeros_like(log_w_t)
+
+            log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval.at[1:].set(
+                log_r_psi_t_eval[
+                    a_t_learned])  # only use the learned twists for this; we are using this for the twist learning procedure
+
+
+        else:
+            rng_key, subkey = jax.random.split(rng_key)
+            a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
+            full_seq_based_on_true_twist = full_seq[a_t]
+
+            rng_key, subkey = jax.random.split(rng_key)
+            a_t_learned = jax.random.categorical(subkey,
+                                                 log_w_t_based_on_learned_twist,
+                                                 shape=log_w_t_based_on_learned_twist.shape)
+            full_seq_based_on_learned_twist = full_seq[a_t_learned]
+
+            # IMPORTANT NOTE: use_log_true_final_twist_for_final_weight_calc should always be True if we are using this log_w_t_no_reset for lower bound
+            # This is because we need to have the unnormalized sigma in the weights
+            # So we need to use the true phi at the end
+            # HOWEVER, as for what q distribution we want to test, we can either test the whole SMC procedure including resampling at the last time step
+            # based on the true phi (final_resample_for_lower_bound=True)
+            # Or we can test without resampling at the last time step based on the true phi, which will then test only our twists.
+
+            # Below not necessary in the current formulation/use case for the code since this is the final iteration
+            # # Make sure the gamma values also track the correct trajectories
+            # log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
+            #
+            # # Same for the p values:
+            # log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
+            #
+
+            # Right now doesn't do anything since the only function that uses log_w_t (iwae) calls this function without resampling
+            log_w_t = jnp.zeros_like(log_w_t)
+            log_w_t_based_on_learned_twist = jnp.zeros_like(log_w_t)
+
+            log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval[
+                a_t_learned]  # only use the learned twists for this; we are using this for the twist learning procedure
+    else:  # No resample, but possibly resample for the log_psi_t_eval_list
+        if resample_for_log_psi_t_eval_list:
+            if true_posterior_sample is not None:
+                raise NotImplementedError
+            else:
+                rng_key, subkey = jax.random.split(rng_key)
+                a_t_learned = jax.random.categorical(subkey,
+                                                     log_w_t_based_on_learned_twist,
+                                                     shape=log_w_t_based_on_learned_twist.shape)
+                log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval[
+                    a_t_learned]
+
+
+    return (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t,
+     log_r_psi_t_eval_w_potential_resample), full_seq_based_on_true_twist, full_seq_based_on_learned_twist
+
+
+
 def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
                         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
                          prepend_tokens_for_twists, token_of_interest_as_int=None, resample=True,
@@ -604,122 +745,13 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     # if use_log_true_final_twist_for_final_weight_calc:
     log_phi_t_eval = evaluate_log_phi_final(full_seq, log_true_final_twist)
     # else:
-    log_r_psi_t_eval = log_psi_eval_of_new_seqs
 
-    # log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist,
-    #                                                    params_twist,
-    #                                                    prompt_len + t, prepend_tokens_for_twists, token_of_interest_as_int)
-
-    # print(log_r_psi_t_eval)
-
-    log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_phi_t_eval
-    log_gamma_1_to_t_eval_based_on_learned_twist = log_p_theta_1_to_t_eval + log_r_psi_t_eval
-
-    # print(full_seq)
-    # print(true_posterior_sample)
-    #
-    # print(log_p_theta_1_to_t_eval)
-    # print(log_phi_t_eval)
-    #
-    #
-    #
-    # print(log_gamma_1_to_t_eval)
-    # print(log_gamma_1_to_t_minus_1_eval)
-    # print(normalized_log_q_t)
-
-    log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - normalized_log_q_t
-    log_alpha_t_based_on_learned_twist = log_gamma_1_to_t_eval_based_on_learned_twist - log_gamma_1_to_t_minus_1_eval - normalized_log_q_t
-
-    # print(log_alpha_t)
-
-    log_w_t = log_w_t_minus_1 + log_alpha_t
-    log_w_t_based_on_learned_twist = log_w_t_minus_1 + log_alpha_t_based_on_learned_twist
-    # all the weights in the previous time steps are equal regardless of whether I use phi or not because
-    # of the way I defined the proposal to be p psi as well
-    # But in this final time step, there's a difference, depending on whether I want to base the importance weights
-    # on psi_T (learned twist) or on phi (the true twist)
-
-    # print(log_w_t)
-    # print(log_w_t_minus_1)
-    # print(jax.nn.logsumexp(log_w_t))
-    # print(jax.nn.logsumexp(log_w_t_minus_1))
-
-
-    log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1)
-    # We should only ever evaluate the normalizing constants over the true final twists. Should we?
-
-    # print(log_z_over_z)
-    # print(log_z_hat_t)
-    # 1/0
-
-    log_z_hat_t = log_z_hat_t + log_z_over_z
-
-    # print(full_seq)
-
-    full_seq_based_on_true_twist = full_seq
-    full_seq_based_on_learned_twist = full_seq
-
-    log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval
-
-    if resample:
-        # Do resampling
-
-        if true_posterior_sample is not None:
-            rng_key, subkey = jax.random.split(rng_key)
-            a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t[1:].shape)
-            full_seq_based_on_true_twist = full_seq.at[1:].set(full_seq[a_t])
-
-            rng_key, subkey = jax.random.split(rng_key)
-            a_t_learned = jax.random.categorical(subkey, log_w_t_based_on_learned_twist, shape=log_w_t_based_on_learned_twist[1:].shape)
-            full_seq_based_on_learned_twist = full_seq.at[1:].set(full_seq[a_t_learned])
-
-            log_w_t = jnp.zeros_like(log_w_t) # still set all the weights to 0
-            log_w_t_based_on_learned_twist = jnp.zeros_like(log_w_t)
-
-            log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval.at[1:].set(log_r_psi_t_eval[a_t_learned]) # only use the learned twists for this; we are using this for the twist learning procedure
-
-
-        else:
-            rng_key, subkey = jax.random.split(rng_key)
-            a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
-            full_seq_based_on_true_twist = full_seq[a_t]
-
-            rng_key, subkey = jax.random.split(rng_key)
-            a_t_learned = jax.random.categorical(subkey, log_w_t_based_on_learned_twist, shape=log_w_t_based_on_learned_twist.shape)
-            full_seq_based_on_learned_twist = full_seq[a_t_learned]
-
-
-            # IMPORTANT NOTE: use_log_true_final_twist_for_final_weight_calc should always be True if we are using this log_w_t_no_reset for lower bound
-            # This is because we need to have the unnormalized sigma in the weights
-            # So we need to use the true phi at the end
-            # HOWEVER, as for what q distribution we want to test, we can either test the whole SMC procedure including resampling at the last time step
-            # based on the true phi (final_resample_for_lower_bound=True)
-            # Or we can test without resampling at the last time step based on the true phi, which will then test only our twists.
-
-            # Below not necessary in the current formulation/use case for the code since this is the final iteration
-            # # Make sure the gamma values also track the correct trajectories
-            # log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
-            #
-            # # Same for the p values:
-            # log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
-            #
-
-            # Right now doesn't do anything since the only function that uses log_w_t (iwae) calls this function without resampling
-            log_w_t = jnp.zeros_like(log_w_t)
-            log_w_t_based_on_learned_twist = jnp.zeros_like(log_w_t)
-
-            log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval[a_t_learned] # only use the learned twists for this; we are using this for the twist learning procedure
-    else: # No resample, but possibly resample for the log_psi_t_eval_list
-        if resample_for_log_psi_t_eval_list:
-            if true_posterior_sample is not None:
-                raise NotImplementedError
-            else:
-                rng_key, subkey = jax.random.split(rng_key)
-                a_t_learned = jax.random.categorical(subkey,
-                                                     log_w_t_based_on_learned_twist,
-                                                     shape=log_w_t_based_on_learned_twist.shape)
-                log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval[a_t_learned]
-
+    (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t,
+     log_r_psi_t_eval_w_potential_resample), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = smc_scan_iter_final_jitted_part(
+    rng_key, full_seq, log_p_theta_1_to_t_eval,
+    log_z_hat_t, log_psi_eval_of_new_seqs, log_phi_t_eval, log_gamma_1_to_t_minus_1_eval, normalized_log_q_t,
+    log_w_t_minus_1,
+    resample=True, true_posterior_sample=None, resample_for_log_psi_t_eval_list=False)
     # print(full_seq)
 
     # Observe that the full sequence we get is identical for the true vs learned twist
@@ -848,14 +880,29 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
             prepend_tokens_for_twists=False, token_of_interest_as_int=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False):
+    print("SMC TIME")
+    start = time.time()
+
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, prompt_len, \
     log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list = \
-        smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist,
+                        params_twist,
                         output_len,
-            n_smc_samples, get_intermediate_sample_history_based_on_learned_twists,
-            prepend_tokens_for_twists, token_of_interest_as_int,
-            resample, true_posterior_sample, proposal_is_p,
-            huggingface_model, resample_for_log_psi_t_eval_list)
+                        n_smc_samples,
+                        get_intermediate_sample_history_based_on_learned_twists,
+                        prepend_tokens_for_twists, token_of_interest_as_int,
+                        resample, true_posterior_sample, proposal_is_p,
+                        huggingface_model, resample_for_log_psi_t_eval_list)
+        # smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        #                 output_len,
+        #     n_smc_samples, get_intermediate_sample_history_based_on_learned_twists,
+        #     prepend_tokens_for_twists, token_of_interest_as_int,
+        #     resample, true_posterior_sample, proposal_is_p,
+        #     huggingface_model, resample_for_log_psi_t_eval_list)
+
+    print(time.time() - start)
+    start = time.time()
+    print("SMC JITTED PART FINISHED")
 
     (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_learned_psi_T_eval), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = \
         smc_scan_iter_final(
@@ -864,11 +911,18 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
         prepend_tokens_for_twists, token_of_interest_as_int, resample, true_posterior_sample, proposal_is_p,
         huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list)
 
+
+
+    print(time.time() - start)
+    start = time.time()
+
     full_seq_list = jnp.concatenate((full_seq_list, full_seq_based_on_learned_twist[None, :, :]))
 
     log_w_t_list = jnp.concatenate((log_w_t_list, log_w_t_based_on_learned_twist[None, :]))
 
     log_psi_t_eval_list = jnp.concatenate((log_psi_t_eval_list, log_learned_psi_T_eval[None, :]))
+
+    print(time.time() - start)
 
     if get_intermediate_sample_history_based_on_learned_twists:
         return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list)
@@ -1368,10 +1422,15 @@ def get_l_ebm_ml_scan_iter(carry, scan_over, cfg_twist, prepend_tokens_for_twist
 
 
 
+# TODO OCT 5 REMOVE ALL BLOCK UNTIL READY STUFF
+
 # JITTING IS DONE SEPARATELY BELOW
 # This is the EBM Maximum Likelihood approach (previously called Roger's approach).
 def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
+
+    print("STARTING GET L EBM UPDATE")
+    new_start = time.time()
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -1385,6 +1444,9 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
                                                       token_of_interest_as_int=token_of_interest_as_int,
                                                       proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                                                       resample=True)
+    print("First SMC done")
+    print(time.time() - new_start)
+    new_start = time.time()
 
     # l_ebm = 0.
 
@@ -1392,6 +1454,8 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
         prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
         token_of_interest_as_int, huggingface_model)
 
+    print(time.time() - new_start)
+    new_start = time.time()
     # print(log_psi_on_truncated_sigma_samples.shape)
 
     # Get q samples with no resampling anywhere
@@ -1405,6 +1469,10 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
         resample=False, # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
         resample_for_log_psi_t_eval_list=True,
     )
+
+    print("Second SMC done")
+    print(time.time() - new_start)
+    new_start = time.time()
 
     # print(jax.lax.stop_gradient(log_psi_on_truncated_sigma_samples))
     # print(jax.lax.stop_gradient(log_psi_t_eval_list_proposal_samples))
@@ -1430,6 +1498,8 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
     # print(l_ebm_new)
     # 1/0
     # return -l_ebm  # negative because now we have a loss
+    print(time.time() - new_start)
+    # new_start = time.time()
 
     return l_ebm_new
 

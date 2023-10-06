@@ -58,6 +58,23 @@ records_labels_list = ["True Log Z",
                        "KL(q||sigma) Lower Bound Estimate (SMC)",
                        ] # TODO Sep 16 make dynamic later
 
+
+@partial(jax.jit, static_argnames=["optimizer_twist"])
+def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist):
+    # print("Updates time")
+    # new_time = time.time()
+    # print(new_time)
+    updates_twist, optim_twist_state = optimizer_twist.update(
+        grad_params_twist, optim_twist_state, params_twist)
+    # print(time.time() - new_time)
+    # new_time = time.time()
+    # print(new_time)
+    params_twist = optax.apply_updates(params_twist, updates_twist)
+    # print(time.time() - new_time)
+    # print("Updates finished")
+    return params_twist, optim_twist_state
+
+
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1.):
         self.n_vocab = n_vocab
@@ -147,6 +164,38 @@ class ExperimentConfig:
                                                  proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
         return grad_params_twist
 
+    # @partial(jax.jit, static_argnames=[
+    #     "self", "n_twist", "output_len",
+    #         "cfg_p", "cfg_twist",
+    #         "log_true_final_twist", "proposal_is_p", "huggingface_model",
+    #         "optimizer_twist"])
+    # def do_twist_update(self, rng_key, optimizer_twist, optim_twist_state,
+    #                 params_twist, prompt, n_twist, output_len, cfg_p, params_p, cfg_twist,
+    #     log_true_final_twist, proposal_is_p, huggingface_model):
+    #     rng_key, sk = jax.random.split(rng_key)
+    #     grad_params_twist = self.get_grad_params_twist(
+    #         sk, prompt, self.n_vocab, n_twist,
+    #         output_len, cfg_p, params_p, cfg_twist,
+    #         params_twist, log_true_final_twist,
+    #         # Only one set of log final twists (for the token we are interested in)
+    #         prepend_tokens_for_twists=self.prepend_tokens_for_twists,
+    #         proposal_is_p=proposal_is_p,
+    #         huggingface_model=huggingface_model
+    #     )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
+    #     # print(time.time() - new_time)
+    #     # new_time = time.time()
+    #     # print(new_time)
+    #     # print(optimizer_twist)
+    #     # print(grad_params_twist)
+    #     # print(optim_twist_state)
+    #     # print(time.time() - new_time)
+    #     # print("hihi")
+    #     params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
+    #         optimizer_twist,
+    #         grad_params_twist,
+    #         optim_twist_state,
+    #         params_twist)
+    #     return params_twist, optim_twist_state
 
     # @partial(jax.jit, static_argnames=[
     #     "self", "n_twist", "output_len",
@@ -243,9 +292,8 @@ class ExperimentConfig:
                     proposal_is_p=proposal_is_p,
                     huggingface_model=huggingface_model
                 )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
-                updates_twist, optim_twist_state = optimizer_twist.update(
-                    grad_params_twist, optim_twist_state, params_twist)
-                params_twist = optax.apply_updates(params_twist, updates_twist)
+                params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
+                    optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
         elif self.rm_type == "contains_token" or self.rm_type == "contains_token_eps":
             token_of_interest_as_int = index_of_token_contained
             rng_key, sk = jax.random.split(rng_key)
@@ -259,12 +307,16 @@ class ExperimentConfig:
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
-            updates_twist, optim_twist_state = optimizer_twist.update(
-                grad_params_twist, optim_twist_state, params_twist)
-            params_twist = optax.apply_updates(params_twist,
-                                               updates_twist)
+            params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
         elif self.rm_type == "p_continuation" or self.rm_type == "contains_continuation" or self.rm_type == "toxicity_threshold":
             # token_of_interest_as_int = index_of_token_contained
+            new_time = time.time()
+            # params_twist, optim_twist_state = self.do_twist_update(rng_key, optimizer_twist, optim_twist_state,
+            #                 params_twist, prompt, n_twist, output_len, cfg_p,
+            #                 params_p, cfg_twist,
+            #                 log_true_final_twist, proposal_is_p,
+            #                 huggingface_model)
+
             rng_key, sk = jax.random.split(rng_key)
             grad_params_twist = self.get_grad_params_twist(
                 sk, prompt, self.n_vocab, n_twist,
@@ -275,10 +327,27 @@ class ExperimentConfig:
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
-            updates_twist, optim_twist_state = optimizer_twist.update(
-                grad_params_twist, optim_twist_state, params_twist)
-            params_twist = optax.apply_updates(params_twist,
-                                               updates_twist)
+            # print(time.time() - new_time)
+            # new_time = time.time()
+            # print(new_time)
+            # print(optimizer_twist)
+            # print(grad_params_twist)
+            # print(optim_twist_state)
+            # print(time.time() - new_time)
+            # print("hihi")
+
+            params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
+
+            # params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist,
+            #                                            grad_params_twist,
+            #                                            optim_twist_state,
+            #                                            params_twist)
+            # updates_twist, optim_twist_state = optimizer_twist.update(
+            #     grad_params_twist, optim_twist_state, params_twist)
+            # params_twist = optax.apply_updates(params_twist,
+            #                                    updates_twist)
+            print("UPDATE TIME:")
+            print(time.time() - new_time)
         elif self.rm_type == "only_contains_token":
             # from custom_transformer_prob_utils import get_proposal_q_sample
             # get_proposal_q_sample(rng_key, jnp.ones((7, 5), dtype=jnp.int32), cfg_p, params_p,
@@ -328,10 +397,7 @@ class ExperimentConfig:
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
-            updates_twist, optim_twist_state = optimizer_twist.update(
-                grad_params_twist, optim_twist_state, params_twist)
-            params_twist = optax.apply_updates(params_twist,
-                                               updates_twist)
+            params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
 
         else:
             rng_key, sk = jax.random.split(rng_key)
@@ -343,9 +409,7 @@ class ExperimentConfig:
                 huggingface_model=huggingface_model
             )
 
-            updates_twist, optim_twist_state = optimizer_twist.update(
-                grad_params_twist, optim_twist_state, params_twist)
-            params_twist = optax.apply_updates(params_twist, updates_twist)
+            params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
 
         return rng_key, params_twist, optim_twist_state
 
@@ -1500,6 +1564,12 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
 
         huggingface_model = model.__call__
 
+
+
+
+
+
+
     else:  # Custom transformer
         rng_key, cfg_p, params_p = transformer_init_params(
             rng_key,
@@ -1658,6 +1728,147 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                                    threshold,
                                                    pos_threshold
                                                    )
+
+
+
+    # TIME TEST ONLY
+    from custom_transformer_prob_utils import get_log_psi_all_vocab, \
+        evaluate_log_psi_selected_tokens, smc_procedure
+
+    # seqs = jnp.ones((args.n_twist, prompt_len + args.output_len),
+    #                 dtype=jnp.int32)
+    prompt = jnp_prompts[0]
+    prompt_len = prompt.shape[-1]
+
+    log_true_final_twist = log_true_final_twists[0]
+
+    from transformers import FlaxAutoModelForCausalLM
+    hfacemodel = FlaxAutoModelForCausalLM.from_pretrained(model_config)
+
+    @partial(jax.jit, static_argnames=["hfacemodel"])
+    def test_generate(sk, hfacemodel, input_ids):
+        x = hfacemodel.generate(input_ids=input_ids, max_length=output_len,
+                       do_sample=True, prng_key=sk)
+        return x
+
+    def test_twist():
+        return log_true_final_twist(jnp.ones((args.n_twist, prompt_len + args.output_len), dtype=jnp.int32))
+
+    # @jax.jit
+    def test_func(params_twist, params_p):
+
+        # # log_psi_all_vocab = get_log_psi_all_vocab(seqs, cfg_twist, params_twist,
+        # #                       prepend_tokens_for_twists=False,
+        # #                       token_of_interest_as_int=None,
+        # #                       huggingface_model=huggingface_model)
+        #
+        # # log_psi = evaluate_log_psi_selected_tokens(seqs, prompt_len, cfg_twist,
+        # #                                            params_twist,
+        # #                                            prepend_tokens_for_twists=False,
+        # #                                            huggingface_model=huggingface_model)
+        #
+        # _, samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
+        #                            cfg_twist, params_twist,
+        #                            log_true_final_twist,
+        #                            args.output_len,
+        #                            args.n_test_smc_samples,
+        #                            smc_procedure_type="partial_jit",
+        #                            n_vocab=args.n_vocab,
+        #                            proposal_is_p=args.proposal_is_p,
+        #                            huggingface_model=huggingface_model)
+
+        # (_, _, log_psi_t_eval_list_proposal_samples), samples, (
+        # intermediate_twist_samples_hist,
+        # intermediate_log_w_t_hist) = smc_procedure(
+        #     rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        #     log_true_final_twist, output_len, args.n_test_smc_samples,
+        #     smc_procedure_type="partial_jit",
+        #     get_intermediate_sample_history_based_on_learned_twists=True,
+        #     proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model,
+        #     resample=False,
+        #     # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
+        #     resample_for_log_psi_t_eval_list=True,
+        # )
+        #
+        # log_psi = evaluate_log_psi_selected_tokens(samples, prompt_len, cfg_twist,
+        #                                            params_twist,
+        #                                            prepend_tokens_for_twists=False,
+        #                                            huggingface_model=huggingface_model)
+        #
+        # # log_psi_all_vocab = huggingface_model(input_ids=jnp.ones((args.n_twist, prompt_len + args.output_len), dtype=jnp.int32),
+        # #                   ret="twist",
+        # #                   params_twist_head=params_twist,
+        # #                   hface_model_params=params_p)
+        # # return log_psi_all_vocab.sum()
+        # return log_psi.sum()
+
+        # return get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        #              log_true_final_twist,
+        #              output_len, args.n_twist, False,
+        #              "partial_jit", token_of_interest_as_int=None,
+        #              proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+
+        return experiment_cfg.get_grad_params_twist(
+                sk, prompt, experiment_cfg.n_vocab, args.n_twist,
+                output_len, cfg_p, params_p, cfg_twist,
+                params_twist, log_true_final_twist,
+                # Only one set of log final twists (for the token we are interested in)
+                prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                proposal_is_p=args.proposal_is_p,
+                huggingface_model=huggingface_model
+            )
+
+    test_grad_fn = jax.grad(test_func, argnums=0)
+
+    batch_prompt = jnp.full((args.n_twist, prompt.shape[0]), prompt)
+
+    @partial(jax.jit, static_argnames=["optimizer_twist"])
+    def full_fwd_bckwd(params_twist, params_p, optimizer_twist,
+                       optim_twist_state):
+        grad_params_twist = test_grad_fn(params_twist, params_p)
+        params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
+            optimizer_twist, grad_params_twist, optim_twist_state,
+            params_twist)
+        # updates_twist, optim_twist_state = optimizer_twist.update(
+        #     grad_params_twist, optim_twist_state, params_twist)
+        # params_twist = optax.apply_updates(params_twist, updates_twist)
+        return params_twist, optim_twist_state
+
+    # jax.block_until_ready(test_generate(sk, hfacemodel, input_ids=batch_prompt))
+    # jax.block_until_ready(test_twist())
+    print("hihi")
+    # x = test_generate(sk, hfacemodel, input_ids=batch_prompt)
+    # print(x)
+    # 1/0
+    # jax.block_until_ready(
+    #     full_fwd_bckwd(params_twist, params_p, optimizer_twist,
+    #                    optim_twist_state))
+    # jax.block_until_ready(stochastic_transformer_sample(sk, cfg_p, params_p, prompt, output_len, args.n_twist, huggingface_model))
+    jax.block_until_ready(test_func(params_twist, params_p))
+
+
+    num_iters = 100
+    start_time = time.time()
+    for i in range(num_iters):
+        new_time = time.time()
+        # params_twist, optim_twist_state = jax.block_until_ready(
+        #     full_fwd_bckwd(params_twist, params_p, optimizer_twist,
+        #                    optim_twist_state))
+        # x = jax.block_until_ready(test_generate(sk, hfacemodel, input_ids=batch_prompt))
+        # x = jax.block_until_ready(test_twist())
+        # x = jax.block_until_ready(
+        #     stochastic_transformer_sample(sk, cfg_p, params_p, prompt,
+        #                                   output_len, args.n_twist,
+        #                                   huggingface_model))
+        jax.block_until_ready(test_func(params_twist, params_p))
+
+        print(time.time() - new_time)
+    x = time.time() - start_time
+    print(x)
+    print(x / num_iters)
+    1 / 0
+
+
 
     # records_list_by_prompt_then_twist = []
     # for _ in jnp_prompts:
@@ -1873,8 +2084,14 @@ def main():
             print(f"TWIST UPDATES STARTING", flush=True)
             print(f"TIME: {time.time() - start}", flush=True)
             # TODO Jul 17 Consider scan loop and jit these too.
+
+            avg_update_time = 0.
+
             print_every_twist_updates = 1 # 50
             for twist_update in range(args.twist_updates_per_epoch):
+                if twist_update != 0:
+                    new_time = time.time()
+
                 if (twist_update + 1) % print_every_twist_updates == 0:
                     print(f"Twist update: {twist_update + 1}")
                     print(f"TIME: {time.time() - start}", flush=True)
@@ -1889,7 +2106,14 @@ def main():
                     optimizer_twist, optim_twist_state, args.index_of_token_contained
                 )
 
-            # 1/0
+                if twist_update != 0:
+                    update_time = time.time() - new_time
+                    print(f"UPDATE TIME: {update_time}")
+                    avg_update_time += update_time
+
+            print("AVG UPDATE TIME")
+            print(avg_update_time / (args.twist_updates_per_epoch - 1))
+            1/0
 
             # We should also be seeing this distribution change, with model updates (even without twist updates)
             test_info = True
