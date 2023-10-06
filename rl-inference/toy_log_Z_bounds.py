@@ -1777,36 +1777,36 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         #                            proposal_is_p=args.proposal_is_p,
         #                            huggingface_model=huggingface_model)
 
-        # (_, _, log_psi_t_eval_list_proposal_samples), samples, (
-        # intermediate_twist_samples_hist,
-        # intermediate_log_w_t_hist) = smc_procedure(
-        #     rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
-        #     log_true_final_twist, output_len, args.n_test_smc_samples,
-        #     smc_procedure_type="partial_jit",
-        #     get_intermediate_sample_history_based_on_learned_twists=True,
-        #     proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model,
-        #     resample=False,
-        #     # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
-        #     resample_for_log_psi_t_eval_list=True,
-        # )
-        #
-        # log_psi = evaluate_log_psi_selected_tokens(samples, prompt_len, cfg_twist,
-        #                                            params_twist,
-        #                                            prepend_tokens_for_twists=False,
-        #                                            huggingface_model=huggingface_model)
-        #
-        # # log_psi_all_vocab = huggingface_model(input_ids=jnp.ones((args.n_twist, prompt_len + args.output_len), dtype=jnp.int32),
-        # #                   ret="twist",
-        # #                   params_twist_head=params_twist,
-        # #                   hface_model_params=params_p)
-        # # return log_psi_all_vocab.sum()
-        # return log_psi.sum()
+        (_, _, log_psi_t_eval_list_proposal_samples), samples, (
+        intermediate_twist_samples_hist,
+        intermediate_log_w_t_hist) = smc_procedure(
+            rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            log_true_final_twist, output_len, args.n_test_smc_samples,
+            smc_procedure_type="partial_jit",
+            get_intermediate_sample_history_based_on_learned_twists=True,
+            proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model,
+            resample=False,
+            # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
+            resample_for_log_psi_t_eval_list=True,
+        )
 
-        return get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                     log_true_final_twist,
-                     output_len, args.n_twist, False,
-                     "partial_jit", token_of_interest_as_int=None,
-                     proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+        log_psi = evaluate_log_psi_selected_tokens(samples, prompt_len, cfg_twist,
+                                                   params_twist,
+                                                   prepend_tokens_for_twists=False,
+                                                   huggingface_model=huggingface_model)
+
+        # log_psi_all_vocab = huggingface_model(input_ids=jnp.ones((args.n_twist, prompt_len + args.output_len), dtype=jnp.int32),
+        #                   ret="twist",
+        #                   params_twist_head=params_twist,
+        #                   hface_model_params=params_p)
+        # return log_psi_all_vocab.sum()
+        return log_psi.sum()
+
+        # return get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        #              log_true_final_twist,
+        #              output_len, args.n_twist, False,
+        #              "partial_jit", token_of_interest_as_int=None,
+        #              proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
 
         # return experiment_cfg.get_grad_params_twist(
         #         sk, prompt, experiment_cfg.n_vocab, args.n_twist,
