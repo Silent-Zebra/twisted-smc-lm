@@ -1847,7 +1847,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     print("hihi", flush=True)
 
 
-    num_iters = 100
+    num_iters = 20
     start_time = time.time()
     for i in range(num_iters):
         new_time = time.time()
