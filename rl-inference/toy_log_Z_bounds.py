@@ -1345,9 +1345,9 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
                                                token_of_interest_as_int=token_of_interest_as_int,
                                                calc_kl_with_p_and_sigma=True)
 
-
-        print(f"Analytic KL(p||sigma): {analytic_kl_p_sigma}")
-        print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}")
+        print(f"True log Z: {true_log_z}", flush=True)
+        print(f"Analytic KL(p||sigma): {analytic_kl_p_sigma}", flush=True)
+        print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}", flush=True)
 
     else:
         true_log_z, analytic_kl_q_sigma, analytic_kl_p_sigma = -jnp.inf, -jnp.inf, -jnp.inf

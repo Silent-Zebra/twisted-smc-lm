@@ -1427,8 +1427,8 @@ def get_l_ebm_ml_scan_iter(carry, scan_over, cfg_twist, prepend_tokens_for_twist
 def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
 
-    print("STARTING GET L EBM UPDATE")
-    new_start = time.time()
+    # print("STARTING GET L EBM UPDATE")
+    # new_start = time.time()
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -1442,9 +1442,9 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
                                                       token_of_interest_as_int=token_of_interest_as_int,
                                                       proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                                                       resample=True)
-    print("First SMC done")
-    print(time.time() - new_start)
-    new_start = time.time()
+    # print("First SMC done")
+    # print(time.time() - new_start)
+    # new_start = time.time()
 
     # l_ebm = 0.
 
@@ -1452,8 +1452,8 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
         prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
         token_of_interest_as_int, huggingface_model)
 
-    print(time.time() - new_start)
-    new_start = time.time()
+    # print(time.time() - new_start)
+    # new_start = time.time()
     # print(log_psi_on_truncated_sigma_samples.shape)
 
     # Get q samples with no resampling anywhere
@@ -1468,9 +1468,9 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
         resample_for_log_psi_t_eval_list=True,
     )
 
-    print("Second SMC done")
-    print(time.time() - new_start)
-    new_start = time.time()
+    # print("Second SMC done")
+    # print(time.time() - new_start)
+    # new_start = time.time()
 
     # print(jax.lax.stop_gradient(log_psi_on_truncated_sigma_samples))
     # print(jax.lax.stop_gradient(log_psi_t_eval_list_proposal_samples))
@@ -1496,7 +1496,7 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
     # print(l_ebm_new)
     # 1/0
     # return -l_ebm  # negative because now we have a loss
-    print(time.time() - new_start)
+    # print(time.time() - new_start)
     # new_start = time.time()
 
     return l_ebm_new
