@@ -417,7 +417,7 @@ class ExperimentConfig:
         self, rng_key, indices_of_tokens_chosen, true_posterior_samples_by_token,
         prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, start, hist_token_index, epoch, huggingface_model,
-        true_posterior_samples_by_prompt_and_by_token, prompt_num,
+        true_posterior_samples_by_prompt_and_by_token, prompt_num, true_log_z,
     ):
 
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
@@ -433,7 +433,7 @@ class ExperimentConfig:
                              prompt, prompt_len, cfg_p,
                              params_p, cfg_twist, params_twist,
                              log_true_final_twist[i], start,
-                             hist_token_index, epoch,
+                             hist_token_index, epoch, true_log_z,
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                              huggingface_model=huggingface_model)
@@ -449,7 +449,7 @@ class ExperimentConfig:
                              prompt, prompt_len, cfg_p,
                              params_p, cfg_twist, params_twist,
                              log_true_final_twist, start,
-                             hist_token_index, epoch,
+                             hist_token_index, epoch, true_log_z,
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                              huggingface_model=huggingface_model)
@@ -462,7 +462,7 @@ class ExperimentConfig:
                              prompt, prompt_len, cfg_p,
                              params_p, cfg_twist, params_twist,
                              log_true_final_twist, start,
-                             hist_token_index, epoch,
+                             hist_token_index, epoch, true_log_z,
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                              huggingface_model=huggingface_model)
@@ -1292,7 +1292,8 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
 
 
 def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, prompt, prompt_len, cfg_p,
-                     params_p, cfg_twist, params_twist, log_true_final_twist, start, hist_token_index, epoch, smc_procedure_type,
+                     params_p, cfg_twist, params_twist, log_true_final_twist, start, hist_token_index, epoch,
+                     true_log_z, smc_procedure_type,
                      prepend_tokens_for_twists=True, huggingface_model=None):
 
     # for x in range(10):
@@ -1314,14 +1315,6 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
 
     if not huggingface_model:
 
-        _, _, true_log_z = \
-            calc_analytic_sigma_vals(prompt, prompt_len,
-                                     args.n_vocab,
-                                     args.output_len, cfg_p,
-                                     params_p,
-                                     log_true_final_twist,
-                                     return_log=True)
-
         analytic_kl_q_sigma = calc_analytic_kl(prompt,
                                                prompt_len,
                                                args.n_vocab,
@@ -1333,24 +1326,10 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
                                                prepend_tokens_for_twists=prepend_tokens_for_twists,
                                                token_of_interest_as_int=token_of_interest_as_int)
 
-        analytic_kl_p_sigma = calc_analytic_kl(prompt,
-                                               prompt_len,
-                                               args.n_vocab,
-                                               args.output_len,
-                                               cfg_p, params_p,
-                                               cfg_twist,
-                                               params_twist,
-                                               log_true_final_twist,
-                                               prepend_tokens_for_twists=prepend_tokens_for_twists,
-                                               token_of_interest_as_int=token_of_interest_as_int,
-                                               calc_kl_with_p_and_sigma=True)
-
-        print(f"True log Z: {true_log_z}", flush=True)
-        print(f"Analytic KL(p||sigma): {analytic_kl_p_sigma}", flush=True)
         print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}", flush=True)
 
     else:
-        true_log_z, analytic_kl_q_sigma, analytic_kl_p_sigma = -jnp.inf, -jnp.inf, -jnp.inf
+        analytic_kl_q_sigma = -jnp.inf
 
     n_samples = [64, 256]  # [4, 8, 16, 32, 64, 128]
     power_base = 4
@@ -1521,7 +1500,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
     plot_with_conf_bounds(np.stack(smc_lbs_across_seeds), x_range,
                           label="SMC Lower bounds", z_score=1.96)
 
-    if not huggingface_model:
+    if not huggingface_model and (true_log_z is not None):
         plt.plot(x_range, np.ones_like(x_range) * true_log_z,
                  label="True Log Z")
     plt.xlabel(f"{power_base}^ Number of Particles")
@@ -1684,7 +1663,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             prompts = [[0, 1]]
         elif rm_type == "p_continuation" or rm_type == "contains_continuation":
             prompts = [[0, 1]]
-            indexes_of_continuation = [6, 8]
+            indexes_of_continuation = [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
             indexes_of_continuation = jnp.array(indexes_of_continuation, dtype=jnp.int32)
         else:
             prompts = [[0, 1, 0, 1]]
@@ -1929,7 +1908,7 @@ def main():
 
     last_ckpt_epoch = -1
 
-
+    true_log_z = None
 
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
@@ -2131,6 +2110,40 @@ def main():
                     print(f"TIME: {time.time() - start}", flush=True)
                     if plot_logZ_bounds_only:
                         assert true_posterior_samples_by_token is not None
+
+                        if not huggingface_model:
+
+                            if true_log_z is None:
+                                token_of_interest_as_int = None
+                                if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index" \
+                                    or experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps":
+                                    i = 0  # Just check the first twist, that's fine for this illustration
+                                    token_of_interest_as_int = indices_of_tokens_chosen[i]
+
+                                _, _, true_log_z = \
+                                    calc_analytic_sigma_vals(prompt, prompt_len,
+                                                             args.n_vocab,
+                                                             args.output_len, cfg_p,
+                                                             params_p,
+                                                             log_true_final_twist,
+                                                             return_log=True)
+                                analytic_kl_p_sigma = calc_analytic_kl(prompt,
+                                                                       prompt_len,
+                                                                       args.n_vocab,
+                                                                       args.output_len,
+                                                                       cfg_p,
+                                                                       params_p,
+                                                                       cfg_twist,
+                                                                       params_twist,
+                                                                       log_true_final_twist,
+                                                                       prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                                                                       token_of_interest_as_int=token_of_interest_as_int,
+                                                                       calc_kl_with_p_and_sigma=True)
+                                print(f"True log Z: {true_log_z}", flush=True)
+                                print(f"Analytic KL(p||sigma): {analytic_kl_p_sigma}",
+                                    flush=True)
+
+
                         rng_key = experiment_cfg.plot_logZ_bounds_based_on_cfg(
                             rng_key, indices_of_tokens_chosen,
                             true_posterior_samples_by_token,
@@ -2139,7 +2152,7 @@ def main():
                             log_true_final_twist, start, hist_token_index,
                             epoch, huggingface_model,
                             true_posterior_samples_by_prompt_and_by_token,
-                            prompt_num
+                            prompt_num, true_log_z
                         )
                         if args.rm_type == "contains_continuation":
                             # Inspect the samples also in this setting
