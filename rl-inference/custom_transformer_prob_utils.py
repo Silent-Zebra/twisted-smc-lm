@@ -751,7 +751,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     rng_key, full_seq, log_p_theta_1_to_t_eval,
     log_z_hat_t, log_psi_eval_of_new_seqs, log_phi_t_eval, log_gamma_1_to_t_minus_1_eval, normalized_log_q_t,
     log_w_t_minus_1,
-    resample=True, true_posterior_sample=None, resample_for_log_psi_t_eval_list=False)
+    resample, true_posterior_sample, resample_for_log_psi_t_eval_list)
     # print(full_seq)
 
     # Observe that the full sequence we get is identical for the true vs learned twist
@@ -785,8 +785,12 @@ def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_
     carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
     output_len, params_p, params_twist, prompt_len, log_z_hat_t)
 
+    # if resample == False:
+    #     print(log_w_t)
+
     carry, (full_seq_list, log_w_t_list, log_psi_t_eval_list) = jax.lax.scan(
-        partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist, prepend_tokens_for_twists=prepend_tokens_for_twists, resample=resample,
+        partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist, prepend_tokens_for_twists=prepend_tokens_for_twists,
+                resample=resample,
                 token_of_interest_as_int=token_of_interest_as_int, true_posterior_sample=true_posterior_sample,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list),
         carry, jnp.arange(output_len - 1, dtype=jnp.int32), output_len - 1)
@@ -803,8 +807,6 @@ def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_
     #     full_seq_list.append(full_seq)
     #     log_w_t_list.append(log_w_t)
 
-
-
     # args become traced after passed through scan? Yes. So it's important not to
     # update the cfg_p and cfg_twist; use the original non-traced args. Otherwise you get
     # "Non-hashable static arguments are not supported" ValueError
@@ -813,12 +815,19 @@ def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     output_len, params_p, params_twist, prompt_len, log_z_hat_t = carry
 
+    # if resample == False:
+    #     print(log_w_t)
+
     (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_learned_psi_T_eval), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = \
         smc_scan_iter_final(
         rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
         prepend_tokens_for_twists, token_of_interest_as_int, resample, true_posterior_sample, proposal_is_p,
         huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list)
+
+    # if resample == False:
+    #     print(log_w_t)
+    #     1/0
 
     full_seq_list = jnp.concatenate((full_seq_list, full_seq_based_on_learned_twist[None, :, :]))
 
@@ -999,6 +1008,7 @@ def iwae_forward_and_backward(rng_key, posterior_sample, prompt, cfg_p, params_p
                                                token_of_interest_as_int=token_of_interest_as_int,
                                                resample=False, # NO resample is very important here
                                                                         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+
 
     f_q_estimate = log_w_t.mean() # Get the F_q estimate here, without resampling, because sampling truly from the proposal distribution
     # involves just sampling one step at a time based on the twist values. Resampling changes the distribution to be based on sigma/true posterior.

@@ -1403,6 +1403,8 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
              kl_q_sigma_smc_lower_bound_estimate) \
                 = list_of_things_to_append_for_record_list
 
+            print(f"F_q Estimate: {f_q_estimate}")
+
             # print(f"True log Z value: {true_log_z}")
             print(
                 f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")

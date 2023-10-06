@@ -368,9 +368,9 @@ def reward_model_contains_continuation(seq, indexes_of_continuation, prompt_len)
     # So for now let's just do the eps check within the sequence.
     # log_prob_of_continuation_at_end = reward_model_p_of_continuation(seq, cfg_p, params_p, indexes_of_continuation, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
     # log_p_contains_continuation = jnp.maximum(log_prob_of_continuation_at_end, jnp.log(contains_continuation))
-    log_p_contains_continuation = jnp.log(contains_continuation + eps)
+    log_contains_continuation = jnp.log(contains_continuation + eps)
 
-    return log_p_contains_continuation
+    return log_contains_continuation
 
 
 def curried_reward_contains_continuation(indexes_of_continuation, prompt_len):
@@ -804,6 +804,8 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
 def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indexes_of_continuation, huggingface_model=None, get_true_posterior_samples=True):
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
+
+
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
 
