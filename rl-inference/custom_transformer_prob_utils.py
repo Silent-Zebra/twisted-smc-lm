@@ -1422,8 +1422,6 @@ def get_l_ebm_ml_scan_iter(carry, scan_over, cfg_twist, prepend_tokens_for_twist
 
 
 
-# TODO OCT 5 REMOVE ALL BLOCK UNTIL READY STUFF
-
 # JITTING IS DONE SEPARATELY BELOW
 # This is the EBM Maximum Likelihood approach (previously called Roger's approach).
 def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
