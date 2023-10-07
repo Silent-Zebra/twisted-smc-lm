@@ -27,8 +27,7 @@ import matplotlib.pyplot as plt
 from custom_transformer import transformer_init_params
 
 from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_final, smc_scan_iter_final, \
-    get_l_ebm_ml, get_l_ebm_ml_jit, get_l_ebm_ml_w_q_resample_jit, get_l_one_total_kl, \
-    get_twist_loss_rl_based, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals, \
+    smc_procedure, calc_analytic_sigma_vals, \
     get_analytic_sigma_sample, upper_bound_log_Z_sigma_estimate, \
     iwae_forward_and_backward, smc_backward, stochastic_transformer_sample, evaluate_log_p_selected_tokens
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, \
@@ -38,6 +37,9 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     build_only_contains_token_twists, build_contains_token_eps_twists,\
     reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
     build_toxicity_threshold_twists
+from losses import get_l_ebm_ml, get_l_ebm_ml_jit, get_l_ebm_ml_w_q_resample_jit, \
+    get_l_one_total_kl, get_twist_loss_rl_based, get_l_dre_sixo
+
 # Update the twists, update the whole framework for the Bayesian thing.
 
 from huggingface_models_custom import CustomLMWithTwistHead, get_tokenizer
