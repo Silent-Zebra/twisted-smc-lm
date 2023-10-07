@@ -380,10 +380,13 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
                                    "evaluate_over_samples_from", "huggingface_model", "loss_type"])
 def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
-                            evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error"):
+                            evaluate_over_samples_from="p", huggingface_model=None, loss_type="monte_carlo"):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
+
+    if loss_type == "monte_carlo":
+        assert evaluate_over_samples_from == "p"
 
     if evaluate_over_samples_from == "p":
         samples_to_evaluate_over = stochastic_transformer_sample(sk1, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
@@ -415,6 +418,17 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
         )
     else:
         raise NotImplementedError
+
+    if loss_type == "monte_carlo":
+        phi_vals = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist)
+        twist_vals = jnp.exp(evaluate_log_psi_selected_tokens(
+            samples_to_evaluate_over, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
+            token_of_interest_as_int, huggingface_model))
+        # print(phi_vals[:, None].shape)
+        # print(twist_vals.shape)
+        loss = ((twist_vals - phi_vals[:, None]) ** 2).mean()
+        # print(((twist_vals - phi_vals[:, None]) ** 2).shape)
+        return loss
 
     p_logits, log_psi =\
         get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p, params_twist,
