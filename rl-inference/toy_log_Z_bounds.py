@@ -17,7 +17,7 @@ import jax.profiler
 
 import optax
 
-# from flax.training import checkpoints # TODO SEP 16 FIX THE CHECKPOINTING ISSUE (maybe use Orbax?)
+from flax.training import checkpoints
 import datetime
 
 import numpy as np
@@ -1345,7 +1345,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
     print(f"TIME: {time.time() - start}", flush=True)
 
     # Measure only for the largest number of particles (should be most accurate)
-    kl_lb_iwae_across_seeds, kl_ub_iwae_across_seeds, kl_lb_smc_across_seeds, kl_ub_smc_across_seeds = 0., 0., 0., 0.
+    kl_lb_iwae_across_seeds, kl_ub_iwae_across_seeds, kl_lb_smc_across_seeds, kl_ub_smc_across_seeds, f_q_across_seeds = 0., 0., 0., 0., 0.
 
     for seed in range(n_seeds):
         print(f"Sampling seed {seed}", flush=True)
@@ -1412,6 +1412,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
                 kl_lb_iwae_across_seeds += kl_q_sigma_iwae_lower_bound_estimate
                 kl_ub_smc_across_seeds += kl_q_sigma_smc_upper_bound_estimate
                 kl_lb_smc_across_seeds += kl_q_sigma_smc_lower_bound_estimate
+                f_q_across_seeds += f_q_estimate
 
             iwae_lbs.append(iwae_lower_bound_estimate)
             iwae_ubs.append(iwae_upper_bound_estimate)
@@ -1474,6 +1475,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
     kl_lb_iwae_across_seeds /= n_seeds
     kl_ub_smc_across_seeds /= n_seeds
     kl_lb_smc_across_seeds /= n_seeds
+    f_q_across_seeds /= n_seeds
     print(
         f"Avg KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_ub_iwae_across_seeds}")
     print(
@@ -1482,6 +1484,7 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
         f"Avg KL(q||sigma) upper bound (using SMC bound on log Z): {kl_ub_smc_across_seeds}")
     print(
         f"Avg KL(q||sigma) lower bound (using SMC bound on log Z): {kl_lb_smc_across_seeds}")
+    print(f"Avg F_q estimate: {f_q_across_seeds}")
 
     # np_n_samples = np.stack(n_samples)
     x_range = np.arange(len(n_samples)) + lowest_power
@@ -1517,7 +1520,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
           beta1, beta2, weight_decay, d_model, d_k, d_v, n_layers, n_heads, d_fc,
           d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist, d_fc_twist,
           indicator_pos_zero_index, output_len, n_true_posterior_samples, index_of_token_contained,
-          beta_temp=1., threshold=0, pos_threshold=True):
+          beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dir=None, load_prefix=None):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
@@ -1546,10 +1549,6 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         optim_twist_state = optimizer_twist.init(params_twist)
 
         huggingface_model = model.__call__
-
-
-
-
 
 
 
@@ -1609,6 +1608,15 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         optimizer_twist = optax.adam(learning_rate=lr_twist, b1=beta1,
                                      b2=beta2)
         optim_twist_state = optimizer_twist.init(params_twist)
+
+    if load_ckpt:
+        print(optim_twist_state)
+        print(params_twist)
+        optim_twist_state, params_twist = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=(optim_twist_state, params_twist), prefix=load_prefix)
+        print("loaded checkpoint")
+        print(optim_twist_state)
+        print(params_twist)
+        1/0
 
     toxicityModel = None
     tokenizer_RM = None
@@ -1897,7 +1905,7 @@ def main():
         args.d_model_twist, args.d_k_twist, args.d_v_twist, args.n_layers_twist,
         args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
         args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
-        args.beta_temp, args.threshold, args.pos_threshold
+        args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir, args.load_prefix
     )
 
     # from toy_reward_models import batch_check_array_contained_in_other_array
@@ -2214,8 +2222,15 @@ def main():
 
             prompt_num += 1
             if (epoch + 1) % args.ckpt_every == 0:
+                checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                            target=(params_twist,
+                                                    optim_twist_state),
+                                            step=epoch + 1,
+                                            prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
                 if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
                     or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
+
+
                     for prompt_num in range(len(prompts)):
 
                         print(f"Prompt: {prompts[prompt_num]}")
@@ -2233,6 +2248,12 @@ def main():
     # print(*records_list)
     # print("---
     if last_ckpt_epoch != epoch:
+        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                    target=(params_twist,
+                                            optim_twist_state),
+                                    step=epoch + 1,
+                                    prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
+
         if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
             or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
             for prompt_num in range(len(prompts)):
@@ -2330,8 +2351,11 @@ if __name__ == "__main__":
 
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
-    parser.add_argument("--ckpt_every", type=int, default=50, help="Epochs between checkpoint save") # TODO CURRENTLY NOT USEFUL. SHOULD USE TO CHECKPOINT MODEL.
+    parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
+    parser.add_argument("--load_dir", type=str, default='.', help="Where to load from for checkpoint")
+    parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
+    parser.add_argument("--load_prefix", type=str, default='.')
 
     parser.add_argument("--indicator_pos_zero_index", type=int, default=0)
     parser.add_argument("--n_true_posterior_samples", type=int, default=10)
