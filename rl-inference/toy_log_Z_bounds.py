@@ -1649,7 +1649,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             # indexes_of_sure_heres = input_ids_and_mask['input_ids'][0]
             # print(indexes_of_sure_heres)
             # indexes_of_continuation = [10889, 11, 994, 338] # "Sure, here's"
-            indexes_of_continuation = [10889, 11]
+            # indexes_of_continuation = [10889, 11]
+            indexes_of_continuation = [10889]
             # print(indexes_of_sure_heres)
             # 1/0
             indexes_of_continuation = jnp.array(indexes_of_continuation, dtype=jnp.int32)
