@@ -280,6 +280,12 @@ def curried_reward_model_p_of_continuation(cfg_p, params_p, indexes_of_continuat
     return new_rm
 
 
+def curried_p_of_continuation(cfg_p, params_p, indexes_of_continuation, huggingface_model=None):
+    def new_rm(seq):
+        return reward_model_p_of_continuation(seq, cfg_p, params_p, indexes_of_continuation, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
+    return new_rm
+
+
 
 def batch_check_contains_token(seq, index_of_token):
     is_token = jnp.where(jnp.abs(seq - index_of_token) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
@@ -692,13 +698,11 @@ def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_ind
 
 
 def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indexes_of_continuation, beta_temp, huggingface_model=None):
-    # The real problem here is how will you get the true posterior samples. Roger's suggestion seems to be to just use whatever we get and define that as the evidence
-    # That can work, I suppose, but then we don't really care about that.
-    # Alternatively have a flag for no posterior samples and do the rest of the code without the posterior sample/bounds stuff
+    # This here is a reward model in the framework phi = e^(beta r) where r = probability of continuation | prompt, s_{1:T} (r = p(continuation | s_{1:T}, prompt))
+    # No posterior samples here
     log_true_final_twists = []
-    true_posterior_samples_by_prompt_and_by_token = []
     for jnp_prompt in jnp_prompts:
-        prompt_len = jnp_prompt.shape[-1]
+        # prompt_len = jnp_prompt.shape[-1]
         log_true_final_twist = curried_reward_model_p_of_continuation(
             cfg_p, params_p, indexes_of_continuation,
             beta_temp, huggingface_model=huggingface_model)
@@ -706,6 +710,69 @@ def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indexes_of_
         log_true_final_twists.append(log_true_final_twist)
 
     return log_true_final_twists, None, None
+
+
+
+def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indexes_of_continuation, output_len,
+                                   n_samples_at_a_time, tokenizer=None, huggingface_model=None, get_true_posterior_samples=True):
+    # Posterior samples can be gotten here; the way this works is that we generate tokens up to
+    # output len + number of tokens in the continuation, and we check that the last tokens match the continuation
+    # This way, we get true posterior samples that satisfy the indicator function on the last tokens matching the continuation
+    # which is equivalent to the posterior defined by phi = probability of the last tokens being this sequence
+
+    num_tokens_in_continuation = indexes_of_continuation.shape[0]
+    log_true_final_twists = []
+    true_posterior_samples_by_prompt = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+        log_true_final_twist = curried_p_of_continuation(cfg_p, params_p, indexes_of_continuation, huggingface_model)
+        log_true_final_twists.append(log_true_final_twist)
+
+        if get_true_posterior_samples:
+            num_posterior_samples = 0
+
+            while num_posterior_samples == 0:
+                rng_key, sk = jax.random.split(rng_key)
+                p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+                                                          jnp_prompt,
+                                                          output_len + num_tokens_in_continuation,
+                                                          n_samples_at_a_time,
+                                                          huggingface_model=huggingface_model)
+
+                check_satisfies_posterior = (batch_check_array_contained_in_other_array(p_samples[:, prompt_len + output_len:], indexes_of_continuation) == 1)
+                # print(check_satisfies_posterior)
+                # print(p_samples[check_satisfies_posterior])
+
+                posterior_samples = p_samples[check_satisfies_posterior][:, :prompt_len + output_len]
+
+                num_posterior_samples = \
+                posterior_samples.shape[0]
+                print("NUM samples")
+                print(num_posterior_samples)
+
+            print(posterior_samples)
+            print(posterior_samples.shape)
+            print(log_true_final_twist(posterior_samples))
+            print(log_true_final_twist(p_samples))
+            if tokenizer is not None:
+                text_outputs = tokenizer.batch_decode(
+                    posterior_samples,
+                    skip_special_tokens=True)
+                print(text_outputs)
+                text_outputs = tokenizer.batch_decode(p_samples,
+                                                      skip_special_tokens=True)
+                print(text_outputs)
+
+        # token = ordered_token_list[i]
+        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
+        # assert extracted_true_posterior_samples.shape[0] != 0
+
+        true_posterior_samples_by_prompt.append(
+            posterior_samples)
+
+    # print(true_posterior_samples_by_prompt_and_by_token)
+
+    return log_true_final_twists, None, true_posterior_samples_by_prompt
 
 
 
