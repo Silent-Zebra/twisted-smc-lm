@@ -380,7 +380,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
                                    "evaluate_over_samples_from", "huggingface_model", "loss_type"])
 def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
-                            evaluate_over_samples_from="p", huggingface_model=None, loss_type="monte_carlo"):
+                            evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error"):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)

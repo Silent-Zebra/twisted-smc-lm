@@ -117,12 +117,20 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
-        elif self.twist_learn_type == "rl_based_p_sample":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p"), argnums=5)
-        elif self.twist_learn_type == "rl_based_q_sample":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q"), argnums=5)
-        elif self.twist_learn_type == "rl_based_sigma_sample":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma"), argnums=5)
+        elif self.twist_learn_type == "rl_p_sq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=5)
+        elif self.twist_learn_type == "rl_q_sq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q", loss_type="squared_error"), argnums=5)
+        elif self.twist_learn_type == "rl_sigma_sq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error"), argnums=5)
+        elif self.twist_learn_type == "rl_p_lsq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_q_lsq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_sigma_lsq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_mc":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=5)
         elif self.twist_learn_type == "sixo":
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         elif self.twist_learn_type == "analytic_mse_rel":
@@ -421,7 +429,7 @@ class ExperimentConfig:
         self, rng_key, indices_of_tokens_chosen, true_posterior_samples_by_token,
         prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, start, hist_token_index, epoch, huggingface_model,
-        true_posterior_samples_by_prompt_and_by_token, prompt_num, true_log_z,
+        true_posterior_samples_by_prompt_and_by_token, prompt_num, true_log_z, plot_over_time_list
     ):
 
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
@@ -433,11 +441,11 @@ class ExperimentConfig:
 
             rng_key, sk = jax.random.split(rng_key)
 
-            plot_logZ_bounds(sk, extracted_samples, token_of_interest_as_int,
+            plot_over_time_list = plot_logZ_bounds(sk, extracted_samples, token_of_interest_as_int,
                              prompt, prompt_len, cfg_p,
                              params_p, cfg_twist, params_twist,
                              log_true_final_twist[i], start,
-                             hist_token_index, epoch, true_log_z,
+                             hist_token_index, epoch, true_log_z, plot_over_time_list,
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                              huggingface_model=huggingface_model)
@@ -449,11 +457,11 @@ class ExperimentConfig:
                 prompt_num]
             rng_key, sk = jax.random.split(rng_key)
 
-            plot_logZ_bounds(sk, extracted_samples, token_of_interest_as_int,
+            plot_over_time_list = plot_logZ_bounds(sk, extracted_samples, token_of_interest_as_int,
                              prompt, prompt_len, cfg_p,
                              params_p, cfg_twist, params_twist,
                              log_true_final_twist, start,
-                             hist_token_index, epoch, true_log_z,
+                             hist_token_index, epoch, true_log_z, plot_over_time_list,
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                              huggingface_model=huggingface_model)
@@ -462,18 +470,18 @@ class ExperimentConfig:
                 prompt_num]
             rng_key, sk = jax.random.split(rng_key)
 
-            plot_logZ_bounds(sk, extracted_samples, None,
+            plot_over_time_list = plot_logZ_bounds(sk, extracted_samples, None,
                              prompt, prompt_len, cfg_p,
                              params_p, cfg_twist, params_twist,
                              log_true_final_twist, start,
-                             hist_token_index, epoch, true_log_z,
+                             hist_token_index, epoch, true_log_z, plot_over_time_list,
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                              huggingface_model=huggingface_model)
         else:
             raise NotImplementedError
 
-        return rng_key
+        return rng_key, plot_over_time_list
 
     def inspect_prob_of_continuation(
         self, rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -1310,7 +1318,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
 
 def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, prompt, prompt_len, cfg_p,
                      params_p, cfg_twist, params_twist, log_true_final_twist, start, hist_token_index, epoch,
-                     true_log_z, smc_procedure_type,
+                     true_log_z, plot_over_time_list, smc_procedure_type,
                      prepend_tokens_for_twists=True, huggingface_model=None):
 
     # for x in range(10):
@@ -1501,6 +1509,15 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
         f"Avg KL(q||sigma) lower bound (using SMC bound on log Z): {kl_lb_smc_across_seeds}")
     print(f"Avg F_q estimate: {f_q_across_seeds}")
 
+    f_q_estimates = plot_over_time_list[0]
+    kl_ubs_iwae, kl_lbs_iwae, kl_ubs_smc, kl_lbs_smc = plot_over_time_list[1], plot_over_time_list[2], plot_over_time_list[3], plot_over_time_list[4]
+
+    f_q_estimates.append(np.array(f_q_across_seeds))
+    kl_ubs_iwae.append(np.array(kl_ub_iwae_across_seeds))
+    kl_lbs_iwae.append(np.array(kl_lb_iwae_across_seeds))
+    kl_ubs_smc.append(np.array(kl_ub_smc_across_seeds))
+    kl_lbs_smc.append(np.array(kl_lb_smc_across_seeds))
+
     # np_n_samples = np.stack(n_samples)
     x_range = np.arange(len(n_samples)) + lowest_power
 
@@ -1526,9 +1543,30 @@ def plot_logZ_bounds(rng_key, extracted_samples, token_of_interest_as_int, promp
     plt.xlabel(f"{power_base}^ Number of Particles")
 
     plt.legend()
-    plt.savefig(f"{args.save_dir}/fig_epoch{epoch + 1}.png")
+    plt.savefig(f"{args.save_dir}/fig_bounds_by_samples_epoch{epoch + 1}.png")
 
 
+    plt.clf()
+    plt.plot(np.arange(1, len(f_q_estimates) + 1), np.stack(f_q_estimates))
+    plt.xlabel(f"Epoch")
+    plt.ylabel(f"F(q) Estimate")
+    # plt.legend()
+    plt.savefig(f"{args.save_dir}/fig_f_q_epoch{epoch + 1}.png")
+
+    plt.clf()
+    x_range = np.arange(1, len(kl_ubs_iwae) + 1)
+    plt.plot(x_range, np.stack(kl_ubs_iwae), label="IWAE Upper bounds")
+    plt.plot(x_range, np.stack(kl_lbs_iwae), label="IWAE Lower bounds")
+    plt.plot(x_range, np.stack(kl_ubs_smc), label="SMC Upper bounds")
+    plt.plot(x_range, np.stack(kl_lbs_smc), label="SMC Lower bounds")
+
+    plt.xlabel(f"Epoch")
+    plt.ylabel(f"KL(q||sigma) bound")
+    plt.legend()
+    plt.savefig(f"{args.save_dir}/fig_kl_divs_epoch{epoch + 1}.png")
+
+
+    return plot_over_time_list
 
 
 def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
@@ -1627,9 +1665,17 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     if load_ckpt:
         print(optim_twist_state)
         print(params_twist)
-        optim_twist_state, params_twist = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=(optim_twist_state, params_twist), prefix=load_prefix)
+        x = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=None, prefix=load_prefix)
+        print(x)
+        # restored_list = [optim_twist_state, params_twist]
+        # restored_list = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=restored_list, prefix=load_prefix)
         print("loaded checkpoint")
-        print(optim_twist_state)
+        # print(restored_list)
+        # optim_twist_state, params_twist = restored_list[0], restored_list[1]
+        params_twist = x['0']
+        # optim_twist_state = x['1']
+
+        # print(optim_twist_state)
         print(params_twist)
         1/0
 
@@ -1689,7 +1735,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             prompts = [[0, 1]]
         elif rm_type == "exp_beta_rew_p_continuation" or rm_type == "contains_continuation" or rm_type == "p_continuation":
             prompts = [[0, 1]]
-            indexes_of_continuation = [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
+            indexes_of_continuation = [6, 8] # [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
             indexes_of_continuation = jnp.array(indexes_of_continuation, dtype=jnp.int32)
         else:
             prompts = [[0, 1, 0, 1]]
@@ -1936,6 +1982,8 @@ def main():
 
     true_log_z = None
 
+    plot_over_time_list = [[], [], [], [], []]
+
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
@@ -2169,7 +2217,7 @@ def main():
                                     flush=True)
 
 
-                        rng_key = experiment_cfg.plot_logZ_bounds_based_on_cfg(
+                        rng_key, plot_over_time_list = experiment_cfg.plot_logZ_bounds_based_on_cfg(
                             rng_key, indices_of_tokens_chosen,
                             true_posterior_samples_by_token,
                             prompt, prompt_len, cfg_p, params_p, cfg_twist,
@@ -2177,7 +2225,7 @@ def main():
                             log_true_final_twist, start, hist_token_index,
                             epoch, huggingface_model,
                             true_posterior_samples_by_prompt_and_by_token,
-                            prompt_num, true_log_z
+                            prompt_num, true_log_z, plot_over_time_list
                         )
                         if args.rm_type == "contains_continuation" or args.rm_type == "p_continuation":
                             # Inspect the samples also in this setting
