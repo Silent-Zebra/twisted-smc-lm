@@ -1061,11 +1061,11 @@ class TestClass:
 
     # Already worked well
     # def test_p_tok_rlp(self):
-    #     self._test_twist_learning(twist_learn_type="rl_based_p_sample",
+    #     self._test_twist_learning(twist_learn_type="rl_p_lsq",
     #                               rm_type=self.rm_type_to_test,
     #                               lr_twist=0.0001)
     def test_p_tok_rlq(self):
-        self._test_twist_learning(twist_learn_type="rl_based_q_sample",
+        self._test_twist_learning(twist_learn_type="rl_q_lsq",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
     # def test_p_tok_rlsigma(self):
@@ -2397,8 +2397,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--twist_learn_type", type=str, default="ebm",
                         choices=["ebm", "ebm_q_rsmp", "one_total_kl",
-                                 "rl_based_p_sample", "rl_based_q_sample",
-                                 "rl_based_sigma_sample", "sixo"])
+                                 "rl_p_sq", "rl_q_sq",
+                                 "rl_sigma_sq", "rl_p_lsq", "rl_q_lsq",
+                                 "rl_sigma_lsq", "rl_mc",  "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=0)
