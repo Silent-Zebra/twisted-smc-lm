@@ -991,6 +991,34 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
 #     return log_w_t, f_q_estimate
 
 
+# in the case of the seqs just being one true posterior, then this gives us a one-sample estimate of G(q), which combined with estimate on log Z, can give us estimates of KL(sigma | q)
+def iwae_backward(seqs, prompt, cfg_p, params_p, cfg_twist, params_twist, output_len, log_true_final_twist, prepend_tokens_for_twists,
+            token_of_interest_as_int, proposal_is_p=False, huggingface_model=None):
+
+    prompt_len = prompt.shape[-1]
+
+    log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(seqs,
+                                                              cfg_p, params_p,
+                                                              prompt_len,
+                                                              output_len,
+                                                              huggingface_model=huggingface_model) \
+                                  + evaluate_log_phi_final(seqs,
+                                                           log_true_final_twist)
+    if proposal_is_p:
+        log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(seqs,
+                                                              cfg_p, params_p,
+                                                              prompt_len,
+                                                              output_len,
+                                                              huggingface_model=huggingface_model)
+    else:
+        log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
+            seqs, cfg_p, params_p, cfg_twist, params_twist,
+            prompt_len, output_len, prepend_tokens_for_twists,
+            token_of_interest_as_int, huggingface_model=huggingface_model)
+    target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
+    return target_dist_weights
+
+
 def iwae_forward_and_backward(rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                                   output_len, n_smc_samples, n_vocab,
                                   prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
@@ -1029,16 +1057,20 @@ def iwae_forward_and_backward(rng_key, posterior_sample, prompt, cfg_p, params_p
 
     # print(combined_seqs.shape)
 
-    prompt_len = prompt.shape[-1]
-
-    log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model) \
-                                  + evaluate_log_phi_final(combined_seqs, log_true_final_twist)
-    if proposal_is_p:
-        log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
-    else:
-        log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(combined_seqs, cfg_p, params_p, cfg_twist, params_twist,
-                                                                   prompt_len, output_len, prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
-    target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
+    target_dist_weights = iwae_backward(
+        combined_seqs, prompt, cfg_p, params_p, cfg_twist, params_twist, output_len,
+        log_true_final_twist, prepend_tokens_for_twists,
+        token_of_interest_as_int, proposal_is_p, huggingface_model)
+    # prompt_len = prompt.shape[-1]
+    #
+    # log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model) \
+    #                               + evaluate_log_phi_final(combined_seqs, log_true_final_twist)
+    # if proposal_is_p:
+    #     log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
+    # else:
+    #     log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(combined_seqs, cfg_p, params_p, cfg_twist, params_twist,
+    #                                                                prompt_len, output_len, prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
+    # target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
 
     return proposal_dist_weights, target_dist_weights, f_q_estimate
 
