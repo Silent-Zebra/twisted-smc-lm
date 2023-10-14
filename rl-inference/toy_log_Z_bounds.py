@@ -37,7 +37,7 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     build_only_contains_token_twists, build_contains_token_eps_twists,\
     reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
     build_toxicity_threshold_twists, build_p_of_continuation_twists
-from losses import get_l_ebm_ml, get_l_ebm_ml_jit, get_l_ebm_ml_w_q_resample_jit, \
+from losses import get_l_ebm_ml, get_l_ebm_ml_jit, \
     get_l_one_total_kl, get_twist_loss_rl_based, get_l_dre_sixo
 
 # Update the twists, update the whole framework for the Bayesian thing.
@@ -106,27 +106,32 @@ class ExperimentConfig:
 
     def _get_dre_grad_fn(self):
         if self.rm_type == "toxicity_threshold":
-            assert self.twist_learn_type == "ebm" # Others not yet implemented
+            assert self.twist_learn_type == "ebm" or self.twist_learn_type == "ebm_partial_jit" # Others not yet implemented
             dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
             return dre_grad_fn
 
         if self.twist_learn_type == "ebm":
-            # dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
             dre_grad_fn = jax.grad(get_l_ebm_ml_jit, argnums=5)
-        elif self.twist_learn_type == "ebm_q_rsmp":
-            dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=5)
+        elif self.twist_learn_type == "ebm_partial_jit":
+            dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
+        # elif self.twist_learn_type == "ebm_q_rsmp":
+        #     dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
         elif self.twist_learn_type == "rl_p_sq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_q_sq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q", loss_type="squared_error"), argnums=5)
+        elif self.twist_learn_type == "rl_qrsmp_sq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="qrsmp", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_sigma_sq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_p_lsq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_q_lsq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_q_lsq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_sigma_lsq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_mc":
@@ -1050,7 +1055,6 @@ def make_hists(true_posterior_samples, smc_samples, prompt_len, token_of_interes
 
 class TestClass:
 
-
     # Anyway this test worked when I tried it using the main code
     # def test_iwae_vs_smc_output_len_1(self):
     #     # These should be equal in the case of only one output len:
@@ -1063,56 +1067,59 @@ class TestClass:
     #                         token_of_interest_as_int,
     #                         true_posterior_samples,
     #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
-    rm_type_to_test = "contains_token_eps" # "p_token_last_index"
+    rm_type_to_test = "p_continuation" # "p_token_last_index" # "contains_token_eps" #
+    # Do p_token_last_index and maybe p_continuation as well
+
 
     # Already worked well
-    # def test_p_tok_rlp(self):
-    #     self._test_twist_learning(twist_learn_type="rl_p_lsq",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0001)
+    def test_p_tok_rlp(self):
+        self._test_twist_learning(twist_learn_type="rl_p_lsq",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003)
     def test_p_tok_rlq(self):
         self._test_twist_learning(twist_learn_type="rl_q_lsq",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
-    # def test_p_tok_rlsigma(self):
-    #     self._test_twist_learning(twist_learn_type="rl_based_sigma_sample",
-    #                               rm_type=self.rm_type_to_test)
+    def test_p_tok_rlsigma(self):
+        self._test_twist_learning(twist_learn_type="rl_sigma_lsq",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003)
     def test_p_tok_ebm(self):
         self._test_twist_learning(twist_learn_type="ebm",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
-    def test_p_tok_ebm2(self):
-        self._test_twist_learning(twist_learn_type="ebm",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0005)
-    def test_p_tok_ebm3(self):
-        self._test_twist_learning(twist_learn_type="ebm",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.001)
+    # def test_p_tok_ebm2(self):
+    #     self._test_twist_learning(twist_learn_type="ebm",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.0005)
+    # def test_p_tok_ebm3(self):
+    #     self._test_twist_learning(twist_learn_type="ebm",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.001)
     def test_p_tok_rob(self):
         self._test_twist_learning(twist_learn_type="one_total_kl",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
-    def test_p_tok_rob2(self):
-        self._test_twist_learning(twist_learn_type="one_total_kl",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0005)
-    def test_p_tok_rob3(self):
-        self._test_twist_learning(twist_learn_type="one_total_kl",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.001)
+    # def test_p_tok_rob2(self):
+    #     self._test_twist_learning(twist_learn_type="one_total_kl",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.0005)
+    # def test_p_tok_rob3(self):
+    #     self._test_twist_learning(twist_learn_type="one_total_kl",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.001)
     def test_p_tok_sixo(self):
         self._test_twist_learning(twist_learn_type="sixo",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
-    def test_p_tok_sixo2(self):
-        self._test_twist_learning(twist_learn_type="sixo",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0005)
-    def test_p_tok_sixo3(self):
-        self._test_twist_learning(twist_learn_type="sixo",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.001)
+    # def test_p_tok_sixo2(self):
+    #     self._test_twist_learning(twist_learn_type="sixo",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.0005)
+    # def test_p_tok_sixo3(self):
+    #     self._test_twist_learning(twist_learn_type="sixo",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.001)
     # def test_twist_learning_p_token_last_index(self):
     #     self._test_twist_learning_all_types(rm_type="p_token_last_index")
     #
@@ -1225,13 +1232,19 @@ class TestClass:
                         stop_grad=True)
                         avg_rel_diff_list.append(avg_rel_diff)
                         print(avg_rel_diff_list)
-            elif rm_type == "contains_token" or rm_type == "contains_token_eps":
-                indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
-                token_of_interest_as_int = index_of_token_contained
+            elif rm_type == "contains_token" or rm_type == "contains_token_eps" or rm_type == "p_continuation":
+                indices_of_tokens_chosen = None
+                token_of_interest_as_int = None
+                if rm_type == "p_continuation":
+                    log_true_final_twist_to_use = log_true_final_twist
+                if rm_type == rm_type == "contains_token" or rm_type == "contains_token_eps":
+                    indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
+                    token_of_interest_as_int = index_of_token_contained
+                    log_true_final_twist_to_use = log_true_final_twist[0]
 
                 avg_rel_diff_start = compare_learned_twist_vs_optimal(
                     prompt, n_vocab, output_len,
-                    cfg_p, params_p, log_true_final_twist[0],
+                    cfg_p, params_p, log_true_final_twist_to_use,
                     cfg_twist, params_twist,
                     rm_type=rm_type,
                     prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
@@ -1241,6 +1254,25 @@ class TestClass:
                     relative_diff_loss=True,
                     stop_grad=True)
                 avg_rel_diff_list = [avg_rel_diff_start]
+
+                analytic_kl_q_sigma, analytic_kl_sigma_q = calc_analytic_kl(prompt,
+                                                       prompt_len,
+                                                       n_vocab,
+                                                       output_len,
+                                                       cfg_p, params_p,
+                                                       cfg_twist,
+                                                       params_twist,
+                                                       log_true_final_twist_to_use,
+                                                       prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                                                       token_of_interest_as_int=token_of_interest_as_int,
+                                                       get_kl_sigma_q_also=True)
+                print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}",
+                      flush=True)
+                print(f"Analytic KL(sigma||q): {analytic_kl_sigma_q}",
+                      flush=True)
+                avg_kl_q_sigma_list = [analytic_kl_q_sigma]
+                avg_kl_sigma_q_list = [analytic_kl_sigma_q]
+
                 print(avg_rel_diff_list)
                 for epoch in range(num_epochs):
                     for twist_update in range(twist_updates_per_epoch):
@@ -1255,7 +1287,7 @@ class TestClass:
                         )
                     avg_rel_diff = compare_learned_twist_vs_optimal(
                         prompt, n_vocab, output_len,
-                        cfg_p, params_p, log_true_final_twist[0],
+                        cfg_p, params_p, log_true_final_twist_to_use,
                         cfg_twist, params_twist,
                         rm_type=rm_type,
                         prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
@@ -1267,13 +1299,34 @@ class TestClass:
                     avg_rel_diff_list.append(avg_rel_diff)
                     print(avg_rel_diff_list)
 
-
+                    analytic_kl_q_sigma, analytic_kl_sigma_q = calc_analytic_kl(
+                        prompt,
+                        prompt_len,
+                        n_vocab,
+                        output_len,
+                        cfg_p, params_p,
+                        cfg_twist,
+                        params_twist,
+                        log_true_final_twist_to_use,
+                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                        token_of_interest_as_int=token_of_interest_as_int,
+                        get_kl_sigma_q_also=True)
+                    print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}",
+                          flush=True)
+                    print(f"Analytic KL(sigma||q): {analytic_kl_sigma_q}",
+                          flush=True)
+                    avg_kl_q_sigma_list.append(analytic_kl_q_sigma)
+                    avg_kl_sigma_q_list.append(analytic_kl_sigma_q)
 
             else:
                 raise NotImplementedError
             prompt_num += 1
 
+            print("TWIST DIFFS")
             print(avg_rel_diff_list)
+            print("KL DIFFS")
+            print(avg_kl_q_sigma_list)
+            print(avg_kl_sigma_q_list)
             # assert avg_rel_diff_list[0] > avg_rel_diff_list[1]
             # assert avg_rel_diff_list[1] > avg_rel_diff_list[2]
             # assert avg_rel_diff_list[2] > avg_rel_diff_list[3]
@@ -1607,13 +1660,6 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
 
     plt.legend()
     plt.savefig(f"{args.save_dir}/fig_bounds_by_samples_epoch{epoch + 1}.png")
-
-
-    print("hihi")
-    print(f_q_estimates_list_of_arrays)
-    print(np.stack(f_q_estimates_list_of_arrays))
-    print(np.stack(f_q_estimates_list_of_arrays).shape)
-    print(np.transpose(np.stack(f_q_estimates_list_of_arrays)).shape)
 
 
     plt.clf()
@@ -2483,9 +2529,11 @@ if __name__ == "__main__":
                         help="Num of tokens in vocab")
 
     parser.add_argument("--twist_learn_type", type=str, default="ebm",
-                        choices=["ebm", "ebm_q_rsmp", "one_total_kl",
-                                 "rl_p_sq", "rl_q_sq",
-                                 "rl_sigma_sq", "rl_p_lsq", "rl_q_lsq",
+                        choices=["ebm", "ebm_partial_jit", # partial jit only for testing
+                                 # "ebm_q_rsmp",
+                                 "one_total_kl",
+                                 "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
+                                 "rl_sigma_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
                                  "rl_sigma_lsq", "rl_mc",  "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 

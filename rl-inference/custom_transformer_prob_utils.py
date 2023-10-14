@@ -763,12 +763,12 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", 'output_len', 'n_smc_samples', "get_intermediate_sample_history_based_on_learned_twists",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p",
-                                   "huggingface_model", "resample_for_log_psi_t_eval_list"])
+                                   "huggingface_model", "resample_for_log_psi_t_eval_list", "no_final_resample"])
 def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
             n_smc_samples, get_intermediate_sample_history_based_on_learned_twists=False,
             prepend_tokens_for_twists=False, token_of_interest_as_int=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
-            huggingface_model=None, resample_for_log_psi_t_eval_list=False):
+            huggingface_model=None, resample_for_log_psi_t_eval_list=False, no_final_resample=False):
     # Generate samples using SMC with twists (learned and final, if use_log_true_final_twist_for_final_weight_calc)
     # IF RESAMPLE=FALSE, MAKE SURE THAT WHATEVER END RESULT RESAMPLES OR REWEIGHTS BASED ON THE RETURNED WEIGHTS (do I even return the weights always though??)
     prompt_len = prompt.shape[-1]
@@ -818,11 +818,15 @@ def smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_
     # if resample == False:
     #     print(log_w_t)
 
+    resample_for_final = resample
+    if no_final_resample:
+        resample_for_final = False
+
     (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_learned_psi_T_eval), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = \
         smc_scan_iter_final(
         rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
-        prepend_tokens_for_twists, token_of_interest_as_int, resample, true_posterior_sample, proposal_is_p,
+        prepend_tokens_for_twists, token_of_interest_as_int, resample_for_final, true_posterior_sample, proposal_is_p,
         huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list)
 
     # if resample == False:
@@ -888,7 +892,7 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
             n_smc_samples, get_intermediate_sample_history_based_on_learned_twists=False,
             prepend_tokens_for_twists=False, token_of_interest_as_int=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
-            huggingface_model=None, resample_for_log_psi_t_eval_list=False):
+            huggingface_model=None, resample_for_log_psi_t_eval_list=False, no_final_resample=False):
     print("SMC TIME")
     start = time.time()
 
@@ -913,14 +917,16 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
     start = time.time()
     print("SMC JITTED PART FINISHED")
 
+    resample_for_final = resample
+    if no_final_resample:
+        resample_for_final = False
+
     (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_learned_psi_T_eval), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = \
         smc_scan_iter_final(
         rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
-        prepend_tokens_for_twists, token_of_interest_as_int, resample, true_posterior_sample, proposal_is_p,
+        prepend_tokens_for_twists, token_of_interest_as_int, resample_for_final, true_posterior_sample, proposal_is_p,
         huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list)
-
-
 
     print(time.time() - start)
     start = time.time()
@@ -1273,7 +1279,7 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                   output_len, n_smc_samples, smc_procedure_type, n_vocab=0,
                   get_intermediate_sample_history_based_on_learned_twists=False,
                   prepend_tokens_for_twists=False, token_of_interest_as_int=None, resample=True,
-                  posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False):
+                  posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False, no_final_resample=False):
     if smc_procedure_type == "analytic_sigma_sample":
         assert n_vocab > 0
         prompt_len = prompt.shape[-1]
@@ -1288,12 +1294,12 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                        prepend_tokens_for_twists, token_of_interest_as_int,
                        resample, posterior_sample, proposal_is_p,
                        huggingface_model=huggingface_model,
-                       resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list)
+                       resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list, no_final_resample=no_final_resample)
     elif smc_procedure_type == "partial_jit":
         return smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                        output_len, n_smc_samples, get_intermediate_sample_history_based_on_learned_twists,
                        prepend_tokens_for_twists, token_of_interest_as_int, resample, posterior_sample, proposal_is_p,
-                       huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list)
+                       huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list, no_final_resample=no_final_resample)
     else:
         raise NotImplementedError
 
@@ -1323,7 +1329,7 @@ def get_analytic_sigma_sample(subkey, jnp_prompt, prompt_len, n_vocab, output_le
 # Right here's the thing; there's no reason to calc the KL with p and sigma. That's just a constant.
 # The only thing maybe that informs you of is how hard the posterior sampling problem is, if you use p as the proposal
 def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist,
-                     log_true_final_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, calc_kl_with_p_and_sigma=False):
+                     log_true_final_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, calc_kl_with_p_and_sigma=False, get_kl_sigma_q_also=False):
     analytic_log_sigma_vals, all_seqs, _ = \
         calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, return_log=True)
 
@@ -1337,6 +1343,10 @@ def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_
     # print(analytic_log_q_t_vals.shape)
 
     kl_div = kl_div_jax(analytic_log_q_t_vals, analytic_log_sigma_vals)
+
+    if get_kl_sigma_q_also:
+        kl_sigma_q = kl_div_jax(analytic_log_sigma_vals, analytic_log_q_t_vals)
+        return kl_div, kl_sigma_q
 
     return kl_div
     # then do the KL calc
