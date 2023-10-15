@@ -130,7 +130,7 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_q_lsq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
-        elif self.twist_learn_type == "rl_q_lsq":
+        elif self.twist_learn_type == "rl_qrsmp_lsq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_sigma_lsq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error_in_log_space"), argnums=5)
