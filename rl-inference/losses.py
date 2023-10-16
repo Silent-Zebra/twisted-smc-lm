@@ -456,6 +456,30 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
             resample=True, no_final_resample=no_final_resample
         )
+    elif evaluate_over_samples_from == "mixed_p_q":
+        # Mix of 50% p samples and 50% q (twist proposal) samples
+        samples_to_evaluate_over_p = stochastic_transformer_sample(sk1, cfg_p,
+                                                                 params_p,
+                                                                 prompt,
+                                                                 output_len,
+                                                                 n_twist // 2,
+                                                                 huggingface_model=huggingface_model)
+        (_, _, _), _, (intermediate_twist_samples_hist,
+                       intermediate_log_w_t_hist) = smc_procedure(
+            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            log_true_final_twist, output_len, n_twist // 2,
+            smc_procedure_type=smc_procedure_type,
+            get_intermediate_sample_history_based_on_learned_twists=True,
+            prepend_tokens_for_twists=prepend_tokens_for_twists,
+            token_of_interest_as_int=token_of_interest_as_int,
+            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+            resample=False
+        )
+        samples_to_evaluate_over_q = intermediate_twist_samples_hist[-1]
+
+        samples_to_evaluate_over = jnp.concatenate((samples_to_evaluate_over_p, samples_to_evaluate_over_q), axis=0)
+
+        log_w_t = jnp.ones((samples_to_evaluate_over.shape[0]))
     else:
         raise NotImplementedError
 
