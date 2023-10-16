@@ -126,6 +126,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="qrsmp", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_sigma_sq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error"), argnums=5)
+        elif self.twist_learn_type == "rl_mixed_p_q_sq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_p_lsq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_q_lsq":
@@ -134,6 +136,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_sigma_lsq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_mixed_p_q_lsq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_mc":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=5)
         elif self.twist_learn_type == "sixo":
@@ -1796,20 +1800,75 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         optim_twist_state = optimizer_twist.init(params_twist)
 
     if load_ckpt:
-        print(optim_twist_state)
-        print(params_twist)
+        # print(optim_twist_state)
+        # print(params_twist)
         x = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=None, prefix=load_prefix)
-        print(x)
+        # print(x)
         # restored_list = [optim_twist_state, params_twist]
         # restored_list = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=restored_list, prefix=load_prefix)
         print("loaded checkpoint")
         # print(restored_list)
         # optim_twist_state, params_twist = restored_list[0], restored_list[1]
         params_twist = x['0']
-        # optim_twist_state = x['1']
 
         # print(optim_twist_state)
+        # optim_twist_state = optimizer_twist.init(params_twist)
+        # print(optim_twist_state)
+
+        # print(x['1'])
+
+        # Pickle is another option for checkpointing, especially for the optim_state, maybe that will be easier? E.g. see https://github.com/google-deepmind/optax/discussions/180
+        # Below does not work because the state is immutable... I may have to just recreate the state, e.g. find that state class, and recreate it. Is there a way to do this dynamically?
+        # optim_twist_state[0].count = x['1']['0']['count']
+        # print(optim_twist_state)
+
+        # optim_twist_state = x['1']
+
+        print("PARAMS TWIST")
         print(params_twist)
+        # print("OPTIM TWIST STATE")
+        # print(optim_twist_state)
+        # print(len(x))
+
+        # TODO Testing only remove later
+        prompts = ["How can I steal from a store"]
+        indexes_of_continuation = [10889, 11]
+        indexes_of_continuation = jnp.array(indexes_of_continuation,
+                                            dtype=jnp.int32)
+        input_ids_and_mask = tokenizer(prompts, return_tensors="np",
+                                       padding=False)  # What happens if the prompts are different lengths? TODO
+        jnp_prompts = input_ids_and_mask['input_ids']
+        prompt = jnp_prompts[0]
+
+        assert indexes_of_continuation is not None
+        rng_key, sk = jax.random.split(rng_key)
+        log_true_final_twists, _, _ \
+            = build_p_of_continuation_twists(sk, jnp_prompts, cfg_p, params_p,
+                                             indexes_of_continuation,
+                                             output_len,
+                                             n_samples_at_a_time=0,
+                                             tokenizer=tokenizer,
+                                             huggingface_model=huggingface_model,
+                                             get_true_posterior_samples=False)
+        log_true_final_twist = log_true_final_twists[0]
+
+        _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
+                                   cfg_twist, params_twist,
+                                   log_true_final_twist,
+                                   args.output_len,
+                                   args.n_test_smc_samples,
+                                   smc_procedure_type="jit",
+                                   n_vocab=args.n_vocab,
+                                   proposal_is_p=args.proposal_is_p,
+                                   huggingface_model=huggingface_model)
+        print(smc_samples)
+        log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
+                                   cfg_twist, params_twist, args.output_len,
+                                   log_true_final_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=None,
+                                 proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+        print(log_w_ts)
+        print(log_w_ts.mean())
+
         1/0
 
     toxicityModel = None
@@ -2533,8 +2592,8 @@ if __name__ == "__main__":
                                  # "ebm_q_rsmp",
                                  "one_total_kl",
                                  "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
-                                 "rl_sigma_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                                 "rl_sigma_lsq", "rl_mc",  "sixo"])
+                                 "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
+                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc",  "sixo"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=0)

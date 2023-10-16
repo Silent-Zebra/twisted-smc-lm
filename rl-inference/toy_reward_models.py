@@ -753,22 +753,22 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indexe
             print(posterior_samples)
             print(posterior_samples.shape)
             print(log_true_final_twist(posterior_samples))
-            print(log_true_final_twist(p_samples))
+            print(log_true_final_twist(p_samples[:10]))
             if tokenizer is not None:
                 text_outputs = tokenizer.batch_decode(
                     posterior_samples,
                     skip_special_tokens=True)
                 print(text_outputs)
-                text_outputs = tokenizer.batch_decode(p_samples,
+                text_outputs = tokenizer.batch_decode(p_samples[:10],
                                                       skip_special_tokens=True)
                 print(text_outputs)
 
-        # token = ordered_token_list[i]
-        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
-        # assert extracted_true_posterior_samples.shape[0] != 0
+            # token = ordered_token_list[i]
+            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
+            # assert extracted_true_posterior_samples.shape[0] != 0
 
-        true_posterior_samples_by_prompt.append(
-            posterior_samples)
+            true_posterior_samples_by_prompt.append(
+                posterior_samples)
 
     # print(true_posterior_samples_by_prompt_and_by_token)
 
