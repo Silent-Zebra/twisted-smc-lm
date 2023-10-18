@@ -170,18 +170,22 @@ class ExperimentConfig:
 
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
                               params_p, cfg_twist, params_twist, log_true_final_twist, prepend_tokens_for_twists=False,
-                              token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
+                              token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
+                              tempered_twist=False, beta_prop=None):
         if self.twist_learn_type == "analytic_mse_rel" or self.twist_learn_type == "analytic_mse_abs":
             grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
                                             params_p, log_true_final_twist, cfg_twist,
                                             params_twist, self.rm_type)
         else:
-            grad_params_twist = self.dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist,
-                                                 params_twist, log_true_final_twist, output_len,
-                                                 n_twist, smc_procedure_type=self.smc_procedure_type,
-                                                 prepend_tokens_for_twists=prepend_tokens_for_twists,
-                                                 token_of_interest_as_int=token_of_interest_as_int,
-                                                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+            grad_params_twist = self.dre_grad_fn(
+                sk, prompt, cfg_p, params_p, cfg_twist,
+                params_twist, log_true_final_twist, output_len,
+                n_twist, smc_procedure_type=self.smc_procedure_type,
+                prepend_tokens_for_twists=prepend_tokens_for_twists,
+                token_of_interest_as_int=token_of_interest_as_int,
+                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop
+            )
         return grad_params_twist
 
     # @partial(jax.jit, static_argnames=[
@@ -225,7 +229,8 @@ class ExperimentConfig:
     def update_twist(self, rng_key, indices_of_tokens_chosen, prompt, n_twist,
                      output_len, cfg_p, params_p, cfg_twist, params_twist,
                      log_true_final_twist, proposal_is_p, huggingface_model,
-                     optimizer_twist, optim_twist_state, index_of_token_contained
+                     optimizer_twist, optim_twist_state, index_of_token_contained,
+                     tempered_twist, beta_prop
                      ):
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index":
 
@@ -310,7 +315,8 @@ class ExperimentConfig:
                     prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                     token_of_interest_as_int=token_of_interest_as_int,
                     proposal_is_p=proposal_is_p,
-                    huggingface_model=huggingface_model
+                    huggingface_model=huggingface_model,
+                    tempered_twist=tempered_twist, beta_prop=beta_prop
                 )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
                 params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
                     optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
@@ -325,7 +331,8 @@ class ExperimentConfig:
                 prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                 token_of_interest_as_int=token_of_interest_as_int,
                 proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model
+                huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
         elif self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "contains_continuation" \
@@ -346,7 +353,8 @@ class ExperimentConfig:
                 # Only one set of log final twists (for the token we are interested in)
                 prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                 proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model
+                huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             # print(time.time() - new_time)
             # new_time = time.time()
@@ -416,7 +424,8 @@ class ExperimentConfig:
                 # Only one set of log final twists (for the token we are interested in)
                 prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                 proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model
+                huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
 
@@ -427,7 +436,8 @@ class ExperimentConfig:
                 sk, prompt, self.n_vocab, n_twist, output_len,
                 cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                 proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model
+                huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop
             )
 
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
@@ -1168,6 +1178,8 @@ class TestClass:
         index_of_token_contained = 6
         proposal_is_p = False
         beta_temp = 1.
+        tempered_twist = False
+        beta_prop = 1.
 
         experiment_cfg, rng_key, huggingface_model, model, cfg_p, params_p, \
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
@@ -1219,7 +1231,7 @@ class TestClass:
                             n_twist, output_len, cfg_p, params_p, cfg_twist,
                             params_twist, log_true_final_twist, proposal_is_p,
                             huggingface_model, optimizer_twist, optim_twist_state,
-                            index_of_token_contained
+                            index_of_token_contained, tempered_twist, beta_prop
                         )
 
                     for i in range(len(indices_of_tokens_chosen)):
@@ -1282,13 +1294,14 @@ class TestClass:
                     for twist_update in range(twist_updates_per_epoch):
                         rng_key, params_twist, optim_twist_state = \
                             experiment_cfg.update_twist(
-                            rng_key, indices_of_tokens_chosen, prompt,
-                            n_twist, output_len, cfg_p, params_p, cfg_twist,
-                            params_twist, log_true_final_twist, proposal_is_p,
-                            huggingface_model, optimizer_twist,
-                            optim_twist_state,
-                            index_of_token_contained
-                        )
+                                rng_key, indices_of_tokens_chosen, prompt,
+                                n_twist, output_len, cfg_p, params_p, cfg_twist,
+                                params_twist, log_true_final_twist, proposal_is_p,
+                                huggingface_model, optimizer_twist,
+                                optim_twist_state,
+                                index_of_token_contained,
+                                tempered_twist, beta_prop
+                            )
                     avg_rel_diff = compare_learned_twist_vs_optimal(
                         prompt, n_vocab, output_len,
                         cfg_p, params_p, log_true_final_twist_to_use,
@@ -1852,23 +1865,87 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                              get_true_posterior_samples=False)
         log_true_final_twist = log_true_final_twists[0]
 
+        # _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
+        #                            cfg_twist, params_twist,
+        #                            log_true_final_twist,
+        #                            args.output_len,
+        #                            args.n_test_smc_samples,
+        #                            smc_procedure_type="jit",
+        #                            n_vocab=args.n_vocab,
+        #                            proposal_is_p=args.proposal_is_p,
+        #                            huggingface_model=huggingface_model)
+        # print(smc_samples)
+        # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
+        #                            cfg_twist, params_twist, args.output_len,
+        #                            log_true_final_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=None,
+        #                          proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+        # print(log_w_ts)
+        # print(log_w_ts.mean())
+
         _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
-                                   cfg_twist, params_twist,
-                                   log_true_final_twist,
-                                   args.output_len,
-                                   args.n_test_smc_samples,
-                                   smc_procedure_type="jit",
-                                   n_vocab=args.n_vocab,
-                                   proposal_is_p=args.proposal_is_p,
-                                   huggingface_model=huggingface_model)
+                                       cfg_twist, params_twist,
+                                       log_true_final_twist,
+                                       args.output_len,
+                                       args.n_test_smc_samples,
+                                       smc_procedure_type="jit",
+                                       n_vocab=args.n_vocab,
+                                       proposal_is_p=args.proposal_is_p,
+                                       huggingface_model=huggingface_model,
+                                       tempered_twist=True,
+                                       beta_prop=0.) # p samples
         print(smc_samples)
         log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
-                                   cfg_twist, params_twist, args.output_len,
-                                   log_true_final_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=None,
-                                 proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+                                 cfg_twist, params_twist, args.output_len,
+                                 log_true_final_twist,
+                                 prepend_tokens_for_twists=False,
+                                 token_of_interest_as_int=None,
+                                 proposal_is_p=args.proposal_is_p,
+                                 huggingface_model=huggingface_model)
+        print(log_w_ts)
+        print(log_w_ts.mean())
+        _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
+                                       cfg_twist, params_twist,
+                                       log_true_final_twist,
+                                       args.output_len,
+                                       args.n_test_smc_samples,
+                                       smc_procedure_type="jit",
+                                       n_vocab=args.n_vocab,
+                                       proposal_is_p=args.proposal_is_p,
+                                       huggingface_model=huggingface_model,
+                                       tempered_twist=True,
+                                       beta_prop=0.3)
+        print(smc_samples)
+        log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
+                                 cfg_twist, params_twist, args.output_len,
+                                 log_true_final_twist,
+                                 prepend_tokens_for_twists=False,
+                                 token_of_interest_as_int=None,
+                                 proposal_is_p=args.proposal_is_p,
+                                 huggingface_model=huggingface_model)
         print(log_w_ts)
         print(log_w_ts.mean())
 
+        _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
+                                       cfg_twist, params_twist,
+                                       log_true_final_twist,
+                                       args.output_len,
+                                       args.n_test_smc_samples,
+                                       smc_procedure_type="jit",
+                                       n_vocab=args.n_vocab,
+                                       proposal_is_p=args.proposal_is_p,
+                                       huggingface_model=huggingface_model,
+                                       tempered_twist=True,
+                                       beta_prop=1.)
+        print(smc_samples)
+        log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
+                                 cfg_twist, params_twist, args.output_len,
+                                 log_true_final_twist,
+                                 prepend_tokens_for_twists=False,
+                                 token_of_interest_as_int=None,
+                                 proposal_is_p=args.proposal_is_p,
+                                 huggingface_model=huggingface_model)
+        print(log_w_ts)
+        print(log_w_ts.mean())
         1/0
 
     toxicityModel = None
@@ -2347,10 +2424,11 @@ def main():
                 rng_key, params_twist, optim_twist_state = \
                     experiment_cfg.update_twist(
                         rng_key, indices_of_tokens_chosen, prompt, args.n_twist,
-                    args.output_len, cfg_p, params_p, cfg_twist, params_twist,
-                    log_true_final_twist, args.proposal_is_p, huggingface_model,
-                    optimizer_twist, optim_twist_state, args.index_of_token_contained
-                )
+                        args.output_len, cfg_p, params_p, cfg_twist, params_twist,
+                        log_true_final_twist, args.proposal_is_p, huggingface_model,
+                        optimizer_twist, optim_twist_state, args.index_of_token_contained,
+                        args.tempered_twist, args.beta_prop
+                    )
                 # if twist_update != 0:
                 #     update_time = time.time() - new_time
                 #     print(f"UPDATE TIME: {update_time}")
@@ -2628,6 +2706,9 @@ if __name__ == "__main__":
     parser.add_argument("--threshold", type=float, default=0., help="The threshold for the toxicity score")
     parser.add_argument("--pos_threshold", action="store_true", help="Use a positive (>) threshold for the toxicity threshold reward model. If not set, then uses negative (<) threshold.")
 
+    parser.add_argument("--tempered_twist", action="store_true", help="Use beta_prop to temper the twists (purpose is to maintain exploration)")
+    parser.add_argument("--beta_prop", type=float, help="beta used for temperature scaling ON THE q (smart twist) PROPOSAL (and q/twist weights for SMC); purpose is to serve as interp between p and q sampling; purpose of that is to maintain exploration/avoid immediately focusing on one mode of posterior. Default 1 means just sample from q (p psi), whereas 0 means sample from p only",
+                        default=1.)
     args = parser.parse_args()
 
 

@@ -18,19 +18,22 @@ no_final_resample = True # False # Turn this off (set to false) if you want the 
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int",
-                                   "smc_procedure_type", "proposal_is_p", "huggingface_model"])
+                                   "smc_procedure_type", "proposal_is_p", "huggingface_model",
+                                   "tempered_twist", "beta_prop"])
 def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                    output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None,
-                   proposal_is_p=False, huggingface_model=None):
+                   proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
-    (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p, params_p, cfg_twist,
-                                                      params_twist, log_true_final_twist, output_len, n_twist,
-                                                      smc_procedure_type=smc_procedure_type,
-                                                      prepend_tokens_for_twists=prepend_tokens_for_twists,
-                                                      token_of_interest_as_int=token_of_interest_as_int,
-                                                      proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, no_final_resample=no_final_resample)
+    (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
+        sk1, prompt, cfg_p, params_p, cfg_twist,
+        params_twist, log_true_final_twist, output_len, n_twist,
+        smc_procedure_type=smc_procedure_type,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        token_of_interest_as_int=token_of_interest_as_int,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+        no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop)
     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
 
     # l_dre_old = 0.
@@ -101,23 +104,25 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 # JITTING IS DONE SEPARATELY BELOW
 # This is the EBM Maximum Likelihood approach (previously called Roger's approach).
 def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                        output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
+                        output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type,
+                 token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
+                 tempered_twist=False, beta_prop=None
+                 ):
 
     # print("STARTING GET L EBM UPDATE")
     # new_start = time.time()
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
-    (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk1, prompt, cfg_p,
-                                                         params_p, cfg_twist,
-                                                         params_twist,
-                                                         log_true_final_twist,
-                                                         output_len, n_twist,
-                                                      smc_procedure_type=smc_procedure_type,
-                                                      prepend_tokens_for_twists=prepend_tokens_for_twists,
-                                                      token_of_interest_as_int=token_of_interest_as_int,
-                                                      proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                                                      resample=True, no_final_resample=no_final_resample)
+    (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
+        sk1, prompt, cfg_p, params_p, cfg_twist,
+        params_twist, log_true_final_twist, output_len, n_twist,
+        smc_procedure_type=smc_procedure_type,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        token_of_interest_as_int=token_of_interest_as_int,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+        resample=True, no_final_resample=no_final_resample,
+        tempered_twist=tempered_twist, beta_prop=beta_prop)
     # print("First SMC done")
     # print(time.time() - new_start)
     # new_start = time.time()
@@ -143,6 +148,7 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
         resample=False, # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
         resample_for_log_psi_t_eval_list=True,
+        tempered_twist=False # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
     )
 
     # print("Second SMC done")
@@ -185,8 +191,10 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
     return l_ebm_new
 
 
-get_l_ebm_ml_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p", "huggingface_model"])(get_l_ebm_ml)
+get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
+    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
+    "huggingface_model", "tempered_twist", "beta_prop"])(get_l_ebm_ml)
 
 
 # # This is the EBM Maximum Likelihood approach, but with resampling on the proposal distribution.
@@ -264,9 +272,11 @@ get_l_ebm_ml_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_
 # This is Rob's approach
 # for t = 1 to T: grad = E_sigma(s_1:t-1) [ E_sigma(s_t|s_1:t-1)[grad log psi (s_1:t)] - E_q(s_t|s_1:t-1)[grad log psi (s_1:t)]  ]
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p", "huggingface_model"])
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type",
+                                   "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop"])
 def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                        output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
+                        output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None,
+                       proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -279,7 +289,8 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
         prepend_tokens_for_twists=prepend_tokens_for_twists,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        resample=True, no_final_resample=no_final_resample
+        resample=True, no_final_resample=no_final_resample,
+        tempered_twist=tempered_twist, beta_prop=beta_prop
     )
 
     normalized_log_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
@@ -397,10 +408,10 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-                                   "evaluate_over_samples_from", "huggingface_model", "loss_type"])
+                                   "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop"])
 def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
-                            evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error"):
+                            evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error", tempered_twist=False, beta_prop=None):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -423,7 +434,7 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
             prepend_tokens_for_twists=prepend_tokens_for_twists,
             token_of_interest_as_int=token_of_interest_as_int,
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-            resample=False
+            resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop
         )
         samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
         print(samples_to_evaluate_over.shape)
@@ -440,7 +451,7 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
             prepend_tokens_for_twists=prepend_tokens_for_twists,
             token_of_interest_as_int=token_of_interest_as_int,
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-            resample=True, no_final_resample=no_final_resample
+            resample=True, no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop
         )
         samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
         print(samples_to_evaluate_over.shape)
@@ -454,7 +465,7 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
             prepend_tokens_for_twists=prepend_tokens_for_twists,
             token_of_interest_as_int=token_of_interest_as_int,
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-            resample=True, no_final_resample=no_final_resample
+            resample=True, no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop
         )
     elif evaluate_over_samples_from == "mixed_p_q":
         # Mix of 50% p samples and 50% q (twist proposal) samples
@@ -473,7 +484,7 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
             prepend_tokens_for_twists=prepend_tokens_for_twists,
             token_of_interest_as_int=token_of_interest_as_int,
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-            resample=False
+            resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop
         )
         samples_to_evaluate_over_q = intermediate_twist_samples_hist[-1]
 
