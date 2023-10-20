@@ -148,6 +148,12 @@ class ExperimentConfig:
         elif self.twist_learn_type == "analytic_mse_abs":
             dre_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal,
                                    argnums=7)
+        elif self.twist_learn_type == "pretrain_final_twist_lsq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p",
+                                           loss_type="squared_error_in_log_space", train_final_twist_only=True), argnums=5)
+        elif self.twist_learn_type == "pretrain_final_twist_sq":
+            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p",
+                                           loss_type="squared_error", train_final_twist_only=True), argnums=5)
         else:
             raise NotImplementedError
         return dre_grad_fn
@@ -2253,6 +2259,68 @@ def main():
 
     plot_over_time_list = [[], [], [], [], [], [], [], [], [], []]
 
+    print_every_twist_updates = args.print_every_twist_updates
+
+    # Pretrain the final twist in the hopes that this will keep the later updates more grounded...
+    if args.pretrain_final_twist: # Doesn't have to be RL, can be used with other twist training as well...
+        print("Pretraining Final Twist", flush=True)
+        experiment_cfg_pretrain = ExperimentConfig(n_vocab=args.n_vocab,
+                                          twist_learn_type="pretrain_final_twist_lsq",
+                                          rm_type=args.rm_type,
+                                          beta_temp=args.beta_temp)
+
+        for epoch in range(args.pretrain_twist_epochs):
+            prompt_num = 0
+            for prompt in jnp_prompts:
+                prompt_len = prompt.shape[-1]
+                log_true_final_twist = log_true_final_twists[prompt_num]
+                indices_of_tokens_chosen = None
+                if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
+                    or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
+                    indices_of_tokens_chosen = \
+                    indices_of_tokens_chosen_by_prompt[prompt_num]
+
+                for twist_update in range(args.twist_updates_per_epoch):
+
+                    if (twist_update + 1) % print_every_twist_updates == 0:
+                        print(f"Twist update: {twist_update + 1}")
+                        print(f"TIME: {time.time() - start}", flush=True)
+                        # jax.profiler.save_device_memory_profile(f"memory{twist_update}.prof")
+                        # jax.profiler.save_device_memory_profile(f"memory.prof")
+
+                    rng_key, params_twist, optim_twist_state = \
+                        experiment_cfg_pretrain.update_twist(
+                            rng_key, indices_of_tokens_chosen, prompt, args.n_twist,
+                            args.output_len, cfg_p, params_p, cfg_twist, params_twist,
+                            log_true_final_twist, args.proposal_is_p, huggingface_model,
+                            optimizer_twist, optim_twist_state,
+                            args.index_of_token_contained,
+                            args.tempered_twist, args.beta_prop
+                        )
+
+                    if (twist_update + 1) % print_every_twist_updates == 0:
+                        print(f"Testing twist update: {twist_update + 1}")
+                        print(f"TIME: {time.time() - start}", flush=True)
+                        rng_key, sk = jax.random.split(rng_key)
+                        test_loss = get_twist_loss_rl_based(sk, prompt, cfg_p,
+                                                            params_p, cfg_twist,
+                                                            params_twist,
+                                                            log_true_final_twist,
+                                                            args.output_len,
+                                                            args.n_twist,
+                                                            experiment_cfg.prepend_tokens_for_twists,
+                                                            experiment_cfg_pretrain.smc_procedure_type,
+                                                            proposal_is_p=args.proposal_is_p,
+                                                            evaluate_over_samples_from="p",
+                                                            huggingface_model=huggingface_model,
+                                                            loss_type="squared_error_in_log_space",
+                                                            tempered_twist=args.tempered_twist,
+                                                            beta_prop=args.beta_prop,
+                                                            train_final_twist_only=True)
+                        print(test_loss)
+        print("Finished Pretraining Final Twist", flush=True)
+        print(f"TIME: {time.time() - start}", flush=True)
+
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
@@ -2410,7 +2478,6 @@ def main():
 
             avg_update_time = 0.
 
-            print_every_twist_updates = 50
             for twist_update in range(args.twist_updates_per_epoch):
                 # if twist_update != 0:
                 #     new_time = time.time()
@@ -2623,6 +2690,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--print_every", type=int, default=1)
+    parser.add_argument("--print_every_twist_updates", type=int, default=50)
 
     # Initialize the model params
     # IN THE ORIGINAL TRANSFORMER PAPER d_k = d_v = d_model / n_heads
@@ -2709,6 +2777,11 @@ if __name__ == "__main__":
     parser.add_argument("--tempered_twist", action="store_true", help="Use beta_prop to temper the twists (purpose is to maintain exploration)")
     parser.add_argument("--beta_prop", type=float, help="beta used for temperature scaling ON THE q (smart twist) PROPOSAL (and q/twist weights for SMC); purpose is to serve as interp between p and q sampling; purpose of that is to maintain exploration/avoid immediately focusing on one mode of posterior. Default 1 means just sample from q (p psi), whereas 0 means sample from p only",
                         default=1.)
+
+    parser.add_argument("--pretrain_final_twist", action="store_true", help="Pretrain the final twists (using RL-style squared error (in log space)) before beginning other twist training")
+    parser.add_argument("--pretrain_twist_epochs", type=int, default=100, help="How many epochs to do the final twist pretraining (total number of pretraining updates = pretrain_twist_epochs * twist_updates_per_epoch)")
+
+
     args = parser.parse_args()
 
 

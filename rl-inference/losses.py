@@ -408,10 +408,11 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-                                   "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop"])
+                                   "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop", "train_final_twist_only"])
 def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
-                            evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error", tempered_twist=False, beta_prop=None):
+                            evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error_in_log_space", tempered_twist=False, beta_prop=None,
+                            train_final_twist_only=False):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -529,6 +530,17 @@ def get_twist_loss_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     values = evaluate_log_psi_selected_tokens(
         samples_to_evaluate_over, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
         token_of_interest_as_int, huggingface_model)
+
+    if train_final_twist_only:
+        # print(values.shape)
+        # print(target_term.shape)
+        values = values[:, -1][:, None]
+        target_term = target_term[:, -1][:, None] # Just so the mean doesn't smush the wrong axis
+        # print(values.shape)
+        # print(target_term.shape)
+        # print(((jnp.exp(values) - jnp.exp(target_term)) ** 2).mean(axis=-1).shape)
+        # normalized_log_w_t_on_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t))
+        # print(normalized_log_w_t_on_samples.shape)
 
     # carry = (samples_to_evaluate_over, prompt_len, params_twist)
     # scan_over = jnp.arange(output_len) # The last item is a dummy value, since we aren't resampling the prompt with twist sample anyway, so we don't need it
