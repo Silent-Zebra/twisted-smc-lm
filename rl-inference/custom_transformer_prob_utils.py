@@ -110,7 +110,7 @@ def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, 
 
     return p_logits, log_psi_all_vocab
 
-def get_log_p_plus_log_psi(full_seq, params_p, params_twist, prompt_len, t, cfg_p, cfg_twist,
+def get_log_p_plus_log_psi_t(full_seq, params_p, params_twist, prompt_len, t, cfg_p, cfg_twist,
                            prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         full_seq, params_p, params_twist, cfg_p, cfg_twist,
@@ -177,7 +177,7 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
     # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
 
-    log_p, log_psi = get_log_p_plus_log_psi(full_seq, params_p, params_twist, prompt_len, t,
+    log_p, log_psi = get_log_p_plus_log_psi_t(full_seq, params_p, params_twist, prompt_len, t,
                                             cfg_p, cfg_twist, prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
 
     if tempered_twist:
@@ -234,48 +234,27 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 
 
 
-
-
-
-def evaluate_normalized_log_q_t_given_1_to_t_minus_1(full_seq, params_p, params_twist, prompt_len, t, cfg_p, cfg_twist,
-                                                     prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
-    log_p, log_psi = get_log_p_plus_log_psi(full_seq, params_p, params_twist, prompt_len, t,
-                                            cfg_p, cfg_twist, prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
-    log_p_plus_log_psi = log_p + log_psi
-
-    log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
-
-    token_indices = full_seq[:, prompt_len + t]
-
-    unnormalized_log_q_t = log_p_plus_log_psi[
-        jnp.arange(token_indices.shape[0]), token_indices]
-
-    normalized_log_q_t = unnormalized_log_q_t - log_Z_s_1_to_t_minus_1
-
-    return normalized_log_q_t
-
-
-def evaluate_and_add_normalized_log_q_t_given_1_to_t_minus_1(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
-    full_seq, params_p, params_twist, prompt_len, normalized_log_q_1_to_t = carry
-
-    normalized_log_q_t = evaluate_normalized_log_q_t_given_1_to_t_minus_1(full_seq, params_p, params_twist, prompt_len, t, cfg_p, cfg_twist, prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
-
-    normalized_log_q_1_to_t = normalized_log_q_1_to_t + normalized_log_q_t
-
-    carry = (full_seq, params_p, params_twist, prompt_len, normalized_log_q_1_to_t)
-    return carry, None
-
-
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'output_len', "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model"])
-def evaluate_normalized_log_q_1_to_t(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len,
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'prompt_len', "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model"])
+def evaluate_normalized_log_q_1_to_t(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
                                      prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
-    normalized_log_q_1_to_t = jnp.zeros((full_seq.shape[0]))
-    carry = (full_seq, params_p, params_twist, prompt_len, normalized_log_q_1_to_t)
-    carry, _ = jax.lax.scan(partial(evaluate_and_add_normalized_log_q_t_given_1_to_t_minus_1, cfg_p=cfg_p, cfg_twist=cfg_twist,
-                                    prepend_tokens_for_twists=prepend_tokens_for_twists, token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model),
-                            carry, jnp.arange(output_len, dtype=jnp.int32), output_len) # Doesn't use the final_twist, but this is fine, since the q doesn't even matter (is that correct? But even if it did, it makes more sense to evaluate q without the final twist than with, as the proposals are using the learned twists all the way to the end now
-    full_seq, params_p, params_twist, prompt_len, normalized_log_q_1_to_t = carry
+    p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
+        full_seq, params_p, params_twist, cfg_p, cfg_twist,
+        prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model)
+
+    log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
+    log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+    log_p_plus_log_psi_all_vocab = log_p + log_psi
+    normalized_log_q_1_to_t_all_vocab = jax.nn.log_softmax(log_p_plus_log_psi_all_vocab, axis=-1)
+
+    seq_selected = full_seq[:, prompt_len:]
+    normalized_log_q_1_to_t_across_t = normalized_log_q_1_to_t_all_vocab[
+        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+            seq_selected.shape[1]), seq_selected]
+
+    normalized_log_q_1_to_t = normalized_log_q_1_to_t_across_t.sum(axis=-1)
+
     return normalized_log_q_1_to_t
+
 
 # def evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len_plus_t, prepend_tokens_for_twists, token_of_interest_as_int=None):
 #     # Assumes 0 based indexing for t
@@ -975,8 +954,9 @@ def iwae_backward(seqs, prompt, cfg_p, params_p, cfg_twist, params_twist, output
     else:
         log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
             seqs, cfg_p, params_p, cfg_twist, params_twist,
-            prompt_len, output_len, prepend_tokens_for_twists,
+            prompt_len, prepend_tokens_for_twists,
             token_of_interest_as_int, huggingface_model=huggingface_model)
+
     target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
     return target_dist_weights
 
@@ -1109,7 +1089,7 @@ def upper_bound_log_Z_sigma_estimate(posterior_samples, log_true_final_twist, cf
         log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(posterior_samples, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
     else:
         log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(posterior_samples, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
-                                                                   output_len, prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
+                                                                   prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
 
     # print(log_unnormalized_sigma_vals)
     # print(log_unnormalized_sigma_vals.shape)
@@ -1298,7 +1278,7 @@ def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_
         analytic_log_q_t_vals = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p, prompt_len, output_len)
     else:
         analytic_log_q_t_vals = evaluate_normalized_log_q_1_to_t(all_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
-                                                                 output_len, prepend_tokens_for_twists, token_of_interest_as_int)
+                                                                 prepend_tokens_for_twists, token_of_interest_as_int)
 
     # print(analytic_log_sigma_vals.shape)
     # print(analytic_log_q_t_vals.shape)
