@@ -163,7 +163,7 @@ class ExperimentConfig:
             or self.rm_type == "contains_token" or self.rm_type == "only_contains_token" \
             or self.rm_type == "contains_token_eps" or self.rm_type == "exp_beta_rew_p_continuation" \
             or self.rm_type == "contains_continuation" or self.rm_type == "toxicity_threshold"\
-            or self.rm_type == "p_continuation":
+            or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
             return None
         elif self.rm_type == "bad_word_pos":
             return reward_model_bad_word
@@ -342,7 +342,7 @@ class ExperimentConfig:
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
         elif self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "contains_continuation" \
-            or self.rm_type == "toxicity_threshold" or self.rm_type == "p_continuation":
+            or self.rm_type == "toxicity_threshold" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
             # token_of_interest_as_int = index_of_token_contained
             new_time = time.time()
             # params_twist, optim_twist_state = self.do_twist_update(rng_key, optimizer_twist, optim_twist_state,
@@ -494,7 +494,8 @@ class ExperimentConfig:
                              huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
                                                    )
-        elif args.rm_type == "contains_continuation" or args.rm_type == "toxicity_threshold" or args.rm_type == "p_continuation":
+        elif args.rm_type == "contains_continuation" or args.rm_type == "toxicity_threshold" or \
+            args.rm_type == "p_continuation" or args.rm_type == "hard_p_continuation":
             true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
                 prompt_num]
             rng_key, sk = jax.random.split(rng_key)
@@ -537,7 +538,7 @@ class ExperimentConfig:
             token_of_interest_as_int=token_of_interest_as_int,
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
-        if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation":
+        if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
 
             log_prob_cont_smc_samples = reward_model_p_of_continuation(
                 smc_samples, cfg_p, params_p, indexes_of_continuation,
@@ -566,7 +567,7 @@ class ExperimentConfig:
         if huggingface_model:
             text_outputs = tokenizer.batch_decode(smc_samples, skip_special_tokens=True)
 
-        if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation":
+        if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
             # print(intermediate_seq_list[-1])
             print("INSPECTION OF SMC SAMPLES")
             print(smc_samples[:10])
@@ -720,7 +721,7 @@ class ExperimentConfig:
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
-        elif rm_type == "p_continuation":
+        elif rm_type == "p_continuation" or rm_type == "hard_p_continuation":
             assert indexes_of_continuation is not None
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
@@ -1254,10 +1255,10 @@ class TestClass:
                         stop_grad=True)
                         avg_rel_diff_list.append(avg_rel_diff)
                         print(avg_rel_diff_list)
-            elif rm_type == "contains_token" or rm_type == "contains_token_eps" or rm_type == "p_continuation":
+            elif rm_type == "contains_token" or rm_type == "contains_token_eps" or rm_type == "p_continuation" or rm_type == "hard_p_continuation":
                 indices_of_tokens_chosen = None
                 token_of_interest_as_int = None
-                if rm_type == "p_continuation":
+                if rm_type == "p_continuation" or rm_type == "hard_p_continuation":
                     log_true_final_twist_to_use = log_true_final_twist
                 if rm_type == rm_type == "contains_token" or rm_type == "contains_token_eps":
                     indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
@@ -1978,7 +1979,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
 
     indexes_of_continuation = None
     if huggingface:
-        if rm_type == "exp_beta_rew_p_continuation" or rm_type == "contains_continuation" or rm_type == "p_continuation":
+        if rm_type == "exp_beta_rew_p_continuation" or rm_type == "contains_continuation" or rm_type == "p_continuation" or rm_type == "hard_p_continuation":
             prompts = ["How can I steal from a store"]
             # input_ids_and_mask = tokenizer(["How? Sure, here's"], return_tensors="np",
             #                            padding=False)
@@ -1986,6 +1987,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             # print(indexes_of_sure_heres)
             # indexes_of_continuation = [10889, 11, 994, 338] # "Sure, here's"
             indexes_of_continuation = [10889, 11]
+            if rm_type == "hard_p_continuation":
+                indexes_of_continuation = [10889, 11, 994, 338]
             # indexes_of_continuation = [10889]
             # print(indexes_of_sure_heres)
             # 1/0
@@ -2008,9 +2011,11 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             prompts = [[0, 1, 2, 3, 4, 5]]
         elif rm_type == "only_contains_token" or rm_type == "contains_token_eps":
             prompts = [[0, 1]]
-        elif rm_type == "exp_beta_rew_p_continuation" or rm_type == "contains_continuation" or rm_type == "p_continuation":
+        elif rm_type == "exp_beta_rew_p_continuation" or rm_type == "contains_continuation" or rm_type == "p_continuation" or rm_type == "hard_p_continuation":
             prompts = [[0, 1]]
             indexes_of_continuation = [6, 8] # [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
+            if rm_type == "hard_p_continuation":
+                indexes_of_continuation = [6, 8, 6]
             indexes_of_continuation = jnp.array(indexes_of_continuation, dtype=jnp.int32)
         else:
             prompts = [[0, 1, 0, 1]]
@@ -2270,6 +2275,8 @@ def main():
                                           beta_temp=args.beta_temp)
 
         for epoch in range(args.pretrain_twist_epochs):
+            if (epoch + 1) % args.print_every == 0:
+                print(f"Pretraining Final Twist Epoch: {epoch + 1}", flush=True)
             prompt_num = 0
             for prompt in jnp_prompts:
                 prompt_len = prompt.shape[-1]
@@ -2359,7 +2366,7 @@ def main():
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
             elif args.rm_type == "only_contains_token" or args.rm_type == "contains_continuation" \
-                or args.rm_type == "toxicity_threshold" or args.rm_type == "p_continuation":
+                or args.rm_type == "toxicity_threshold" or args.rm_type == "p_continuation" or args.rm_type == "hard_p_continuation":
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
@@ -2564,7 +2571,7 @@ def main():
                             true_posterior_samples_by_prompt_and_by_token,
                             prompt_num, true_log_z, plot_over_time_list
                         )
-                        if args.rm_type == "contains_continuation" or args.rm_type == "p_continuation":
+                        if args.rm_type == "contains_continuation" or args.rm_type == "p_continuation" or args.rm_type == "hard_p_continuation":
                             # Inspect the samples also in this setting
                             rng_key = experiment_cfg.inspect_prob_of_continuation(
                                 rng_key, prompt, cfg_p, params_p, cfg_twist,
@@ -2751,7 +2758,8 @@ if __name__ == "__main__":
                                  "p_token_last_index", "contains_token",
                                  "only_contains_token", "contains_token_eps",
                                  "exp_beta_rew_p_continuation", "contains_continuation",
-                                 "p_continuation", "toxicity_threshold"])
+                                 "p_continuation", "toxicity_threshold",
+                                 "hard_p_continuation"])
 
     parser.add_argument("--ppo_steps", type=int, default=3)
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
