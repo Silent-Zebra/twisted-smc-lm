@@ -118,6 +118,8 @@ class ExperimentConfig:
         #     dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
+        elif self.twist_learn_type == "one_total_kl_mixed_p_q":
+            dre_grad_fn = jax.grad(partial(get_l_one_total_kl, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "rl_p_sq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_q_sq":
@@ -1091,7 +1093,10 @@ class TestClass:
     rm_type_to_test = "p_continuation" # "p_token_last_index" # "contains_token_eps" #
     # Do p_token_last_index and maybe p_continuation as well
 
-
+    def test_p_tok_rob_new(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl_mixed_p_q",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003)
     # Already worked well
     def test_p_tok_rlp(self):
         self._test_twist_learning(twist_learn_type="rl_p_lsq",
@@ -2743,7 +2748,7 @@ if __name__ == "__main__":
     parser.add_argument("--twist_learn_type", type=str, default="ebm",
                         choices=["ebm", "ebm_partial_jit", # partial jit only for testing
                                  # "ebm_q_rsmp",
-                                 "one_total_kl",
+                                 "one_total_kl", "one_total_kl_mixed_p_q",
                                  "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                                  "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
                                  "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc",  "sixo"])

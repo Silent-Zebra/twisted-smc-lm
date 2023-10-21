@@ -128,7 +128,7 @@ def get_log_p_plus_log_psi_t(full_seq, params_p, params_twist, prompt_len, t, cf
     return log_p, log_psi
 
 
-def stochastic_transformer_sample_iter(carry, t, cfg, huggingface_model=None):
+def stochastic_transformer_sample_iter(carry, t, cfg, huggingface_model=None, return_p_eval=False):
     # Essentially the way this works is we pass in a full computation (eg full prompt_len + output_len)
     # but we only use the logit for the time step t, and discard the rest of the computation
     # That is, we are computing logits on the full sequence of length prompt_len + output_len
@@ -149,13 +149,18 @@ def stochastic_transformer_sample_iter(carry, t, cfg, huggingface_model=None):
     indices_to_use = jax.random.categorical(subkey, p_logits[:, prompt_len + t - 1, :],
                                  shape=(p_logits.shape[0],))
     full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
+
+    p_eval = None
+    if return_p_eval:
+        p_eval = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])[jnp.arange(p_logits.shape[0]), indices_to_use]
+
     carry = (rng_key, params, full_seq, prompt_len)
-    return carry, None
+    return carry, p_eval
 
 
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
-@partial(jax.jit, static_argnames=["cfg", "output_len", "n_samples", "huggingface_model"])
-def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples, huggingface_model=None):
+@partial(jax.jit, static_argnames=["cfg", "output_len", "n_samples", "huggingface_model", "return_p_eval"])
+def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples, huggingface_model=None, return_p_eval=False):
     prompt_len = prompt.shape[0]
     # print(prompt_len)
     batch_prompt = jnp.full((n_samples, prompt.shape[0]), prompt)
@@ -163,9 +168,13 @@ def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, out
     full_seq = jnp.concatenate((batch_prompt, output), axis=1)
 
     carry = (rng_key, params, full_seq, prompt_len)
-    carry, _ =  jax.lax.scan(partial(stochastic_transformer_sample_iter, cfg=cfg, huggingface_model=huggingface_model), carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
+    carry, p_evals = jax.lax.scan(partial(stochastic_transformer_sample_iter, cfg=cfg, huggingface_model=huggingface_model, return_p_eval=return_p_eval),
+                             carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
 
     rng_key, params, full_seq, _ = carry
+
+    if return_p_eval:
+        return full_seq, p_evals
 
     return full_seq
 
