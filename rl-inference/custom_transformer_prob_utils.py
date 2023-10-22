@@ -119,6 +119,7 @@ def get_log_p_plus_log_psi_t(full_seq, params_p, params_twist, prompt_len, t, cf
     # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
     # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
     # And then we set full_seq at index 4 with the newly generated tokens
+
     log_p = jax.nn.log_softmax(p_logits[:,prompt_len + t - 1,:])
     log_psi = log_psi_all_vocab[:,prompt_len + t - 1,:]
 
@@ -436,12 +437,24 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
     log_w_t_minus_1 = log_w_t
 
+    print('hihi')
+    print(log_w_t)
+
     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
         rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t,
         prepend_tokens_for_twists, token_of_interest_as_int, proposal_is_p=proposal_is_p,
         huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample,
         tempered_twist=tempered_twist, beta_prop=beta_prop
     )
+
+    # # TODO OCT 21 REMOVE LATER
+    # p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
+    #     full_seq, params_p, params_twist, cfg_p, cfg_twist,
+    #     prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model)
+    # print(log_psi_all_vocab)
+    # print(log_psi_all_vocab[:, prompt_len + t - 1:])
+    # print(log_psi_all_vocab[:, prompt_len + t - 1:].max(axis=-1))
+    # 1/0
 
     log_p_theta_t_eval = log_p_eval_of_new_seqs
 
@@ -501,19 +514,21 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
     log_w_t = log_w_t_minus_1 + log_alpha_t
 
-    # print(full_seq)
-    # print(log_gamma_1_to_t_eval)
-    # print(log_gamma_1_to_t_minus_1_eval)
-    # print(normalized_log_q_t)
-    # print(log_w_t)
-    # print(log_w_t_minus_1)
+    print(full_seq)
+    print(log_p_theta_1_to_t_eval)
+    print(log_r_psi_t_eval)
+    print(log_gamma_1_to_t_eval)
+    print(log_gamma_1_to_t_minus_1_eval)
+    print(normalized_log_q_t)
+    print(log_w_t)
+    print(log_w_t_minus_1)
 
     log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1) # Note: instead of taking average 1/K (sum of wts) / (1/K (sum of wts at last time step)), the 1/K cancel which is why just using the sum over the sum is totally fine
     # This is following the SIXO formulation which per my understanding is the correct one.
 
     log_z_hat_t = log_z_hat_t + log_z_over_z
 
-    # print(log_z_hat_t)
+    print(log_z_hat_t)
     # 1/0
 
     log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval
@@ -536,6 +551,13 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
             log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval.at[1:].set(log_r_psi_t_eval[a_t])
 
+            print("true posterior sample stuff")
+            print(full_seq)
+            print(log_gamma_1_to_t_eval)
+            print(log_gamma_1_to_t_minus_1_eval)
+            print(normalized_log_q_t)
+            print(log_w_t)
+            print(log_w_t_minus_1)
 
         else:
             rng_key, subkey = jax.random.split(rng_key)
@@ -778,7 +800,93 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     return (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_r_psi_t_eval_w_potential_resample), full_seq_based_on_true_twist, full_seq_based_on_learned_twist
 
 
+# Debug version, use only for debugging
+def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
+            n_smc_samples, get_intermediate_sample_history_based_on_learned_twists=False,
+            prepend_tokens_for_twists=False, token_of_interest_as_int=None,
+            resample=True, true_posterior_sample=None, proposal_is_p=False,
+            huggingface_model=None, resample_for_log_psi_t_eval_list=False,
+                    no_final_resample=False, tempered_twist=False, beta_prop=None):
+    # print("SMC TIME")
+    # start = time.time()
 
+    prompt_len = prompt.shape[-1]
+
+    log_z_hat_t = 0.
+    log_w_t = jnp.zeros((n_smc_samples,))
+    log_gamma_1_to_t_eval = jnp.zeros((n_smc_samples,))
+    log_p_theta_1_to_t_eval = jnp.zeros((n_smc_samples,))
+
+    batch_prompt = jnp.full((n_smc_samples, prompt.shape[0]), prompt)
+    output = jnp.zeros((n_smc_samples, output_len), dtype=jnp.int32)
+    full_seq = jnp.concatenate((batch_prompt, output), axis=1)
+
+    carry = (
+    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
+    output_len, params_p, params_twist, prompt_len, log_z_hat_t)
+
+    full_seq_list = []
+    log_w_t_list = []
+    log_psi_t_eval_list = []
+
+    for t in range(output_len - 1):
+        carry, (full_seq, log_w_t, log_psi_t_eval) =\
+            partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist,
+                prepend_tokens_for_twists=prepend_tokens_for_twists,
+                resample=resample,
+                token_of_interest_as_int=token_of_interest_as_int,
+                true_posterior_sample=true_posterior_sample,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model,
+                resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
+                tempered_twist=tempered_twist, beta_prop=beta_prop)(carry, t)
+        full_seq_list.append(full_seq)
+        log_w_t_list.append(log_w_t)
+        log_psi_t_eval_list.append(log_psi_t_eval)
+
+    full_seq_list = jnp.stack(full_seq_list)
+    log_w_t_list = jnp.stack(log_w_t_list)
+    log_psi_t_eval_list = jnp.stack(log_psi_t_eval_list)
+
+    # args become traced after passed through scan? Yes. So it's important not to
+    # update the cfg_p and cfg_twist; use the original non-traced args. Otherwise you get
+    # "Non-hashable static arguments are not supported" ValueError
+    # The functools.partial approach I used later on to pass cfg outside of the carry
+    # is another, possibly better, approach to avoid this problem too.
+    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
+    output_len, params_p, params_twist, prompt_len, log_z_hat_t = carry
+
+    # print(time.time() - start)
+    # start = time.time()
+    # print("SMC JITTED PART FINISHED")
+
+    resample_for_final = resample
+    if no_final_resample:
+        resample_for_final = False
+
+    (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_learned_psi_T_eval), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = \
+        smc_scan_iter_final(
+        rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
+        output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
+        prepend_tokens_for_twists, token_of_interest_as_int, resample_for_final, true_posterior_sample, proposal_is_p,
+        huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
+        tempered_twist=tempered_twist, beta_prop=beta_prop)
+
+    # print(time.time() - start)
+    # start = time.time()
+
+    full_seq_list = jnp.concatenate((full_seq_list, full_seq_based_on_learned_twist[None, :, :]))
+
+    log_w_t_list = jnp.concatenate((log_w_t_list, log_w_t_based_on_learned_twist[None, :]))
+
+    log_psi_t_eval_list = jnp.concatenate((log_psi_t_eval_list, log_learned_psi_T_eval[None, :]))
+
+    # print(time.time() - start)
+
+    if get_intermediate_sample_history_based_on_learned_twists:
+        return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list)
+
+    return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist
 
 
 
@@ -1246,6 +1354,12 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                        tempered_twist=tempered_twist, beta_prop=beta_prop)
     elif smc_procedure_type == "partial_jit":
         return smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                       output_len, n_smc_samples, get_intermediate_sample_history_based_on_learned_twists,
+                       prepend_tokens_for_twists, token_of_interest_as_int, resample, posterior_sample, proposal_is_p,
+                       huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
+                               no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop)
+    elif smc_procedure_type == "debug":
+        return smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                        output_len, n_smc_samples, get_intermediate_sample_history_based_on_learned_twists,
                        prepend_tokens_for_twists, token_of_interest_as_int, resample, posterior_sample, proposal_is_p,
                        huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,

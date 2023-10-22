@@ -21,23 +21,31 @@ no_final_resample = True # False # Turn this off (set to false) if you want the 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int",
                                    "smc_procedure_type", "proposal_is_p", "huggingface_model",
-                                   "tempered_twist", "beta_prop"])
+                                   "tempered_twist", "beta_prop", "mixed_p_q_sample"])
 def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                    output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None,
-                   proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None):
+                   proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None, mixed_p_q_sample=False):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
-    (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
-        sk1, prompt, cfg_p, params_p, cfg_twist,
-        params_twist, log_true_final_twist, output_len, n_twist,
-        smc_procedure_type=smc_procedure_type,
-        prepend_tokens_for_twists=prepend_tokens_for_twists,
-        token_of_interest_as_int=token_of_interest_as_int,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop)
-    prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
 
+    if mixed_p_q_sample:
+        rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_log_w_t_sigma_samples = \
+            get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                        output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int,
+                       proposal_is_p, huggingface_model, tempered_twist, beta_prop)
+    else:
+        (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
+            sk1, prompt, cfg_p, params_p, cfg_twist,
+            params_twist, log_true_final_twist, output_len, n_twist,
+            smc_procedure_type=smc_procedure_type,
+            prepend_tokens_for_twists=prepend_tokens_for_twists,
+            token_of_interest_as_int=token_of_interest_as_int,
+            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+            no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop)
+        normalized_log_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
+
+    prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
     # l_dre_old = 0.
     #
     # scan_over = jnp.arange(output_len)
@@ -62,7 +70,6 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
         prepend_tokens_for_twists,
         token_of_interest_as_int, huggingface_model)
 
-    normalized_log_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
 
     l_dre = jnp.dot(jax.nn.log_sigmoid(log_psi_on_truncated_sigma_samples).mean(axis=1), normalized_log_w_t_sigma_samples) \
             + jnp.log(1 - jax.nn.sigmoid(log_psi_on_p_samples)).mean()
@@ -108,7 +115,7 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type,
                  token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
-                 tempered_twist=False, beta_prop=None
+                 tempered_twist=False, beta_prop=None, mixed_p_q_sample=False
                  ):
 
     # print("STARTING GET L EBM UPDATE")
@@ -116,21 +123,26 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
-    (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
-        sk1, prompt, cfg_p, params_p, cfg_twist,
-        params_twist, log_true_final_twist, output_len, n_twist,
-        smc_procedure_type=smc_procedure_type,
-        prepend_tokens_for_twists=prepend_tokens_for_twists,
-        token_of_interest_as_int=token_of_interest_as_int,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        resample=True, no_final_resample=no_final_resample,
-        tempered_twist=tempered_twist, beta_prop=beta_prop)
-    # print("First SMC done")
-    # print(time.time() - new_start)
-    # new_start = time.time()
 
-    # l_ebm = 0.
-    normalized_log_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
+    if mixed_p_q_sample:
+        rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_log_w_t_sigma_samples = \
+            get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                        output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int,
+                       proposal_is_p, huggingface_model, tempered_twist, beta_prop)
+    else:
+        (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
+            sk1, prompt, cfg_p, params_p, cfg_twist,
+            params_twist, log_true_final_twist, output_len, n_twist,
+            smc_procedure_type=smc_procedure_type,
+            prepend_tokens_for_twists=prepend_tokens_for_twists,
+            token_of_interest_as_int=token_of_interest_as_int,
+            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+            resample=True, no_final_resample=no_final_resample,
+            tempered_twist=tempered_twist, beta_prop=beta_prop)
+        # print("First SMC done")
+        # print(time.time() - new_start)
+        # new_start = time.time()
+        normalized_log_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
         prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
@@ -196,7 +208,7 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
 get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-    "huggingface_model", "tempered_twist", "beta_prop"])(get_l_ebm_ml)
+    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample"])(get_l_ebm_ml)
 
 
 # # This is the EBM Maximum Likelihood approach, but with resampling on the proposal distribution.
@@ -252,6 +264,69 @@ get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
 #     return carry, new_seq
 
 
+# 50/50 split on samples from q (non-resampled) and p. Also provides weights based on sigma_tilde if you want to either resample
+# or use those weights in some weighted expectation which approximates draws from sigma.
+def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                        output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int=None,
+                       proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None):
+    prompt_len = prompt.shape[-1]
+
+    rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
+    assert not tempered_twist
+
+    (log_w_t_sigma_samples, _, _), q_samples, (
+        intermediate_twist_samples_hist,
+        intermediate_log_w_t_hist) = smc_procedure(
+        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        log_true_final_twist, output_len, n_twist // 2,
+        smc_procedure_type=smc_procedure_type,
+        get_intermediate_sample_history_based_on_learned_twists=True,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        token_of_interest_as_int=token_of_interest_as_int,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+        resample=False, no_final_resample=no_final_resample,
+        tempered_twist=tempered_twist, beta_prop=beta_prop
+    )
+
+    p_samples = stochastic_transformer_sample(
+        sk1, cfg_p, params_p, prompt, output_len,
+        n_twist // 2, huggingface_model=huggingface_model)
+    # p_evals = jnp.transpose(p_evals)
+
+    combined_seqs = jnp.concatenate((p_samples, q_samples), axis=0)
+    # log_p_eval = evaluate_log_p_selected_tokens(combined_seqs, prompt_len, cfg_p, params_p, huggingface_model).sum(axis=1)
+    log_p_eval = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p,
+                                             prompt_len, output_len,
+                                             huggingface_model=huggingface_model)
+
+    log_q_eval = evaluate_normalized_log_q_1_to_t(combined_seqs, cfg_p,
+                                                  params_p, cfg_twist,
+                                                  params_twist,
+                                                  prompt_len,
+                                                  prepend_tokens_for_twists,
+                                                  token_of_interest_as_int,
+                                                  huggingface_model)  # No tempered twist for this evaluation
+    mixture_prob_eval = 1. / 2. * (jnp.exp(log_p_eval) + jnp.exp(
+        log_q_eval))  # 50/50 mixture of the two distributions, so for the density, just take 50% prob of each
+    mixture_log_prob_eval = jnp.log(mixture_prob_eval)
+
+    log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(combined_seqs,
+                                                              cfg_p,
+                                                              params_p,
+                                                              prompt_len,
+                                                              output_len,
+                                                              huggingface_model=huggingface_model) \
+                                  + evaluate_log_phi_final(combined_seqs,
+                                                           log_true_final_twist)
+    log_w_t_tilde_sigma_over_q_mix = log_unnormalized_sigma_vals - mixture_log_prob_eval
+
+    # print(log_w_t_tilde_sigma_over_q_mix)
+    normalized_log_w_t_sigma_samples = jax.nn.softmax(
+        jax.lax.stop_gradient(log_w_t_tilde_sigma_over_q_mix))
+    # print(normalized_log_w_t_sigma_samples)
+
+    return rng_key, combined_seqs, normalized_log_w_t_sigma_samples
+
 # This is Rob's approach
 # for t = 1 to T: grad = E_sigma(s_1:t-1) [ E_sigma(s_t|s_1:t-1)[grad log psi (s_1:t)] - E_q(s_t|s_1:t-1)[grad log psi (s_1:t)]  ]
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
@@ -265,55 +340,10 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
     if mixed_p_q_sample:
-        assert not tempered_twist
-
-        (log_w_t_sigma_samples, _, _), q_samples, (
-        intermediate_twist_samples_hist,
-        intermediate_log_w_t_hist) = smc_procedure(
-            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-            log_true_final_twist, output_len, n_twist // 2,
-            smc_procedure_type=smc_procedure_type,
-            get_intermediate_sample_history_based_on_learned_twists=True,
-            prepend_tokens_for_twists=prepend_tokens_for_twists,
-            token_of_interest_as_int=token_of_interest_as_int,
-            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-            resample=False, no_final_resample=no_final_resample,
-            tempered_twist=tempered_twist, beta_prop=beta_prop
-        )
-
-        p_samples = stochastic_transformer_sample(
-            sk1, cfg_p, params_p, prompt, output_len,
-            n_twist // 2, huggingface_model=huggingface_model)
-        # p_evals = jnp.transpose(p_evals)
-
-        combined_seqs = jnp.concatenate((p_samples, q_samples), axis=0)
-        # log_p_eval = evaluate_log_p_selected_tokens(combined_seqs, prompt_len, cfg_p, params_p, huggingface_model).sum(axis=1)
-        log_p_eval = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
-
-        log_q_eval = evaluate_normalized_log_q_1_to_t(combined_seqs, cfg_p, params_p, cfg_twist, params_twist,
-                                         prompt_len, prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model) # No tempered twist for this evaluation
-        mixture_prob_eval = 1./2. * (jnp.exp(log_p_eval) + jnp.exp(log_q_eval)) # 50/50 mixture of the two distributions, so for the density, just take 50% prob of each
-        mixture_log_prob_eval = jnp.log(mixture_prob_eval)
-
-        log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(combined_seqs,
-                                                                  cfg_p,
-                                                                  params_p,
-                                                                  prompt_len,
-                                                                  output_len,
-                                                                  huggingface_model=huggingface_model) \
-                                      + evaluate_log_phi_final(combined_seqs,
-                                                               log_true_final_twist)
-        log_w_t_tilde_sigma_over_q_mix = log_unnormalized_sigma_vals - mixture_log_prob_eval
-
-
-        # print(log_w_t_tilde_sigma_over_q_mix)
-        normalized_log_w_t_sigma_samples = jax.nn.softmax(
-            jax.lax.stop_gradient(log_w_t_tilde_sigma_over_q_mix))
-        print(normalized_log_w_t_sigma_samples)
-
-        prompt_w_sigma_sample_s_1_to_t = combined_seqs # Remember, weighted using the log weights above, so if you had infinite particles these are sigma samples
-
-
+        rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_log_w_t_sigma_samples = \
+            get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                        output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type, token_of_interest_as_int,
+                       proposal_is_p, huggingface_model, tempered_twist, beta_prop)
 
     else:
         # The first part is the same as Roger's/EBM-ML approach; the first term is going to be the same

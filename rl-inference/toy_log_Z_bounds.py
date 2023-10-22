@@ -116,6 +116,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
         # elif self.twist_learn_type == "ebm_q_rsmp":
         #     dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=5)
+        elif self.twist_learn_type == "ebm_mixed_p_q":
+            dre_grad_fn = jax.grad(partial(get_l_ebm_ml, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
@@ -144,6 +146,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=5)
         elif self.twist_learn_type == "sixo":
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
+        elif self.twist_learn_type == "sixo_mixed_p_q":
+            dre_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "analytic_mse_rel":
             dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
                                    argnums=7)
@@ -1114,6 +1118,12 @@ class TestClass:
         self._test_twist_learning(twist_learn_type="ebm",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
+
+    def test_p_tok_ebm_mixed_p_q(self):
+        self._test_twist_learning(twist_learn_type="ebm_mixed_p_q",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003)
+
     # def test_p_tok_ebm2(self):
     #     self._test_twist_learning(twist_learn_type="ebm",
     #                               rm_type=self.rm_type_to_test,
@@ -1138,6 +1148,12 @@ class TestClass:
         self._test_twist_learning(twist_learn_type="sixo",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
+
+    def test_p_tok_sixo_mixed_p_q(self):
+        self._test_twist_learning(twist_learn_type="sixo_mixed_p_q",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003)
+
     # def test_p_tok_sixo2(self):
     #     self._test_twist_learning(twist_learn_type="sixo",
     #                               rm_type=self.rm_type_to_test,
@@ -1877,6 +1893,46 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                              get_true_posterior_samples=False)
         log_true_final_twist = log_true_final_twists[0]
 
+
+        n_test_smc_samples = 256
+        rng_key, sk_smc = jax.random.split(rng_key)
+        (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list) = smc_procedure(
+            sk_smc, prompt, cfg_p, params_p,
+            cfg_twist, params_twist,
+            log_true_final_twist,
+            output_len,
+            n_test_smc_samples,
+            smc_procedure_type="debug",
+            n_vocab=n_vocab,
+            prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+            get_intermediate_sample_history_based_on_learned_twists=True,
+            proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+
+        smc_lower_bound_estimate = log_z_hat_t
+
+        print(smc_lower_bound_estimate)
+        print(full_seq_list)
+        print(log_w_t_list)
+        1/0
+
+        posterior_sample = jnp.array([[2437, 460, 314, 8711, 422, 257, 3650, 36195, 353, 30]], dtype=jnp.int32)
+        rng_key, sk_smc = jax.random.split(rng_key)
+        smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
+                                                prompt, cfg_p, params_p,
+                                                cfg_twist, params_twist,
+                                                log_true_final_twist,
+                                                output_len,
+                                                n_test_smc_samples,
+                                                n_vocab,
+                                                smc_procedure_type="debug",
+                                                prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                                                proposal_is_p=args.proposal_is_p,
+                                                huggingface_model=huggingface_model)
+
+        print(smc_upper_bound_estimate)
+        1/0
+
+
         # _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
         #                            cfg_twist, params_twist,
         #                            log_true_final_twist,
@@ -1894,70 +1950,70 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         # print(log_w_ts)
         # print(log_w_ts.mean())
 
-        _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
-                                       cfg_twist, params_twist,
-                                       log_true_final_twist,
-                                       args.output_len,
-                                       args.n_test_smc_samples,
-                                       smc_procedure_type="jit",
-                                       n_vocab=args.n_vocab,
-                                       proposal_is_p=args.proposal_is_p,
-                                       huggingface_model=huggingface_model,
-                                       tempered_twist=True,
-                                       beta_prop=0.) # p samples
-        print(smc_samples)
-        log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
-                                 cfg_twist, params_twist, args.output_len,
-                                 log_true_final_twist,
-                                 prepend_tokens_for_twists=False,
-                                 token_of_interest_as_int=None,
-                                 proposal_is_p=args.proposal_is_p,
-                                 huggingface_model=huggingface_model)
-        print(log_w_ts)
-        print(log_w_ts.mean())
-        _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
-                                       cfg_twist, params_twist,
-                                       log_true_final_twist,
-                                       args.output_len,
-                                       args.n_test_smc_samples,
-                                       smc_procedure_type="jit",
-                                       n_vocab=args.n_vocab,
-                                       proposal_is_p=args.proposal_is_p,
-                                       huggingface_model=huggingface_model,
-                                       tempered_twist=True,
-                                       beta_prop=0.3)
-        print(smc_samples)
-        log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
-                                 cfg_twist, params_twist, args.output_len,
-                                 log_true_final_twist,
-                                 prepend_tokens_for_twists=False,
-                                 token_of_interest_as_int=None,
-                                 proposal_is_p=args.proposal_is_p,
-                                 huggingface_model=huggingface_model)
-        print(log_w_ts)
-        print(log_w_ts.mean())
-
-        _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
-                                       cfg_twist, params_twist,
-                                       log_true_final_twist,
-                                       args.output_len,
-                                       args.n_test_smc_samples,
-                                       smc_procedure_type="jit",
-                                       n_vocab=args.n_vocab,
-                                       proposal_is_p=args.proposal_is_p,
-                                       huggingface_model=huggingface_model,
-                                       tempered_twist=True,
-                                       beta_prop=1.)
-        print(smc_samples)
-        log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
-                                 cfg_twist, params_twist, args.output_len,
-                                 log_true_final_twist,
-                                 prepend_tokens_for_twists=False,
-                                 token_of_interest_as_int=None,
-                                 proposal_is_p=args.proposal_is_p,
-                                 huggingface_model=huggingface_model)
-        print(log_w_ts)
-        print(log_w_ts.mean())
+        # _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
+        #                                cfg_twist, params_twist,
+        #                                log_true_final_twist,
+        #                                args.output_len,
+        #                                args.n_test_smc_samples,
+        #                                smc_procedure_type="jit",
+        #                                n_vocab=args.n_vocab,
+        #                                proposal_is_p=args.proposal_is_p,
+        #                                huggingface_model=huggingface_model,
+        #                                tempered_twist=True,
+        #                                beta_prop=0.) # p samples
+        # print(smc_samples)
+        # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
+        #                          cfg_twist, params_twist, args.output_len,
+        #                          log_true_final_twist,
+        #                          prepend_tokens_for_twists=False,
+        #                          token_of_interest_as_int=None,
+        #                          proposal_is_p=args.proposal_is_p,
+        #                          huggingface_model=huggingface_model)
+        # print(log_w_ts)
+        # print(log_w_ts.mean())
+        # _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
+        #                                cfg_twist, params_twist,
+        #                                log_true_final_twist,
+        #                                args.output_len,
+        #                                args.n_test_smc_samples,
+        #                                smc_procedure_type="jit",
+        #                                n_vocab=args.n_vocab,
+        #                                proposal_is_p=args.proposal_is_p,
+        #                                huggingface_model=huggingface_model,
+        #                                tempered_twist=True,
+        #                                beta_prop=0.3)
+        # print(smc_samples)
+        # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
+        #                          cfg_twist, params_twist, args.output_len,
+        #                          log_true_final_twist,
+        #                          prepend_tokens_for_twists=False,
+        #                          token_of_interest_as_int=None,
+        #                          proposal_is_p=args.proposal_is_p,
+        #                          huggingface_model=huggingface_model)
+        # print(log_w_ts)
+        # print(log_w_ts.mean())
+        #
+        # _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
+        #                                cfg_twist, params_twist,
+        #                                log_true_final_twist,
+        #                                args.output_len,
+        #                                args.n_test_smc_samples,
+        #                                smc_procedure_type="jit",
+        #                                n_vocab=args.n_vocab,
+        #                                proposal_is_p=args.proposal_is_p,
+        #                                huggingface_model=huggingface_model,
+        #                                tempered_twist=True,
+        #                                beta_prop=1.)
+        # print(smc_samples)
+        # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
+        #                          cfg_twist, params_twist, args.output_len,
+        #                          log_true_final_twist,
+        #                          prepend_tokens_for_twists=False,
+        #                          token_of_interest_as_int=None,
+        #                          proposal_is_p=args.proposal_is_p,
+        #                          huggingface_model=huggingface_model)
+        # print(log_w_ts)
+        # print(log_w_ts.mean())
         1/0
 
     toxicityModel = None
@@ -2746,12 +2802,12 @@ if __name__ == "__main__":
                         help="Num of tokens in vocab")
 
     parser.add_argument("--twist_learn_type", type=str, default="ebm",
-                        choices=["ebm", "ebm_partial_jit", # partial jit only for testing
+                        choices=["ebm", "ebm_partial_jit", "ebm_mixed_p_q", # partial jit only for testing
                                  # "ebm_q_rsmp",
                                  "one_total_kl", "one_total_kl_mixed_p_q",
                                  "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                                  "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc",  "sixo"])
+                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc",  "sixo", "sixo_mixed_p_q"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=0)
