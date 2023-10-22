@@ -37,7 +37,7 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     build_only_contains_token_twists, build_contains_token_eps_twists,\
     reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
     build_toxicity_threshold_twists, build_p_of_continuation_twists
-from losses import get_l_ebm_ml, get_l_ebm_ml_jit, \
+from losses import get_l_ebm_ml_partial_jit, get_l_ebm_ml_jit, \
     get_l_one_total_kl, get_twist_loss_rl_based, get_l_dre_sixo
 
 # Update the twists, update the whole framework for the Bayesian thing.
@@ -107,17 +107,17 @@ class ExperimentConfig:
     def _get_dre_grad_fn(self):
         if self.rm_type == "toxicity_threshold":
             assert self.twist_learn_type == "ebm" or self.twist_learn_type == "ebm_partial_jit" # Others not yet implemented
-            dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
+            dre_grad_fn = jax.grad(get_l_ebm_ml_partial_jit, argnums=5)
             return dre_grad_fn
 
         if self.twist_learn_type == "ebm":
             dre_grad_fn = jax.grad(get_l_ebm_ml_jit, argnums=5)
         elif self.twist_learn_type == "ebm_partial_jit":
-            dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
+            dre_grad_fn = jax.grad(get_l_ebm_ml_partial_jit, argnums=5)
         # elif self.twist_learn_type == "ebm_q_rsmp":
         #     dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=5)
         elif self.twist_learn_type == "ebm_mixed_p_q":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_ml, mixed_p_q_sample=True), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":

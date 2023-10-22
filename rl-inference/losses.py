@@ -112,7 +112,7 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 
 # JITTING IS DONE SEPARATELY BELOW
 # This is the EBM Maximum Likelihood approach (previously called Roger's approach).
-def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def get_l_ebm_ml_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, smc_procedure_type,
                  token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
                  tempered_twist=False, beta_prop=None, mixed_p_q_sample=False
@@ -208,7 +208,7 @@ def get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_
 get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample"])(get_l_ebm_ml)
+    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample"])(get_l_ebm_ml_partial_jit)
 
 
 # # This is the EBM Maximum Likelihood approach, but with resampling on the proposal distribution.
