@@ -122,6 +122,10 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
             dre_grad_fn = jax.grad(partial(get_l_one_total_kl, mixed_p_q_sample=True), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_sample":
+            dre_grad_fn = jax.grad(partial(get_l_one_total_kl, exact_expectation=False), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_sample_mixed_p_q":
+            dre_grad_fn = jax.grad(partial(get_l_one_total_kl, mixed_p_q_sample=True, exact_expectation=False), argnums=5)
         elif self.twist_learn_type == "rl_p_sq":
             dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_q_sq":
@@ -1101,6 +1105,15 @@ class TestClass:
         self._test_twist_learning(twist_learn_type="one_total_kl_mixed_p_q",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
+
+    def test_p_tok_rob_sample(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl_sample",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003)
+    def test_p_tok_rob_sample_mixed(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl_sample_mixed_p_q",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003)
     # Already worked well
     def test_p_tok_rlp(self):
         self._test_twist_learning(twist_learn_type="rl_p_lsq",
@@ -1136,14 +1149,7 @@ class TestClass:
         self._test_twist_learning(twist_learn_type="one_total_kl",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
-    # def test_p_tok_rob2(self):
-    #     self._test_twist_learning(twist_learn_type="one_total_kl",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0005)
-    # def test_p_tok_rob3(self):
-    #     self._test_twist_learning(twist_learn_type="one_total_kl",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.001)
+
     def test_p_tok_sixo(self):
         self._test_twist_learning(twist_learn_type="sixo",
                                   rm_type=self.rm_type_to_test,
@@ -1894,7 +1900,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         log_true_final_twist = log_true_final_twists[0]
 
 
-        n_test_smc_samples = 256
+        n_test_smc_samples = 16
         rng_key, sk_smc = jax.random.split(rng_key)
         (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list) = smc_procedure(
             sk_smc, prompt, cfg_p, params_p,
@@ -1913,9 +1919,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         print(smc_lower_bound_estimate)
         print(full_seq_list)
         print(log_w_t_list)
-        1/0
 
-        posterior_sample = jnp.array([[2437, 460, 314, 8711, 422, 257, 3650, 36195, 353, 30]], dtype=jnp.int32)
+        posterior_sample = jnp.array([2437, 460, 314, 8711, 422, 257, 3650, 36195, 353, 30], dtype=jnp.int32)
         rng_key, sk_smc = jax.random.split(rng_key)
         smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
                                                 prompt, cfg_p, params_p,
@@ -2395,6 +2400,7 @@ def main():
 
         prompt_num = 0
         for prompt in jnp_prompts:
+
             if args.rm_type == "exp_beta_rew_p_continuation" and args.rejection_sample_naive:
                 rng_key, sk = jax.random.split(rng_key)
                 p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
@@ -2432,6 +2438,15 @@ def main():
             else:
                 true_posterior_samples_by_token = None
 
+            # get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist,
+            #                    params_twist, log_true_final_twist,
+            #                    args.output_len, args.n_twist,
+            #                    prepend_tokens_for_twists=False,
+            #                    smc_procedure_type=experiment_cfg.smc_procedure_type,
+            #                    token_of_interest_as_int=None,
+            #                    proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model,
+            #                    mixed_p_q_sample=False,
+            #                    exact_expectation=False)
 
             # from custom_transformer_prob_utils import smc_partial_jit
             # rng_key, sk = jax.random.split(rng_key)
@@ -2805,6 +2820,7 @@ if __name__ == "__main__":
                         choices=["ebm", "ebm_partial_jit", "ebm_mixed_p_q", # partial jit only for testing
                                  # "ebm_q_rsmp",
                                  "one_total_kl", "one_total_kl_mixed_p_q",
+                                 "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
                                  "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                                  "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
                                  "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc",  "sixo", "sixo_mixed_p_q"])

@@ -304,7 +304,6 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists, 
     # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
     return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
-
 @partial(jax.jit, static_argnames = ["cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model"])
 # Evaluate log psi_t for every t from 1 to T for the sequence seq (not including the prompt)
 def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
@@ -437,8 +436,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
     log_w_t_minus_1 = log_w_t
 
-    print('hihi')
-    print(log_w_t)
+    # print(log_w_t)
 
     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
         rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t,
@@ -447,14 +445,13 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
         tempered_twist=tempered_twist, beta_prop=beta_prop
     )
 
-    # # TODO OCT 21 REMOVE LATER
+    # REMOVE LATER
     # p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
     #     full_seq, params_p, params_twist, cfg_p, cfg_twist,
     #     prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model)
     # print(log_psi_all_vocab)
     # print(log_psi_all_vocab[:, prompt_len + t - 1:])
     # print(log_psi_all_vocab[:, prompt_len + t - 1:].max(axis=-1))
-    # 1/0
 
     log_p_theta_t_eval = log_p_eval_of_new_seqs
 
@@ -514,22 +511,28 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
     log_w_t = log_w_t_minus_1 + log_alpha_t
 
-    print(full_seq)
-    print(log_p_theta_1_to_t_eval)
-    print(log_r_psi_t_eval)
-    print(log_gamma_1_to_t_eval)
-    print(log_gamma_1_to_t_minus_1_eval)
-    print(normalized_log_q_t)
-    print(log_w_t)
-    print(log_w_t_minus_1)
+    # print(full_seq)
+    # print(log_p_theta_1_to_t_eval)
+    # print(log_r_psi_t_eval)
+    # print(log_gamma_1_to_t_eval)
+    # print(log_gamma_1_to_t_minus_1_eval)
+    # print(normalized_log_q_t)
+    # print(log_w_t)
+    # print(log_w_t_minus_1)
+    # print(jnp.exp(log_w_t))
+    # print(jnp.exp(log_w_t_minus_1))
+    # print(jax.nn.logsumexp(log_w_t))
+    # print(jax.nn.logsumexp(log_w_t_minus_1))
 
     log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1) # Note: instead of taking average 1/K (sum of wts) / (1/K (sum of wts at last time step)), the 1/K cancel which is why just using the sum over the sum is totally fine
     # This is following the SIXO formulation which per my understanding is the correct one.
 
     log_z_hat_t = log_z_hat_t + log_z_over_z
 
-    print(log_z_hat_t)
-    # 1/0
+    # print(log_z_over_z)
+    # print(log_z_hat_t)
+    # print("-----")
+
 
     log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval
 
@@ -616,8 +619,6 @@ def smc_scan_iter_final_jitted_part(
     # print(log_p_theta_1_to_t_eval)
     # print(log_phi_t_eval)
     #
-    #
-    #
     # print(log_gamma_1_to_t_eval)
     # print(log_gamma_1_to_t_minus_1_eval)
     # print(normalized_log_q_t)
@@ -636,17 +637,20 @@ def smc_scan_iter_final_jitted_part(
 
     # print(log_w_t)
     # print(log_w_t_minus_1)
+    # print(jnp.exp(log_w_t))
+    # print(jnp.exp(log_w_t_minus_1))
     # print(jax.nn.logsumexp(log_w_t))
     # print(jax.nn.logsumexp(log_w_t_minus_1))
+    # print("--SMC final iter--")
 
     log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(log_w_t_minus_1)
     # We should only ever evaluate the normalizing constants over the true final twists. Should we?
 
+    log_z_hat_t = log_z_hat_t + log_z_over_z
+
     # print(log_z_over_z)
     # print(log_z_hat_t)
-    # 1/0
-
-    log_z_hat_t = log_z_hat_t + log_z_over_z
+    # print("--SMC final iter--")
 
     # print(full_seq)
 
@@ -784,6 +788,17 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     # if use_log_true_final_twist_for_final_weight_calc:
     log_phi_t_eval = evaluate_log_phi_final(full_seq, log_true_final_twist)
     # else:
+
+    # print(log_phi_t_eval)
+    # log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_phi_t_eval
+    # log_gamma_1_to_t_eval_based_on_learned_twist = log_p_theta_1_to_t_eval + log_psi_eval_of_new_seqs
+    # log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - normalized_log_q_t
+    # print(log_gamma_1_to_t_eval)
+    # print(log_gamma_1_to_t_eval_based_on_learned_twist)
+    # print(normalized_log_q_t)
+    # print(log_alpha_t)
+    # print("remove later")
+
 
     (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t,
      log_r_psi_t_eval_w_potential_resample), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = smc_scan_iter_final_jitted_part(
