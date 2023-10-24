@@ -14,7 +14,7 @@ from custom_transformer import linear_init_normal, linear
 
 
 class CustomLMWithTwistHead:
-    def __init__(self, key, model_name, output_size=-1):
+    def __init__(self, key, model_name, output_size=-1, softmax_twist=False):
         self.huggingface_model = FlaxAutoModel.from_pretrained(model_name)  # Produces embeddings of d_model size
         if output_size == -1:
             output_size, d_model = self.huggingface_model._params['wte']['embedding'].shape
@@ -23,6 +23,8 @@ class CustomLMWithTwistHead:
         # print(output_size)
         # print(d_model)
         key, self.twist_head_params = linear_init_normal(key, d_model, output_size, d_model + output_size)
+
+        self.softmax_twist = softmax_twist
 
     def __call__(self, ret="both", train=False, params_twist_head=None, hface_model_params=None, **kwargs):
         # Why is one layer used for the head in LMs? Why not more? I suppose the idea is that
@@ -46,10 +48,14 @@ class CustomLMWithTwistHead:
             return model_logits
         elif ret == "twist":
             model_log_psi = linear(params_twist_head, embeddings)
+            if self.softmax_twist:
+                model_log_psi = jax.nn.softmax(model_log_psi, axis=-1)
             return model_log_psi
         else:
             model_logits = embeddings @ jnp.transpose(hface_model_params['wte']['embedding'])
             model_log_psi = linear(params_twist_head, embeddings)
+            if self.softmax_twist:
+                model_log_psi = jax.nn.softmax(model_log_psi, axis=-1)
             return model_logits, model_log_psi
 
 
