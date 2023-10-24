@@ -49,13 +49,13 @@ class CustomLMWithTwistHead:
         elif ret == "twist":
             model_log_psi = linear(params_twist_head, embeddings)
             if self.softmax_twist:
-                model_log_psi = jax.nn.softmax(model_log_psi, axis=-1)
+                model_log_psi = jax.nn.log_softmax(model_log_psi, axis=-1)
             return model_log_psi
         else:
             model_logits = embeddings @ jnp.transpose(hface_model_params['wte']['embedding'])
             model_log_psi = linear(params_twist_head, embeddings)
             if self.softmax_twist:
-                model_log_psi = jax.nn.softmax(model_log_psi, axis=-1)
+                model_log_psi = jax.nn.log_softmax(model_log_psi, axis=-1)
             return model_logits, model_log_psi
 
 
