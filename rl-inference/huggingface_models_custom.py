@@ -26,7 +26,7 @@ class CustomLMWithTwistHead:
         if hface_nn_twist:
             self.twist_head_params = {}
             key, self.twist_head_params['linear1'] = linear_init_normal(key, d_model, d_model, d_model + d_model)
-            key, self.twist_head_params['linear2'] = linear_init_normal(key, d_model, d_model, d_model + d_model)
+            # key, self.twist_head_params['linear2'] = linear_init_normal(key, d_model, d_model, d_model + d_model)
             key, self.twist_head_params['linear3'] = linear_init_normal(key, d_model, output_size, d_model + output_size)
         else:
             key, self.twist_head_params = linear_init_normal(key, d_model, output_size, d_model + output_size)
@@ -60,8 +60,8 @@ class CustomLMWithTwistHead:
             if self.hface_nn_twist:
                 x = linear(params_twist_head['linear1'], embeddings)
                 x = jax.nn.relu(x)
-                x = linear(params_twist_head['linear2'], x)
-                x = jax.nn.relu(x)
+                # x = linear(params_twist_head['linear2'], x)
+                # x = jax.nn.relu(x)
                 x = linear(params_twist_head['linear3'], x)
                 model_log_psi = x
             else:

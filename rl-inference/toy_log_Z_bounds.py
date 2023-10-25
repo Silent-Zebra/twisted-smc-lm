@@ -1472,6 +1472,13 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     power_base = 4
     lowest_power = 0
     power_increment = 2
+
+    if args.hface_nn_twist:
+        n_samples = [16, 256]
+        power_base = 4
+        lowest_power = 2
+        power_increment = 2
+
     iwae_lbs_across_seeds = []
     iwae_ubs_across_seeds = []
     smc_lbs_across_seeds = []
