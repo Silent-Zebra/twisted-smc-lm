@@ -92,13 +92,15 @@ def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, 
                            prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
     if huggingface_model is not None: # huggingface model
         if prepend_tokens_for_twists:
-            log_psi_all_vocab = get_log_psi_all_vocab(full_seq, params_p, params_twist,
+            log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
                                   prepend_tokens_for_twists,
                                   token_of_interest_as_int,
                                                       huggingface_model)
             p_logits = get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=huggingface_model)
         else:
-            p_logits, log_psi_all_vocab = huggingface_model(input_ids=full_seq, ret="both", params_twist_head=params_twist, hface_model_params=params_p)
+            # TODO NOTE THAT if not specifying the hface_model_params, it defaults to whatever is in the huggingface_model
+            # Which is based on the CustomLMWithTwistHead.huggingface_model._params
+            p_logits, log_psi_all_vocab = huggingface_model(input_ids=full_seq, ret="both", params_twist_head=params_twist)
 
 
     else:

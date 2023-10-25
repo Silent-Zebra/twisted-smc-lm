@@ -1214,6 +1214,7 @@ class TestClass:
         beta_temp = 1.
         tempered_twist = False
         beta_prop = 1.
+        hface_nn_twist = False
 
         experiment_cfg, rng_key, huggingface_model, model, cfg_p, params_p, \
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
@@ -1226,7 +1227,8 @@ class TestClass:
             d_model, d_k, d_v, n_layers, n_heads, d_fc,
             d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist,
             d_fc_twist, indicator_pos_zero_index,
-            output_len, n_true_posterior_samples, index_of_token_contained, beta_temp)
+            output_len, n_true_posterior_samples, index_of_token_contained,
+            beta_temp, hface_nn_twist)
 
         twist_updates_per_epoch = 2000
         num_epochs = 4
@@ -1757,7 +1759,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
           beta1, beta2, weight_decay, d_model, d_k, d_v, n_layers, n_heads, d_fc,
           d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist, d_fc_twist,
           indicator_pos_zero_index, output_len, n_true_posterior_samples, index_of_token_contained,
-          beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dir=None, load_prefix=None):
+          beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dir=None,
+              load_prefix=None, hface_nn_twist=False):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
@@ -1780,7 +1783,10 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             print("Using softmax twists")
             softmax_twist = True
 
-        model = CustomLMWithTwistHead(sk, model_config, softmax_twist=softmax_twist)
+        if hface_nn_twist:
+            print("Using NN for huggingface model twist head")
+
+        model = CustomLMWithTwistHead(sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist)
         params_p = model.huggingface_model.params
         params_twist = model.twist_head_params
         cfg_p = None
@@ -2320,7 +2326,8 @@ def main():
         args.d_model_twist, args.d_k_twist, args.d_v_twist, args.n_layers_twist,
         args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
         args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
-        args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir, args.load_prefix
+        args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
+        args.load_prefix, args.hface_nn_twist
     )
 
     # from toy_reward_models import batch_check_array_contained_in_other_array
@@ -2869,6 +2876,8 @@ if __name__ == "__main__":
     parser.add_argument("--tempered_twist", action="store_true", help="Use beta_prop to temper the twists (purpose is to maintain exploration)")
     parser.add_argument("--beta_prop", type=float, help="beta used for temperature scaling ON THE q (smart twist) PROPOSAL (and q/twist weights for SMC); purpose is to serve as interp between p and q sampling; purpose of that is to maintain exploration/avoid immediately focusing on one mode of posterior. Default 1 means just sample from q (p psi), whereas 0 means sample from p only",
                         default=1.)
+
+    parser.add_argument("--hface_nn_twist", action="store_true", help="Use an NN instead of a single linear layer for the twist head for the hface model")
 
     parser.add_argument("--pretrain_final_twist", action="store_true", help="Pretrain the final twists (using RL-style squared error (in log space)) before beginning other twist training")
     parser.add_argument("--pretrain_twist_epochs", type=int, default=100, help="How many epochs to do the final twist pretraining (total number of pretraining updates = pretrain_twist_epochs * twist_updates_per_epoch)")

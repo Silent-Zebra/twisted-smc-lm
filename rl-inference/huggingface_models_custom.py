@@ -14,7 +14,7 @@ from custom_transformer import linear_init_normal, linear
 
 
 class CustomLMWithTwistHead:
-    def __init__(self, key, model_name, output_size=-1, softmax_twist=False):
+    def __init__(self, key, model_name, output_size=-1, hface_nn_twist=False, softmax_twist=False):
         self.huggingface_model = FlaxAutoModel.from_pretrained(model_name)  # Produces embeddings of d_model size
         if output_size == -1:
             output_size, d_model = self.huggingface_model._params['wte']['embedding'].shape
@@ -22,7 +22,14 @@ class CustomLMWithTwistHead:
             _, d_model = self.huggingface_model._params['wte']['embedding'].shape
         # print(output_size)
         # print(d_model)
-        key, self.twist_head_params = linear_init_normal(key, d_model, output_size, d_model + output_size)
+        self.hface_nn_twist = hface_nn_twist
+        if hface_nn_twist:
+            self.twist_head_params = {}
+            key, self.twist_head_params['linear1'] = linear_init_normal(key, d_model, d_model, d_model + d_model)
+            key, self.twist_head_params['linear2'] = linear_init_normal(key, d_model, d_model, d_model + d_model)
+            key, self.twist_head_params['linear3'] = linear_init_normal(key, d_model, output_size, d_model + output_size)
+        else:
+            key, self.twist_head_params = linear_init_normal(key, d_model, output_size, d_model + output_size)
 
         self.softmax_twist = softmax_twist
 
@@ -43,20 +50,30 @@ class CustomLMWithTwistHead:
         # embeddings have d_model shape. Attribute name of the [0] element is "last_hidden_state"
         embeddings = self.huggingface_model(train=train, params=hface_model_params, **kwargs)[0]
         embeddings = jax.lax.stop_gradient(embeddings) # do this to ensure that we only train the twist head in this setting
-        if ret == "p":
+        if ret not in ["p", "twist", "both"]:
+            raise NotImplementedError
+        if ret == "p" or ret == "both":
             model_logits = embeddings @ jnp.transpose(hface_model_params['wte']['embedding'])
-            return model_logits
-        elif ret == "twist":
-            model_log_psi = linear(params_twist_head, embeddings)
+            if ret == "p":
+                return model_logits
+        if ret == "twist" or ret == "both":
+            if self.hface_nn_twist:
+                x = linear(params_twist_head['linear1'], embeddings)
+                x = jax.nn.relu(x)
+                x = linear(params_twist_head['linear2'], x)
+                x = jax.nn.relu(x)
+                x = linear(params_twist_head['linear3'], x)
+                model_log_psi = x
+            else:
+                model_log_psi = linear(params_twist_head, embeddings)
+
             if self.softmax_twist:
                 model_log_psi = jax.nn.log_softmax(model_log_psi, axis=-1)
-            return model_log_psi
-        else:
-            model_logits = embeddings @ jnp.transpose(hface_model_params['wte']['embedding'])
-            model_log_psi = linear(params_twist_head, embeddings)
-            if self.softmax_twist:
-                model_log_psi = jax.nn.log_softmax(model_log_psi, axis=-1)
-            return model_logits, model_log_psi
+
+            if ret == "twist":
+                return model_log_psi
+            else:
+                return model_logits, model_log_psi
 
 
 # class CustomLM:
