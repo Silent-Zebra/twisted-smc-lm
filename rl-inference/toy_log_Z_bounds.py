@@ -1217,7 +1217,7 @@ class TestClass:
         hface_nn_twist = False
         separate_hface_twist_model = False
 
-        experiment_cfg, rng_key, huggingface_model, model, cfg_p, params_p, \
+        experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
         prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
         true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
@@ -2339,7 +2339,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         # TODO later change back to first index, is second now
         hist_token_index = -output_len + 1  # check the first token, to really test the effects of twists learning # Build an illustrative histogram just to check that SMC dist approximately matches true posterior. Check the marginal distribution over the token at the position of hist_token_index. -1 is just a design choice (last token)
 
-    return experiment_cfg, rng_key, huggingface_model, model, cfg_p, params_p, \
+    return experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
            cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
            prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
            true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
@@ -2350,7 +2350,7 @@ def main():
 
     start = time.time()
 
-    experiment_cfg, rng_key, huggingface_model, model, cfg_p, params_p, \
+    experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
     cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
     prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
     true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
@@ -2616,8 +2616,8 @@ def main():
 
                 # TODO OCT 26 REMOVE LATER
                 print(jnp_prompts)
-                start_x = model['p'](input_ids=jnp_prompts)
-                start_y, start_z = model['twist'](input_ids=jnp_prompts)
+                start_x = params_twist[0](input_ids=jnp_prompts) # model (embeddings)
+                start_y, start_z = params_twist[1](input_ids=jnp_prompts) # twist head
 
                 if (twist_update + 1) % print_every_twist_updates == 0:
                     print(f"Twist update: {twist_update + 1}")
@@ -2638,8 +2638,8 @@ def main():
                 #     print(f"UPDATE TIME: {update_time}")
                 #     avg_update_time += update_time
 
-                new_x = model['p'](input_ids=jnp_prompts)
-                new_y, new_z = model['twist'](input_ids=jnp_prompts)
+                new_x = params_twist[0](input_ids=jnp_prompts)
+                new_y, new_z = params_twist[1](input_ids=jnp_prompts)
                 print(jnp.abs(start_x - new_x).sum())
                 print(jnp.abs(start_y - new_y).sum())
                 print(jnp.abs(start_z - new_z).sum())
