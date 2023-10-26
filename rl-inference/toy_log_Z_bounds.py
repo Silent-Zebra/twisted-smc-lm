@@ -61,7 +61,7 @@ records_labels_list = ["True Log Z",
                        ] # TODO Sep 16 make dynamic later
 
 
-@partial(jax.jit, static_argnames=["optimizer_twist"])
+# @partial(jax.jit, static_argnames=["optimizer_twist"])
 def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist):
     # print("Updates time")
     # new_time = time.time()
@@ -2953,5 +2953,9 @@ if __name__ == "__main__":
 
     if args.huggingface:
         assert args.n_vocab == 50257
+
+    args.n_test_smc_samples = args.n_twist # Save one set of compilations for SMC procedures...
+
+    print(args.n_test_smc_samples)
 
     main()
