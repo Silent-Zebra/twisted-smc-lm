@@ -2616,8 +2616,9 @@ def main():
                 #     new_time = time.time()
 
                 # TODO OCT 26 REMOVE LATER
-                x = model['p'](jnp_prompts)
-                y = model['twist'](jnp_prompts)
+                print(jnp_prompts)
+                x = model['p'](input_ids=jnp_prompts)
+                y = model['twist'](input_ids=jnp_prompts)
                 print(x)
                 print(y)
 
@@ -2640,8 +2641,8 @@ def main():
                 #     print(f"UPDATE TIME: {update_time}")
                 #     avg_update_time += update_time
 
-                x = model['p'](jnp_prompts)
-                y = model['twist'](jnp_prompts)
+                x = model['p'](input_ids=jnp_prompts)
+                y = model['twist'](input_ids=jnp_prompts)
                 print(x)
                 print(y)
                 1/0
