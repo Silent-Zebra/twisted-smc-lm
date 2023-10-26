@@ -1806,9 +1806,9 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                                 softmax_twist=softmax_twist)
 
             params_p = model_p.huggingface_model.params
+            from custom_transformer import HashableDict
 
-            # TODO do a dict if this doesn't work?
-            params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
+            params_twist = HashableDict({'twist_body': model_twist.huggingface_model.params, 'twist_head': model_twist.twist_head_params})
 
             optimizer_twist = optax.adamw(learning_rate=lr_twist,
                                           b1=beta1,
@@ -1816,7 +1816,6 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                           weight_decay=weight_decay)
             optim_twist_state = optimizer_twist.init(params_twist)
 
-            from custom_transformer import HashableDict
             huggingface_model = HashableDict({'p': model_p.__call__, 'twist': model_twist.__call__})
 
             model = {'p': model_p, 'twist': model_twist}
