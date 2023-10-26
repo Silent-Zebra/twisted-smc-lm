@@ -35,14 +35,14 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     build_indicator_twists_all_tokens_at_position, reward_model_bad_word, \
     hist_by_token_index, build_log_p_token_last_pos_twists, build_contains_token_twists, \
     build_only_contains_token_twists, build_contains_token_eps_twists,\
-    reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
+    log_reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
     build_toxicity_threshold_twists, build_p_of_continuation_twists
 from losses import get_l_ebm_ml_partial_jit, get_l_ebm_ml_jit, \
     get_l_one_total_kl, get_twist_loss_rl_based, get_l_dre_sixo
 
 # Update the twists, update the whole framework for the Bayesian thing.
 
-from huggingface_models_custom import CustomLMWithTwistHead, get_tokenizer
+from huggingface_models_custom import CustomLMWithTwistHead, get_tokenizer, CustomLMHeadModel
 
 # from result_plots_bounds import records_labels_list
 records_labels_list = ["True Log Z",
@@ -550,17 +550,17 @@ class ExperimentConfig:
 
         if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
 
-            log_prob_cont_smc_samples = reward_model_p_of_continuation(
+            log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
                 smc_samples, cfg_p, params_p, indexes_of_continuation,
                 huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
-            log_prob_cont_proposal_samples = reward_model_p_of_continuation(
+            log_prob_cont_proposal_samples = log_reward_model_p_of_continuation(
                 intermediate_seq_list[-1], cfg_p, params_p, indexes_of_continuation,
                 huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
             p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
                                                       output_len, n_samples, huggingface_model=huggingface_model)
-            log_prob_cont_p_samples = reward_model_p_of_continuation(
+            log_prob_cont_p_samples = log_reward_model_p_of_continuation(
                 p_samples, cfg_p, params_p, indexes_of_continuation,
                 huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
@@ -1215,6 +1215,7 @@ class TestClass:
         tempered_twist = False
         beta_prop = 1.
         hface_nn_twist = False
+        separate_hface_twist_model = False
 
         experiment_cfg, rng_key, huggingface_model, model, cfg_p, params_p, \
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
@@ -1228,7 +1229,7 @@ class TestClass:
             d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist,
             d_fc_twist, indicator_pos_zero_index,
             output_len, n_true_posterior_samples, index_of_token_contained,
-            beta_temp, hface_nn_twist)
+            beta_temp, hface_nn_twist, separate_hface_twist_model)
 
         twist_updates_per_epoch = 2000
         num_epochs = 4
@@ -1767,7 +1768,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
           d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist, d_fc_twist,
           indicator_pos_zero_index, output_len, n_true_posterior_samples, index_of_token_contained,
           beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dir=None,
-              load_prefix=None, hface_nn_twist=False):
+              load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
@@ -1793,19 +1794,46 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         if hface_nn_twist:
             print("Using NN for huggingface model twist head")
 
-        model = CustomLMWithTwistHead(sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist)
-        params_p = model.huggingface_model.params
-        params_twist = model.twist_head_params
         cfg_p = None
         cfg_twist = None
         eps = 1e-8
-        optimizer_twist = optax.adamw(learning_rate=lr_twist,
-                                      b1=beta1,
-                                      b2=beta2, eps=eps,
-                                      weight_decay=weight_decay)
-        optim_twist_state = optimizer_twist.init(params_twist)
 
-        huggingface_model = model.__call__
+        if separate_hface_twist_model:
+            model_p = CustomLMHeadModel(model_config)
+
+            model_twist = CustomLMWithTwistHead(sk, model_config,
+                                                hface_nn_twist=hface_nn_twist,
+                                                softmax_twist=softmax_twist)
+
+            params_p = model_p.huggingface_model.params
+
+            # TODO do a dict if this doesn't work?
+            params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
+
+            optimizer_twist = optax.adamw(learning_rate=lr_twist,
+                                          b1=beta1,
+                                          b2=beta2, eps=eps,
+                                          weight_decay=weight_decay)
+            optim_twist_state = optimizer_twist.init(params_twist)
+
+            huggingface_model = {'p': model_p.__call__, 'twist': model_twist.__call__}
+
+            model = {'p': model_p, 'twist': model_twist}
+
+        else:
+            model = CustomLMWithTwistHead(sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist)
+            params_p = model.huggingface_model.params
+            params_twist = model.twist_head_params
+
+            optimizer_twist = optax.adamw(learning_rate=lr_twist,
+                                          b1=beta1,
+                                          b2=beta2, eps=eps,
+                                          weight_decay=weight_decay)
+            optim_twist_state = optimizer_twist.init(params_twist)
+
+            huggingface_model = model.__call__
+
+
 
 
 
@@ -2334,7 +2362,7 @@ def main():
         args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
         args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
         args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
-        args.load_prefix, args.hface_nn_twist
+        args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model
     )
 
     # from toy_reward_models import batch_check_array_contained_in_other_array
@@ -2428,7 +2456,7 @@ def main():
                                                           prompt,
                                                           args.output_len, args.n_twist,
                                                           huggingface_model=huggingface_model)
-                log_prob_cont_p_samples = reward_model_p_of_continuation(
+                log_prob_cont_p_samples = log_reward_model_p_of_continuation(
                     p_samples, cfg_p, params_p, indexes_of_continuation,
                     huggingface_model=huggingface_model,
                     return_log_w_no_temp=True)
@@ -2586,6 +2614,11 @@ def main():
                 # if twist_update != 0:
                 #     new_time = time.time()
 
+                x = model['p'](jnp_prompts)
+                y = model['twist'](jnp_prompts)
+                print(x)
+                print(y)
+
                 if (twist_update + 1) % print_every_twist_updates == 0:
                     print(f"Twist update: {twist_update + 1}")
                     print(f"TIME: {time.time() - start}", flush=True)
@@ -2604,6 +2637,12 @@ def main():
                 #     update_time = time.time() - new_time
                 #     print(f"UPDATE TIME: {update_time}")
                 #     avg_update_time += update_time
+
+                x = model['p'](jnp_prompts)
+                y = model['twist'](jnp_prompts)
+                print(x)
+                print(y)
+                1/0
             # print("AVG UPDATE TIME")
             # print(avg_update_time / (args.twist_updates_per_epoch - 1))
 
@@ -2885,6 +2924,7 @@ if __name__ == "__main__":
                         default=1.)
 
     parser.add_argument("--hface_nn_twist", action="store_true", help="Use an NN instead of a single linear layer for the twist head for the hface model")
+    parser.add_argument("--separate_hface_twist_model", action="store_true", help="Use an entirely new (fine-tuneable) twist model")
 
     parser.add_argument("--pretrain_final_twist", action="store_true", help="Pretrain the final twists (using RL-style squared error (in log space)) before beginning other twist training")
     parser.add_argument("--pretrain_twist_epochs", type=int, default=100, help="How many epochs to do the final twist pretraining (total number of pretraining updates = pretrain_twist_epochs * twist_updates_per_epoch)")

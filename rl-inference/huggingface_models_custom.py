@@ -93,16 +93,19 @@ class CustomLMWithTwistHead:
 #         embeddings = self.huggingface_model(**kwargs)[0]
 #         output = linear(self.head, embeddings)
 #         return output
-#
-# # Just so I don't have to call [0] everywhere
-# class CustomLMHeadModel:
-#     def __init__(self, model_name):
-#         self.huggingface_model = FlaxAutoModelForCausalLM.from_pretrained(model_name)
-#         # Output size is n_vocab, ie. 50257
-#
-#     def __call__(self, **kwargs):
-#         logits = self.huggingface_model(**kwargs)[0]
-#         return logits
+
+
+
+# Just so I don't have to call [0] everywhere
+class CustomLMHeadModel:
+    def __init__(self, model_name):
+        self.huggingface_model = FlaxAutoModelForCausalLM.from_pretrained(model_name)
+        # Output size is n_vocab, ie. 50257
+
+    def __call__(self, **kwargs):
+        logits = self.huggingface_model(**kwargs)[0]
+        return logits
+
 
 def get_tokenizer(model_config):
     tokenizer = AutoTokenizer.from_pretrained(model_config)

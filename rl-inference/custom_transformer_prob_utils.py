@@ -63,8 +63,11 @@ def get_all_new_seqs_single_t(seq, n_vocab):
 
 def get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=None):
     if huggingface_model is not None: # huggingface model
-        # should really be an apply_fn here...
-        p_logits = huggingface_model(input_ids=full_seq, ret="p", hface_model_params=params_p)
+        if isinstance(huggingface_model, list):
+            p_logits = huggingface_model['p'](input_ids=full_seq)
+        else:
+            # should be an apply_fn here?
+            p_logits = huggingface_model(input_ids=full_seq, ret="p", hface_model_params=params_p)
     else:
         p_logits = batch_transformer(cfg_p, params_p, full_seq)
 
@@ -74,12 +77,16 @@ def get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=None):
 def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
     # produces output of size (batch, n_vocab)
     if huggingface_model is not None: # huggingface model
-        if prepend_tokens_for_twists:
-            seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1),
-                dtype=jnp.int32) + token_of_interest_as_int, seq), axis=1)
-            return huggingface_model(input_ids=seqs_with_prepended_prompts, ret="twist", params_twist_head=params_twist)[:, 1:, :]
+        if isinstance(huggingface_model, list):
+            return huggingface_model['twist'](input_ids=seq, ret="twist", params_twist_head=params_twist)
+
         else:
-            return huggingface_model(input_ids=seq, ret="twist", params_twist_head=params_twist)
+            if prepend_tokens_for_twists:
+                seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1),
+                    dtype=jnp.int32) + token_of_interest_as_int, seq), axis=1)
+                return huggingface_model(input_ids=seqs_with_prepended_prompts, ret="twist", params_twist_head=params_twist)[:, 1:, :]
+            else:
+                return huggingface_model(input_ids=seq, ret="twist", params_twist_head=params_twist)
 
     else:
         if prepend_tokens_for_twists:
@@ -91,7 +98,7 @@ def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twist
 def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, cfg_twist,
                            prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
     if huggingface_model is not None: # huggingface model
-        if prepend_tokens_for_twists:
+        if prepend_tokens_for_twists or isinstance(huggingface_model, list):
             log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
                                   prepend_tokens_for_twists,
                                   token_of_interest_as_int,
