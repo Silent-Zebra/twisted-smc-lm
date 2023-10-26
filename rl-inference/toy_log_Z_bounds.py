@@ -1816,7 +1816,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                           weight_decay=weight_decay)
             optim_twist_state = optimizer_twist.init(params_twist)
 
-            huggingface_model = {'p': model_p.__call__, 'twist': model_twist.__call__}
+            from custom_transformer import HashableDict
+            huggingface_model = HashableDict({'p': model_p.__call__, 'twist': model_twist.__call__})
 
             model = {'p': model_p, 'twist': model_twist}
 
@@ -2614,6 +2615,7 @@ def main():
                 # if twist_update != 0:
                 #     new_time = time.time()
 
+                # TODO OCT 26 REMOVE LATER
                 x = model['p'](jnp_prompts)
                 y = model['twist'](jnp_prompts)
                 print(x)
