@@ -1474,7 +1474,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     lowest_power = 0
     power_increment = 2
 
-    if args.hface_nn_twist:
+    if args.hface_nn_twist or args.separate_hface_twist_model:
         n_samples = [256]
         power_base = 4
         lowest_power = 4
