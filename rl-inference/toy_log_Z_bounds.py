@@ -2616,8 +2616,12 @@ def main():
 
                 # TODO OCT 26 REMOVE LATER
                 print(jnp_prompts)
-                start_x = params_twist[0](input_ids=jnp_prompts) # model (embeddings)
-                start_y, start_z = params_twist[1](input_ids=jnp_prompts) # twist head
+                start_x = huggingface_model['p'](input_ids=jnp_prompts) # model (embeddings)
+                start_y, start_z = huggingface_model['twist'](
+                    input_ids=jnp_prompts, ret="both",
+                    hface_model_params=params_twist[0],
+                    params_twist_head=params_twist[1]
+                )
 
                 if (twist_update + 1) % print_every_twist_updates == 0:
                     print(f"Twist update: {twist_update + 1}")
@@ -2638,8 +2642,13 @@ def main():
                 #     print(f"UPDATE TIME: {update_time}")
                 #     avg_update_time += update_time
 
-                new_x = params_twist[0](input_ids=jnp_prompts)
-                new_y, new_z = params_twist[1](input_ids=jnp_prompts)
+                new_x = huggingface_model['p'](
+                    input_ids=jnp_prompts)  # model (embeddings)
+                new_y, new_z = huggingface_model['twist'](
+                    input_ids=jnp_prompts, ret="both",
+                    hface_model_params=params_twist[0],
+                    params_twist_head=params_twist[1]
+                )
                 print(jnp.abs(start_x - new_x).sum())
                 print(jnp.abs(start_y - new_y).sum())
                 print(jnp.abs(start_z - new_z).sum())
