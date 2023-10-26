@@ -5,8 +5,7 @@ from functools import partial
 import jax
 import time
 
-
-from custom_transformer import batch_transformer, batch_transformer_with_prepend_token_of_interest
+from custom_transformer import batch_transformer, batch_transformer_with_prepend_token_of_interest, HashableDict
 
 
 def kl_div_jax(log_p_target, log_p_curr):
@@ -63,7 +62,7 @@ def get_all_new_seqs_single_t(seq, n_vocab):
 
 def get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=None):
     if huggingface_model is not None: # huggingface model
-        if isinstance(huggingface_model, list):
+        if isinstance(huggingface_model, HashableDict):
             p_logits = huggingface_model['p'](input_ids=full_seq)
         else:
             # should be an apply_fn here?
@@ -77,7 +76,7 @@ def get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=None):
 def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
     # produces output of size (batch, n_vocab)
     if huggingface_model is not None: # huggingface model
-        if isinstance(huggingface_model, list):
+        if isinstance(huggingface_model, HashableDict):
             return huggingface_model['twist'](input_ids=seq, ret="twist", params_twist_head=params_twist)
 
         else:
@@ -98,7 +97,7 @@ def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twist
 def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, cfg_twist,
                            prepend_tokens_for_twists, token_of_interest_as_int=None, huggingface_model=None):
     if huggingface_model is not None: # huggingface model
-        if prepend_tokens_for_twists or isinstance(huggingface_model, list):
+        if prepend_tokens_for_twists or isinstance(huggingface_model, HashableDict):
             log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
                                   prepend_tokens_for_twists,
                                   token_of_interest_as_int,
