@@ -79,8 +79,8 @@ def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twist
         if isinstance(huggingface_model, HashableDict):
             return huggingface_model['twist'](
                 input_ids=seq, ret="twist",
-                params_twist_head=params_twist['twist_head'],
-                hface_model_params=params_twist['twist_body']
+                hface_model_params=params_twist[0],
+                params_twist_head=params_twist[1]
             )
 
         else:
