@@ -2616,10 +2616,8 @@ def main():
 
                 # TODO OCT 26 REMOVE LATER
                 print(jnp_prompts)
-                x = model['p'](input_ids=jnp_prompts)
-                y = model['twist'](input_ids=jnp_prompts)
-                print(x)
-                print(y)
+                start_x = model['p'](input_ids=jnp_prompts)
+                start_y, start_z = model['twist'](input_ids=jnp_prompts)
 
                 if (twist_update + 1) % print_every_twist_updates == 0:
                     print(f"Twist update: {twist_update + 1}")
@@ -2640,10 +2638,11 @@ def main():
                 #     print(f"UPDATE TIME: {update_time}")
                 #     avg_update_time += update_time
 
-                x = model['p'](input_ids=jnp_prompts)
-                y = model['twist'](input_ids=jnp_prompts)
-                print(x)
-                print(y)
+                new_x = model['p'](input_ids=jnp_prompts)
+                new_y, new_z = model['twist'](input_ids=jnp_prompts)
+                print(jnp.abs(start_x - new_x).sum())
+                print(jnp.abs(start_y - new_y).sum())
+                print(jnp.abs(start_z - new_z).sum())
                 1/0
             # print("AVG UPDATE TIME")
             # print(avg_update_time / (args.twist_updates_per_epoch - 1))
