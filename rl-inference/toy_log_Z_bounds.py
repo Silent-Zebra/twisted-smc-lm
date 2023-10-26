@@ -2614,14 +2614,13 @@ def main():
                 # if twist_update != 0:
                 #     new_time = time.time()
 
-                # TODO OCT 26 REMOVE LATER
-                print(jnp_prompts)
-                start_x = huggingface_model['p'](input_ids=jnp_prompts) # model (embeddings)
-                start_y, start_z = huggingface_model['twist'](
-                    input_ids=jnp_prompts, ret="both",
-                    hface_model_params=params_twist[0],
-                    params_twist_head=params_twist[1]
-                )
+                # print(jnp_prompts)
+                # start_x = huggingface_model['p'](input_ids=jnp_prompts) # model (embeddings)
+                # start_y, start_z = huggingface_model['twist'](
+                #     input_ids=jnp_prompts, ret="both",
+                #     hface_model_params=params_twist[0],
+                #     params_twist_head=params_twist[1]
+                # )
 
                 if (twist_update + 1) % print_every_twist_updates == 0:
                     print(f"Twist update: {twist_update + 1}")
@@ -2642,17 +2641,16 @@ def main():
                 #     print(f"UPDATE TIME: {update_time}")
                 #     avg_update_time += update_time
 
-                new_x = huggingface_model['p'](
-                    input_ids=jnp_prompts)  # model (embeddings)
-                new_y, new_z = huggingface_model['twist'](
-                    input_ids=jnp_prompts, ret="both",
-                    hface_model_params=params_twist[0],
-                    params_twist_head=params_twist[1]
-                )
-                print(jnp.abs(start_x - new_x).sum())
-                print(jnp.abs(start_y - new_y).sum())
-                print(jnp.abs(start_z - new_z).sum())
-                1/0
+                # new_x = huggingface_model['p'](
+                #     input_ids=jnp_prompts)  # model (embeddings)
+                # new_y, new_z = huggingface_model['twist'](
+                #     input_ids=jnp_prompts, ret="both",
+                #     hface_model_params=params_twist[0],
+                #     params_twist_head=params_twist[1]
+                # )
+                # print(jnp.abs(start_x - new_x).sum())
+                # print(jnp.abs(start_y - new_y).sum())
+                # print(jnp.abs(start_z - new_z).sum())
             # print("AVG UPDATE TIME")
             # print(avg_update_time / (args.twist_updates_per_epoch - 1))
 
