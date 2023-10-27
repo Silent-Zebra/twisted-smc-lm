@@ -1471,18 +1471,12 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     else:
         analytic_kl_q_sigma = -jnp.inf
 
-    # n_samples = [1, 16, 256]  # [4, 8, 16, 32, 64, 128]
-    # power_base = 4
-    # lowest_power = 0
-    # power_increment = 2
-    #
-    # if args.hface_nn_twist or args.separate_hface_twist_model:
-    #     n_samples = [16, 256]
-    #     power_base = 4
-    #     lowest_power = 4
-    #     power_increment = 2
+    n_samples = [1, 16, 256]  # [4, 8, 16, 32, 64, 128]
 
-    n_samples = [16, args.n_twist]
+    if args.hface_nn_twist or args.separate_hface_twist_model:
+        n_samples = [args.n_twist]
+
+
 
     iwae_lbs_across_seeds = []
     iwae_ubs_across_seeds = []
@@ -1723,7 +1717,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     if not huggingface_model and (true_log_z is not None):
         plt.plot(x_range, np.ones_like(x_range) * true_log_z,
                  label="True Log Z")
-    plt.xlabel(f"{power_base}^ Number of Particles")
+    # plt.xlabel(f"{power_base}^ Number of Particles")
+    plt.xlabel(f"Number of Particles")
 
     plt.legend()
     plt.savefig(f"{args.save_dir}/fig_bounds_by_samples_epoch{epoch + 1}.png")
