@@ -548,6 +548,8 @@ class ExperimentConfig:
             token_of_interest_as_int=token_of_interest_as_int,
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
+        n_samples_to_print = 10
+
         if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
 
             log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
@@ -565,9 +567,9 @@ class ExperimentConfig:
                 huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
             print("LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples")
-            print(log_prob_cont_smc_samples)
-            print(log_prob_cont_proposal_samples)
-            print(log_prob_cont_p_samples)
+            print(log_prob_cont_smc_samples[:n_samples_to_print])
+            print(log_prob_cont_proposal_samples[:n_samples_to_print])
+            print(log_prob_cont_p_samples[:n_samples_to_print])
 
             print("Averages of the above for SMC samples, proposal samples, p samples")
             print(log_prob_cont_smc_samples.mean())
@@ -580,9 +582,9 @@ class ExperimentConfig:
         if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
             # print(intermediate_seq_list[-1])
             print("INSPECTION OF SMC SAMPLES")
-            print(smc_samples[:10])
+            print(smc_samples[:n_samples_to_print])
             if huggingface_model:
-                for s in text_outputs:
+                for s in text_outputs[:n_samples_to_print]:
                     print(s)
 
         if self.rm_type == "contains_continuation":
@@ -1475,7 +1477,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     power_increment = 2
 
     if args.hface_nn_twist or args.separate_hface_twist_model:
-        n_samples = [256]
+        n_samples = [16, 256]
         power_base = 4
         lowest_power = 4
         power_increment = 2
@@ -2798,23 +2800,27 @@ def main():
     # print("---")
     # print(*records_list)
     # print("---
-    if last_ckpt_epoch != epoch:
-        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                    target=(params_twist,
-                                            optim_twist_state),
-                                    step=epoch + 1,
-                                    prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
 
-        if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
-            or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
-            for prompt_num in range(len(prompts)):
-                print(f"Prompt: {prompts[prompt_num]}")
-                records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
-                print(records_list_by_twist)
-                # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                #                             target=records_list_by_twist,
-                #                             step=epoch + 1,
-                #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
+    save_ckpt_at_end = False
+
+    if save_ckpt_at_end:
+        if last_ckpt_epoch != epoch:
+            checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                        target=(params_twist,
+                                                optim_twist_state),
+                                        step=epoch + 1,
+                                        prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
+
+            if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
+                or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
+                for prompt_num in range(len(prompts)):
+                    print(f"Prompt: {prompts[prompt_num]}")
+                    records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
+                    print(records_list_by_twist)
+                    # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                    #                             target=records_list_by_twist,
+                    #                             step=epoch + 1,
+                    #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
 
 
     end = time.time()
