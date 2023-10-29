@@ -93,6 +93,7 @@ class CustomLMWithTwistHead:
             prompt_plus_output_embeddings = self.huggingface_model(train=train, params=hface_model_params, input_ids=input_ids, **kwargs)[0]
             condition_on_embeddings = self.huggingface_model(train=train, params=hface_model_params, input_ids=condition_twist_on_tokens, **kwargs)[0]
             embeddings_p = prompt_plus_output_embeddings
+            condition_on_embeddings = condition_on_embeddings[:, -1, :] # Take the last embedding - this embeds all the information of the entire sequence of last tokens (what we want to condition on)
             condition_on_embeddings = jnp.broadcast_to(condition_on_embeddings, embeddings_p.shape)
             embeddings_twist = jnp.concatenate((prompt_plus_output_embeddings, condition_on_embeddings), axis=-1)
         else:
