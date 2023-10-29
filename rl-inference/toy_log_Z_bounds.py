@@ -36,9 +36,9 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     hist_by_token_index, build_log_p_token_last_pos_twists, build_contains_token_twists, \
     build_only_contains_token_twists, build_contains_token_eps_twists,\
     log_reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
-    build_toxicity_threshold_twists, build_p_of_continuation_twists
+    build_toxicity_threshold_twists, build_p_of_continuation_twists, build_p_of_last_tokens_twists, log_reward_model_p_of_last_tokens
 from losses import get_l_ebm_ml_partial_jit, get_l_ebm_ml_jit, \
-    get_l_one_total_kl, get_twist_loss_rl_based, get_l_dre_sixo
+    get_l_one_total_kl, get_l_rl_based, get_l_dre_sixo
 
 # Update the twists, update the whole framework for the Bayesian thing.
 
@@ -78,7 +78,7 @@ def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twis
 
 
 class ExperimentConfig:
-    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1.):
+    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
         self.beta_temp = beta_temp
@@ -90,10 +90,15 @@ class ExperimentConfig:
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
             or self.rm_type == "contains_token" or self.rm_type == "contains_token_eps":
             self.prepend_tokens_for_twists = True
-        elif self.rm_type == "only_contains_token":
-            self.prepend_tokens_for_twists = False
+        # elif self.rm_type == "only_contains_token":
+        #     self.prepend_tokens_for_twists = False
         else:
             self.prepend_tokens_for_twists = False
+
+        if self.rm_type == "p_last_tokens":
+            assert num_last_tokens_to_condition_on > 0
+        self.num_last_tokens_to_condition_on = num_last_tokens_to_condition_on
+
 
         if self.rm_type == "toxicity_threshold":
             self.smc_procedure_type = "partial_jit"
@@ -101,6 +106,7 @@ class ExperimentConfig:
             self.smc_procedure_type = "jit"
 
         self.dre_grad_fn = self._get_dre_grad_fn()
+
 
 
 
@@ -127,27 +133,27 @@ class ExperimentConfig:
         elif self.twist_learn_type == "one_total_kl_sample_mixed_p_q":
             dre_grad_fn = jax.grad(partial(get_l_one_total_kl, mixed_p_q_sample=True, exact_expectation=False), argnums=5)
         elif self.twist_learn_type == "rl_p_sq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_q_sq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q", loss_type="squared_error"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="q", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_qrsmp_sq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="qrsmp", loss_type="squared_error"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="qrsmp", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_sigma_sq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_mixed_p_q_sq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_p_lsq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="squared_error_in_log_space"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="p", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_q_lsq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_qrsmp_lsq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_sigma_lsq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error_in_log_space"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="sigma", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_mixed_p_q_lsq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_mc":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=5)
         elif self.twist_learn_type == "sixo":
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         elif self.twist_learn_type == "sixo_mixed_p_q":
@@ -159,26 +165,21 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal,
                                    argnums=7)
         elif self.twist_learn_type == "pretrain_final_twist_lsq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p",
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="p",
                                            loss_type="squared_error_in_log_space", train_final_twist_only=True), argnums=5)
         elif self.twist_learn_type == "pretrain_final_twist_sq":
-            dre_grad_fn = jax.grad(partial(get_twist_loss_rl_based, evaluate_over_samples_from="p",
+            dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="p",
                                            loss_type="squared_error", train_final_twist_only=True), argnums=5)
         else:
             raise NotImplementedError
         return dre_grad_fn
 
     def _get_rm_fn(self):
-        if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
-            or self.rm_type == "contains_token" or self.rm_type == "only_contains_token" \
-            or self.rm_type == "contains_token_eps" or self.rm_type == "exp_beta_rew_p_continuation" \
-            or self.rm_type == "contains_continuation" or self.rm_type == "toxicity_threshold"\
-            or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
-            return None
-        elif self.rm_type == "bad_word_pos":
+        if self.rm_type == "bad_word_pos":
             return reward_model_bad_word
         else:
-            raise NotImplementedError
+            return None
+
 
     def _get_batch_rm(self):
         batch_rm = batch_reward_model(reward_model_fn=self.rm_fn)
@@ -193,14 +194,23 @@ class ExperimentConfig:
                                             params_p, log_true_final_twist, cfg_twist,
                                             params_twist, self.rm_type)
         else:
+            true_sigma_samples = None
+            if self.rm_type == "p_last_tokens":
+                sk, sk2 = jax.random.split(sk)
+                p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
+                                              output_len + self.num_last_tokens_to_condition_on, n_twist,
+                                              huggingface_model=huggingface_model)
+                true_sigma_samples = p_samples[:, :-self.num_last_tokens_to_condition_on]
+                condition_twist_on_tokens = p_samples[:, -self.num_last_tokens_to_condition_on:]
             grad_params_twist = self.dre_grad_fn(
                 sk, prompt, cfg_p, params_p, cfg_twist,
                 params_twist, log_true_final_twist, output_len,
                 n_twist, smc_procedure_type=self.smc_procedure_type,
-                prepend_tokens_for_twists=prepend_tokens_for_twists,
+                prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
                 token_of_interest_as_int=token_of_interest_as_int,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                tempered_twist=tempered_twist, beta_prop=beta_prop
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                true_sigma_samples=true_sigma_samples
             )
         return grad_params_twist
 
@@ -218,7 +228,7 @@ class ExperimentConfig:
     #         output_len, cfg_p, params_p, cfg_twist,
     #         params_twist, log_true_final_twist,
     #         # Only one set of log final twists (for the token we are interested in)
-    #         prepend_tokens_for_twists=self.prepend_tokens_for_twists,
+    #         prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens,
     #         proposal_is_p=proposal_is_p,
     #         huggingface_model=huggingface_model
     #     )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
@@ -249,80 +259,8 @@ class ExperimentConfig:
                      tempered_twist, beta_prop
                      ):
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index":
-
             for i in range(len(indices_of_tokens_chosen)):
-
                 token_of_interest_as_int = indices_of_tokens_chosen[i]
-
-                # # get_log_psi_all_vocab(p_samples_for_test, cfg_twist, params_twist,
-                # #                     True, token_of_interest_as_int)
-                #
-                # true_posterior_samples = true_posterior_samples_by_token[i]
-                # posterior_sample = true_posterior_samples[0]
-                #
-                # log_z_hat_t = 0.
-                # log_w_t = jnp.zeros((args.n_test_smc_samples,))
-                # log_w_t_no_reset = jnp.zeros((args.n_test_smc_samples,))
-                # log_gamma_1_to_t_eval = jnp.zeros((args.n_test_smc_samples,))
-                # log_p_theta_1_to_t_eval = jnp.zeros((args.n_test_smc_samples,))
-                #
-                # batch_prompt = jnp.full(
-                #     (args.n_test_smc_samples, prompt.shape[0]), prompt)
-                # output = jnp.zeros((args.n_test_smc_samples, args.output_len),
-                #                    dtype=jnp.int32)
-                # full_seq = jnp.concatenate((batch_prompt, output),
-                #                            axis=1)
-                # t = 0
-                # carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, args.output_len,
-                #          params_p, params_twist, prompt_len, log_z_hat_t)
-                # carry, _ = smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist,
-                #                         prepend_tokens_for_twists=True,
-                #                         token_of_interest_as_int=token_of_interest_as_int,
-                #                         resample=True, proposal_is_p=True
-                #                         )
-                # t += 1
-                # carry, _ = smc_scan_iter_non_final(carry, t, cfg_p,
-                #                                    cfg_twist,
-                #                                    prepend_tokens_for_twists=True,
-                #                                    token_of_interest_as_int=token_of_interest_as_int,
-                #                                    resample=True, proposal_is_p=True
-                #                                    )
-                # smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, args.output_len,
-                #          cfg_p, params_p, cfg_twist, params_twist, prompt_len, True, log_true_final_twist[i], log_z_hat_t,
-                #                         prepend_tokens_for_twists=True,
-                #                         token_of_interest_as_int=token_of_interest_as_int,
-                #                         resample=True, proposal_is_p=True
-                #                         )
-                # 1/0
-
-                # smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist,
-                #                         prepend_tokens_for_twists=True,
-                #                         token_of_interest_as_int=token_of_interest_as_int,
-                #                         resample=True,
-                #                         true_posterior_sample=posterior_sample)
-                # #
-                # _, smc_samples_test = smc_procedure(sk, prompt, cfg_p,
-                #                                  params_p, cfg_twist,
-                #                                  params_twist,
-                #                                  log_true_final_twist[i], args.output_len, args.n_test_smc_samples,
-                #                                  analytic_sigma_sample=False, n_vocab=args.n_vocab,
-                #                                  get_intermediate_sample_history_based_on_learned_twists=False,
-                #                                  prepend_tokens_for_twists=True, token_of_interest_as_int=token_of_interest_as_int,)
-                # print(smc_samples_test)
-                # 1/0
-
-                # _, smc_samples_test, (a, b) = smc_procedure(sk, prompt, cfg_p,
-                #                                  params_p, cfg_twist,
-                #                                  params_twist,
-                #                                  log_true_final_twist[i], args.output_len, args.n_test_smc_samples,
-                #                                             use_log_true_final_twist_for_final_weight_calc=False,
-                #                                  analytic_sigma_sample=False, n_vocab=args.n_vocab,
-                #                                  get_intermediate_sample_history_based_on_learned_twists=True,
-                #                                  prepend_tokens_for_twists=True, token_of_interest_as_int=token_of_interest_as_int,
-                #                                  resample=False)
-                # print(a)
-                # print(b)
-
                 rng_key, sk = jax.random.split(rng_key)
                 grad_params_twist = self.get_grad_params_twist(
                     sk, prompt, self.n_vocab, n_twist,
@@ -393,12 +331,27 @@ class ExperimentConfig:
             #                                    updates_twist)
             # print("UPDATE TIME:")
             # print(time.time() - new_time)
+        elif self.rm_type == "p_last_tokens":
+            rng_key, sk = jax.random.split(rng_key)
+            grad_params_twist = self.get_grad_params_twist(
+                sk, prompt, self.n_vocab, n_twist,
+                output_len, cfg_p, params_p, cfg_twist,
+                params_twist, log_true_final_twist,
+                prepend_tokens_for_twists=self.prepend_tokens_for_twists,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop
+            )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
+            params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
+                optimizer_twist, grad_params_twist, optim_twist_state,
+                params_twist)
+
         elif self.rm_type == "only_contains_token":
             # from custom_transformer_prob_utils import get_proposal_q_sample
             # get_proposal_q_sample(rng_key, jnp.ones((7, 5), dtype=jnp.int32), cfg_p, params_p,
             #                       cfg_twist, params_twist, prompt_len,
             #                       3,
-            #                       prepend_tokens_for_twists=False,
+            #                       prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
             #                       proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model
             #                       )
             # _, smc_samples_test = smc_procedure(sk, prompt, cfg_p,
@@ -410,7 +363,7 @@ class ExperimentConfig:
             #                                     analytic_sigma_sample=False,
             #                                     n_vocab=args.n_vocab,
             #                                     get_intermediate_sample_history_based_on_learned_twists=False,
-            #                                     prepend_tokens_for_twists=False,
+            #                                     prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
             #                                     proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model
             #                                     )
             # print(smc_samples_test)
@@ -427,7 +380,7 @@ class ExperimentConfig:
             #                                         args.output_len,
             #                                         args.n_test_smc_samples,
             #                                         args.n_vocab,
-            #                                         prepend_tokens_for_twists=False,
+            #                                         prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
             #                                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
             # print(smc_upper_bound_estimate)
             # 1 / 0
@@ -458,6 +411,7 @@ class ExperimentConfig:
 
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
 
+
         return rng_key, params_twist, optim_twist_state
 
     def plot_logZ_bounds_based_on_cfg(
@@ -482,7 +436,7 @@ class ExperimentConfig:
                              log_true_final_twist[i], start,
                              hist_token_index, epoch, true_log_z, plot_over_time_list,
                              smc_procedure_type=self.smc_procedure_type,
-                             prepend_tokens_for_twists=self.prepend_tokens_for_twists,
+                             prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=self.condition_twist_on_tokens,
                              huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
                                                    )
@@ -500,7 +454,7 @@ class ExperimentConfig:
                              log_true_final_twist, start,
                              hist_token_index, epoch, true_log_z, plot_over_time_list,
                              smc_procedure_type=self.smc_procedure_type,
-                             prepend_tokens_for_twists=self.prepend_tokens_for_twists,
+                             prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=self.condition_twist_on_tokens,
                              huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
                                                    )
@@ -516,10 +470,16 @@ class ExperimentConfig:
                              log_true_final_twist, start,
                              hist_token_index, epoch, true_log_z, plot_over_time_list,
                              smc_procedure_type=self.smc_procedure_type,
-                             prepend_tokens_for_twists=self.prepend_tokens_for_twists,
+                             prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=self.condition_twist_on_tokens,
                              huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
                                                    )
+        elif args.rm_type == "p_last_tokens":
+            # TODO OCT 29 - later what I can do is pick a particular continuation of interest, e.g. "Sure, here's", and then condition the twist model on that
+            # And then inspect the UB and LB and do all the plots and whatever on that particular continuation
+            # Of course, the training is based on all the possible twists
+            # But we can just inspect that one particular one.
+            pass
         else:
             raise NotImplementedError
 
@@ -535,22 +495,20 @@ class ExperimentConfig:
 
         prompt_len = prompt.shape[-1]
 
-        _, smc_samples, (intermediate_seq_list, _) = smc_procedure(
-            sk1, prompt, cfg_p, params_p,
-            cfg_twist, params_twist,
-            log_true_final_twist,
-            output_len,
-            n_samples,
-            smc_procedure_type=self.smc_procedure_type,
-            n_vocab=self.n_vocab,
-            get_intermediate_sample_history_based_on_learned_twists=True,
-            prepend_tokens_for_twists=prepend_tokens_for_twists,
-            token_of_interest_as_int=token_of_interest_as_int,
-            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
-
         n_samples_to_print = 10
 
         if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
+
+            _, smc_samples, (intermediate_seq_list, _) = smc_procedure(
+                sk1, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                log_true_final_twist, output_len, n_samples,
+                smc_procedure_type=self.smc_procedure_type,
+                n_vocab=self.n_vocab,
+                get_intermediate_sample_history_based_on_learned_twists=True,
+                prepend_tokens_for_twists=prepend_tokens_for_twists,
+                token_of_interest_as_int=token_of_interest_as_int,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model)
 
             log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
                 smc_samples, cfg_p, params_p, indexes_of_continuation,
@@ -576,16 +534,109 @@ class ExperimentConfig:
             print(log_prob_cont_proposal_samples.mean())
             print(log_prob_cont_p_samples.mean())
 
-        if huggingface_model:
-            text_outputs = tokenizer.batch_decode(smc_samples, skip_special_tokens=True)
-
-        if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
-            # print(intermediate_seq_list[-1])
-            print("INSPECTION OF SMC SAMPLES")
-            print(smc_samples[:n_samples_to_print])
             if huggingface_model:
-                for s in text_outputs[:n_samples_to_print]:
-                    print(s)
+                text_outputs = tokenizer.batch_decode(smc_samples,
+                                                      skip_special_tokens=True)
+
+                if self.rm_type in ["exp_beta_rew_p_continuation",
+                                    "p_continuation", "hard_p_continuation",
+                                    "p_last_tokens"]:
+                    # print(intermediate_seq_list[-1])
+                    print("INSPECTION OF SMC SAMPLES")
+                    print(smc_samples[:n_samples_to_print])
+                    if huggingface_model:
+                        for s in text_outputs[:n_samples_to_print]:
+                            print(s)
+
+        elif self.rm_type == "p_last_tokens":
+            p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p,
+                                                      prompt,
+                                                      output_len + self.num_last_tokens_to_condition_on,
+                                                      n_samples,
+                                                      huggingface_model=huggingface_model)
+            true_sigma_samples = p_samples[:,:-self.num_last_tokens_to_condition_on]
+            condition_twist_on_tokens = p_samples[:,-self.num_last_tokens_to_condition_on:]
+
+            log_prob_cont_sigma_samples = log_reward_model_p_of_last_tokens(
+                p_samples, cfg_p, params_p, self.num_last_tokens_to_condition_on,
+                huggingface_model=huggingface_model, return_log_w_no_temp=True)
+
+            # TODO OCT 29
+            # And then figure out how to do the UB LB stuff... I guess just no SMC bounds, just IWAE bounds then... because we only have 1 particle per posterior anyway.
+
+            _, _, (intermediate_seq_list, _) = smc_procedure(
+                sk1, prompt, cfg_p, params_p,
+                cfg_twist, params_twist,
+                log_true_final_twist,
+                output_len,
+                n_samples,
+                smc_procedure_type=self.smc_procedure_type,
+                n_vocab=self.n_vocab,
+                get_intermediate_sample_history_based_on_learned_twists=True,
+                prepend_tokens_for_twists=prepend_tokens_for_twists,
+                resample=False, # VERY IMPORTANT FOR THIS HERE
+                condition_twist_on_tokens=condition_twist_on_tokens,
+                token_of_interest_as_int=token_of_interest_as_int,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model)
+
+            print("hihi")
+            print(intermediate_seq_list)
+            print(intermediate_seq_list[-1])
+            print(condition_twist_on_tokens.shape)
+            proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
+
+            log_prob_cont_proposal_samples = log_reward_model_p_of_last_tokens(
+                proposal_samples, cfg_p, params_p,
+                self.num_last_tokens_to_condition_on,
+                huggingface_model=huggingface_model, return_log_w_no_temp=True)
+
+            print(
+                "LOG PROB OF CONTINUATION FOR: true sigma samples, proposal samples")
+            print(log_prob_cont_sigma_samples[:n_samples_to_print])
+            print(log_prob_cont_proposal_samples[:n_samples_to_print])
+
+            print(
+                "Averages of the above for SMC samples, proposal samples, p samples")
+            print(log_prob_cont_sigma_samples.mean())
+            print(log_prob_cont_proposal_samples.mean())
+
+            if huggingface_model:
+                text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
+
+                if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens"]:
+                    # print(intermediate_seq_list[-1])
+                    print("INSPECTION OF Sigma SAMPLES")
+                    print(p_samples[:n_samples_to_print])
+                    if huggingface_model:
+                        for s in text_outputs[:n_samples_to_print]:
+                            print(s)
+
+                text_outputs = tokenizer.batch_decode(proposal_samples, skip_special_tokens=True)
+
+                if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation",
+                                    "hard_p_continuation", "p_last_tokens"]:
+                    # print(intermediate_seq_list[-1])
+                    print("INSPECTION OF Proposal SAMPLES")
+                    print(proposal_samples[:n_samples_to_print])
+                    if huggingface_model:
+                        for s in text_outputs[:n_samples_to_print]:
+                            print(s)
+
+            g_q_estimates = iwae_backward(
+                true_sigma_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                output_len, log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+                token_of_interest_as_int, proposal_is_p, huggingface_model)
+            f_q_estimates = iwae_backward(
+                proposal_samples, prompt, cfg_p, params_p, cfg_twist,
+                params_twist, output_len, log_true_final_twist, prepend_tokens_for_twists,
+                condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p, huggingface_model)
+
+            print("G(q) and F(q) estimates")
+            print(g_q_estimates)
+            print(f_q_estimates)
+            print(f_q_estimates - g_q_estimates)
+            print(f"Average gap: {(f_q_estimates - g_q_estimates).mean()}")
 
         if self.rm_type == "contains_continuation":
             # print(intermediate_seq_list)
@@ -629,7 +680,7 @@ class ExperimentConfig:
     #               cfg_p, params_p, cfg_twist, params_twist, output_len,
     #               log_true_final_twist, n_test_smc_samples,
     #               hist_token_index, records_list_by_twist, proposal_is_p,
-    #               prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model):
+    #               prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model):
     #     rng_key, sk, sk2, sk3 = jax.random.split(rng_key, 4)
     #
     #     if self.rm_type == "bad_word_pos":
@@ -667,7 +718,7 @@ class ExperimentConfig:
     #                 cfg_twist,
     #                 params_twist,
     #                 rm_type=self.rm_type,
-    #                 prepend_tokens_for_twists=prepend_tokens_for_twists,
+    #                 prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
     #                 token_of_interest_as_int=token_of_interest_as_int,
     #                 huggingface_model=huggingface_model,
     #                 verbose=True,
@@ -739,6 +790,21 @@ class ExperimentConfig:
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
                 = build_p_of_continuation_twists(sk, jnp_prompts, cfg_p, params_p, indexes_of_continuation, output_len,
                                                  n_samples_at_a_time=n_true_posterior_samples, tokenizer=tokenizer, huggingface_model=huggingface_model, get_true_posterior_samples=True)
+            print(log_true_final_twists)
+            print(indices_of_tokens_chosen_by_prompt)
+            print(true_posterior_samples_by_prompt_and_by_token)
+            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+        elif rm_type == "p_last_tokens":
+            rng_key, sk = jax.random.split(rng_key)
+            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+                = build_p_of_last_tokens_twists(sk, jnp_prompts, cfg_p,
+                                                 params_p,
+                                                 self.num_last_tokens_to_condition_on,
+                                                 output_len,
+                                                 n_samples_at_a_time=n_true_posterior_samples,
+                                                 tokenizer=tokenizer,
+                                                 huggingface_model=huggingface_model,
+                                                 get_true_posterior_samples=True)
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
@@ -825,7 +891,7 @@ class ExperimentConfig:
 #                                             output_len,
 #                                             n_test_smc_samples,
 #                                             n_vocab,
-#                                             prepend_tokens_for_twists=prepend_tokens_for_twists,
+#                                             prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
 #                                             token_of_interest_as_int=token_of_interest_as_int,
 #                                             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 #     print(smc_upper_bound_estimate)
@@ -837,7 +903,7 @@ class ExperimentConfig:
 #         output_len, n_test_smc_samples,
 #         n_vocab,
 #         smc_procedure_type=smc_procedure_type,
-#         prepend_tokens_for_twists=prepend_tokens_for_twists,
+#         prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
 #         token_of_interest_as_int=token_of_interest_as_int,
 #         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 #     iwae_lower_bound_estimate = jax.nn.logsumexp(
@@ -860,7 +926,8 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
                                         log_true_final_twist,
                                         n_test_smc_samples, token_of_interest_as_int,
                                                   true_posterior_samples, true_log_z, analytic_kl_q_sigma, smc_procedure_type,
-                                                  proposal_is_p=False, prepend_tokens_for_twists=True, huggingface_model=None):
+                                                  proposal_is_p=False, prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
+                                                  huggingface_model=None):
 
     assert true_posterior_samples.shape[0] > 0
 
@@ -872,7 +939,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         params_twist, log_true_final_twist,
         output_len, n_test_smc_samples,
         n_vocab, smc_procedure_type=smc_procedure_type,
-        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
     iwae_lower_bound_estimate = jax.nn.logsumexp(
@@ -885,14 +952,14 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
         true_posterior_samples, log_true_final_twist, cfg_p,
         params_p, cfg_twist, params_twist, prompt_len,
-        output_len, prepend_tokens_for_twists=prepend_tokens_for_twists,
+        output_len, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
     true_one_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
         posterior_sample[None, :], log_true_final_twist, cfg_p,
         params_p, cfg_twist, params_twist, prompt_len,
-        output_len, prepend_tokens_for_twists=prepend_tokens_for_twists,
+        output_len, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
@@ -911,7 +978,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         n_test_smc_samples,
         smc_procedure_type=smc_procedure_type,
         n_vocab=n_vocab,
-        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
         token_of_interest_as_int=token_of_interest_as_int,
     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
@@ -925,7 +992,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
                                             output_len,
                                             n_test_smc_samples,
                                             n_vocab, smc_procedure_type=smc_procedure_type,
-                                            prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                            prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
                                             token_of_interest_as_int=token_of_interest_as_int,
                                             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
@@ -974,7 +1041,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
 #                                                    cfg_p, params_p, cfg_twist,
 #                                                    params_twist,
 #                                                    log_true_final_twist,
-#                                                    prepend_tokens_for_twists=prepend_tokens_for_twists,
+#                                                    prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
 #                                                    token_of_interest_as_int=token_of_interest_as_int)
 #         else:
 #             true_log_z = -jnp.inf
@@ -985,7 +1052,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
 #             output_len, log_true_final_twist, n_test_smc_samples,
 #             token_of_interest_as_int, true_posterior_samples,
 #             true_log_z, analytic_kl_q_sigma, smc_procedure_type, proposal_is_p,
-#             prepend_tokens_for_twists=prepend_tokens_for_twists,
+#             prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
 #         huggingface_model=huggingface_model)
 #
 #         # if i == 0: # only check a single set of twists for now
@@ -1100,8 +1167,30 @@ class TestClass:
     #                         token_of_interest_as_int,
     #                         true_posterior_samples,
     #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
-    rm_type_to_test = "p_continuation" # "p_token_last_index" # "contains_token_eps" #
+    rm_type_to_test = "p_last_tokens" # "p_continuation" # "p_token_last_index" # "contains_token_eps" #
     # Do p_token_last_index and maybe p_continuation as well
+
+    def test_new_new_rob_no_sample(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl", # one_total_kl_mixed_p_q, the same. The type of sampling doesn't matter if we use rm_type "p_last_tokens" since we have true posterior sigma samples always
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003, twist_updates_per_epoch=200
+                                  )
+    def test_new_new_rob_sample(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl_sample",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003, twist_updates_per_epoch=200
+                                  )
+    def test_new_new_ebm(self):
+        self._test_twist_learning(twist_learn_type="ebm",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0001, twist_updates_per_epoch=200
+                                  )
+
+    def test_new_new_rl(self):
+        self._test_twist_learning(twist_learn_type="rl_p_lsq", # The type of sampling doesn't matter if we use rm_type "p_last_tokens" since we have true posterior sigma samples always
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003, twist_updates_per_epoch=200
+                                  )
 
     def test_p_tok_rob_new(self):
         self._test_twist_learning(twist_learn_type="one_total_kl_mixed_p_q",
@@ -1116,6 +1205,7 @@ class TestClass:
         self._test_twist_learning(twist_learn_type="one_total_kl_sample_mixed_p_q",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
+
     # Already worked well
     def test_p_tok_rlp(self):
         self._test_twist_learning(twist_learn_type="rl_p_lsq",
@@ -1186,11 +1276,10 @@ class TestClass:
     #                                   rm_type=rm_type)
 
 
-    def _test_twist_learning(self, twist_learn_type, rm_type="p_token_last_index", seed=1, lr_twist=0.0001):
+    def _test_twist_learning(self, twist_learn_type, rm_type="p_token_last_index", seed=1, lr_twist=0.0001, twist_updates_per_epoch=2000):
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
         # 70 seconds on GPU for 100 twist updates 3 epochs
         output_len = 2
-
         n_true_posterior_samples = 1
         n_vocab = 9
         huggingface = False
@@ -1218,6 +1307,10 @@ class TestClass:
         beta_prop = 1.
         hface_nn_twist = False
         separate_hface_twist_model = False
+        num_last_tokens_to_condition_on = 0
+
+        if rm_type == "p_last_tokens":
+            num_last_tokens_to_condition_on = 1
 
         experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
@@ -1231,9 +1324,11 @@ class TestClass:
             d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist,
             d_fc_twist, indicator_pos_zero_index,
             output_len, n_true_posterior_samples, index_of_token_contained,
-            beta_temp, hface_nn_twist, separate_hface_twist_model)
+            beta_temp, hface_nn_twist=hface_nn_twist,
+            separate_hface_twist_model=separate_hface_twist_model,
+            num_last_tokens_to_condition_on=num_last_tokens_to_condition_on
+        )
 
-        twist_updates_per_epoch = 2000
         num_epochs = 4
 
         prompt_num = 0
@@ -1246,13 +1341,12 @@ class TestClass:
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
 
                 for i in range(len(indices_of_tokens_chosen)):
-
                     avg_rel_diff_start = compare_learned_twist_vs_optimal(
                         prompt, n_vocab, output_len,
                         cfg_p, params_p, log_true_final_twist[i],
                         cfg_twist, params_twist,
                         rm_type=rm_type,
-                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                         token_of_interest_as_int=indices_of_tokens_chosen[i],
                         huggingface_model=huggingface_model,
                         verbose=True,
@@ -1260,6 +1354,7 @@ class TestClass:
                     stop_grad=True)
                     avg_rel_diff_list = [avg_rel_diff_start]
                     print(avg_rel_diff_list)
+                    raise NotImplementedError # The above doesn't really work as intended...
 
                 rng_key, sk = jax.random.split(rng_key)
                 for epoch in range(num_epochs):
@@ -1272,14 +1367,13 @@ class TestClass:
                             huggingface_model, optimizer_twist, optim_twist_state,
                             index_of_token_contained, tempered_twist, beta_prop
                         )
-
                     for i in range(len(indices_of_tokens_chosen)):
                         avg_rel_diff = compare_learned_twist_vs_optimal(
                             prompt, n_vocab, output_len,
                             cfg_p, params_p, log_true_final_twist[i],
                             cfg_twist, params_twist,
                             rm_type=rm_type,
-                            prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                            prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                             token_of_interest_as_int=indices_of_tokens_chosen[i],
                             huggingface_model=huggingface_model,
                             verbose=True,
@@ -1287,6 +1381,8 @@ class TestClass:
                         stop_grad=True)
                         avg_rel_diff_list.append(avg_rel_diff)
                         print(avg_rel_diff_list)
+
+
             elif rm_type == "contains_token" or rm_type == "contains_token_eps" or rm_type == "p_continuation" or rm_type == "hard_p_continuation":
                 indices_of_tokens_chosen = None
                 token_of_interest_as_int = None
@@ -1302,7 +1398,7 @@ class TestClass:
                     cfg_p, params_p, log_true_final_twist_to_use,
                     cfg_twist, params_twist,
                     rm_type=rm_type,
-                    prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                    prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                     token_of_interest_as_int=token_of_interest_as_int,
                     huggingface_model=huggingface_model,
                     verbose=True,
@@ -1318,7 +1414,7 @@ class TestClass:
                                                        cfg_twist,
                                                        params_twist,
                                                        log_true_final_twist_to_use,
-                                                       prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                                                       prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_token=None,
                                                        token_of_interest_as_int=token_of_interest_as_int,
                                                        get_kl_sigma_q_also=True)
                 print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}",
@@ -1346,7 +1442,7 @@ class TestClass:
                         cfg_p, params_p, log_true_final_twist_to_use,
                         cfg_twist, params_twist,
                         rm_type=rm_type,
-                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                         token_of_interest_as_int=token_of_interest_as_int,
                         huggingface_model=huggingface_model,
                         verbose=True,
@@ -1364,7 +1460,7 @@ class TestClass:
                         cfg_twist,
                         params_twist,
                         log_true_final_twist_to_use,
-                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_token=None,
                         token_of_interest_as_int=token_of_interest_as_int,
                         get_kl_sigma_q_also=True)
                     print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}",
@@ -1374,15 +1470,90 @@ class TestClass:
                     avg_kl_q_sigma_list.append(analytic_kl_q_sigma)
                     avg_kl_sigma_q_list.append(analytic_kl_sigma_q)
 
+            elif rm_type == "p_last_tokens":
+                indices_of_tokens_chosen = None
+                token_of_interest_as_int = None
+                log_true_final_twist_to_use = log_true_final_twist
+                # token_to_test_conditioning = 3
+                assert num_last_tokens_to_condition_on == 1
+
+                # Essentially what I'm doing here is testing all possible continuations (twists) of len 1
+
+                avg_kl_q_sigma_list_by_tokens = []
+                avg_kl_sigma_q_list_by_tokens = []
+                for token_to_test_conditioning in range(n_vocab):
+
+                    analytic_kl_q_sigma, analytic_kl_sigma_q = calc_analytic_kl(
+                        prompt,
+                        prompt_len,
+                        n_vocab,
+                        output_len,
+                        cfg_p, params_p,
+                        cfg_twist,
+                        params_twist,
+                        log_true_final_twist_to_use,
+                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                        condition_twist_on_token=token_to_test_conditioning,
+                        token_of_interest_as_int=token_of_interest_as_int,
+                        get_kl_sigma_q_also=True)
+                    print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}",
+                          flush=True)
+                    print(f"Analytic KL(sigma||q): {analytic_kl_sigma_q}",
+                          flush=True)
+                    avg_kl_q_sigma_list = [analytic_kl_q_sigma]
+                    avg_kl_sigma_q_list = [analytic_kl_sigma_q]
+                    avg_kl_q_sigma_list_by_tokens.append(avg_kl_q_sigma_list)
+                    avg_kl_sigma_q_list_by_tokens.append(avg_kl_sigma_q_list)
+
+                for epoch in range(num_epochs):
+                    for twist_update in range(twist_updates_per_epoch):
+                        rng_key, params_twist, optim_twist_state = \
+                            experiment_cfg.update_twist(
+                                rng_key, indices_of_tokens_chosen, prompt,
+                                n_twist, output_len, cfg_p, params_p, cfg_twist,
+                                params_twist, log_true_final_twist,
+                                proposal_is_p,
+                                huggingface_model, optimizer_twist,
+                                optim_twist_state,
+                                index_of_token_contained,
+                                tempered_twist, beta_prop
+                            )
+
+                    for token_to_test_conditioning in range(n_vocab):
+
+                        analytic_kl_q_sigma, analytic_kl_sigma_q = calc_analytic_kl(
+                            prompt,
+                            prompt_len,
+                            n_vocab,
+                            output_len,
+                            cfg_p, params_p,
+                            cfg_twist,
+                            params_twist,
+                            log_true_final_twist_to_use,
+                            prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                            condition_twist_on_token=token_to_test_conditioning,
+                            token_of_interest_as_int=token_of_interest_as_int,
+                            get_kl_sigma_q_also=True)
+                        print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}",
+                              flush=True)
+                        print(f"Analytic KL(sigma||q): {analytic_kl_sigma_q}",
+                              flush=True)
+                        avg_kl_q_sigma_list_by_tokens[token_to_test_conditioning].append(analytic_kl_q_sigma)
+                        avg_kl_sigma_q_list_by_tokens[token_to_test_conditioning].append(analytic_kl_sigma_q)
+
+
             else:
                 raise NotImplementedError
             prompt_num += 1
 
-            print("TWIST DIFFS")
-            print(avg_rel_diff_list)
+            for token_to_test_conditioning in range(n_vocab):
+                avg_kl_q_sigma_list_by_tokens[token_to_test_conditioning] = jnp.stack(avg_kl_q_sigma_list_by_tokens[token_to_test_conditioning])
+                avg_kl_sigma_q_list_by_tokens[token_to_test_conditioning] = jnp.stack(avg_kl_sigma_q_list_by_tokens[token_to_test_conditioning])
+            # print("TWIST DIFFS")
+            # print(avg_rel_diff_list)
             print("KL DIFFS")
-            print(avg_kl_q_sigma_list)
-            print(avg_kl_sigma_q_list)
+            print(avg_kl_q_sigma_list_by_tokens)
+            print(avg_kl_sigma_q_list_by_tokens)
             # assert avg_rel_diff_list[0] > avg_rel_diff_list[1]
             # assert avg_rel_diff_list[1] > avg_rel_diff_list[2]
             # assert avg_rel_diff_list[2] > avg_rel_diff_list[3]
@@ -1434,7 +1605,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
 def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, prompt, prompt_len, output_len, cfg_p,
                      params_p, cfg_twist, params_twist, log_true_final_twist, start, hist_token_index, epoch,
                      true_log_z, plot_over_time_list, smc_procedure_type, proposal_is_p=False,
-                     prepend_tokens_for_twists=True, huggingface_model=None):
+                     prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=None):
 
     # for x in range(10):
     #     rng_key, sk = jax.random.split(rng_key)
@@ -1454,6 +1625,9 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     print(token_of_interest_as_int)
 
     if not huggingface_model:
+
+        if args.rm_type == "p_last_tokens":
+            raise NotImplementedError
 
         analytic_kl_q_sigma = calc_analytic_kl(prompt,
                                                prompt_len,
@@ -1513,7 +1687,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 n_test_smc_samples,
                 token_of_interest_as_int, true_posterior_samples,
                 true_log_z, analytic_kl_q_sigma, smc_procedure_type,
-                proposal_is_p, prepend_tokens_for_twists=prepend_tokens_for_twists,
+                proposal_is_p, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
             huggingface_model=huggingface_model)
             (true_log_z, true_one_post_upper_bound_estimate,
              true_all_post_upper_bound_estimate,
@@ -1594,7 +1768,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 #                                        args.output_len,
                 #                                        n_test_smc_samples,
                 #                                        n_vocab=args.n_vocab,
-                #                                        prepend_tokens_for_twists=prepend_tokens_for_twists,
+                #                                        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
                 #                                        token_of_interest_as_int=token_of_interest_as_int,
                 #                                        resample=False,
                 #                                        proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
@@ -1652,7 +1826,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
 
 
     target_dist_weights = iwae_backward(true_posterior_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                  output_len, log_true_final_twist, prepend_tokens_for_twists,
+                  output_len, log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
                   token_of_interest_as_int, proposal_is_p, huggingface_model)
     g_q_estimate = target_dist_weights.mean()
     num_true_posterior_samples = true_posterior_samples.shape[0]
@@ -1769,11 +1943,13 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
           d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist, d_fc_twist,
           indicator_pos_zero_index, output_len, n_true_posterior_samples, index_of_token_contained,
           beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dir=None,
-              load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False):
+              load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
+              num_last_tokens_to_condition_on=0):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
-                                      beta_temp=beta_temp)
+                                      beta_temp=beta_temp,
+                                      num_last_tokens_to_condition_on=num_last_tokens_to_condition_on)
 
     rng_key = jax.random.PRNGKey(seed)
 
@@ -1799,12 +1975,18 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         cfg_twist = None
         eps = 1e-8
 
+        conditional_twist = False
+        if rm_type == "p_last_tokens":
+            conditional_twist = True
+
         if separate_hface_twist_model:
             model_p = CustomLMHeadModel(model_config)
 
-            model_twist = CustomLMWithTwistHead(sk, model_config,
-                                                hface_nn_twist=hface_nn_twist,
-                                                softmax_twist=softmax_twist)
+            model_twist = CustomLMWithTwistHead(
+                sk, model_config, hface_nn_twist=hface_nn_twist,
+                softmax_twist=softmax_twist, conditional_twist=conditional_twist,
+                num_last_tokens_to_condition_on=num_last_tokens_to_condition_on
+            )
 
             params_p = model_p.huggingface_model.params
             from custom_transformer import HashableDict
@@ -1822,7 +2004,10 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             model = {'p': model_p, 'twist': model_twist}
 
         else:
-            model = CustomLMWithTwistHead(sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist)
+            model = CustomLMWithTwistHead(
+                sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist,
+                conditional_twist=conditional_twist, num_last_tokens_to_condition_on=num_last_tokens_to_condition_on
+            )
             params_p = model.huggingface_model.params
             params_twist = model.twist_head_params
 
@@ -1959,7 +2144,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             n_test_smc_samples,
             smc_procedure_type="debug",
             n_vocab=n_vocab,
-            prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+            prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=experiment_cfg.condition_twist_on_tokens,
             get_intermediate_sample_history_based_on_learned_twists=True,
             proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
 
@@ -1979,7 +2164,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                                 n_test_smc_samples,
                                                 n_vocab,
                                                 smc_procedure_type="debug",
-                                                prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                                                prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=experiment_cfg.condition_twist_on_tokens,
                                                 proposal_is_p=args.proposal_is_p,
                                                 huggingface_model=huggingface_model)
 
@@ -1999,7 +2184,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         # print(smc_samples)
         # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
         #                            cfg_twist, params_twist, args.output_len,
-        #                            log_true_final_twist, prepend_tokens_for_twists=False, token_of_interest_as_int=None,
+        #                            log_true_final_twist, prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
         #                          proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
         # print(log_w_ts)
         # print(log_w_ts.mean())
@@ -2019,7 +2204,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
         #                          cfg_twist, params_twist, args.output_len,
         #                          log_true_final_twist,
-        #                          prepend_tokens_for_twists=False,
+        #                          prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
         #                          token_of_interest_as_int=None,
         #                          proposal_is_p=args.proposal_is_p,
         #                          huggingface_model=huggingface_model)
@@ -2040,7 +2225,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
         #                          cfg_twist, params_twist, args.output_len,
         #                          log_true_final_twist,
-        #                          prepend_tokens_for_twists=False,
+        #                          prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
         #                          token_of_interest_as_int=None,
         #                          proposal_is_p=args.proposal_is_p,
         #                          huggingface_model=huggingface_model)
@@ -2062,7 +2247,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
         #                          cfg_twist, params_twist, args.output_len,
         #                          log_true_final_twist,
-        #                          prepend_tokens_for_twists=False,
+        #                          prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
         #                          token_of_interest_as_int=None,
         #                          proposal_is_p=args.proposal_is_p,
         #                          huggingface_model=huggingface_model)
@@ -2094,7 +2279,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
 
     indexes_of_continuation = None
     if huggingface:
-        if rm_type == "exp_beta_rew_p_continuation" or rm_type == "contains_continuation" or rm_type == "p_continuation" or rm_type == "hard_p_continuation":
+        if rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens"]:
             prompts = ["How can I steal from a store"]
             # input_ids_and_mask = tokenizer(["How? Sure, here's"], return_tensors="np",
             #                            padding=False)
@@ -2126,7 +2311,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             prompts = [[0, 1, 2, 3, 4, 5]]
         elif rm_type == "only_contains_token" or rm_type == "contains_token_eps":
             prompts = [[0, 1]]
-        elif rm_type == "exp_beta_rew_p_continuation" or rm_type == "contains_continuation" or rm_type == "p_continuation" or rm_type == "hard_p_continuation":
+        elif rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens"]:
             prompts = [[0, 1]]
             indexes_of_continuation = [6, 8] # [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
             if rm_type == "hard_p_continuation":
@@ -2206,13 +2391,13 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     # def test_func(params_twist, params_p):
     #
     #     # # log_psi_all_vocab = get_log_psi_all_vocab(seqs, cfg_twist, params_twist,
-    #     # #                       prepend_tokens_for_twists=False,
+    #     # #                       prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
     #     # #                       token_of_interest_as_int=None,
     #     # #                       huggingface_model=huggingface_model)
     #     #
     #     # # log_psi = evaluate_log_psi_selected_tokens(seqs, prompt_len, cfg_twist,
     #     # #                                            params_twist,
-    #     # #                                            prepend_tokens_for_twists=False,
+    #     # #                                            prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
     #     # #                                            huggingface_model=huggingface_model)
     #     #
     #     # _, samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
@@ -2240,7 +2425,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     #
     #     log_psi = evaluate_log_psi_selected_tokens(samples, prompt_len, cfg_twist,
     #                                                params_twist,
-    #                                                prepend_tokens_for_twists=False,
+    #                                                prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
     #                                                huggingface_model=huggingface_model)
     #
     #     # log_psi_all_vocab = huggingface_model(input_ids=jnp.ones((args.n_twist, prompt_len + args.output_len), dtype=jnp.int32),
@@ -2261,7 +2446,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     #     #         output_len, cfg_p, params_p, cfg_twist,
     #     #         params_twist, log_true_final_twist,
     #     #         # Only one set of log final twists (for the token we are interested in)
-    #     #         prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+    #     #         prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=experiment_cfg.condition_twist_on_tokens,
     #     #         proposal_is_p=args.proposal_is_p,
     #     #         huggingface_model=huggingface_model
     #     #     )
@@ -2363,7 +2548,8 @@ def main():
         args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
         args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
         args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
-        args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model
+        args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model,
+        args.num_last_tokens_to_condition_on
     )
 
     # from toy_reward_models import batch_check_array_contained_in_other_array
@@ -2425,13 +2611,13 @@ def main():
                         print(f"Testing twist update: {twist_update + 1}")
                         print(f"TIME: {time.time() - start}", flush=True)
                         rng_key, sk = jax.random.split(rng_key)
-                        test_loss = get_twist_loss_rl_based(sk, prompt, cfg_p,
+                        test_loss = get_l_rl_based(sk, prompt, cfg_p,
                                                             params_p, cfg_twist,
                                                             params_twist,
                                                             log_true_final_twist,
                                                             args.output_len,
                                                             args.n_twist,
-                                                            experiment_cfg.prepend_tokens_for_twists,
+                                                            experiment_cfg.prepend_tokens_for_twists, experiment_cfg.condition_twist_on_tokens,
                                                             experiment_cfg_pretrain.smc_procedure_type,
                                                             proposal_is_p=args.proposal_is_p,
                                                             evaluate_over_samples_from="p",
@@ -2482,8 +2668,7 @@ def main():
                 indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
-            elif args.rm_type == "only_contains_token" or args.rm_type == "contains_continuation" \
-                or args.rm_type == "toxicity_threshold" or args.rm_type == "p_continuation" or args.rm_type == "hard_p_continuation":
+            elif args.rm_type in ["only_contains_token", "contains_continuation", "toxicity_threshold", "p_continuation", "hard_p_continuation", "p_last_tokens"]:
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
@@ -2491,7 +2676,7 @@ def main():
             # get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist,
             #                    params_twist, log_true_final_twist,
             #                    args.output_len, args.n_twist,
-            #                    prepend_tokens_for_twists=False,
+            #                    prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
             #                    smc_procedure_type=experiment_cfg.smc_procedure_type,
             #                    token_of_interest_as_int=None,
             #                    proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model,
@@ -2660,17 +2845,17 @@ def main():
             test_info = True
 
             if true_posterior_samples_by_token is None:
-                plot_logZ_bounds_only = False
+                plot_logZ_bounds = False
                 only_inspect_samples = True
             else:
-                plot_logZ_bounds_only = True
+                plot_logZ_bounds = True
                 only_inspect_samples = False
 
             if (epoch + 1) % args.print_every == 0:
                 if test_info:
                     print(f"TEST INFO STARTING", flush=True)
                     print(f"TIME: {time.time() - start}", flush=True)
-                    if plot_logZ_bounds_only:
+                    if plot_logZ_bounds:
                         assert true_posterior_samples_by_token is not None
 
                         if not huggingface_model:
@@ -2681,13 +2866,16 @@ def main():
                                     or experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps":
                                     i = 0  # Just check the first twist, that's fine for this illustration
                                     token_of_interest_as_int = indices_of_tokens_chosen[i]
+                                condition_twist_on_token = None
+                                if experiment_cfg.rm_type == "p_last_tokens":
+                                    raise NotImplementedError
 
                                 _, _, true_log_z = \
                                     calc_analytic_sigma_vals(prompt, prompt_len,
                                                              args.n_vocab,
                                                              args.output_len, cfg_p,
                                                              params_p,
-                                                             log_true_final_twist,
+                                                             log_true_final_twist, condition_twist_on_token=condition_twist_on_token,
                                                              return_log=True)
                                 analytic_kl_p_sigma = calc_analytic_kl(prompt,
                                                                        prompt_len,
@@ -2698,7 +2886,7 @@ def main():
                                                                        cfg_twist,
                                                                        params_twist,
                                                                        log_true_final_twist,
-                                                                       prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                                                                       prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_token=experiment_cfg.condition_twist_on_tokens,
                                                                        token_of_interest_as_int=token_of_interest_as_int,
                                                                        calc_kl_with_p_and_sigma=True)
                                 print(f"True log Z: {true_log_z}", flush=True)
@@ -2716,7 +2904,7 @@ def main():
                             true_posterior_samples_by_prompt_and_by_token,
                             prompt_num, true_log_z, plot_over_time_list
                         )
-                        if args.rm_type == "contains_continuation" or args.rm_type == "p_continuation" or args.rm_type == "hard_p_continuation":
+                        if args.rm_type in ["contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens"]:
                             # Inspect the samples also in this setting
                             rng_key = experiment_cfg.inspect_prob_of_continuation(
                                 rng_key, prompt, cfg_p, params_p, cfg_twist,
@@ -2728,6 +2916,17 @@ def main():
                                 token_of_interest_as_int=None,
                                 proposal_is_p=args.proposal_is_p,
                                 huggingface_model=huggingface_model)
+                        # elif args.rm_type == "p_last_tokens":
+                        #     rng_key = experiment_cfg.inspect_prob_of_continuation(
+                        #         rng_key, prompt, cfg_p, params_p, cfg_twist,
+                        #         params_twist, log_true_final_twist,
+                        #         args.output_len,
+                        #         args.n_test_smc_samples,
+                        #         indexes_of_continuation, tokenizer,
+                        #         prepend_tokens_for_twists=False,
+                        #         token_of_interest_as_int=None,
+                        #         proposal_is_p=args.proposal_is_p,
+                        #         huggingface_model=huggingface_model)
                         elif args.rm_type == "toxicity_threshold":
                             rng_key, sk = jax.random.split(rng_key)
                             _, smc_samples = smc_procedure(
@@ -2766,7 +2965,7 @@ def main():
                         #           args.output_len,
                         #           log_true_final_twist, args.n_test_smc_samples,
                         #           hist_token_index, records_list_by_twist,
-                        #           args.proposal_is_p, prepend_tokens_for_twists,
+                        #           args.proposal_is_p, prepend_tokens_for_twists, condition_twist_on_tokens,
                         #                                    token_of_interest_as_int, huggingface_model)
 
 
@@ -2909,10 +3108,13 @@ if __name__ == "__main__":
                                  "only_contains_token", "contains_token_eps",
                                  "exp_beta_rew_p_continuation", "contains_continuation",
                                  "p_continuation", "toxicity_threshold",
-                                 "hard_p_continuation"])
+                                 "hard_p_continuation", "p_last_tokens"])
 
-    parser.add_argument("--ppo_steps", type=int, default=3)
-    parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
+    parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0, help="Number of last tokens to condition on (only for the rm_type == p_last_tokens)")
+
+    # parser.add_argument("--ppo_steps", type=int, default=3)
+    # parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
+
     parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
     parser.add_argument("--load_dir", type=str, default='.', help="Where to load from for checkpoint")
@@ -2942,10 +3144,7 @@ if __name__ == "__main__":
     parser.add_argument("--pretrain_final_twist", action="store_true", help="Pretrain the final twists (using RL-style squared error (in log space)) before beginning other twist training")
     parser.add_argument("--pretrain_twist_epochs", type=int, default=100, help="How many epochs to do the final twist pretraining (total number of pretraining updates = pretrain_twist_epochs * twist_updates_per_epoch)")
 
-
     args = parser.parse_args()
-
-
 
     # if args.analytic_sigma_sample:
     #     assert args.twist_updates_per_epoch == 0
@@ -2960,6 +3159,9 @@ if __name__ == "__main__":
         assert args.n_vocab == 50257
 
     args.n_test_smc_samples = args.n_twist # Save one set of compilations for SMC procedures...
+
+    if args.rm_type == "p_last_tokens":
+        assert args.num_last_tokens_to_condition_on > 0
 
     print(args.n_test_smc_samples)
 

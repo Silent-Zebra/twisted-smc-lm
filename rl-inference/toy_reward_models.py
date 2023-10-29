@@ -289,9 +289,9 @@ def curried_log_p_of_continuation(cfg_p, params_p, indexes_of_continuation, hugg
 
 
 
-# Takes in sequences of some length (prompt_len + output_len) and evaluates the probability of the last continuation_len number of tokens in those sequences
+# Takes in sequences of some length (prompt_len + output_len + continuation_len) and evaluates the probability of the last continuation_len number of tokens in those sequences
 # Essentially: like the p_continuation, except here the indexes of interest are determined by whatever is in the last few tokens
-@partial(jax.jit, static_argnames=["cfg_p", "beta_temp", "huggingface_model", "return_log_w_no_temp"])
+@partial(jax.jit, static_argnames=["cfg_p", "beta_temp", "huggingface_model", "continuation_len", "return_log_w_no_temp"])
 def log_reward_model_p_of_last_tokens(
     seq, cfg_p, params_p, continuation_len, beta_temp=None,
     huggingface_model=None, return_log_w_no_temp=False):
@@ -313,6 +313,12 @@ def log_reward_model_p_of_last_tokens(
     # continuations you got from the sigma (p) samples
     # Then you feed those samples (sigma or generated q ones) into the twist model, prepending the twists based on the sigma samples (last few tokens of interest)
     # And then all your other calculations should work
+
+def curried_log_reward_model_p_of_last_tokens(cfg_p, params_p, continuation_len, huggingface_model=None):
+    def new_rm(seq):
+        return log_reward_model_p_of_last_tokens(seq, cfg_p, params_p, continuation_len, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
+    return new_rm
+
 
 
 
@@ -805,66 +811,61 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indexe
 
 
 
-def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, continuation_len,
+def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continuation_len, output_len,
                                    n_samples_at_a_time, tokenizer=None, huggingface_model=None, get_true_posterior_samples=True):
     # This is the setting where we always have 1 true posterior sample every time we draw a sample
     # Draw samples from the base model
     # Then the true twist we care about is the probability of the last continuation_len number of tokens
 
-    raise NotImplementedError
-    # num_tokens_in_continuation = indexes_of_continuation.shape[0]
-    # log_true_final_twists = []
-    # true_posterior_samples_by_prompt = []
-    # for jnp_prompt in jnp_prompts:
-    #     prompt_len = jnp_prompt.shape[-1]
-    #     log_true_final_twist = curried_log_p_of_continuation(cfg_p, params_p, indexes_of_continuation, huggingface_model)
-    #     log_true_final_twists.append(log_true_final_twist)
-    #
-    #     if get_true_posterior_samples:
-    #         num_posterior_samples = 0
-    #
-    #         while num_posterior_samples == 0:
-    #             rng_key, sk = jax.random.split(rng_key)
-    #             p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
-    #                                                       jnp_prompt,
-    #                                                       output_len + num_tokens_in_continuation,
-    #                                                       n_samples_at_a_time,
-    #                                                       huggingface_model=huggingface_model)
-    #
-    #             check_satisfies_posterior = (batch_check_array_contained_in_other_array(p_samples[:, prompt_len + output_len:], indexes_of_continuation) == 1)
-    #             # print(check_satisfies_posterior)
-    #             # print(p_samples[check_satisfies_posterior])
-    #
-    #             posterior_samples = p_samples[check_satisfies_posterior][:, :prompt_len + output_len]
-    #
-    #             num_posterior_samples = \
-    #             posterior_samples.shape[0]
-    #             print("NUM samples")
-    #             print(num_posterior_samples)
-    #
-    #         print(posterior_samples)
-    #         print(posterior_samples.shape)
-    #         print(log_true_final_twist(posterior_samples))
-    #         print(log_true_final_twist(p_samples[:10]))
-    #         if tokenizer is not None:
-    #             text_outputs = tokenizer.batch_decode(
-    #                 posterior_samples,
-    #                 skip_special_tokens=True)
-    #             print(text_outputs)
-    #             text_outputs = tokenizer.batch_decode(p_samples[:10],
-    #                                                   skip_special_tokens=True)
-    #             print(text_outputs)
-    #
-    #         # token = ordered_token_list[i]
-    #         # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
-    #         # assert extracted_true_posterior_samples.shape[0] != 0
-    #
-    #         true_posterior_samples_by_prompt.append(
-    #             posterior_samples)
-    #
-    # # print(true_posterior_samples_by_prompt_and_by_token)
-    #
-    # return log_true_final_twists, None, true_posterior_samples_by_prompt
+    # Still using output_len + continuation_len...
+
+    log_true_final_twists = []
+    true_posterior_samples_by_prompt = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+        log_true_final_twist = curried_log_reward_model_p_of_last_tokens(
+            cfg_p, params_p, continuation_len, huggingface_model)
+        log_true_final_twists.append(log_true_final_twist)
+
+        if get_true_posterior_samples:
+            rng_key, sk = jax.random.split(rng_key)
+            p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+                                                      jnp_prompt,
+                                                      output_len + continuation_len,
+                                                      n_samples_at_a_time,
+                                                      huggingface_model=huggingface_model)
+
+            # posterior_samples = p_samples[:, :prompt_len + output_len]
+            posterior_samples = p_samples
+
+            num_posterior_samples = \
+            posterior_samples.shape[0]
+            print("NUM samples")
+            print(num_posterior_samples)
+
+            print(posterior_samples)
+            print(posterior_samples.shape)
+            print(log_true_final_twist(posterior_samples))
+            print(log_true_final_twist(p_samples[:10]))
+            if tokenizer is not None:
+                text_outputs = tokenizer.batch_decode(
+                    posterior_samples,
+                    skip_special_tokens=True)
+                print(text_outputs)
+                text_outputs = tokenizer.batch_decode(p_samples[:10],
+                                                      skip_special_tokens=True)
+                print(text_outputs)
+
+            # token = ordered_token_list[i]
+            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
+            # assert extracted_true_posterior_samples.shape[0] != 0
+
+            true_posterior_samples_by_prompt.append(
+                posterior_samples)
+
+    # print(true_posterior_samples_by_prompt_and_by_token)
+
+    return log_true_final_twists, None, true_posterior_samples_by_prompt
 
 
 
@@ -1310,7 +1311,7 @@ def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_tr
     return opt_log_twist_array_list
 
 def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist,
-                      prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=None):
+                      prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=None):
     # Calculates on all possible sequences (not practical for large n_vocab or large output_len)
     all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(
         prompt, n_vocab, output_len)
@@ -1320,7 +1321,7 @@ def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist,
     for j in range(1, output_len + 1):
         all_seqs = all_seqs_list[-j]
         model_twist = evaluate_log_psi_t(all_seqs, cfg_twist, params_twist,
-                                         prepend_tokens_for_twists, token_of_interest_as_int, huggingface_model=huggingface_model)
+                                         prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
         model_twist_array_list.append(model_twist)
 
     return model_twist_array_list
@@ -1337,10 +1338,13 @@ def l_abs_compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
 
 def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
                                      params_p, log_true_final_twist, cfg_twist, params_twist, rm_type,
-                                     prepend_tokens_for_twists,
+                                     prepend_tokens_for_twists, condition_twist_on_tokens,
                                      token_of_interest_as_int,
                                      huggingface_model,
                                      verbose=True, relative_diff_loss=True, stop_grad=False):
+    if condition_twist_on_tokens:
+        raise NotImplementedError
+
     if rm_type == "one_bad":
         opt_log_twist_array_list = calc_optimal_twists_one_bad(prompt, n_vocab,
                                                    output_len, cfg_p,
@@ -1365,7 +1369,7 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
         # NEXT generate all seqs, and compare the model twists on all 1:t for all t on all seqs.
         model_twist_array_list = calc_model_twists(prompt, n_vocab, output_len,
                                                    cfg_twist, params_twist,
-                                                   prepend_tokens_for_twists, token_of_interest_as_int,
+                                                   prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
                                                    huggingface_model)
 
     if verbose:

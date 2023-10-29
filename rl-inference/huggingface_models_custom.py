@@ -14,8 +14,14 @@ from custom_transformer import linear_init_normal, linear
 
 
 class CustomLMWithTwistHead:
-    def __init__(self, key, model_name, output_size=-1, hface_nn_twist=False, softmax_twist=False):
+    def __init__(self, key, model_name, output_size=-1, hface_nn_twist=False, softmax_twist=False,
+                 conditional_twist=False, num_last_tokens_to_condition_on=0):
         self.huggingface_model = FlaxAutoModel.from_pretrained(model_name)  # Produces embeddings of d_model size
+        if conditional_twist:
+            assert num_last_tokens_to_condition_on > 0
+            self.conditional_twist = conditional_twist
+            self.num_last_tokens_to_condition_on = num_last_tokens_to_condition_on
+
         if output_size == -1:
             output_size, d_model = self.huggingface_model._params['wte']['embedding'].shape
         else: # basically allow for custom choice of the output size of the twist head
@@ -25,15 +31,47 @@ class CustomLMWithTwistHead:
         self.hface_nn_twist = hface_nn_twist
         if hface_nn_twist:
             self.twist_head_params = {}
-            key, self.twist_head_params['linear1'] = linear_init_normal(key, d_model, d_model, d_model + d_model)
-            key, self.twist_head_params['linear2'] = linear_init_normal(key, d_model, d_model, d_model + d_model)
-            key, self.twist_head_params['linear3'] = linear_init_normal(key, d_model, output_size, d_model + output_size)
+            if conditional_twist:
+                key, self.twist_head_params['linear1'] = linear_init_normal(
+                    key, d_model * 2, d_model * 2, d_model * 4)
+                key, self.twist_head_params['linear2'] = linear_init_normal(
+                    key, d_model * 2, d_model * 2, d_model * 4)
+                key, self.twist_head_params['linear3'] = linear_init_normal(
+                    key, d_model * 2, output_size, d_model * 2 + output_size)
+            else:
+                key, self.twist_head_params['linear1'] = linear_init_normal(
+                    key, d_model, d_model, d_model + d_model)
+                key, self.twist_head_params['linear2'] = linear_init_normal(
+                    key, d_model, d_model, d_model + d_model)
+                key, self.twist_head_params['linear3'] = linear_init_normal(
+                    key, d_model, output_size, d_model + output_size)
         else:
-            key, self.twist_head_params = linear_init_normal(key, d_model, output_size, d_model + output_size)
+            if conditional_twist:
+                key, self.twist_head_params = linear_init_normal(
+                    key, d_model * 2, output_size, d_model * 2 + output_size)
+            else:
+                key, self.twist_head_params = linear_init_normal(key, d_model, output_size, d_model + output_size)
 
         self.softmax_twist = softmax_twist
 
-    def __call__(self, ret="both", train=False, params_twist_head=None, hface_model_params=None, **kwargs):
+
+    def _get_model_log_psi(self, params_twist_head, embeddings):
+        if self.hface_nn_twist:
+            x = linear(params_twist_head['linear1'], embeddings)
+            x = jax.nn.relu(x)
+            x = linear(params_twist_head['linear2'], x)
+            x = jax.nn.relu(x)
+            x = linear(params_twist_head['linear3'], x)
+            model_log_psi = x
+        else:
+            model_log_psi = linear(params_twist_head, embeddings)
+
+        if self.softmax_twist:
+            model_log_psi = jax.nn.log_softmax(model_log_psi, axis=-1)
+
+        return model_log_psi
+
+    def __call__(self, ret="both", train=False, params_twist_head=None, hface_model_params=None, input_ids=None, condition_twist_on_tokens=None, **kwargs):
         # Why is one layer used for the head in LMs? Why not more? I suppose the idea is that
         # one linear layer may be enough if you've learned good enough representations
         # Because of large vocab size, MLP is expensive
@@ -42,33 +80,41 @@ class CustomLMWithTwistHead:
         # initialized from the pretraining, but then train end to end.
         # Anyway, just implement the custom model
 
+        assert input_ids is not None
+
         if params_twist_head is None:
             params_twist_head = self.twist_head_params
 
         if hface_model_params is None:
             hface_model_params = self.huggingface_model._params
-        # embeddings have d_model shape. Attribute name of the [0] element is "last_hidden_state"
-        embeddings = self.huggingface_model(train=train, params=hface_model_params, **kwargs)[0]
-        embeddings = jax.lax.stop_gradient(embeddings) # do this to ensure that we only train the twist head in this setting
+
+        if condition_twist_on_tokens is not None:
+            assert self.conditional_twist
+            prompt_plus_output_embeddings = self.huggingface_model(train=train, params=hface_model_params, input_ids=input_ids, **kwargs)[0]
+            condition_on_embeddings = self.huggingface_model(train=train, params=hface_model_params, input_ids=condition_twist_on_tokens, **kwargs)[0]
+            embeddings_p = prompt_plus_output_embeddings
+            condition_on_embeddings = jnp.broadcast_to(condition_on_embeddings, embeddings_p.shape)
+            embeddings_twist = jnp.concatenate((prompt_plus_output_embeddings, condition_on_embeddings), axis=-1)
+        else:
+            # embeddings have d_model shape. Attribute name of the [0] element is "last_hidden_state"
+            embeddings_p = self.huggingface_model(train=train, params=hface_model_params, input_ids=input_ids, **kwargs)[0]
+            embeddings_twist = embeddings_p
+
+        embeddings_p = jax.lax.stop_gradient(embeddings_p) # do this to ensure that we only train the twist head in this setting
+        embeddings_twist = jax.lax.stop_gradient(embeddings_twist) # do this to ensure that we only train the twist head in this setting
+
+        # print('hihihi')
+        # print(embeddings_twist.shape)
+        # print(condition_twist_on_tokens)
+
         if ret not in ["p", "twist", "both"]:
             raise NotImplementedError
         if ret == "p" or ret == "both":
-            model_logits = embeddings @ jnp.transpose(hface_model_params['wte']['embedding'])
+            model_logits = embeddings_p @ jnp.transpose(hface_model_params['wte']['embedding'])
             if ret == "p":
                 return model_logits
         if ret == "twist" or ret == "both":
-            if self.hface_nn_twist:
-                x = linear(params_twist_head['linear1'], embeddings)
-                x = jax.nn.relu(x)
-                x = linear(params_twist_head['linear2'], x)
-                x = jax.nn.relu(x)
-                x = linear(params_twist_head['linear3'], x)
-                model_log_psi = x
-            else:
-                model_log_psi = linear(params_twist_head, embeddings)
-
-            if self.softmax_twist:
-                model_log_psi = jax.nn.log_softmax(model_log_psi, axis=-1)
+            model_log_psi = self._get_model_log_psi(params_twist_head, embeddings_twist)
 
             if ret == "twist":
                 return model_log_psi
