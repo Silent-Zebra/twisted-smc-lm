@@ -1170,96 +1170,76 @@ class TestClass:
     rm_type_to_test = "p_last_tokens" # "p_continuation" # "p_token_last_index" # "contains_token_eps" #
     # Do p_token_last_index and maybe p_continuation as well
 
-    def test_new_new_rob_no_sample(self):
+    def test_rob_no_sample(self):
         self._test_twist_learning(twist_learn_type="one_total_kl", # one_total_kl_mixed_p_q, the same. The type of sampling doesn't matter if we use rm_type "p_last_tokens" since we have true posterior sigma samples always
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003, twist_updates_per_epoch=200
                                   )
-    def test_new_new_rob_sample(self):
+    def test_rob_sample(self):
         self._test_twist_learning(twist_learn_type="one_total_kl_sample",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003, twist_updates_per_epoch=200
                                   )
-    def test_new_new_ebm(self):
+    def test_ebm(self):
         self._test_twist_learning(twist_learn_type="ebm",
                                   rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0001, twist_updates_per_epoch=200
+                                  lr_twist=0.0003, twist_updates_per_epoch=200
                                   )
 
-    def test_new_new_rl(self):
+    def test_rl(self):
         self._test_twist_learning(twist_learn_type="rl_p_lsq", # The type of sampling doesn't matter if we use rm_type "p_last_tokens" since we have true posterior sigma samples always
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003, twist_updates_per_epoch=200
                                   )
 
-    def test_p_tok_rob_new(self):
-        self._test_twist_learning(twist_learn_type="one_total_kl_mixed_p_q",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003)
-
-    def test_p_tok_rob_sample(self):
-        self._test_twist_learning(twist_learn_type="one_total_kl_sample",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003)
-    def test_p_tok_rob_sample_mixed(self):
-        self._test_twist_learning(twist_learn_type="one_total_kl_sample_mixed_p_q",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003)
-
-    # Already worked well
-    def test_p_tok_rlp(self):
-        self._test_twist_learning(twist_learn_type="rl_p_lsq",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003)
-    def test_p_tok_rlq(self):
-        self._test_twist_learning(twist_learn_type="rl_q_lsq",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003)
-    def test_p_tok_rlsigma(self):
-        self._test_twist_learning(twist_learn_type="rl_sigma_lsq",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003)
-    def test_p_tok_ebm(self):
-        self._test_twist_learning(twist_learn_type="ebm",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003)
-
-    def test_p_tok_ebm_mixed_p_q(self):
-        self._test_twist_learning(twist_learn_type="ebm_mixed_p_q",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003)
-
-    # def test_p_tok_ebm2(self):
+    # def test_p_tok_rob_new(self):
+    #     self._test_twist_learning(twist_learn_type="one_total_kl_mixed_p_q",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.0003)
+    #
+    # def test_p_tok_rob_sample(self):
+    #     self._test_twist_learning(twist_learn_type="one_total_kl_sample",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.0003)
+    # def test_p_tok_rob_sample_mixed(self):
+    #     self._test_twist_learning(twist_learn_type="one_total_kl_sample_mixed_p_q",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.0003)
+    #
+    # # Already worked well
+    # def test_p_tok_rlp(self):
+    #     self._test_twist_learning(twist_learn_type="rl_p_lsq",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.0003)
+    # def test_p_tok_rlq(self):
+    #     self._test_twist_learning(twist_learn_type="rl_q_lsq",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.0003)
+    # def test_p_tok_rlsigma(self):
+    #     self._test_twist_learning(twist_learn_type="rl_sigma_lsq",
+    #                               rm_type=self.rm_type_to_test,
+    #                               lr_twist=0.0003)
+    # def test_p_tok_ebm(self):
     #     self._test_twist_learning(twist_learn_type="ebm",
     #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0005)
-    # def test_p_tok_ebm3(self):
-    #     self._test_twist_learning(twist_learn_type="ebm",
+    #                               lr_twist=0.0003)
+    #
+    # def test_p_tok_ebm_mixed_p_q(self):
+    #     self._test_twist_learning(twist_learn_type="ebm_mixed_p_q",
     #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.001)
-    def test_p_tok_rob(self):
-        self._test_twist_learning(twist_learn_type="one_total_kl",
-                                  rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003)
+    #                               lr_twist=0.0003)
 
-    def test_p_tok_sixo(self):
+
+    def test_sixo(self):
         self._test_twist_learning(twist_learn_type="sixo",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
 
-    def test_p_tok_sixo_mixed_p_q(self):
+    def test_sixo_mixed_p_q(self):
         self._test_twist_learning(twist_learn_type="sixo_mixed_p_q",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
 
-    # def test_p_tok_sixo2(self):
-    #     self._test_twist_learning(twist_learn_type="sixo",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0005)
-    # def test_p_tok_sixo3(self):
-    #     self._test_twist_learning(twist_learn_type="sixo",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.001)
     # def test_twist_learning_p_token_last_index(self):
     #     self._test_twist_learning_all_types(rm_type="p_token_last_index")
     #

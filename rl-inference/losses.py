@@ -18,6 +18,9 @@ from functools import partial
 
 no_final_resample = True # False # Turn this off (set to false) if you want the old versions of these updates that used the resampled sigma samples
 
+resample_for_sigma_samples = False # True was what I had before; false to try no resampling (since we use the twist info already) on the approximate sigma samples
+
+
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int",
                                    "smc_procedure_type", "proposal_is_p", "huggingface_model",
@@ -145,7 +148,7 @@ def get_l_ebm_ml_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params
                 prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
                 token_of_interest_as_int=token_of_interest_as_int,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                resample=True, no_final_resample=no_final_resample,
+                resample=resample_for_sigma_samples, no_final_resample=no_final_resample,
                 tempered_twist=tempered_twist, beta_prop=beta_prop)
             # print("First SMC done")
             # print(time.time() - new_start)
@@ -372,7 +375,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
                 prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
                 token_of_interest_as_int=token_of_interest_as_int,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                resample=True, no_final_resample=no_final_resample,
+                resample=resample_for_sigma_samples, no_final_resample=no_final_resample,
                 tempered_twist=tempered_twist, beta_prop=beta_prop
             )
 
@@ -581,7 +584,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
                 prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
                 token_of_interest_as_int=token_of_interest_as_int,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                resample=True, no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop
+                resample=resample_for_sigma_samples, no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop
             )
         elif evaluate_over_samples_from == "mixed_p_q":
             # Mix of 50% p samples and 50% q (twist proposal) samples
