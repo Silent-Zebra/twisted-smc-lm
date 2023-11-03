@@ -437,7 +437,7 @@ class ExperimentConfig:
                              log_true_final_twist[i], start,
                              hist_token_index, epoch, true_log_z, plot_over_time_list,
                              smc_procedure_type=self.smc_procedure_type,
-                             prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=self.condition_twist_on_tokens,
+                             prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                              huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
                                                    )
@@ -455,7 +455,7 @@ class ExperimentConfig:
                              log_true_final_twist, start,
                              hist_token_index, epoch, true_log_z, plot_over_time_list,
                              smc_procedure_type=self.smc_procedure_type,
-                             prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=self.condition_twist_on_tokens,
+                             prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                              huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
                                                    )
@@ -471,7 +471,7 @@ class ExperimentConfig:
                              log_true_final_twist, start,
                              hist_token_index, epoch, true_log_z, plot_over_time_list,
                              smc_procedure_type=self.smc_procedure_type,
-                             prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=self.condition_twist_on_tokens,
+                             prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                              huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
                                                    )
@@ -2114,7 +2114,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                              get_true_posterior_samples=False)
         log_true_final_twist = log_true_final_twists[0]
 
-
+        condition_twist_on_tokens = None
         n_test_smc_samples = 16
         rng_key, sk_smc = jax.random.split(rng_key)
         (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list) = smc_procedure(
@@ -2125,7 +2125,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             n_test_smc_samples,
             smc_procedure_type="debug",
             n_vocab=n_vocab,
-            prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=experiment_cfg.condition_twist_on_tokens,
+            prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
             get_intermediate_sample_history_based_on_learned_twists=True,
             proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
 
@@ -2145,7 +2145,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                                 n_test_smc_samples,
                                                 n_vocab,
                                                 smc_procedure_type="debug",
-                                                prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=experiment_cfg.condition_twist_on_tokens,
+                                                prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                                                condition_twist_on_tokens=condition_twist_on_tokens,
                                                 proposal_is_p=args.proposal_is_p,
                                                 huggingface_model=huggingface_model)
 
@@ -2867,7 +2868,8 @@ def main():
                                                                        cfg_twist,
                                                                        params_twist,
                                                                        log_true_final_twist,
-                                                                       prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_token=experiment_cfg.condition_twist_on_tokens,
+                                                                       prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                                                                       condition_twist_on_token=condition_twist_on_token,
                                                                        token_of_interest_as_int=token_of_interest_as_int,
                                                                        calc_kl_with_p_and_sigma=True)
                                 print(f"True log Z: {true_log_z}", flush=True)

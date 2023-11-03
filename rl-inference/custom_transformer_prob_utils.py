@@ -1435,7 +1435,8 @@ def get_analytic_sigma_sample(subkey, jnp_prompt, prompt_len, n_vocab, output_le
 # Right here's the thing; there's no reason to calc the KL with p and sigma. That's just a constant.
 # The only thing maybe that informs you of is how hard the posterior sampling problem is, if you use p as the proposal
 def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist,
-                     log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_token=None, token_of_interest_as_int=None, calc_kl_with_p_and_sigma=False, get_kl_sigma_q_also=False):
+                     log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_token=None,
+                     token_of_interest_as_int=None, calc_kl_with_p_and_sigma=False, get_kl_sigma_q_also=False):
     analytic_log_sigma_vals, all_seqs, _ = \
         calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, return_log=True, condition_twist_on_token=condition_twist_on_token)
 
