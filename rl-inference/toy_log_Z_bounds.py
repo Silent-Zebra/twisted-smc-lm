@@ -195,6 +195,7 @@ class ExperimentConfig:
                                             params_twist, self.rm_type)
         else:
             true_sigma_samples = None
+            condition_twist_on_tokens = None
             if self.rm_type == "p_last_tokens":
                 sk, sk2 = jax.random.split(sk)
                 p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
