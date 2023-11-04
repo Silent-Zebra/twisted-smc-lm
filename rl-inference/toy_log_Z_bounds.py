@@ -2669,6 +2669,9 @@ def sample_for_replay_buffer(
     print(replay_buffer.shape)
     print(replay_buffer_log_w_ts.shape)
 
+    replay_buffer = jax.lax.stop_gradient(replay_buffer)
+    replay_buffer_log_w_ts = jax.lax.stop_gradient(replay_buffer_log_w_ts)
+
     return rng_key, replay_buffer, replay_buffer_log_w_ts
 
 
