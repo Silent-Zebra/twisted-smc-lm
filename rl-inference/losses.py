@@ -36,7 +36,7 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
     if mixed_p_q_sample:
-        rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples = \
+        rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _ = \
             get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
                        proposal_is_p, huggingface_model, tempered_twist, beta_prop)
@@ -136,7 +136,7 @@ def get_l_ebm_ml_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params
         normalized_w_t_sigma_samples = jnp.ones((true_sigma_samples.shape[0])) / true_sigma_samples.shape[0]
     else:
         if mixed_p_q_sample:
-            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples = \
+            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _ = \
                 get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                             output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
                            proposal_is_p, huggingface_model, tempered_twist, beta_prop)
@@ -326,12 +326,14 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
                                                            log_true_final_twist)
     log_w_t_tilde_sigma_over_q_mix = log_unnormalized_sigma_vals - mixture_log_prob_eval
 
+    log_w_t_tilde_sigma_over_q_mix = jax.lax.stop_gradient(log_w_t_tilde_sigma_over_q_mix) # unnormalized log w_t
+
     # print(log_w_t_tilde_sigma_over_q_mix)
     normalized_w_t_sigma_samples = jax.nn.softmax(
-        jax.lax.stop_gradient(log_w_t_tilde_sigma_over_q_mix))
+        log_w_t_tilde_sigma_over_q_mix)
     # print(normalized_w_t_sigma_samples)
 
-    return rng_key, combined_seqs, normalized_w_t_sigma_samples
+    return rng_key, combined_seqs, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix
 
 
 # TODO Oct 29 - I guess that the sigma samples should come from outside of this function, since this works for any set of (approximate) sigma samples
@@ -345,20 +347,27 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
 def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None,
-                       mixed_p_q_sample=False, exact_expectation=True, true_sigma_samples=None):
+                       mixed_p_q_sample=False, exact_expectation=True, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
     if true_sigma_samples is not None:
+        assert replay_buffer is None
         # if we have true posteriors (e.g. one true posterior, every example is from the
         prompt_w_sigma_sample_s_1_to_t = true_sigma_samples
         normalized_w_t_sigma_samples = jnp.ones((true_sigma_samples.shape[0])) / true_sigma_samples.shape[0]
 
-    else:
+    elif replay_buffer is not None:
+        assert replay_buffer_log_w_ts is not None
+        rng_key, sk_sample = jax.random.split(rng_key)
+        indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
+        prompt_w_sigma_sample_s_1_to_t = replay_buffer[indices]
+        normalized_w_t_sigma_samples = jnp.ones((n_twist,)) / n_twist
 
+    else:
         if mixed_p_q_sample:
-            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples = \
+            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _ = \
                 get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                             output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
                            proposal_is_p, huggingface_model, tempered_twist, beta_prop)
@@ -420,6 +429,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
         # Mean along the time dimension, again we can debate if we want to use sum. Just be consistent, that's the most important.
 
     else:
+        # TODO NOV 3 IF USING THIS, SHOULD TRY TO MAKE MORE EFFICIENT. But may as well just use the exact version.
         scan_over = jnp.arange(output_len)
         carry = (rng_key, params_p, params_twist, prompt_len)
         # Then the second part, we need to truncate the sigma samples to t-1, and then sample from the proposal q for the next time step, then those will be our negative samples

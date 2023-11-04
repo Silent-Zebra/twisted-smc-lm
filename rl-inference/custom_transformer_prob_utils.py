@@ -1474,9 +1474,13 @@ def calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p,
                                                  params_p,
                                                  prompt_len,
                                                  output_len)
-    log_phi_all_seqs = evaluate_log_phi_final(
-        jnp.concatenate((all_seqs, jnp.ones(all_seqs.shape[0], dtype=jnp.int32)[:, None] * condition_twist_on_token), axis=-1),
-        log_true_final_twist)
+
+    if condition_twist_on_token is not None:
+        log_phi_all_seqs = evaluate_log_phi_final(
+            jnp.concatenate((all_seqs, jnp.ones(all_seqs.shape[0], dtype=jnp.int32)[:, None] * condition_twist_on_token), axis=-1),
+            log_true_final_twist)
+    else:
+        log_phi_all_seqs = evaluate_log_phi_final(all_seqs, log_true_final_twist)
 
     # print((log_p_all_seqs + log_phi_all_seqs).shape)
     normalizing_constant = jnp.exp((log_p_all_seqs + log_phi_all_seqs)).sum()

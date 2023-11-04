@@ -38,7 +38,7 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     log_reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
     build_toxicity_threshold_twists, build_p_of_continuation_twists, build_p_of_last_tokens_twists, log_reward_model_p_of_last_tokens
 from losses import get_l_ebm_ml_partial_jit, get_l_ebm_ml_jit, \
-    get_l_one_total_kl, get_l_rl_based, get_l_dre_sixo
+    get_l_one_total_kl, get_l_rl_based, get_l_dre_sixo, get_mixed_p_q_samples
 
 # Update the twists, update the whole framework for the Bayesian thing.
 
@@ -188,7 +188,7 @@ class ExperimentConfig:
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
                               params_p, cfg_twist, params_twist, log_true_final_twist, prepend_tokens_for_twists=False,
                               token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
-                              tempered_twist=False, beta_prop=None):
+                              tempered_twist=False, beta_prop=None, replay_buffer=None, replay_buffer_log_w_ts=None):
         if self.twist_learn_type == "analytic_mse_rel" or self.twist_learn_type == "analytic_mse_abs":
             grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
                                             params_p, log_true_final_twist, cfg_twist,
@@ -211,7 +211,7 @@ class ExperimentConfig:
                 token_of_interest_as_int=token_of_interest_as_int,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                 tempered_twist=tempered_twist, beta_prop=beta_prop,
-                true_sigma_samples=true_sigma_samples
+                true_sigma_samples=true_sigma_samples, replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
             )
         return grad_params_twist
 
@@ -257,7 +257,7 @@ class ExperimentConfig:
                      output_len, cfg_p, params_p, cfg_twist, params_twist,
                      log_true_final_twist, proposal_is_p, huggingface_model,
                      optimizer_twist, optim_twist_state, index_of_token_contained,
-                     tempered_twist, beta_prop
+                     tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts
                      ):
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index":
             for i in range(len(indices_of_tokens_chosen)):
@@ -271,7 +271,8 @@ class ExperimentConfig:
                     token_of_interest_as_int=token_of_interest_as_int,
                     proposal_is_p=proposal_is_p,
                     huggingface_model=huggingface_model,
-                    tempered_twist=tempered_twist, beta_prop=beta_prop
+                    tempered_twist=tempered_twist, beta_prop=beta_prop,
+                    replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
                 )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
                 params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
                     optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
@@ -287,7 +288,8 @@ class ExperimentConfig:
                 token_of_interest_as_int=token_of_interest_as_int,
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model,
-                tempered_twist=tempered_twist, beta_prop=beta_prop
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
         elif self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "contains_continuation" \
@@ -309,7 +311,8 @@ class ExperimentConfig:
                 prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model,
-                tempered_twist=tempered_twist, beta_prop=beta_prop
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             # print(time.time() - new_time)
             # new_time = time.time()
@@ -341,7 +344,8 @@ class ExperimentConfig:
                 prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model,
-                tempered_twist=tempered_twist, beta_prop=beta_prop
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
                 optimizer_twist, grad_params_twist, optim_twist_state,
@@ -395,7 +399,8 @@ class ExperimentConfig:
                 prepend_tokens_for_twists=self.prepend_tokens_for_twists,
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model,
-                tempered_twist=tempered_twist, beta_prop=beta_prop
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
 
@@ -407,7 +412,8 @@ class ExperimentConfig:
                 cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model,
-                tempered_twist=tempered_twist, beta_prop=beta_prop
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
             )
 
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
@@ -1156,6 +1162,26 @@ def make_hists(true_posterior_samples, smc_samples, prompt_len, token_of_interes
 
 class TestClass:
 
+    def test_replay_buffer_NOBUFFER_rob_exact(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl",
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200
+                                  )
+
+    def test_replay_buffer_rob_exact(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl",
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  use_replay_buffer=True
+                                  )
+
+    def test_replay_buffer_one_big_sample_rob_exact(self):
+        self._test_twist_learning(twist_learn_type="one_total_kl",
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  use_replay_buffer=True, one_big_sample=True
+                                  )
+
     # Anyway this test worked when I tried it using the main code
     # def test_iwae_vs_smc_output_len_1(self):
     #     # These should be equal in the case of only one output len:
@@ -1170,6 +1196,7 @@ class TestClass:
     #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
     rm_type_to_test = "p_last_tokens" # "p_continuation" # "p_token_last_index" # "contains_token_eps" #
     # Do p_token_last_index and maybe p_continuation as well
+
 
     def test_rob_no_sample(self):
         self._test_twist_learning(twist_learn_type="one_total_kl", # one_total_kl_mixed_p_q, the same. The type of sampling doesn't matter if we use rm_type "p_last_tokens" since we have true posterior sigma samples always
@@ -1193,44 +1220,6 @@ class TestClass:
                                   lr_twist=0.0003, twist_updates_per_epoch=200
                                   )
 
-    # def test_p_tok_rob_new(self):
-    #     self._test_twist_learning(twist_learn_type="one_total_kl_mixed_p_q",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0003)
-    #
-    # def test_p_tok_rob_sample(self):
-    #     self._test_twist_learning(twist_learn_type="one_total_kl_sample",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0003)
-    # def test_p_tok_rob_sample_mixed(self):
-    #     self._test_twist_learning(twist_learn_type="one_total_kl_sample_mixed_p_q",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0003)
-    #
-    # # Already worked well
-    # def test_p_tok_rlp(self):
-    #     self._test_twist_learning(twist_learn_type="rl_p_lsq",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0003)
-    # def test_p_tok_rlq(self):
-    #     self._test_twist_learning(twist_learn_type="rl_q_lsq",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0003)
-    # def test_p_tok_rlsigma(self):
-    #     self._test_twist_learning(twist_learn_type="rl_sigma_lsq",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0003)
-    # def test_p_tok_ebm(self):
-    #     self._test_twist_learning(twist_learn_type="ebm",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0003)
-    #
-    # def test_p_tok_ebm_mixed_p_q(self):
-    #     self._test_twist_learning(twist_learn_type="ebm_mixed_p_q",
-    #                               rm_type=self.rm_type_to_test,
-    #                               lr_twist=0.0003)
-
-
     def test_sixo(self):
         self._test_twist_learning(twist_learn_type="sixo",
                                   rm_type=self.rm_type_to_test,
@@ -1241,12 +1230,7 @@ class TestClass:
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003)
 
-    # def test_twist_learning_p_token_last_index(self):
-    #     self._test_twist_learning_all_types(rm_type="p_token_last_index")
-    #
-    # def test_twist_learning_contains_token_eps(self):
-    #     self._test_twist_learning_all_types(rm_type="contains_token_eps")
-    #
+
     # def _test_twist_learning_all_types(self, rm_type="p_token_last_index"):
     #     types_to_test = [
     #         "rl_based_p_sample", "rl_based_q_sample", "rl_based_sigma_sample",
@@ -1257,7 +1241,9 @@ class TestClass:
     #                                   rm_type=rm_type)
 
 
-    def _test_twist_learning(self, twist_learn_type, rm_type="p_token_last_index", seed=1, lr_twist=0.0001, twist_updates_per_epoch=2000):
+    def _test_twist_learning(self, twist_learn_type, rm_type="p_token_last_index", seed=1,
+                             lr_twist=0.0001, twist_updates_per_epoch=2000,
+                             use_replay_buffer=False, one_big_sample=False):
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
         # 70 seconds on GPU for 100 twist updates 3 epochs
         output_len = 2
@@ -1289,6 +1275,16 @@ class TestClass:
         hface_nn_twist = False
         separate_hface_twist_model = False
         num_last_tokens_to_condition_on = 0
+        n_buffer_samples_at_a_time = n_twist
+        if one_big_sample:
+            twist_updates_between_buffer_samples = twist_updates_per_epoch // 4
+            n_times_to_sample_for_buffer = twist_updates_between_buffer_samples // 5
+        else:
+            twist_updates_between_buffer_samples = twist_updates_per_epoch // 40
+            n_times_to_sample_for_buffer = twist_updates_between_buffer_samples // 5
+        assert twist_updates_between_buffer_samples > 0
+        assert n_times_to_sample_for_buffer > 0
+        max_buffer_size = n_twist * n_times_to_sample_for_buffer * 10
 
         if rm_type == "p_last_tokens":
             num_last_tokens_to_condition_on = 1
@@ -1312,12 +1308,22 @@ class TestClass:
 
         num_epochs = 4
 
+        replay_buffers_by_prompt = [None] * len(jnp_prompts)
+        replay_buffer_log_w_ts_by_prompt = [None] * len(jnp_prompts)
+
+
         prompt_num = 0
         for prompt in jnp_prompts:
+            replay_buffer = replay_buffers_by_prompt[prompt_num]
+            replay_buffer_log_w_ts = replay_buffer_log_w_ts_by_prompt[
+                prompt_num]
 
             prompt_len = prompt.shape[-1]
             log_true_final_twist = log_true_final_twists[prompt_num]
             if rm_type == "indicator_at_index" or rm_type == "p_token_last_index":
+                if use_replay_buffer:
+                    raise NotImplementedError
+
                 indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
 
@@ -1342,11 +1348,12 @@ class TestClass:
                     for twist_update in range(twist_updates_per_epoch):
                         rng_key, params_twist, optim_twist_state = \
                             experiment_cfg.update_twist(
-                            rng_key, indices_of_tokens_chosen, prompt,
-                            n_twist, output_len, cfg_p, params_p, cfg_twist,
-                            params_twist, log_true_final_twist, proposal_is_p,
-                            huggingface_model, optimizer_twist, optim_twist_state,
-                            index_of_token_contained, tempered_twist, beta_prop
+                                rng_key, indices_of_tokens_chosen, prompt,
+                                n_twist, output_len, cfg_p, params_p, cfg_twist,
+                                params_twist, log_true_final_twist, proposal_is_p,
+                                huggingface_model, optimizer_twist, optim_twist_state,
+                                index_of_token_contained, tempered_twist, beta_prop,
+                                replay_buffer, replay_buffer_log_w_ts
                         )
                     for i in range(len(indices_of_tokens_chosen)):
                         avg_rel_diff = compare_learned_twist_vs_optimal(
@@ -1367,6 +1374,7 @@ class TestClass:
             elif rm_type == "contains_token" or rm_type == "contains_token_eps" or rm_type == "p_continuation" or rm_type == "hard_p_continuation":
                 indices_of_tokens_chosen = None
                 token_of_interest_as_int = None
+
                 if rm_type == "p_continuation" or rm_type == "hard_p_continuation":
                     log_true_final_twist_to_use = log_true_final_twist
                 if rm_type == rm_type == "contains_token" or rm_type == "contains_token_eps":
@@ -1407,7 +1415,30 @@ class TestClass:
 
                 print(avg_rel_diff_list)
                 for epoch in range(num_epochs):
+
                     for twist_update in range(twist_updates_per_epoch):
+
+                        if use_replay_buffer:
+                            if twist_update % twist_updates_between_buffer_samples == 0:  # Note: NOT twist_update + 1, because we want to get a replay buffer sample before the updates start
+                                print("UPDATING REPLAY BUFFER", flush=True)
+                                rng_key, replay_buffer, replay_buffer_log_w_ts = sample_for_replay_buffer(
+                                    rng_key, replay_buffer, replay_buffer_log_w_ts, prompt,
+                                    cfg_p, params_p, cfg_twist,
+                                    params_twist, log_true_final_twist,
+                                    experiment_cfg, output_len,
+                                    n_buffer_samples_at_a_time,
+                                    n_times_to_sample_for_buffer,
+                                    huggingface_model,
+                                    one_big_sample,
+                                    proposal_is_p,
+                                    tempered_twist, beta_prop, max_buffer_size
+                                )
+                                print("FINISHED UPDATING REPLAY BUFFER",
+                                      flush=True)
+
+                                replay_buffers_by_prompt[prompt_num] = replay_buffer
+                                replay_buffer_log_w_ts_by_prompt[prompt_num] = replay_buffer_log_w_ts
+
                         rng_key, params_twist, optim_twist_state = \
                             experiment_cfg.update_twist(
                                 rng_key, indices_of_tokens_chosen, prompt,
@@ -1416,7 +1447,8 @@ class TestClass:
                                 huggingface_model, optimizer_twist,
                                 optim_twist_state,
                                 index_of_token_contained,
-                                tempered_twist, beta_prop
+                                tempered_twist, beta_prop, replay_buffer,
+                                replay_buffer_log_w_ts
                             )
                     avg_rel_diff = compare_learned_twist_vs_optimal(
                         prompt, n_vocab, output_len,
@@ -1452,6 +1484,8 @@ class TestClass:
                     avg_kl_sigma_q_list.append(analytic_kl_sigma_q)
 
             elif rm_type == "p_last_tokens":
+                if use_replay_buffer:
+                    raise NotImplementedError
                 indices_of_tokens_chosen = None
                 token_of_interest_as_int = None
                 log_true_final_twist_to_use = log_true_final_twist
@@ -1497,7 +1531,8 @@ class TestClass:
                                 huggingface_model, optimizer_twist,
                                 optim_twist_state,
                                 index_of_token_contained,
-                                tempered_twist, beta_prop
+                                tempered_twist, beta_prop,
+                                replay_buffer, replay_buffer_log_w_ts
                             )
 
                     for token_to_test_conditioning in range(n_vocab):
@@ -2514,6 +2549,129 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
            hist_token_index, indexes_of_continuation, tokenizer
 
 
+# @partial(jax.jit, static_argnames=[
+#     "cfg_p", "cfg_twist", "output_len", "log_true_final_twist", "experiment_cfg",
+#     "n_buffer_samples_at_a_time", "n_times_to_sample_for_buffer", "huggingface_model",
+#     "one_big_sample", "proposal_is_p", "tempered_twist", "beta_prop", "max_buffer_size" ])
+# # TODO If using jit, should make the for loops a scan
+def sample_for_replay_buffer(
+    rng_key, replay_buffer, replay_buffer_log_w_ts, prompt, cfg_p, params_p, cfg_twist,
+    params_twist, log_true_final_twist, experiment_cfg, output_len,
+    n_buffer_samples_at_a_time, n_times_to_sample_for_buffer, huggingface_model,
+    one_big_sample, proposal_is_p, tempered_twist, beta_prop, max_buffer_size
+):
+    if experiment_cfg.rm_type == "p_last_tokens":
+        raise NotImplementedError  # Think about how to do replay buffer or one big sample for this setting
+    if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index" \
+        or experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps":
+        raise NotImplementedError  # Deal with the token_of_interest_as_int
+
+    if one_big_sample:
+        # Reset everything and just get an entirely new buffer (a new big sample)
+        replay_buffer = None
+        replay_buffer_log_w_ts = None
+
+        # TODO: consider other sampling procedures besides mixed_p_q (also: lax.scan)
+        for _ in range(n_times_to_sample_for_buffer):
+            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix = \
+                get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p,
+                                      cfg_twist, params_twist,
+                                      log_true_final_twist,
+                                      output_len,
+                                      n_buffer_samples_at_a_time,
+                                      experiment_cfg.prepend_tokens_for_twists,
+                                      condition_twist_on_tokens=None,
+                                      smc_procedure_type=experiment_cfg.smc_procedure_type,
+                                      token_of_interest_as_int=None,
+                                      proposal_is_p=proposal_is_p,
+                                      huggingface_model=huggingface_model,
+                                      tempered_twist=tempered_twist,
+                                      beta_prop=beta_prop)
+
+            if replay_buffer is None:
+                replay_buffer = prompt_w_sigma_sample_s_1_to_t
+                replay_buffer_log_w_ts = log_w_t_tilde_sigma_over_q_mix
+            else:
+                replay_buffer = jnp.concatenate(
+                    (replay_buffer, prompt_w_sigma_sample_s_1_to_t), axis=0)
+                replay_buffer_log_w_ts = jnp.concatenate(
+                    (replay_buffer_log_w_ts, log_w_t_tilde_sigma_over_q_mix), axis=0)
+                # Keep the log_w_ts as is without normalization/logsoftmax because
+                # the replay buffer in this setting is just one big sample from the same base probabilities
+                # (p, q, or mixed; the p or q will all be from the same distribution in this one big sample setting)
+
+            # replay_buffer.append(prompt_w_sigma_sample_s_1_to_t)
+            # log_w_ts.append(log_w_t_tilde_sigma_over_q_mix)
+
+            # print(prompt_w_sigma_sample_s_1_to_t.shape)
+            # print(log_w_t_tilde_sigma_over_q_mix.shape)
+
+        # replay_buffer = jnp.stack(replay_buffer)
+        # log_w_ts = jnp.stack(log_w_ts)
+        # print(replay_buffer.shape)
+        # print(log_w_ts.shape)
+        # normalized_w_ts = jax.nn.softmax(log_w_ts, axis=-1)
+        # print(log_w_ts)
+        # print(normalized_w_ts)
+
+    else: # Rolling/FIFO queue replay buffer
+        replay_buffer_samples_to_add = None
+        log_w_ts_to_add = None
+        for _ in range(n_times_to_sample_for_buffer):
+            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix = \
+                get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p,
+                                      cfg_twist, params_twist,
+                                      log_true_final_twist,
+                                      output_len,
+                                      n_buffer_samples_at_a_time,
+                                      experiment_cfg.prepend_tokens_for_twists,
+                                      condition_twist_on_tokens=None,
+                                      smc_procedure_type=experiment_cfg.smc_procedure_type,
+                                      token_of_interest_as_int=None,
+                                      proposal_is_p=proposal_is_p,
+                                      huggingface_model=huggingface_model,
+                                      tempered_twist=tempered_twist,
+                                      beta_prop=beta_prop)
+
+            if replay_buffer_samples_to_add is None:
+                replay_buffer_samples_to_add = prompt_w_sigma_sample_s_1_to_t
+                log_w_ts_to_add = log_w_t_tilde_sigma_over_q_mix
+                # Here we need log softmax in order to get normalized log w_ts
+                # we need this because with a rolling/queue buffer, we may possibly
+                # have samples drawn from different q distributions
+                # So we cannot use the unnormalized values/weights when they come from different
+                # base distributions
+                # Once we've normalized across each of the individual draws,
+            else:
+                replay_buffer_samples_to_add = jnp.concatenate(
+                    (replay_buffer_samples_to_add, prompt_w_sigma_sample_s_1_to_t), axis=0)
+                log_w_ts_to_add = jnp.concatenate(
+                    (log_w_ts_to_add, log_w_t_tilde_sigma_over_q_mix), axis=0)
+
+        if replay_buffer is None:
+            replay_buffer = replay_buffer_samples_to_add
+            replay_buffer_log_w_ts = jax.nn.log_softmax(log_w_ts_to_add)
+            # The way this log_softmax works is: for all the draws we have made now, these come from the same proposal or base model or prior distribution
+            # so again, we can do softmax across all of those.
+            # BUT once the distribution we are drawing from changes, now we need to separately normalize for draws from that distribution.
+            # Now, when we actually go draw from the replay buffer, we could separate into chunks, and pick chunks uniformly at random,
+            # then sample within those chunks according to their (either normalized or unnormalized) weights
+            # Or we could just normalize each chunk first, and then draw from the whole set of possible weights (this may have the possibility of duplicates or oversampling from some chunk, but in expectation should be the same)
+        else:
+            replay_buffer = jnp.concatenate((replay_buffer, replay_buffer_samples_to_add), axis=0)
+            replay_buffer_log_w_ts = jnp.concatenate((replay_buffer_log_w_ts, jax.nn.log_softmax(log_w_ts_to_add)), axis=0)
+
+        if replay_buffer.shape[0] > max_buffer_size:
+            replay_buffer = replay_buffer[-max_buffer_size:]
+            replay_buffer_log_w_ts = replay_buffer_log_w_ts[-max_buffer_size:]
+
+    print("Replay buffer shapes:", flush=True)
+    print(replay_buffer.shape)
+    print(replay_buffer_log_w_ts.shape)
+
+    return rng_key, replay_buffer, replay_buffer_log_w_ts
+
+
 def main():
 
     start = time.time()
@@ -2586,7 +2744,8 @@ def main():
                             log_true_final_twist, args.proposal_is_p, huggingface_model,
                             optimizer_twist, optim_twist_state,
                             args.index_of_token_contained,
-                            args.tempered_twist, args.beta_prop
+                            args.tempered_twist, args.beta_prop,
+                            replay_buffer=None, replay_buffer_log_w_ts=None
                         )
 
                     if (twist_update + 1) % print_every_twist_updates == 0:
@@ -2612,12 +2771,18 @@ def main():
         print("Finished Pretraining Final Twist", flush=True)
         print(f"TIME: {time.time() - start}", flush=True)
 
+    replay_buffers_by_prompt = [None] * len(jnp_prompts)
+    replay_buffer_log_w_ts_by_prompt = [None] * len(jnp_prompts)
+
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
 
         prompt_num = 0
         for prompt in jnp_prompts:
+            replay_buffer = replay_buffers_by_prompt[prompt_num]
+            replay_buffer_log_w_ts = replay_buffer_log_w_ts_by_prompt[prompt_num]
+
 
             if args.rm_type == "exp_beta_rew_p_continuation" and args.rejection_sample_naive:
                 rng_key, sk = jax.random.split(rng_key)
@@ -2779,6 +2944,29 @@ def main():
             avg_update_time = 0.
 
             for twist_update in range(args.twist_updates_per_epoch):
+
+                if args.use_replay_buffer:
+                    if twist_update % args.twist_updates_between_buffer_samples == 0: # Note: NOT twist_update + 1, because we want to get a replay buffer sample before the updates start
+                        print("UPDATING REPLAY BUFFER", flush=True)
+                        print(f"TIME: {time.time() - start}", flush=True)
+                        rng_key, replay_buffer, replay_buffer_log_w_ts = sample_for_replay_buffer(
+                            rng_key, replay_buffer, replay_buffer_log_w_ts, prompt, cfg_p,
+                            params_p, cfg_twist,
+                            params_twist, log_true_final_twist,
+                            experiment_cfg, args.output_len,
+                            args.n_buffer_samples_at_a_time, args.n_times_to_sample_for_buffer,
+                            huggingface_model,
+                            args.one_big_sample, args.proposal_is_p,
+                            args.tempered_twist, args.beta_prop, args.max_buffer_size
+                        )
+                        print("FINISHED UPDATING REPLAY BUFFER", flush=True)
+                        print(f"TIME: {time.time() - start}", flush=True)
+                        print(replay_buffer.shape)
+                        print(replay_buffer_log_w_ts.shape)
+
+                        replay_buffers_by_prompt[prompt_num] = replay_buffer
+                        replay_buffer_log_w_ts_by_prompt[prompt_num] = replay_buffer_log_w_ts
+
                 # if twist_update != 0:
                 #     new_time = time.time()
 
@@ -2802,7 +2990,7 @@ def main():
                         args.output_len, cfg_p, params_p, cfg_twist, params_twist,
                         log_true_final_twist, args.proposal_is_p, huggingface_model,
                         optimizer_twist, optim_twist_state, args.index_of_token_contained,
-                        args.tempered_twist, args.beta_prop
+                        args.tempered_twist, args.beta_prop, replay_buffer, replay_buffer_log_w_ts
                     )
                 # if twist_update != 0:
                 #     update_time = time.time() - new_time
@@ -2834,6 +3022,8 @@ def main():
                 only_inspect_samples = False
 
             if (epoch + 1) % args.print_every == 0:
+                token_of_interest_as_int = None
+
                 if test_info:
                     print(f"TEST INFO STARTING", flush=True)
                     print(f"TIME: {time.time() - start}", flush=True)
@@ -2843,7 +3033,6 @@ def main():
                         if not huggingface_model:
 
                             if true_log_z is None:
-                                token_of_interest_as_int = None
                                 if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index" \
                                     or experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps":
                                     i = 0  # Just check the first twist, that's fine for this illustration
@@ -3066,6 +3255,8 @@ if __name__ == "__main__":
     parser.add_argument("--n_twist", type=int, default=100)
     parser.add_argument("--n_policy_samples", type=int, default=100,
                         help="Batch size to use when updating policy (p) and baseline")
+
+
     parser.add_argument("--n_bad_word_samples", type=int, default=10, help="only for inspecting the bad_word environment; see some model generations")
 
     parser.add_argument("--n_vocab", type=int, default=2,
@@ -3126,6 +3317,15 @@ if __name__ == "__main__":
 
     parser.add_argument("--pretrain_final_twist", action="store_true", help="Pretrain the final twists (using RL-style squared error (in log space)) before beginning other twist training")
     parser.add_argument("--pretrain_twist_epochs", type=int, default=100, help="How many epochs to do the final twist pretraining (total number of pretraining updates = pretrain_twist_epochs * twist_updates_per_epoch)")
+
+    parser.add_argument("--use_replay_buffer", action="store_true", help="Use a replay buffer")
+    parser.add_argument("--one_big_sample", action="store_true", help="Get a replay buffer based on one big sample (via a bunch of smaller samples). Default false means we will have a growing FIFO queue buffer that we keep adding to")
+    parser.add_argument("--n_times_to_sample_for_buffer", type=int, default=100, help="How many iterations to collect n_twist samples for the replay buffer")
+    parser.add_argument("--n_buffer_samples_at_a_time", type=int, default=1000, help="only for use with the replay buffer")
+    parser.add_argument("--twist_updates_between_buffer_samples", type=int, default=500, help="How many twist updates before we sample for the buffer again. Probably should have this be bigger than n_times_to_sample_for_buffer, otherwise defeats the purpose of the buffer. Can be smaller with smaller n_times_to_sample_for_buffer, if we want more frequent buffer updates without one_big_sample (with the queue buffer)")
+    parser.add_argument("--max_buffer_size", type=int, default=100000, help="Maximum number of samples to hold in the buffer")
+
+
 
     args = parser.parse_args()
 
