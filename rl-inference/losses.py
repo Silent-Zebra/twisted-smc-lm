@@ -534,7 +534,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
                             evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error_in_log_space", tempered_twist=False, beta_prop=None,
-                            train_final_twist_only=False, true_sigma_samples=None):
+                            train_final_twist_only=False, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -542,7 +542,14 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     if true_sigma_samples is not None:
         # if we have true posteriors (e.g. one true posterior, every example is from the
         samples_to_evaluate_over = true_sigma_samples
-        log_w_t = jnp.ones((true_sigma_samples.shape[0]))
+        log_w_t = jnp.zeros((true_sigma_samples.shape[0]))
+
+    elif replay_buffer is not None:
+        assert replay_buffer_log_w_ts is not None
+        rng_key, sk_sample = jax.random.split(rng_key)
+        indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
+        samples_to_evaluate_over = replay_buffer[indices]
+        log_w_t = jnp.zeros((n_twist,))
 
     else:
         if loss_type == "monte_carlo":
@@ -550,7 +557,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 
         if evaluate_over_samples_from == "p":
             samples_to_evaluate_over = stochastic_transformer_sample(sk1, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
-            log_w_t = jnp.ones((samples_to_evaluate_over.shape[0]))
+            log_w_t = jnp.zeros((samples_to_evaluate_over.shape[0]))
 
         elif evaluate_over_samples_from == "q":
             # Get q samples with no resampling anywhere
@@ -567,7 +574,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
             )
             samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
             print(samples_to_evaluate_over.shape)
-            log_w_t = jnp.ones((samples_to_evaluate_over.shape[0])) # Do this because with the no resample case, we already have samples from the q distribution, reweighting again would do nothing, just increase variance/redundancy in samples
+            log_w_t = jnp.zeros((samples_to_evaluate_over.shape[0])) # Do this because with the no resample case, we already have samples from the q distribution, reweighting again would do nothing, just increase variance/redundancy in samples
 
         elif evaluate_over_samples_from == "qrsmp":
             # Get q samples with no resampling anywhere
@@ -619,7 +626,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 
             samples_to_evaluate_over = jnp.concatenate((samples_to_evaluate_over_p, samples_to_evaluate_over_q), axis=0)
 
-            log_w_t = jnp.ones((samples_to_evaluate_over.shape[0]))
+            log_w_t = jnp.zeros((samples_to_evaluate_over.shape[0])) # actually 1 or 0 doesn't matter since I softmax afterwards...
         else:
             raise NotImplementedError
 

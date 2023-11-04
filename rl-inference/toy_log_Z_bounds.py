@@ -1182,6 +1182,26 @@ class TestClass:
                                   use_replay_buffer=True, one_big_sample=True
                                   )
 
+    def test_NOreplay_buffer_rl(self):
+        self._test_twist_learning(twist_learn_type="rl_mixed_p_q_lsq",
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  )
+
+    def test_replay_buffer_rl(self):
+        self._test_twist_learning(twist_learn_type="rl_p_lsq", # The middle choice (p, q, etc.) should not matter with the use of the replay buffer
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  use_replay_buffer=True
+                                  )
+
+    def test_replay_buffer_one_big_sample_rl(self):
+        self._test_twist_learning(twist_learn_type="rl_p_lsq",
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  use_replay_buffer=True, one_big_sample=True
+                                  )
+
     # Anyway this test worked when I tried it using the main code
     # def test_iwae_vs_smc_output_len_1(self):
     #     # These should be equal in the case of only one output len:
@@ -2571,8 +2591,9 @@ def sample_for_replay_buffer(
         replay_buffer = None
         replay_buffer_log_w_ts = None
 
-        # TODO: consider other sampling procedures besides mixed_p_q (also: lax.scan)
+        # TODO Nov: consider other sampling procedures besides mixed_p_q (also: lax.scan): use args.replay_buffer_sample_type
         for _ in range(n_times_to_sample_for_buffer):
+
             rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix = \
                 get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p,
                                       cfg_twist, params_twist,
@@ -3328,7 +3349,8 @@ if __name__ == "__main__":
     parser.add_argument("--twist_updates_between_buffer_samples", type=int, default=500, help="How many twist updates before we sample for the buffer again. Probably should have this be bigger than n_times_to_sample_for_buffer, otherwise defeats the purpose of the buffer. Can be smaller with smaller n_times_to_sample_for_buffer, if we want more frequent buffer updates without one_big_sample (with the queue buffer)")
     parser.add_argument("--max_buffer_size", type=int, default=100000, help="Maximum number of samples to hold in the buffer")
 
-
+    parser.add_argument("--replay_buffer_sample_type", type=str, default="ebm",
+                        choices=["mixed_p_q"], help="How to draw samples to fill up the replay buffer")
 
     args = parser.parse_args()
 
