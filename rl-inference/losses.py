@@ -27,7 +27,8 @@ resample_for_sigma_samples = False # True was what I had before; false to try no
                                    "tempered_twist", "beta_prop", "mixed_p_q_sample"])
 def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                    output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
-                   proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None):
+                   proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
+                   replay_buffer=None, replay_buffer_log_w_ts=None):
     if true_sigma_samples is not None:
         raise NotImplementedError
 
@@ -121,7 +122,7 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 def get_l_ebm_ml_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
                  token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
-                 tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None
+                 tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None
                  ):
 
     # print("STARTING GET L EBM UPDATE")
@@ -545,9 +546,15 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
         log_w_t = jnp.zeros((true_sigma_samples.shape[0]))
 
     elif replay_buffer is not None:
-        assert replay_buffer_log_w_ts is not None
         rng_key, sk_sample = jax.random.split(rng_key)
-        indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
+        if evaluate_over_samples_from == "sigma":
+            assert replay_buffer_log_w_ts is not None
+            indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
+        elif evaluate_over_samples_from == "mixed_p_q":
+            replay_buffer_log_w_ts = jnp.zeros((n_twist,)) # do uniform draws in this case, since the samples are already from p and q mixed...
+            indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
+        else:
+            raise NotImplementedError
         samples_to_evaluate_over = replay_buffer[indices]
         log_w_t = jnp.zeros((n_twist,))
 
