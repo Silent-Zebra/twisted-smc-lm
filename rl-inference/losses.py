@@ -301,6 +301,24 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
         tempered_twist=tempered_twist, beta_prop=beta_prop
     )
 
+    # (_, _, _), _, (intermediate_twist_samples_hist,
+    #                intermediate_log_w_t_hist) = smc_procedure(
+    #     sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    #     log_true_final_twist, output_len, n_twist // 2,
+    #     smc_procedure_type=smc_procedure_type,
+    #     get_intermediate_sample_history_based_on_learned_twists=True,
+    #     prepend_tokens_for_twists=prepend_tokens_for_twists,
+    #     condition_twist_on_tokens=condition_twist_on_tokens,
+    #     token_of_interest_as_int=token_of_interest_as_int,
+    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+    #     resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop
+    # )
+    # samples_to_evaluate_over_q = intermediate_twist_samples_hist[-1]
+    # print(q_samples)
+    # print(samples_to_evaluate_over_q)
+    # print(q_samples - samples_to_evaluate_over_q)
+    # print((q_samples - samples_to_evaluate_over_q).sum())
+
     p_samples = stochastic_transformer_sample(
         sk1, cfg_p, params_p, prompt, output_len,
         n_twist // 2, huggingface_model=huggingface_model)
@@ -528,7 +546,6 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 #     return -l_kl  # negative because now we have a loss
 
 
-
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
                                    "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop", "train_final_twist_only"])
@@ -555,7 +572,11 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
             indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
         else:
             raise NotImplementedError
-        samples_to_evaluate_over = replay_buffer[indices]
+        if replay_buffer.shape[0] == n_twist:
+            print("Using the full replay buffer with no sampling")
+            samples_to_evaluate_over = replay_buffer
+        else:
+            samples_to_evaluate_over = replay_buffer[indices]
         log_w_t = jnp.zeros((n_twist,))
 
     else:

@@ -1189,19 +1189,26 @@ class TestClass:
                                   )
 
     def test_replay_buffer_rl(self):
-        self._test_twist_learning(twist_learn_type="rl_p_lsq", # The middle choice (p, q, etc.) should not matter with the use of the replay buffer
+        self._test_twist_learning(twist_learn_type="rl_mixed_p_q_lsq", # The middle choice (p, q, etc.) should not matter with the use of the replay buffer
                                   rm_type="p_continuation",
                                   lr_twist=0.0003, twist_updates_per_epoch=200,
                                   use_replay_buffer=True
                                   )
 
     def test_replay_buffer_one_big_sample_rl(self):
-        self._test_twist_learning(twist_learn_type="rl_p_lsq",
+        self._test_twist_learning(twist_learn_type="rl_mixed_p_q_lsq",
                                   rm_type="p_continuation",
                                   lr_twist=0.0003, twist_updates_per_epoch=200,
                                   use_replay_buffer=True, one_big_sample=True
                                   )
 
+    def test_replay_buffer_BASELINE_one_big_sample_rl(self):
+        self._test_twist_learning(twist_learn_type="rl_mixed_p_q_lsq",
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  use_replay_buffer=True, one_big_sample=True,
+                                  debug=True
+                                  )
     # Anyway this test worked when I tried it using the main code
     # def test_iwae_vs_smc_output_len_1(self):
     #     # These should be equal in the case of only one output len:
@@ -1263,7 +1270,7 @@ class TestClass:
 
     def _test_twist_learning(self, twist_learn_type, rm_type="p_token_last_index", seed=1,
                              lr_twist=0.0001, twist_updates_per_epoch=2000,
-                             use_replay_buffer=False, one_big_sample=False):
+                             use_replay_buffer=False, one_big_sample=False, debug=False):
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
         # 70 seconds on GPU for 100 twist updates 3 epochs
         output_len = 2
@@ -1297,8 +1304,12 @@ class TestClass:
         num_last_tokens_to_condition_on = 0
         n_buffer_samples_at_a_time = n_twist
         if one_big_sample:
-            twist_updates_between_buffer_samples = twist_updates_per_epoch // 4
-            n_times_to_sample_for_buffer = twist_updates_between_buffer_samples // 5
+            if debug:
+                twist_updates_between_buffer_samples = 1
+                n_times_to_sample_for_buffer = 1
+            else:
+                twist_updates_between_buffer_samples = twist_updates_per_epoch // 4
+                n_times_to_sample_for_buffer = twist_updates_between_buffer_samples // 5
         else:
             twist_updates_between_buffer_samples = twist_updates_per_epoch // 40
             n_times_to_sample_for_buffer = twist_updates_between_buffer_samples // 5
