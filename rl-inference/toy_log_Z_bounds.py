@@ -748,7 +748,8 @@ class ExperimentConfig:
                                   index_of_token_contained=None,
                                   indexes_of_continuation=None,
                                   toxicityModel=None, tokenizer_RM=None, tokenizer=None,
-                                  threshold=0, pos_threshold=True):
+                                  threshold=0, pos_threshold=True,
+                                  get_true_posterior_samples=True):
         if rm_type == "bad_word_pos":
             log_true_final_twists = build_log_true_final_twists_positive_rew(
                 jnp_prompts, self.rm_fn,
@@ -795,8 +796,10 @@ class ExperimentConfig:
             assert indexes_of_continuation is not None
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = build_p_of_continuation_twists(sk, jnp_prompts, cfg_p, params_p, indexes_of_continuation, output_len,
-                                                 n_samples_at_a_time=n_true_posterior_samples, tokenizer=tokenizer, huggingface_model=huggingface_model, get_true_posterior_samples=True)
+                = build_p_of_continuation_twists(
+                sk, jnp_prompts, cfg_p, params_p, indexes_of_continuation, output_len,
+                n_samples_at_a_time=n_true_posterior_samples, tokenizer=tokenizer,
+                huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples)
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
@@ -811,7 +814,7 @@ class ExperimentConfig:
                                                  n_samples_at_a_time=n_true_posterior_samples,
                                                  tokenizer=tokenizer,
                                                  huggingface_model=huggingface_model,
-                                                 get_true_posterior_samples=True)
+                                                 get_true_posterior_samples=get_true_posterior_samples)
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
@@ -1667,7 +1670,6 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     #                         token_of_interest_as_int,
     #                         true_posterior_samples,
     #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
-    #
     # 1/0
 
     print("TOKEN OF INTEREST")
@@ -1878,6 +1880,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                   output_len, log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
                   token_of_interest_as_int, proposal_is_p, huggingface_model)
     g_q_estimate = target_dist_weights.mean()
+    print("G_q for each posterior sample:")
+    print(target_dist_weights)
     num_true_posterior_samples = true_posterior_samples.shape[0]
     print(f"G_q {num_true_posterior_samples} posterior sample(s) estimate: {g_q_estimate}")
     kl_sigma_q_ub_iwae = g_q_estimate - iwae_lower_bound_across_seeds # Note this is correct, you need LB to get the UB on KL(sigma|q)
@@ -1994,7 +1998,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
           beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dir=None,
               load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
               num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
-              num_samples_if_only_collect_true_posterior_samples=100):
+              num_samples_if_only_collect_true_posterior_samples=100,
+              load_posterior_samples=False, load_prefix_posterior_samples=None):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
@@ -2438,24 +2443,25 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
 
         return combined_true_posterior_samples
 
-
+    get_true_posterior_samples = True
+    if load_posterior_samples:
+        get_true_posterior_samples = False
     rng_key, sk = jax.random.split(rng_key)
     log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-        = experiment_cfg.get_log_true_final_twists(sk, jnp_prompts, cfg_p,
-                                    params_p,
-                                    rm_type, indicator_pos_zero_index,
-                                    output_len,
-                                    n_true_posterior_samples,
-                                    huggingface_model,
-                                    index_of_token_contained,
-                                                   indexes_of_continuation,
-                                                   toxicityModel,
-                                                   tokenizer_RM,
-                                                   tokenizer,
-                                                   threshold,
-                                                   pos_threshold
-                                                   )
+        = experiment_cfg.get_log_true_final_twists(
+        sk, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
+        output_len, n_true_posterior_samples, huggingface_model,
+        index_of_token_contained, indexes_of_continuation, toxicityModel,
+        tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples
+    )
 
+    if load_posterior_samples:
+        x = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=None, prefix=load_prefix_posterior_samples)
+        # print(x)
+        # print(x['0']['0'])
+        print(x['0']['0'].shape)
+        print(list(x['0'].values()))
+        true_posterior_samples_by_prompt_and_by_token = list(x['0'].values())
 
 
     # # TIME TEST ONLY
@@ -2769,13 +2775,14 @@ def main():
             args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
             args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model,
             args.num_last_tokens_to_condition_on, only_collect_true_posterior_samples=True,
-            num_samples_if_only_collect_true_posterior_samples=args.num_samples_if_only_collect_true_posterior_samples
+            num_samples_if_only_collect_true_posterior_samples=args.num_samples_if_only_collect_true_posterior_samples,
+            load_posterior_samples=False
         )
         print(true_posterior_samples_by_prompt)
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                     target=(true_posterior_samples_by_prompt,),
-                                    step=0,
-                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
+                                    step=true_posterior_samples_by_prompt[0].shape[0],
+                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
         1 / 0
 
     experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
@@ -2791,7 +2798,8 @@ def main():
         args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
         args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
         args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model,
-        args.num_last_tokens_to_condition_on
+        args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
+        args.load_prefix_posterior_samples
     )
 
     # from toy_reward_models import batch_check_array_contained_in_other_array
@@ -3393,9 +3401,12 @@ if __name__ == "__main__":
 
     parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
-    parser.add_argument("--load_dir", type=str, default='.', help="Where to load from for checkpoint")
     parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
+    parser.add_argument("--load_dir", type=str, default='.', help="Where to load from for checkpoint")
     parser.add_argument("--load_prefix", type=str, default='.')
+    parser.add_argument("--load_posterior_samples", action="store_true", help="load posterior samples from saved checkpoint instead of creating new ones")
+    parser.add_argument("--load_prefix_posterior_samples", type=str, default='.')
+
 
     parser.add_argument("--indicator_pos_zero_index", type=int, default=0)
     parser.add_argument("--n_true_posterior_samples", type=int, default=10)
