@@ -37,7 +37,7 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
     if mixed_p_q_sample:
-        rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _ = \
+        rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _  = \
             get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
                        proposal_is_p, huggingface_model, tempered_twist, beta_prop)
@@ -119,11 +119,13 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 
 # JITTING IS DONE SEPARATELY BELOW
 # This is the EBM Maximum Likelihood approach (previously called Roger's approach).
-def get_l_ebm_ml_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                        output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
-                 token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
-                 tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None
-                 ):
+def get_l_ebm_ml_partial_jit(
+    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+    output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
+    token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
+    tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
+    replay_buffer=None, replay_buffer_log_w_ts=None
+):
 
     # print("STARTING GET L EBM UPDATE")
     # new_start = time.time()
@@ -135,9 +137,45 @@ def get_l_ebm_ml_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params
         # if we have true posteriors (e.g. one true posterior, every example is from the
         prompt_w_sigma_sample_s_1_to_t = true_sigma_samples
         normalized_w_t_sigma_samples = jnp.ones((true_sigma_samples.shape[0])) / true_sigma_samples.shape[0]
+    elif replay_buffer is not None:
+        assert replay_buffer_log_w_ts is not None
+        # print("hihi")
+        # print(replay_buffer_log_w_ts)
+        replay_buffer_log_w_ts, replay_buffer_log_prob_eval = replay_buffer_log_w_ts
+        # print("hihi2")
+        # print(replay_buffer_log_w_ts)
+        # print("hihi3")
+        # print(replay_buffer_log_prob_eval)
+        rng_key, sk_sample = jax.random.split(rng_key)
+        indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
+        prompt_w_sigma_sample_s_1_to_t = replay_buffer[indices]
+        normalized_w_t_sigma_samples = jnp.ones((n_twist,)) / n_twist
+
+        indices_neg = jax.random.categorical(sk_sample, jnp.zeros_like(replay_buffer_log_w_ts), shape=(n_twist,)) # Uniform random sample
+
+        proposal_samples = replay_buffer[indices_neg]
+        proposal_samples_log_w_ts = evaluate_normalized_log_q_1_to_t(
+            proposal_samples, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
+            prepend_tokens_for_twists, condition_twist_on_tokens,
+            token_of_interest_as_int, huggingface_model) - replay_buffer_log_prob_eval[indices_neg]
+        normalized_proposal_samples_log_w_ts = jax.nn.softmax(jax.lax.stop_gradient(proposal_samples_log_w_ts))
+        log_psi_on_proposal_samples = evaluate_log_psi_selected_tokens(
+            proposal_samples, prompt_len, cfg_twist, params_twist,
+            prepend_tokens_for_twists, condition_twist_on_tokens,
+            token_of_interest_as_int, huggingface_model)
+
+        log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
+            prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+            prepend_tokens_for_twists, condition_twist_on_tokens,
+            token_of_interest_as_int, huggingface_model)
+
+        l_ebm_new = -(jnp.dot(log_psi_on_truncated_sigma_samples.mean(axis=-1), normalized_w_t_sigma_samples)
+                      - jnp.dot(log_psi_on_proposal_samples.mean(axis=-1), normalized_proposal_samples_log_w_ts))
+        return l_ebm_new
+
     else:
         if mixed_p_q_sample:
-            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _ = \
+            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _ = \
                 get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                             output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
                            proposal_is_p, huggingface_model, tempered_twist, beta_prop)
@@ -352,7 +390,7 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
         log_w_t_tilde_sigma_over_q_mix)
     # print(normalized_w_t_sigma_samples)
 
-    return rng_key, combined_seqs, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix
+    return rng_key, combined_seqs, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix, jax.lax.stop_gradient(mixture_log_prob_eval)
 
 
 # TODO Oct 29 - I guess that the sigma samples should come from outside of this function, since this works for any set of (approximate) sigma samples
@@ -386,7 +424,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 
     else:
         if mixed_p_q_sample:
-            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _ = \
+            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _ = \
                 get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                             output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
                            proposal_is_p, huggingface_model, tempered_twist, beta_prop)
