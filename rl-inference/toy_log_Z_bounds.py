@@ -2739,7 +2739,7 @@ def sample_for_replay_buffer(
                                           beta_prop=beta_prop)
                 log_w_t_sigma_over_proposal = log_w_t_tilde_sigma_over_q_mix
 
-
+            log_prob_eval = jax.lax.stop_gradient(log_prob_eval)
             if replay_buffer is None:
                 replay_buffer = prompt_w_sigma_sample_s_1_to_t
                 replay_buffer_log_w_ts = log_w_t_sigma_over_proposal
@@ -2812,6 +2812,7 @@ def sample_for_replay_buffer(
                                           beta_prop=beta_prop)
                 log_w_t_sigma_over_proposal = log_w_t_tilde_sigma_over_q_mix
 
+            log_prob_eval = jax.lax.stop_gradient(log_prob_eval)
 
             if replay_buffer_samples_to_add is None:
                 replay_buffer_samples_to_add = prompt_w_sigma_sample_s_1_to_t
