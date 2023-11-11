@@ -1186,7 +1186,13 @@ class TestClass:
                                   use_replay_buffer=True, one_big_sample=True
                                   )
 
-
+    def test_replay_buffer_one_big_sample_partial_jit_ebm(self):
+        self._test_twist_learning(twist_learn_type="ebm_partial_jit",
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  use_replay_buffer=True, one_big_sample=True,
+                                  debug=True
+                                  )
 
     def test_replay_buffer_NOBUFFER_rob_exact(self):
         self._test_twist_learning(twist_learn_type="one_total_kl",
