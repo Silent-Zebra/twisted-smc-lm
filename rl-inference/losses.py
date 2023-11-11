@@ -85,7 +85,6 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     # print(jax.lax.stop_gradient((jax.nn.log_sigmoid(log_psi_on_truncated_sigma_samples)
     #                                                + jnp.log(1 - jax.nn.sigmoid(log_psi_on_p_samples))).mean()))
 
-
     # l_dre = l_dre.mean()
 
     # print(l_dre_old)
@@ -218,7 +217,7 @@ def get_l_ebm_ml_partial_jit(
     # print(log_psi_on_truncated_sigma_samples.shape)
 
     # Get q samples with no resampling anywhere
-    (_, _, log_psi_t_eval_list_proposal_samples), _, (intermediate_twist_samples_hist, intermediate_log_w_t_hist) = smc_procedure(
+    (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (intermediate_twist_samples_hist, intermediate_log_w_t_hist) = smc_procedure(
         sk2, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len, n_twist,
         smc_procedure_type=smc_procedure_type,
         get_intermediate_sample_history_based_on_learned_twists=True,
@@ -227,7 +226,7 @@ def get_l_ebm_ml_partial_jit(
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
         resample=False, # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
         # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
-        resample_for_log_psi_t_eval_list=True,
+        resample_for_log_psi_t_eval_list=False,
         tempered_twist=False # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
     )
 
@@ -244,6 +243,14 @@ def get_l_ebm_ml_partial_jit(
     # print(jnp.transpose(log_psi_t_eval_list_proposal_samples).shape)
     # print(jax.lax.stop_gradient(-(jnp.dot(log_psi_on_truncated_sigma_samples.mean(axis=-1), normalized_w_t_sigma_samples) - jnp.transpose(log_psi_t_eval_list_proposal_samples).mean())))
     # print(jax.lax.stop_gradient(-(log_psi_on_truncated_sigma_samples - jnp.transpose(log_psi_t_eval_list_proposal_samples)).mean()))
+    # 1/0
+
+    # log_psi_on_proposal_samples = evaluate_log_psi_selected_tokens(
+    #     proposal_samples, prompt_len, cfg_twist, params_twist,
+    #     prepend_tokens_for_twists, condition_twist_on_tokens,
+    #     token_of_interest_as_int, huggingface_model)
+    #
+    # print(log_psi_on_proposal_samples - jnp.transpose(log_psi_t_eval_list_proposal_samples))
     # 1/0
 
     l_ebm_new = -(jnp.dot(log_psi_on_truncated_sigma_samples.mean(axis=-1), normalized_w_t_sigma_samples) - jnp.transpose(log_psi_t_eval_list_proposal_samples).mean())
