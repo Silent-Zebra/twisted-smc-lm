@@ -260,6 +260,9 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 
 
 
+# NOTE that what this does is evaluate q(s_1) q(s_2 | s_1) q(s_3 | s_1:2)...
+# Which is equivalent to p(s_1) psi(s_1) / (sum of p(s_1) psi(s_1)) * p(s_2|s_1) psi(s_1:2) / (sum of p(s_2|s_1) psi(s_1:2)) ...
+# which is NOT the same as evaluating p(s_{1:t}) psi(s_{1:t}) / (sum of p(s_{1:t}) psi(s_{1:t})) in general. Only would be the same if "normalization consistency" holds.
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'prompt_len', "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model"])
 def evaluate_normalized_log_q_1_to_t(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
                                      prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
@@ -601,7 +604,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
         # And note that for the EBM update, the negative samples must come from p(s_{1:t}) psi_t(s_{1:t}), for each psi_t that we are trying to train
         # This is why we need to do the resample (or, alternatively, we should do reweighting if not doing resampling)
         # TODO Nov 11 - try reweighting instead of resampling, and try the EBM updates in that setting
-        # TODO Nov 11 - another thing to try, try using resample on the positive sigma samples, for Rob update, and also for the ebm update, and see if any difference
+        # Another thing to try, try using resample on the positive sigma samples, for Rob update, and also for the ebm update, and see if any difference - there seems to be not much.
         # TODO nov 11, and then of course we should retry the EBM replay buffer with this reweight/resample as well
         if resample_for_log_psi_t_eval_list:
             if true_posterior_sample is not None:
@@ -746,7 +749,7 @@ def smc_scan_iter_final_jitted_part(
         # And note that for the EBM update, the negative samples must come from p(s_{1:t}) psi_t(s_{1:t}), for each psi_t that we are trying to train
         # This is why we need to do the resample (or, alternatively, we should do reweighting if not doing resampling)
         # TODO Nov 11 - try reweighting instead of resampling, and try the EBM updates in that setting
-        # TODO Nov 11 - another thing to try, try using resample on the positive sigma samples, for Rob update, and also for the ebm update, and see if any difference
+        # Another thing to try, try using resample on the positive sigma samples, for Rob update, and also for the ebm update, and see if any difference - seems to be not much
         # TODO nov 11, and then of course we should retry the EBM replay buffer with this reweight/resample as well
         if resample_for_log_psi_t_eval_list:
             if true_posterior_sample is not None:

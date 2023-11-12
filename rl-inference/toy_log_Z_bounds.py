@@ -119,6 +119,8 @@ class ExperimentConfig:
 
         if self.twist_learn_type == "ebm":
             dre_grad_fn = jax.grad(get_l_ebm_ml_jit, argnums=5)
+        elif self.twist_learn_type == "ebm_reweight":
+            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit, reweight_for_second_term=True), argnums=5)
         elif self.twist_learn_type == "ebm_partial_jit":
             dre_grad_fn = jax.grad(get_l_ebm_ml_partial_jit, argnums=5)
         # elif self.twist_learn_type == "ebm_q_rsmp":
@@ -1167,7 +1169,7 @@ def make_hists(true_posterior_samples, smc_samples, prompt_len, token_of_interes
 
 class TestClass:
 
-    def test_debug_ebm(self):
+    def test_debug_smc(self):
         output_len = 2
         n_true_posterior_samples = 1
         n_vocab = 9
@@ -1272,6 +1274,11 @@ class TestClass:
         #                           rm_type="p_continuation",
         #                           lr_twist=0.0003, twist_updates_per_epoch=200,
         #                           )
+    def test_debug_ebm(self):
+        self._test_twist_learning(twist_learn_type="ebm_reweight",
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  )
 
     def test_NOreplay_buffer_ebm(self):
         self._test_twist_learning(twist_learn_type="ebm",
@@ -2820,7 +2827,7 @@ def sample_for_replay_buffer(
         # TODO Nov: consider other sampling procedures besides mixed_p_q (also: lax.scan): use args.replay_buffer_sample_type
         for _ in range(n_times_to_sample_for_buffer):
 
-            if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit"]:
+            if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight"]:
                 # do a q-based sample (Ebm no mixed p_q)
                 rng_key, sk2 = jax.random.split(rng_key)
                 (log_w_t_sigma_samples, _, _), q_samples, (
@@ -2894,7 +2901,7 @@ def sample_for_replay_buffer(
         log_w_ts_to_add = None
         replay_buffer_log_prob_eval_to_add = None
         for _ in range(n_times_to_sample_for_buffer):
-            if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit"]:
+            if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight"]:
                 # do a q-based sample (Ebm no mixed p_q)
                 rng_key, sk2 = jax.random.split(rng_key)
                 (log_w_t_sigma_samples, _, _), q_samples, (
@@ -3323,7 +3330,7 @@ def main():
                     # jax.profiler.save_device_memory_profile(f"memory{twist_update}.prof")
                     # jax.profiler.save_device_memory_profile(f"memory.prof")
 
-                if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit"]:
+                if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight"]:
                     rng_key, params_twist, optim_twist_state = \
                         experiment_cfg.update_twist(
                             rng_key, indices_of_tokens_chosen, prompt,
@@ -3619,6 +3626,7 @@ if __name__ == "__main__":
     parser.add_argument("--twist_learn_type", type=str, default="ebm",
                         choices=["ebm", "ebm_partial_jit", "ebm_mixed_p_q", # partial jit only for testing
                                  # "ebm_q_rsmp",
+                                 "ebm_reweight",
                                  "one_total_kl", "one_total_kl_mixed_p_q",
                                  "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
                                  "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
