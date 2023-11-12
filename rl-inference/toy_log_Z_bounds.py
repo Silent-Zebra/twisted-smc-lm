@@ -1164,13 +1164,127 @@ def make_hists(true_posterior_samples, smc_samples, prompt_len, token_of_interes
     else:
         raise NotImplementedError
 
+
 class TestClass:
+
+    def test_debug_ebm(self):
+        output_len = 2
+        n_true_posterior_samples = 1
+        n_vocab = 9
+        huggingface = False
+        beta1 = 0.9
+        beta2 = 0.99
+        weight_decay = 0.01
+        d_model = 64
+        d_k = 16
+        n_layers = 2
+        n_heads = 4
+        d_v = 16
+        d_fc = 64
+        d_model_twist = 64
+        d_k_twist = 16
+        n_layers_twist = 2
+        n_heads_twist = 4
+        d_v_twist = 16
+        d_fc_twist = 64
+        indicator_pos_zero_index = 1
+        n_twist = 100
+        index_of_token_contained = 6
+        proposal_is_p = False
+        beta_temp = 1.
+        tempered_twist = False
+        beta_prop = 1.
+        hface_nn_twist = False
+        separate_hface_twist_model = False
+        num_last_tokens_to_condition_on = 0
+        n_buffer_samples_at_a_time = n_twist
+        one_big_sample = True
+        debug = True
+        rm_type = "p_continuation"
+        twist_learn_type = "ebm_partial_jit"
+        seed = 0
+        lr_twist = 0.0001
+        if one_big_sample:
+            if debug:
+                twist_updates_between_buffer_samples = 1
+                n_times_to_sample_for_buffer = 1
+            # else:
+            #     twist_updates_between_buffer_samples = twist_updates_per_epoch // 4
+            #     n_times_to_sample_for_buffer = twist_updates_between_buffer_samples // 5
+        # else:
+        #     twist_updates_between_buffer_samples = twist_updates_per_epoch // 40
+        #     n_times_to_sample_for_buffer = twist_updates_between_buffer_samples // 5
+        assert twist_updates_between_buffer_samples > 0
+        assert n_times_to_sample_for_buffer > 0
+        max_buffer_size = n_twist * n_times_to_sample_for_buffer * 10
+
+
+
+        experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
+        cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
+        prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
+        true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
+        hist_token_index, indexes_of_continuation, tokenizer = setup_cfg(
+            n_vocab, twist_learn_type, rm_type, seed,
+            huggingface, lr_twist, beta1, beta2,
+            weight_decay,
+            d_model, d_k, d_v, n_layers, n_heads, d_fc,
+            d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist,
+            d_fc_twist, indicator_pos_zero_index,
+            output_len, n_true_posterior_samples, index_of_token_contained,
+            beta_temp, hface_nn_twist=hface_nn_twist,
+            separate_hface_twist_model=separate_hface_twist_model,
+            num_last_tokens_to_condition_on=num_last_tokens_to_condition_on
+        )
+
+        num_epochs = 4
+
+        replay_buffers_by_prompt = [None] * len(jnp_prompts)
+        replay_buffer_log_w_ts_by_prompt = [None] * len(jnp_prompts)
+        replay_buffer_log_prob_eval_by_prompt = [None] * len(jnp_prompts)
+
+
+        prompt_num = 0
+        for prompt in jnp_prompts:
+            replay_buffer = replay_buffers_by_prompt[prompt_num]
+            replay_buffer_log_w_ts = replay_buffer_log_w_ts_by_prompt[
+                prompt_num]
+            replay_buffer_log_prob_eval = replay_buffer_log_prob_eval_by_prompt[prompt_num]
+
+            prompt_len = prompt.shape[-1]
+            log_true_final_twist = log_true_final_twists[prompt_num]
+
+            _, no_resample_samples = smc_procedure(rng_key, prompt, cfg_p,
+                                                   params_p, cfg_twist,
+                                                   params_twist,
+                                                   log_true_final_twist,
+                                                   output_len,
+                                                   100,
+                                                   n_vocab=n_vocab,
+                                                   resample=False,
+                                                   proposal_is_p=proposal_is_p,
+                                                   huggingface_model=huggingface_model,
+                                                   resample_for_log_psi_t_eval_list=True,
+                                                   smc_procedure_type="partial_jit")
+            1/0
+
+        # self._test_twist_learning(twist_learn_type="ebm_partial_jit",
+        #                           rm_type="p_continuation",
+        #                           lr_twist=0.0003, twist_updates_per_epoch=200,
+        #                           )
 
     def test_NOreplay_buffer_ebm(self):
         self._test_twist_learning(twist_learn_type="ebm",
                                   rm_type="p_continuation",
                                   lr_twist=0.0003, twist_updates_per_epoch=200,
                                   )
+
+    def test_NOreplay_buffer_mixpqebm(self):
+        self._test_twist_learning(twist_learn_type="ebm_mixed_p_q",
+                                  rm_type="p_continuation",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  )
+
 
     def test_replay_buffer_ebm(self):
         self._test_twist_learning(twist_learn_type="ebm", # The middle choice (p, q, etc.) should not matter with the use of the replay buffer

@@ -595,6 +595,14 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
             log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval[a_t]
     else: # No resample, but possibly resample for the log_psi_t_eval_list
+        # The reason why this is important is because, the samples are created
+        # via draws from each of the conditional distributions. If you normalize each of the conditional distributions,
+        # then take the product, that is not the same (unless you have normalization consistency) as drawing from the normalized distribution p(s_{1:t}) psi_t(s_{1:t}) (which IMPORTANTLY is what you would get if you took the product of the unnormalized conditional distributions, and then only normalized at the end - again, I have this written all out in my notes)
+        # And note that for the EBM update, the negative samples must come from p(s_{1:t}) psi_t(s_{1:t}), for each psi_t that we are trying to train
+        # This is why we need to do the resample (or, alternatively, we should do reweighting if not doing resampling)
+        # TODO Nov 11 - try reweighting instead of resampling, and try the EBM updates in that setting
+        # TODO Nov 11 - another thing to try, try using resample on the positive sigma samples, for Rob update, and also for the ebm update, and see if any difference
+        # TODO nov 11, and then of course we should retry the EBM replay buffer with this reweight/resample as well
         if resample_for_log_psi_t_eval_list:
             if true_posterior_sample is not None:
                 raise NotImplementedError
@@ -608,7 +616,6 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
     output_len, params_p, params_twist, prompt_len, log_z_hat_t)
 
     return carry, (full_seq, log_w_t, log_r_psi_t_eval_w_potential_resample)
-
 
 
 @partial(jax.jit, static_argnames=["resample", "resample_for_log_psi_t_eval_list"])
@@ -733,6 +740,14 @@ def smc_scan_iter_final_jitted_part(
             log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval[
                 a_t_learned]  # only use the learned twists for this; we are using this for the twist learning procedure
     else:  # No resample, but possibly resample for the log_psi_t_eval_list
+        # The reason why this is important is because, the samples are created
+        # via draws from each of the conditional distributions. If you normalize each of the conditional distributions,
+        # then take the product, that is not the same (unless you have normalization consistency) as drawing from the normalized distribution p(s_{1:t}) psi_t(s_{1:t}) (which IMPORTANTLY is what you would get if you took the product of the unnormalized conditional distributions, and then only normalized at the end - again, I have this written all out in my notes)
+        # And note that for the EBM update, the negative samples must come from p(s_{1:t}) psi_t(s_{1:t}), for each psi_t that we are trying to train
+        # This is why we need to do the resample (or, alternatively, we should do reweighting if not doing resampling)
+        # TODO Nov 11 - try reweighting instead of resampling, and try the EBM updates in that setting
+        # TODO Nov 11 - another thing to try, try using resample on the positive sigma samples, for Rob update, and also for the ebm update, and see if any difference
+        # TODO nov 11, and then of course we should retry the EBM replay buffer with this reweight/resample as well
         if resample_for_log_psi_t_eval_list:
             if true_posterior_sample is not None:
                 raise NotImplementedError

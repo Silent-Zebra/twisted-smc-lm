@@ -18,7 +18,7 @@ from functools import partial
 
 no_final_resample = True # False # Turn this off (set to false) if you want the old versions of these updates that used the resampled sigma samples
 
-resample_for_sigma_samples = False # True was what I had before; false to try no resampling (since we use the twist info already) on the approximate sigma samples
+resample_for_sigma_samples = True # Try true again. # True was what I had before; false to try no resampling (since we use the twist info already) on the approximate sigma samples
 
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
@@ -226,7 +226,7 @@ def get_l_ebm_ml_partial_jit(
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
         resample=False, # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
         # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
-        resample_for_log_psi_t_eval_list=False,
+        resample_for_log_psi_t_eval_list=True,
         tempered_twist=False # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
     )
 
