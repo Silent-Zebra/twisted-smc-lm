@@ -127,6 +127,8 @@ class ExperimentConfig:
         #     dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=5)
         elif self.twist_learn_type == "ebm_mixed_p_q":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit, mixed_p_q_sample=True), argnums=5)
+        elif self.twist_learn_type == "ebm_mixed_p_q_reweight":
+            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
@@ -2827,7 +2829,7 @@ def sample_for_replay_buffer(
         # TODO Nov: consider other sampling procedures besides mixed_p_q (also: lax.scan): use args.replay_buffer_sample_type
         for _ in range(n_times_to_sample_for_buffer):
 
-            if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight"]:
+            if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight", "ebm_mixed_p_q_reweight"]:
                 # do a q-based sample (Ebm no mixed p_q)
                 rng_key, sk2 = jax.random.split(rng_key)
                 (log_w_t_sigma_samples, _, _), q_samples, (
