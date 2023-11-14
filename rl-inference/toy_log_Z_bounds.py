@@ -2829,7 +2829,7 @@ def sample_for_replay_buffer(
         # TODO Nov: consider other sampling procedures besides mixed_p_q (also: lax.scan): use args.replay_buffer_sample_type
         for _ in range(n_times_to_sample_for_buffer):
 
-            if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight", "ebm_mixed_p_q_reweight"]:
+            if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight"]:
                 # do a q-based sample (Ebm no mixed p_q)
                 rng_key, sk2 = jax.random.split(rng_key)
                 (log_w_t_sigma_samples, _, _), q_samples, (
@@ -3628,7 +3628,7 @@ if __name__ == "__main__":
     parser.add_argument("--twist_learn_type", type=str, default="ebm",
                         choices=["ebm", "ebm_partial_jit", "ebm_mixed_p_q", # partial jit only for testing
                                  # "ebm_q_rsmp",
-                                 "ebm_reweight",
+                                 "ebm_reweight", "ebm_mixed_p_q_reweight",
                                  "one_total_kl", "one_total_kl_mixed_p_q",
                                  "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
                                  "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
