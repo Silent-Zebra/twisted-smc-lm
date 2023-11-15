@@ -231,10 +231,20 @@ def get_l_ebm_ml_partial_jit(
         )
 
         ebm_second_term = 0.
+
+        # for i in range(intermediate_log_w_t_hist.shape[0]):
+        #     rng_key, subkey = jax.random.split(rng_key)
+        #     a_t_learned = jax.random.categorical(subkey, intermediate_log_w_t_hist[i],
+        #                                          shape=intermediate_log_w_t_hist[i].shape)
+        #     log_r_psi_t_eval_w_potential_resample = log_psi_t_eval_list_proposal_samples[i][
+        #         a_t_learned]
+        #     ebm_second_term += log_r_psi_t_eval_w_potential_resample.mean()
+
         for i in range(intermediate_log_w_t_hist.shape[0]):
             ebm_second_term += jnp.dot(
-                jax.nn.softmax(intermediate_log_w_t_hist[i]),
+                jax.nn.softmax(jax.lax.stop_gradient(intermediate_log_w_t_hist[i])), # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
                 log_psi_t_eval_list_proposal_samples[i])
+
         ebm_second_term /= intermediate_log_w_t_hist.shape[0]
 
     else: # Get approximate p(s_{1:t}) psi_t(s_{1:t}) samples by resampling from the produce of conditionals q(s_1) q(s_2|s_1)...
