@@ -114,7 +114,7 @@ def get_l_ebm_ml_partial_jit(
     output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
     token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
     tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
-    replay_buffer=None, replay_buffer_log_w_ts=None, reweight_for_second_term=False
+    replay_buffer=None, replay_buffer_log_w_ts=None, reweight_for_second_term=False, only_one_sample=False
 ):
 
     # print("STARTING GET L EBM UPDATE")
@@ -122,6 +122,48 @@ def get_l_ebm_ml_partial_jit(
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
+
+    if only_one_sample:
+        assert true_sigma_samples is None
+        assert replay_buffer is None
+        (log_w_t_sigma_samples, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
+            intermediate_twist_samples_hist,
+            intermediate_log_w_t_hist) = smc_procedure(
+            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            log_true_final_twist, output_len, n_twist,
+            smc_procedure_type=smc_procedure_type,
+            get_intermediate_sample_history_based_on_learned_twists=True,
+            prepend_tokens_for_twists=prepend_tokens_for_twists,
+            condition_twist_on_tokens=condition_twist_on_tokens,
+            token_of_interest_as_int=token_of_interest_as_int,
+            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+            resample=False,
+            # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
+            # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
+            resample_for_log_psi_t_eval_list=False,  # NOTE THE FALSE HERE
+            tempered_twist=False
+            # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
+        )
+        normalized_w_t_sigma_samples = jax.nn.softmax(
+            jax.lax.stop_gradient(log_w_t_sigma_samples))
+
+        log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(
+            proposal_samples, prompt_len, cfg_twist, params_twist,
+            prepend_tokens_for_twists, condition_twist_on_tokens,
+            token_of_interest_as_int, huggingface_model)
+
+        ebm_second_term = 0.
+
+        for i in range(intermediate_log_w_t_hist.shape[0]):
+            ebm_second_term += jnp.dot(
+                jax.nn.softmax(jax.lax.stop_gradient(intermediate_log_w_t_hist[i])), # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
+                log_psi_t_eval_list_proposal_samples[i])
+
+        ebm_second_term /= intermediate_log_w_t_hist.shape[0]
+
+        l_ebm_new = -(jnp.dot(log_psi_on_truncated_proposal_samples.mean(axis=-1),
+                              normalized_w_t_sigma_samples) - ebm_second_term)
+        return l_ebm_new
 
     if true_sigma_samples is not None:
         # if we have true posteriors (e.g. one true posterior, every example is from the
@@ -324,7 +366,8 @@ def get_l_ebm_ml_partial_jit(
 get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample", "reweight_for_second_term"])(get_l_ebm_ml_partial_jit)
+    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
+    "reweight_for_second_term", "only_one_sample"])(get_l_ebm_ml_partial_jit)
 
 
 # # This is the EBM Maximum Likelihood approach, but with resampling on the proposal distribution.
