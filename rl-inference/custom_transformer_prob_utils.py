@@ -263,9 +263,11 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 # NOTE that what this does is evaluate q(s_1) q(s_2 | s_1) q(s_3 | s_1:2)...
 # Which is equivalent to p(s_1) psi(s_1) / (sum of p(s_1) psi(s_1)) * p(s_2|s_1) psi(s_1:2) / (sum of p(s_2|s_1) psi(s_1:2)) ...
 # which is NOT the same as evaluating p(s_{1:t}) psi(s_{1:t}) / (sum of p(s_{1:t}) psi(s_{1:t})) in general. Only would be the same if "normalization consistency" holds.
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'prompt_len', "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model"])
-def evaluate_normalized_log_q_1_to_t(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
-                                     prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'prompt_len', "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model", "return_cumsum"])
+def evaluate_normalized_log_q_1_to_t(
+    full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
+    prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None,
+    huggingface_model=None, return_cumsum=False):
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         full_seq, params_p, params_twist, cfg_p, cfg_twist,
         prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model)
@@ -279,6 +281,10 @@ def evaluate_normalized_log_q_1_to_t(full_seq, cfg_p, params_p, cfg_twist, param
     normalized_log_q_1_to_t_across_t = normalized_log_q_1_to_t_all_vocab[
         jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
             seq_selected.shape[1]), seq_selected]
+
+    if return_cumsum:
+        normalized_log_q_1_to_t_cumsum = jnp.cumsum(normalized_log_q_1_to_t_across_t, axis=-1)
+        return normalized_log_q_1_to_t_cumsum
 
     normalized_log_q_1_to_t = normalized_log_q_1_to_t_across_t.sum(axis=-1)
 
@@ -387,7 +393,7 @@ def evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len, ou
     # for each of the batch*output_len items, resulting in our final matrix of shape (batch, output_len)
     log_p_select_tokens = log_p_all_tokens_for_output_time_steps[jnp.arange(seq.shape[0])[:, None], jnp.arange(output_tokens.shape[-1]), output_tokens]
 
-    # output_log_p_for_each_t means returning log_p_theta_t for each of the individual time steps t.
+    # output_log_p_for_each_t means returning log_p_theta_t for each of the individual time steps t. (e.g. p(s_t|s_1:t-1), ... , p(s_2|s_1), p(s_1) )
     # The default is False, in which case we would return the sum, e.g. a single probability for the sequence from 1 to t (given the prompt)
     if output_log_p_for_each_t:
         return log_p_select_tokens

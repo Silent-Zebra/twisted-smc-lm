@@ -2838,11 +2838,20 @@ def sample_for_replay_buffer(
         for _ in range(n_times_to_sample_for_buffer):
 
             if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight", "ebm_one_sample"]:
-                # do a q-based sample (Ebm no mixed p_q)
+                # do a q-based sample (Ebm no mixed p_q). Right now, do the one sample version.
                 rng_key, sk2 = jax.random.split(rng_key)
-                (log_w_t_sigma_samples, _, _), q_samples, (
-                    intermediate_twist_samples_hist,
-                    intermediate_log_w_t_hist) = smc_procedure(
+                # (log_w_t_sigma_samples, _, _), q_samples = smc_procedure(
+                #     sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                #     log_true_final_twist, output_len,
+                #     n_buffer_samples_at_a_time,
+                #     smc_procedure_type=experiment_cfg.smc_procedure_type,
+                #     get_intermediate_sample_history_based_on_learned_twists=False,
+                #     proposal_is_p=proposal_is_p,
+                #     huggingface_model=huggingface_model,
+                #     resample=False,
+                #     tempered_twist=tempered_twist, beta_prop=beta_prop
+                # )
+                (log_w_t_sigma_samples, _, _), q_samples, (_, log_w_t_learned_twist_list) = smc_procedure(
                     sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
                     log_true_final_twist, output_len, n_buffer_samples_at_a_time,
                     smc_procedure_type=experiment_cfg.smc_procedure_type,
@@ -2853,9 +2862,30 @@ def sample_for_replay_buffer(
                     tempered_twist=tempered_twist, beta_prop=beta_prop
                 )
                 log_prob_eval = evaluate_normalized_log_q_1_to_t(
-                    q_samples, cfg_p, params_p, cfg_twist, params_twist, prompt.shape[-1],
-                    prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=huggingface_model
+                    q_samples, cfg_p, params_p, cfg_twist, params_twist,
+                    prompt.shape[-1],
+                    prepend_tokens_for_twists=False,
+                    condition_twist_on_tokens=None,
+                    huggingface_model=huggingface_model,
+                    return_cumsum=True
                 )
+                # from custom_transformer_prob_utils import evaluate_log_p_theta_1_to_t, evaluate_log_psi_selected_tokens
+                # prompt_len = prompt.shape[-1]
+                # conditional_log_p = evaluate_log_p_theta_1_to_t(
+                #     q_samples, cfg_p, params_p,
+                #     prompt_len, output_len, output_log_p_for_each_t=True,
+                #     huggingface_model=huggingface_model)
+                # # The above is just p(s_t|s_1:t-1), not p(s_1:t). Needs cumsum for the latter (across all t)
+                # log_psi_for_each_t = evaluate_log_psi_selected_tokens(
+                #     q_samples, prompt_len, cfg_twist, params_twist,
+                #     prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
+                #     huggingface_model=huggingface_model)
+                # log_p_1_to_t_psi_t = jnp.cumsum(conditional_log_p,
+                #                                 axis=1) + log_psi_for_each_t
+                # print(log_w_t_learned_twist_list)
+                # print(log_p_1_to_t_psi_t - log_prob_eval)
+                # print(jnp.transpose(log_w_t_learned_twist_list) - (log_p_1_to_t_psi_t - log_prob_eval))
+
                 prompt_w_sigma_sample_s_1_to_t = q_samples
                 log_w_t_sigma_over_proposal = log_w_t_sigma_samples
             elif experiment_cfg.twist_learn_type in ["ebm_mixed_p_q", "ebm_mixed_p_q_reweight"]:
@@ -2877,8 +2907,10 @@ def sample_for_replay_buffer(
                                           tempered_twist=tempered_twist,
                                           beta_prop=beta_prop)
                 log_w_t_sigma_over_proposal = log_w_t_tilde_sigma_over_q_mix
+                intermediate_log_w_t_hist = None
 
             log_prob_eval = jax.lax.stop_gradient(log_prob_eval)
+
             if replay_buffer is None:
                 replay_buffer = prompt_w_sigma_sample_s_1_to_t
                 replay_buffer_log_w_ts = log_w_t_sigma_over_proposal
@@ -2890,23 +2922,8 @@ def sample_for_replay_buffer(
                     (replay_buffer_log_w_ts, log_w_t_sigma_over_proposal), axis=0)
                 replay_buffer_log_prob_eval = jnp.concatenate(
                     (replay_buffer_log_prob_eval, log_prob_eval), axis=0)
-                # Keep the log_w_ts as is without normalization/logsoftmax because
-                # the replay buffer in this setting is just one big sample from the same base probabilities
-                # (p, q, or mixed; the p or q will all be from the same distribution in this one big sample setting)
 
-            # replay_buffer.append(prompt_w_sigma_sample_s_1_to_t)
-            # log_w_ts.append(log_w_t_tilde_sigma_over_q_mix)
 
-            # print(prompt_w_sigma_sample_s_1_to_t.shape)
-            # print(log_w_t_tilde_sigma_over_q_mix.shape)
-
-        # replay_buffer = jnp.stack(replay_buffer)
-        # log_w_ts = jnp.stack(log_w_ts)
-        # print(replay_buffer.shape)
-        # print(log_w_ts.shape)
-        # normalized_w_ts = jax.nn.softmax(log_w_ts, axis=-1)
-        # print(log_w_ts)
-        # print(normalized_w_ts)
 
     else: # Rolling/FIFO queue replay buffer
         replay_buffer_samples_to_add = None
@@ -2916,24 +2933,27 @@ def sample_for_replay_buffer(
             if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight", "ebm_one_sample"]:
                 # do a q-based sample (Ebm no mixed p_q)
                 rng_key, sk2 = jax.random.split(rng_key)
-                (log_w_t_sigma_samples, _, _), q_samples, (
-                    intermediate_twist_samples_hist,
-                    intermediate_log_w_t_hist) = smc_procedure(
+                (log_w_t_sigma_samples, _, _), q_samples = smc_procedure(
                     sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
                     log_true_final_twist, output_len, n_buffer_samples_at_a_time,
                     smc_procedure_type=experiment_cfg.smc_procedure_type,
-                    get_intermediate_sample_history_based_on_learned_twists=True,
+                    get_intermediate_sample_history_based_on_learned_twists=False,
                     proposal_is_p=proposal_is_p,
                     huggingface_model=huggingface_model,
                     resample=False,
                     tempered_twist=tempered_twist, beta_prop=beta_prop
                 )
-                log_prob_eval = evaluate_normalized_log_q_1_to_t(
-                    q_samples, cfg_p, params_p, cfg_twist, params_twist, prompt.shape[-1],
-                    prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=huggingface_model
-                )
                 prompt_w_sigma_sample_s_1_to_t = q_samples
                 log_w_t_sigma_over_proposal = log_w_t_sigma_samples
+                log_prob_eval = evaluate_normalized_log_q_1_to_t(
+                    q_samples, cfg_p, params_p, cfg_twist, params_twist,
+                    prompt.shape[-1],
+                    prepend_tokens_for_twists=False,
+                    condition_twist_on_tokens=None,
+                    huggingface_model=huggingface_model,
+                    return_cumsum=True
+                )
+
             else:
                 rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix, log_prob_eval = \
                     get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p,
@@ -2974,7 +2994,8 @@ def sample_for_replay_buffer(
         if replay_buffer is None:
             replay_buffer = replay_buffer_samples_to_add
             replay_buffer_log_w_ts = jax.nn.log_softmax(log_w_ts_to_add)
-            replay_buffer_log_prob_eval = replay_buffer_log_prob_eval_to_add
+            if replay_buffer_log_prob_eval_to_add is not None:
+                replay_buffer_log_prob_eval = replay_buffer_log_prob_eval_to_add
             # The way this log_softmax works is: for all the draws we have made now, these come from the same proposal or base model or prior distribution
             # so again, we can do softmax across all of those.
             # BUT once the distribution we are drawing from changes, now we need to separately normalize for draws from that distribution.
@@ -2984,21 +3005,25 @@ def sample_for_replay_buffer(
         else:
             replay_buffer = jnp.concatenate((replay_buffer, replay_buffer_samples_to_add), axis=0)
             replay_buffer_log_w_ts = jnp.concatenate((replay_buffer_log_w_ts, jax.nn.log_softmax(log_w_ts_to_add)), axis=0)
-            replay_buffer_log_prob_eval = jnp.concatenate((replay_buffer_log_prob_eval, replay_buffer_log_prob_eval_to_add), axis=0)
+            if replay_buffer_log_prob_eval_to_add is not None:
+                replay_buffer_log_prob_eval = jnp.concatenate((replay_buffer_log_prob_eval, replay_buffer_log_prob_eval_to_add), axis=0)
 
         if replay_buffer.shape[0] > max_buffer_size:
             replay_buffer = replay_buffer[-max_buffer_size:]
             replay_buffer_log_w_ts = replay_buffer_log_w_ts[-max_buffer_size:]
-            replay_buffer_log_prob_eval = replay_buffer_log_prob_eval[-max_buffer_size:]
+            if replay_buffer_log_prob_eval is not None:
+                replay_buffer_log_prob_eval = replay_buffer_log_prob_eval[-max_buffer_size:]
 
     print("Replay buffer shapes:", flush=True)
     print(replay_buffer.shape)
     print(replay_buffer_log_w_ts.shape)
-    print(replay_buffer_log_prob_eval.shape)
+    if replay_buffer_log_prob_eval is not None:
+        print(replay_buffer_log_prob_eval.shape)
 
     replay_buffer = jax.lax.stop_gradient(replay_buffer)
     replay_buffer_log_w_ts = jax.lax.stop_gradient(replay_buffer_log_w_ts)
-    replay_buffer_log_prob_eval = jax.lax.stop_gradient(replay_buffer_log_prob_eval)
+    if replay_buffer_log_prob_eval is not None:
+        replay_buffer_log_prob_eval = jax.lax.stop_gradient(replay_buffer_log_prob_eval)
 
     return rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval
 

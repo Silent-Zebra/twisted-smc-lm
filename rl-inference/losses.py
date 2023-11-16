@@ -172,52 +172,100 @@ def get_l_ebm_ml_partial_jit(
     elif replay_buffer is not None:
         assert replay_buffer_log_w_ts is not None
         replay_buffer_log_w_ts, replay_buffer_log_prob_eval = replay_buffer_log_w_ts
-        print("hihi2")
-        print(replay_buffer_log_w_ts)
-        print("hihi3")
-        print(replay_buffer_log_prob_eval)
+        # print("hihi2")
+        # print(replay_buffer_log_w_ts)
+        # print("hihi3")
+        # print(replay_buffer_log_prob_eval)
 
         if replay_buffer.shape[0] == n_twist:
             print("Using the full replay buffer with no sampling")
             prompt_w_sigma_sample_s_1_to_t = replay_buffer
             normalized_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(replay_buffer_log_w_ts))
+
+            proposal_samples = replay_buffer
+
+            conditional_log_p = evaluate_log_p_theta_1_to_t(proposal_samples, cfg_p, params_p,
+                prompt_len, output_len, output_log_p_for_each_t=True, huggingface_model=huggingface_model)
+            # The above is just p(s_t|s_1:t-1), not p(s_1:t). Needs cumsum for the latter (across all t)
+            log_psi_for_each_t = evaluate_log_psi_selected_tokens(
+                proposal_samples, prompt_len, cfg_twist, params_twist,
+                prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
+                huggingface_model)
+
+            log_p_1_to_t_psi_t = jnp.cumsum(conditional_log_p, axis=1) + log_psi_for_each_t
+
+            # Idea here is: we have replay buffer samples drawn according to the conditional proposal ie p(s_t|s_1:t-1) psi_t(s_1:t) p(s_t-1|s_1:t-2) psi_t(s_1:t-1) ...
+            # We also have stored the replay_buffer_log_prob_eval which is just that value p(s_t|s_1:t-1) psi_t(s_1:t) p(s_t-1|s_1:t-2) psi_t(s_1:t-1) ...
+            # So all we need to do is calculate the numerator of the distribution we're interested in, which is our current p(s_1:t) psi_t(s_1:t)
+            # and then take that numerator over the denominator which is exp(replay_buffer_log_prob_eval)
+
+            new_log_imp_wts = log_p_1_to_t_psi_t - replay_buffer_log_prob_eval
+            # print("hihi")
+            # print(jax.lax.stop_gradient(replay_buffer_log_prob_eval))
+            # print(jax.lax.stop_gradient(log_p_1_to_t_psi_t))
+            # print(normalized_w_t_sigma_samples.shape)
+
+            # TODO NOV 15 TEST JUST THIS SPECIAL CASE OF REPLAY BUFF = N_TWIST
+            # Test it by checking that for the first iter (or just one big sample)
+            # 1) I should get the final weights equal to the log weights (well... so I would also have to have stored the previous evaluations...)
+            # 2) I get the same final results as the one sample ebm update
+
         else:
             rng_key, sk_sample = jax.random.split(rng_key)
+
             indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
             prompt_w_sigma_sample_s_1_to_t = replay_buffer[indices]
             normalized_w_t_sigma_samples = jnp.ones((n_twist,)) / n_twist
 
-        if replay_buffer.shape[0] == n_twist:
-            print("Using the full replay buffer with no sampling")
-            proposal_samples = replay_buffer
-            proposal_samples_log_w_ts = evaluate_normalized_log_q_1_to_t(
-                proposal_samples, cfg_p, params_p, cfg_twist, params_twist,
-                prompt_len,
-                prepend_tokens_for_twists, condition_twist_on_tokens,
-                token_of_interest_as_int, huggingface_model) - \
-                                        replay_buffer_log_prob_eval
-        else:
             indices_neg = jax.random.categorical(sk_sample, jnp.zeros_like(replay_buffer_log_w_ts), shape=(n_twist,)) # Uniform random sample
             proposal_samples = replay_buffer[indices_neg]
-            proposal_samples_log_w_ts = evaluate_normalized_log_q_1_to_t(
-                proposal_samples, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
+
+            conditional_log_p = evaluate_log_p_theta_1_to_t(proposal_samples,
+                                                            cfg_p, params_p,
+                                                            prompt_len,
+                                                            output_len,
+                                                            output_log_p_for_each_t=True,
+                                                            huggingface_model=huggingface_model)
+            # The above is just p(s_t|s_1:t-1), not p(s_1:t). Needs cumsum for the latter (across all t)
+            log_psi_for_each_t = evaluate_log_psi_selected_tokens(
+                proposal_samples, prompt_len, cfg_twist, params_twist,
                 prepend_tokens_for_twists, condition_twist_on_tokens,
-                token_of_interest_as_int, huggingface_model) - replay_buffer_log_prob_eval[indices_neg]
-        normalized_proposal_samples_log_w_ts = jax.nn.softmax(jax.lax.stop_gradient(proposal_samples_log_w_ts))
+                token_of_interest_as_int,
+                huggingface_model)
+
+            log_p_1_to_t_psi_t = jnp.cumsum(conditional_log_p,
+                                            axis=1) + log_psi_for_each_t
+
+            new_log_imp_wts = log_p_1_to_t_psi_t - replay_buffer_log_prob_eval[indices_neg]
+
+        proposal_samples_log_w_ts = jax.lax.stop_gradient(new_log_imp_wts)
+
+        normalized_proposal_samples_log_w_ts = jax.nn.softmax(proposal_samples_log_w_ts, axis=0)
         log_psi_on_proposal_samples = evaluate_log_psi_selected_tokens(
             proposal_samples, prompt_len, cfg_twist, params_twist,
             prepend_tokens_for_twists, condition_twist_on_tokens,
             token_of_interest_as_int, huggingface_model)
-        print("hihi4")
-        print(jax.lax.stop_gradient(proposal_samples_log_w_ts))
-        print(jax.lax.stop_gradient(normalized_proposal_samples_log_w_ts))
+        # print("hihi4")
+        # print(jax.lax.stop_gradient(proposal_samples_log_w_ts))
+        # print(jax.lax.stop_gradient(normalized_proposal_samples_log_w_ts))
         log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
             prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
             prepend_tokens_for_twists, condition_twist_on_tokens,
             token_of_interest_as_int, huggingface_model)
 
-        l_ebm_new = -(jnp.dot(log_psi_on_truncated_sigma_samples.mean(axis=-1), normalized_w_t_sigma_samples)
-                      - jnp.dot(log_psi_on_proposal_samples.mean(axis=-1), normalized_proposal_samples_log_w_ts))
+        # print("hihi5")
+        # print(log_psi_on_truncated_sigma_samples.shape)
+        # print(normalized_w_t_sigma_samples.shape)
+        # print(log_psi_on_proposal_samples.shape)
+        # print(normalized_proposal_samples_log_w_ts.shape)
+        l_ebm_new = 0.
+        for i in range(log_psi_on_truncated_sigma_samples.shape[-1]):
+            l_ebm_new += - (jnp.dot(log_psi_on_truncated_sigma_samples[:, i], normalized_w_t_sigma_samples) -
+                            jnp.dot(log_psi_on_proposal_samples[:, i], normalized_proposal_samples_log_w_ts[:, i]))
+        l_ebm_new /= log_psi_on_truncated_sigma_samples.shape[-1]
+
+        # l_ebm_new = -(jnp.dot(log_psi_on_truncated_sigma_samples.mean(axis=-1), normalized_w_t_sigma_samples)
+        #               - jnp.dot(log_psi_on_proposal_samples.mean(axis=-1), normalized_proposal_samples_log_w_ts))
         return l_ebm_new
 
     else:
