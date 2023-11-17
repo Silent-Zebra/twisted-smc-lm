@@ -1007,7 +1007,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         iwae_log_w_upper.shape[0])
 
     print("hihi1")
-    jax.profiler.save_device_memory_profile(f"memory1.prof")
+    jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory1.prof")
 
     true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
         true_posterior_samples, log_true_final_twist, cfg_p,
@@ -1030,7 +1030,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     kl_q_sigma_iwae_lower_bound_estimate = iwae_lower_bound_estimate - f_q_estimate
 
     print("hihi2")
-    jax.profiler.save_device_memory_profile(f"memory2.prof")
+    jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory2.prof")
 
     rng_key, sk_smc = jax.random.split(rng_key)
     (_, log_z_hat_t, _), smc_samples = smc_procedure(
@@ -1048,7 +1048,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     smc_lower_bound_estimate = log_z_hat_t
 
     print("hihi3")
-    jax.profiler.save_device_memory_profile(f"memory3.prof")
+    jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory3.prof")
 
     rng_key, sk_smc = jax.random.split(rng_key)
     smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
@@ -1067,7 +1067,7 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     kl_q_sigma_smc_lower_bound_estimate = smc_lower_bound_estimate - f_q_estimate
 
     print("hihi4")
-    jax.profiler.save_device_memory_profile(f"memory4.prof")
+    jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory4.prof")
 
 
     list_of_things_to_append_for_record_list = \
@@ -1969,7 +1969,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 # jax.profiler.save_device_memory_profile(f"memory.prof")
 
             print("HERE_A")
-            jax.profiler.save_device_memory_profile(f"memory_A{seed}.prof")
+            jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory_A{seed}.prof")
 
             rng_key, sk = jax.random.split(rng_key)
 
@@ -1995,7 +1995,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 = list_of_things_to_append_for_record_list
 
             print("HERE_B")
-            jax.profiler.save_device_memory_profile(f"memory_B{seed}.prof")
+            jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory_B{seed}.prof")
 
             list_of_things_to_add_across_seeds_for_largest_n_samples = [
                 f_q_estimate, kl_q_sigma_iwae_upper_bound_estimate,
@@ -2076,7 +2076,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     logZ_lbs_smc_across_samples_and_seeds[n] = np.stack(logZ_lbs_smc_across_samples_and_seeds[n])
 
     print("HERE_C")
-    jax.profiler.save_device_memory_profile(f"memory_C.prof")
+    jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory_C.prof")
 
     for i in range(1, len(list_of_stuff_across_seeds_only_largest_n_samples)):
         list_of_stuff_across_seeds_only_largest_n_samples[i] /= n_seeds
@@ -3198,8 +3198,8 @@ def main():
                     if (twist_update + 1) % print_every_twist_updates == 0:
                         print(f"Twist update: {twist_update + 1}")
                         print(f"TIME: {time.time() - start}", flush=True)
-                        # jax.profiler.save_device_memory_profile(f"memory{twist_update}.prof")
-                        # jax.profiler.save_device_memory_profile(f"memory.prof")
+                        # jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory{twist_update}.prof")
+                        # jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory.prof")
 
                     rng_key, params_twist, optim_twist_state = \
                         experiment_cfg_pretrain.update_twist(
@@ -3593,8 +3593,8 @@ def main():
                 if (twist_update + 1) % print_every_twist_updates == 0:
                     print(f"Twist update: {twist_update + 1}")
                     print(f"TIME: {time.time() - start}", flush=True)
-                    # jax.profiler.save_device_memory_profile(f"memory{twist_update}.prof")
-                    # jax.profiler.save_device_memory_profile(f"memory.prof")
+                    # jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory{twist_update}.prof")
+                    # jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory.prof")
 
                 if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight", "ebm_one_sample"]:
                     rng_key, params_twist, optim_twist_state = \
