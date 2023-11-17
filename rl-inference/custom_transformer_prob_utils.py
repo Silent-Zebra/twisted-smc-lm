@@ -579,13 +579,13 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
             log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval.at[1:].set(log_r_psi_t_eval[a_t])
 
-            print("true posterior sample stuff")
-            print(full_seq)
-            print(log_gamma_1_to_t_eval)
-            print(log_gamma_1_to_t_minus_1_eval)
-            print(normalized_log_q_t)
-            print(log_w_t)
-            print(log_w_t_minus_1)
+            # print("true posterior sample stuff")
+            # print(full_seq)
+            # print(log_gamma_1_to_t_eval)
+            # print(log_gamma_1_to_t_minus_1_eval)
+            # print(normalized_log_q_t)
+            # print(log_w_t)
+            # print(log_w_t_minus_1)
 
         else:
             rng_key, subkey = jax.random.split(rng_key)

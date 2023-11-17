@@ -1831,7 +1831,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
                      upper_conf_bound, alpha=0.3)
 
 
-n_samples_for_plots = [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
+n_samples_for_plots = [500] #[1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
 # if args.hface_nn_twist or args.separate_hface_twist_model:
 #     n_samples_for_plots = [args.n_twist]
 
@@ -1877,8 +1877,6 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
 
     else:
         analytic_kl_q_sigma = -jnp.inf
-
-
 
 
 
