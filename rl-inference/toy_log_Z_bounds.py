@@ -2131,12 +2131,12 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.savefig(f"{args.save_dir}/fig_f_q_g_q_epoch{epoch + 1}.png")
 
 
-    kl_q_sigma_bounds_midpoint_iwae = (kl_ubs_iwae + kl_lbs_iwae) / 2.
-    kl_sigma_q_bounds_midpoint_iwae = (kl_sigma_q_ubs_iwae + kl_sigma_q_lbs_iwae) / 2.
+    kl_q_sigma_bounds_midpoint_iwae = (np.stack(kl_ubs_iwae) + np.stack(kl_lbs_iwae)) / 2.
+    kl_sigma_q_bounds_midpoint_iwae = (np.stack(kl_sigma_q_ubs_iwae) + np.stack(kl_sigma_q_lbs_iwae)) / 2.
     plt.clf()
-    x_range = np.arange(1, len(kl_q_sigma_bounds_midpoint_iwae) + 1)
-    plt.plot(x_range, np.stack(kl_q_sigma_bounds_midpoint_iwae), label="KL(q||sigma) (Midpoint based on IWAE LogZ Bounds)")
-    plt.plot(x_range, np.stack(kl_sigma_q_bounds_midpoint_iwae), label="KL(sigma||q) (Midpoint based on IWAE LogZ Bounds)")
+    x_range = np.arange(1, len(kl_ubs_iwae) + 1)
+    plt.plot(x_range, kl_q_sigma_bounds_midpoint_iwae, label="KL(q||sigma) (Midpoint based on IWAE LogZ Bounds)")
+    plt.plot(x_range, kl_sigma_q_bounds_midpoint_iwae, label="KL(sigma||q) (Midpoint based on IWAE LogZ Bounds)")
     plt.xlabel(f"Epoch")
     plt.ylabel(f"KL Divergence")
     plt.legend()
@@ -2167,7 +2167,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.legend()
     # plt.savefig(f"{args.save_dir}/fig_kl_sigma_q_epoch{epoch + 1}.png")
 
-    x_range = np.arange(1, len(kl_q_sigma_bounds_midpoint_iwae) + 1)
+    x_range = np.arange(1, len(kl_ubs_iwae) + 1)
     plt.clf()
 
     # TODO Plot with different colours (shades of colours) afterwards
