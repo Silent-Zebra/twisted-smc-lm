@@ -966,6 +966,9 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
         iwae_log_w_upper) - jnp.log(
         iwae_log_w_upper.shape[0])
 
+    print("hihi1")
+    jax.profiler.save_device_memory_profile(f"memory1.prof")
+
     true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
         true_posterior_samples, log_true_final_twist, cfg_p,
         params_p, cfg_twist, params_twist, prompt_len,
@@ -986,6 +989,9 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     kl_q_sigma_iwae_upper_bound_estimate = iwae_upper_bound_estimate - f_q_estimate
     kl_q_sigma_iwae_lower_bound_estimate = iwae_lower_bound_estimate - f_q_estimate
 
+    print("hihi2")
+    jax.profiler.save_device_memory_profile(f"memory2.prof")
+
     rng_key, sk_smc = jax.random.split(rng_key)
     (_, log_z_hat_t, _), smc_samples = smc_procedure(
         sk_smc, prompt, cfg_p, params_p,
@@ -1000,6 +1006,9 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
     smc_lower_bound_estimate = log_z_hat_t
+
+    print("hihi3")
+    jax.profiler.save_device_memory_profile(f"memory3.prof")
 
     rng_key, sk_smc = jax.random.split(rng_key)
     smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
@@ -1016,6 +1025,10 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
 
     kl_q_sigma_smc_upper_bound_estimate = smc_upper_bound_estimate - f_q_estimate
     kl_q_sigma_smc_lower_bound_estimate = smc_lower_bound_estimate - f_q_estimate
+
+    print("hihi4")
+    jax.profiler.save_device_memory_profile(f"memory4.prof")
+    1/0
 
 
     list_of_things_to_append_for_record_list = \
