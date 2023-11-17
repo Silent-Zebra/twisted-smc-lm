@@ -1831,7 +1831,8 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
                      upper_conf_bound, alpha=0.3)
 
 
-n_samples_for_plots = [500] #[1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
+# TODO NOV 17 REVERT LATER (test with more settings)
+n_samples_for_plots = [500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
 # if args.hface_nn_twist or args.separate_hface_twist_model:
 #     n_samples_for_plots = [args.n_twist]
 
@@ -2011,10 +2012,10 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         smc_lbs_across_seeds.append(np.stack(smc_lbs))
         smc_ubs_across_seeds.append(np.stack(smc_ubs))
 
-        logZ_ubs_iwae_across_samples_and_seeds[n] = np.stack(logZ_ubs_iwae_across_samples_and_seeds[n])
-        logZ_lbs_iwae_across_samples_and_seeds[n] = np.stack(logZ_lbs_iwae_across_samples_and_seeds[n])
-        logZ_ubs_smc_across_samples_and_seeds[n] = np.stack(logZ_ubs_smc_across_samples_and_seeds[n])
-        logZ_lbs_smc_across_samples_and_seeds[n] = np.stack(logZ_lbs_smc_across_samples_and_seeds[n])
+    logZ_ubs_iwae_across_samples_and_seeds[n] = np.stack(logZ_ubs_iwae_across_samples_and_seeds[n])
+    logZ_lbs_iwae_across_samples_and_seeds[n] = np.stack(logZ_lbs_iwae_across_samples_and_seeds[n])
+    logZ_ubs_smc_across_samples_and_seeds[n] = np.stack(logZ_ubs_smc_across_samples_and_seeds[n])
+    logZ_lbs_smc_across_samples_and_seeds[n] = np.stack(logZ_lbs_smc_across_samples_and_seeds[n])
 
 
     for i in range(1, len(list_of_stuff_across_seeds_only_largest_n_samples)):
