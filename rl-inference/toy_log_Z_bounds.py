@@ -949,6 +949,46 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
     assert true_posterior_samples.shape[0] > 0
 
     posterior_sample = true_posterior_samples[0]
+
+    rng_key, sk_i = jax.random.split(rng_key)
+    iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
+        sk_i, posterior_sample, prompt, cfg_p,
+        params_p, cfg_twist,
+        params_twist, log_true_final_twist,
+        output_len, n_test_smc_samples,
+        n_vocab, smc_procedure_type=smc_procedure_type,
+        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+        token_of_interest_as_int=token_of_interest_as_int,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+    rng_key, sk = jax.random.split(rng_key)
+    (_, log_z_hat_t, _), smc_samples = smc_procedure(
+        sk, prompt, cfg_p, params_p,
+        cfg_twist, params_twist,
+        log_true_final_twist,
+        output_len,
+        n_test_smc_samples,
+        smc_procedure_type=smc_procedure_type,
+        n_vocab=n_vocab,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        condition_twist_on_tokens=condition_twist_on_tokens,
+        token_of_interest_as_int=token_of_interest_as_int,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+    rng_key, sk = jax.random.split(rng_key)
+    smc_upper_bound_estimate = smc_backward(sk, posterior_sample,
+                                            prompt, cfg_p, params_p,
+                                            cfg_twist, params_twist,
+                                            log_true_final_twist,
+                                            output_len,
+                                            n_test_smc_samples,
+                                            n_vocab,
+                                            smc_procedure_type=smc_procedure_type,
+                                            prepend_tokens_for_twists=prepend_tokens_for_twists,
+                                            condition_twist_on_tokens=condition_twist_on_tokens,
+                                            token_of_interest_as_int=token_of_interest_as_int,
+                                            proposal_is_p=proposal_is_p,
+                                            huggingface_model=huggingface_model)
+    1/0
+
     rng_key, sk_i = jax.random.split(rng_key)
     iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
         sk_i, posterior_sample, prompt, cfg_p,
@@ -1028,7 +1068,6 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
 
     print("hihi4")
     jax.profiler.save_device_memory_profile(f"memory4.prof")
-    1/0
 
 
     list_of_things_to_append_for_record_list = \
@@ -1845,7 +1884,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
 
 
 # TODO NOV 17 REVERT LATER (test with more settings)
-n_samples_for_plots = [500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
+n_samples_for_plots = [1, 500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
 # if args.hface_nn_twist or args.separate_hface_twist_model:
 #     n_samples_for_plots = [args.n_twist]
 
@@ -1929,6 +1968,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 print(f"n_smc: {n_test_smc_samples}")
                 # jax.profiler.save_device_memory_profile(f"memory.prof")
 
+            print("HERE_A")
+            jax.profiler.save_device_memory_profile(f"memory_A{seed}.prof")
 
             rng_key, sk = jax.random.split(rng_key)
 
@@ -1953,6 +1994,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
              kl_q_sigma_smc_lower_bound_estimate) \
                 = list_of_things_to_append_for_record_list
 
+            print("HERE_B")
+            jax.profiler.save_device_memory_profile(f"memory_B{seed}.prof")
 
             list_of_things_to_add_across_seeds_for_largest_n_samples = [
                 f_q_estimate, kl_q_sigma_iwae_upper_bound_estimate,
@@ -1961,6 +2004,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 iwae_upper_bound_estimate, iwae_lower_bound_estimate,
                 smc_upper_bound_estimate, smc_lower_bound_estimate,
             ]
+
+
 
             print(f"F_q Estimate: {f_q_estimate}")
 
@@ -2030,6 +2075,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     logZ_ubs_smc_across_samples_and_seeds[n] = np.stack(logZ_ubs_smc_across_samples_and_seeds[n])
     logZ_lbs_smc_across_samples_and_seeds[n] = np.stack(logZ_lbs_smc_across_samples_and_seeds[n])
 
+    print("HERE_C")
+    jax.profiler.save_device_memory_profile(f"memory_C.prof")
 
     for i in range(1, len(list_of_stuff_across_seeds_only_largest_n_samples)):
         list_of_stuff_across_seeds_only_largest_n_samples[i] /= n_seeds

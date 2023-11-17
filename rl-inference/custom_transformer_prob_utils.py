@@ -1150,17 +1150,17 @@ def iwae_forward_and_backward(rng_key, posterior_sample, prompt, cfg_p, params_p
 
     assert len(posterior_sample.shape) == 1 # single posterior sample
 
-    (log_w_t, _, _), full_seq_from_twist_since_no_resample = smc_procedure(rng_key, prompt, cfg_p, params_p,
-                                               cfg_twist, params_twist,
-                                               log_true_final_twist,
-                                               output_len, n_smc_samples,
-                                               smc_procedure_type=smc_procedure_type,
-                                               get_intermediate_sample_history_based_on_learned_twists=False,
-                                               n_vocab=n_vocab,
-                                               prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-                                               token_of_interest_as_int=token_of_interest_as_int,
-                                               resample=False, # NO resample is very important here
-                                                                        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+    (log_w_t, _, _), full_seq_from_twist_since_no_resample = smc_procedure(
+        rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        log_true_final_twist, output_len, n_smc_samples,
+        smc_procedure_type=smc_procedure_type,
+        get_intermediate_sample_history_based_on_learned_twists=False,
+        n_vocab=n_vocab,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        condition_twist_on_tokens=condition_twist_on_tokens,
+        token_of_interest_as_int=token_of_interest_as_int,
+        resample=False, # NO resample is very important here
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
 
     f_q_estimate = log_w_t.mean() # Get the F_q estimate here, without resampling, because sampling truly from the proposal distribution
@@ -1239,6 +1239,8 @@ def smc_backward(rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, 
                                                token_of_interest_as_int=token_of_interest_as_int,
                                                resample=True, posterior_sample=posterior_sample,
                                                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model) # resample is very important here, otherwise is just IWAE bound
+
+
     # Posterior sample for the upper bound
 
     # print("SMC Samples")
