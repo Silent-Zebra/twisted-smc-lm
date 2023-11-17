@@ -950,44 +950,44 @@ def inspect_and_record_evidence_setting_for_index(rng_key,
 
     posterior_sample = true_posterior_samples[0]
 
-    rng_key, sk_i = jax.random.split(rng_key)
-    iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
-        sk_i, posterior_sample, prompt, cfg_p,
-        params_p, cfg_twist,
-        params_twist, log_true_final_twist,
-        output_len, n_test_smc_samples,
-        n_vocab, smc_procedure_type=smc_procedure_type,
-        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-        token_of_interest_as_int=token_of_interest_as_int,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
-    rng_key, sk = jax.random.split(rng_key)
-    (_, log_z_hat_t, _), smc_samples = smc_procedure(
-        sk, prompt, cfg_p, params_p,
-        cfg_twist, params_twist,
-        log_true_final_twist,
-        output_len,
-        n_test_smc_samples,
-        smc_procedure_type=smc_procedure_type,
-        n_vocab=n_vocab,
-        prepend_tokens_for_twists=prepend_tokens_for_twists,
-        condition_twist_on_tokens=condition_twist_on_tokens,
-        token_of_interest_as_int=token_of_interest_as_int,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
-    rng_key, sk = jax.random.split(rng_key)
-    smc_upper_bound_estimate = smc_backward(sk, posterior_sample,
-                                            prompt, cfg_p, params_p,
-                                            cfg_twist, params_twist,
-                                            log_true_final_twist,
-                                            output_len,
-                                            n_test_smc_samples,
-                                            n_vocab,
-                                            smc_procedure_type=smc_procedure_type,
-                                            prepend_tokens_for_twists=prepend_tokens_for_twists,
-                                            condition_twist_on_tokens=condition_twist_on_tokens,
-                                            token_of_interest_as_int=token_of_interest_as_int,
-                                            proposal_is_p=proposal_is_p,
-                                            huggingface_model=huggingface_model)
-    1/0
+    # rng_key, sk_i = jax.random.split(rng_key)
+    # iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
+    #     sk_i, posterior_sample, prompt, cfg_p,
+    #     params_p, cfg_twist,
+    #     params_twist, log_true_final_twist,
+    #     output_len, n_test_smc_samples,
+    #     n_vocab, smc_procedure_type=smc_procedure_type,
+    #     prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+    #     token_of_interest_as_int=token_of_interest_as_int,
+    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+    # rng_key, sk = jax.random.split(rng_key)
+    # (_, log_z_hat_t, _), smc_samples = smc_procedure(
+    #     sk, prompt, cfg_p, params_p,
+    #     cfg_twist, params_twist,
+    #     log_true_final_twist,
+    #     output_len,
+    #     n_test_smc_samples,
+    #     smc_procedure_type=smc_procedure_type,
+    #     n_vocab=n_vocab,
+    #     prepend_tokens_for_twists=prepend_tokens_for_twists,
+    #     condition_twist_on_tokens=condition_twist_on_tokens,
+    #     token_of_interest_as_int=token_of_interest_as_int,
+    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+    # rng_key, sk = jax.random.split(rng_key)
+    # smc_upper_bound_estimate = smc_backward(sk, posterior_sample,
+    #                                         prompt, cfg_p, params_p,
+    #                                         cfg_twist, params_twist,
+    #                                         log_true_final_twist,
+    #                                         output_len,
+    #                                         n_test_smc_samples,
+    #                                         n_vocab,
+    #                                         smc_procedure_type=smc_procedure_type,
+    #                                         prepend_tokens_for_twists=prepend_tokens_for_twists,
+    #                                         condition_twist_on_tokens=condition_twist_on_tokens,
+    #                                         token_of_interest_as_int=token_of_interest_as_int,
+    #                                         proposal_is_p=proposal_is_p,
+    #                                         huggingface_model=huggingface_model)
+    # 1/0
 
     rng_key, sk_i = jax.random.split(rng_key)
     iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
