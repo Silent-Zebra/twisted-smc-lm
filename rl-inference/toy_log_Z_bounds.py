@@ -1868,7 +1868,14 @@ indexes_of_tokens_for_only_contains_token = [6, 8]
 
 
 def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
+
+    print("RECORD")
+    print(record.shape)
+
     avg = record.mean(axis=0)
+
+    print(x_range.shape)
+    print(avg.shape)
 
     stdev = jnp.std(record, axis=0)
 
@@ -1877,8 +1884,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
     lower_conf_bound = avg - z_score * stdev / np.sqrt(
         record.shape[0])
 
-    plt.plot(x_range, avg,
-             label=label)
+    plt.plot(x_range, avg, label=label)
     plt.fill_between(x_range, lower_conf_bound,
                      upper_conf_bound, alpha=0.3)
 
@@ -2230,8 +2236,14 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     x_range = np.arange(1, len(kl_ubs_iwae) + 1)
     plt.clf()
 
+    print(logZ_ubs_iwae_across_samples_time_seeds)
+
     # TODO Plot with different colours (shades of colours) afterwards
     for n in range(len(n_samples_for_plots)):
+        print(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n]).shape)
+        print(x_range.shape)
+
+
         plot_with_conf_bounds(np.transpose(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n])), x_range, label=f"Log(Z) IWAE UB ({n_samples_for_plots[n]} Samples)")
         plot_with_conf_bounds(np.transpose(np.stack(logZ_lbs_iwae_across_samples_time_seeds[n])), x_range, label=f"Log(Z) IWAE LB ({n_samples_for_plots[n]} Samples)")
         plot_with_conf_bounds(np.transpose(np.stack(logZ_ubs_smc_across_samples_time_seeds[n])), x_range, label=f"Log(Z) SMC UB ({n_samples_for_plots[n]} Samples)")
