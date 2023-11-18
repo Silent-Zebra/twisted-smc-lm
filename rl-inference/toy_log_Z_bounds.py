@@ -2076,10 +2076,17 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         smc_lbs_across_seeds.append(np.stack(smc_lbs))
         smc_ubs_across_seeds.append(np.stack(smc_ubs))
 
-    logZ_ubs_iwae_across_samples_and_seeds[n] = np.stack(logZ_ubs_iwae_across_samples_and_seeds[n])
-    logZ_lbs_iwae_across_samples_and_seeds[n] = np.stack(logZ_lbs_iwae_across_samples_and_seeds[n])
-    logZ_ubs_smc_across_samples_and_seeds[n] = np.stack(logZ_ubs_smc_across_samples_and_seeds[n])
-    logZ_lbs_smc_across_samples_and_seeds[n] = np.stack(logZ_lbs_smc_across_samples_and_seeds[n])
+    print("---")
+    print(logZ_ubs_iwae_across_samples_and_seeds)
+
+    for n in range(len(n_samples_for_plots)):
+        logZ_ubs_iwae_across_samples_and_seeds[n] = np.stack(logZ_ubs_iwae_across_samples_and_seeds[n])
+        logZ_lbs_iwae_across_samples_and_seeds[n] = np.stack(logZ_lbs_iwae_across_samples_and_seeds[n])
+        logZ_ubs_smc_across_samples_and_seeds[n] = np.stack(logZ_ubs_smc_across_samples_and_seeds[n])
+        logZ_lbs_smc_across_samples_and_seeds[n] = np.stack(logZ_lbs_smc_across_samples_and_seeds[n])
+
+    print("---")
+    print(logZ_ubs_iwae_across_samples_and_seeds)
 
     print("HERE_C")
     jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory_C.prof")
