@@ -1950,14 +1950,17 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # Measure only for the largest number of particles (should be most accurate)
     list_of_stuff_across_seeds_only_largest_n_samples = [[], 0., 0., 0., 0., 0., 0., 0., 0.]
 
-    logZ_ubs_iwae_across_samples_and_seeds = [[]] * len(n_samples_for_plots)
-    logZ_lbs_iwae_across_samples_and_seeds = [[]] * len(n_samples_for_plots)
-    logZ_ubs_smc_across_samples_and_seeds = [[]] * len(n_samples_for_plots)
-    logZ_lbs_smc_across_samples_and_seeds = [[]] * len(n_samples_for_plots)
-    # logZ_all_bounds_across_seeds_and_time = [
-    #     logZ_ubs_iwae_across_seeds_and_time, logZ_lbs_iwae_across_seeds_and_time,
-    #     logZ_ubs_smc_across_seeds_and_time, logZ_lbs_smc_across_seeds_and_time
-    # ]
+    logZ_ubs_iwae_across_samples_and_seeds = []
+    logZ_lbs_iwae_across_samples_and_seeds = []
+    logZ_ubs_smc_across_samples_and_seeds = []
+    logZ_lbs_smc_across_samples_and_seeds = []
+    logZ_all_bounds_across_seeds_and_time = [
+        logZ_ubs_iwae_across_samples_and_seeds, logZ_lbs_iwae_across_samples_and_seeds,
+        logZ_ubs_smc_across_samples_and_seeds, logZ_lbs_smc_across_samples_and_seeds
+    ]
+    for lst in logZ_all_bounds_across_seeds_and_time:
+        for n in range(len(n_samples_for_plots)):
+            lst.append([])
 
     # TODO swap order of seeds and n_samples for loops?
     for seed in range(n_seeds):
