@@ -934,17 +934,17 @@ class ExperimentConfig:
 
 
 # TODO SEP 30 CONSIDER REJIT
-# @partial(jax.jit, static_argnames=["log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
-#                                    "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",  "prepend_tokens_for_twists", "huggingface_model"])
-def inspect_and_record_evidence_setting_for_index(rng_key,
-                                        prompt,
-                                        prompt_len, cfg_p, params_p, cfg_twist,
-                                        params_twist, n_vocab, output_len,
-                                        log_true_final_twist,
-                                        n_test_smc_samples, token_of_interest_as_int,
-                                                  true_posterior_samples, true_log_z, analytic_kl_q_sigma, smc_procedure_type,
-                                                  proposal_is_p=False, prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
-                                                  huggingface_model=None):
+@partial(jax.jit, static_argnames=[
+    "log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
+    "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",
+    "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type"])
+def inspect_and_record_evidence_setting_for_index(
+    rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
+    params_twist, n_vocab, output_len, log_true_final_twist,
+    n_test_smc_samples, token_of_interest_as_int, true_posterior_samples,
+    true_log_z, analytic_kl_q_sigma, smc_procedure_type,
+    proposal_is_p=False, prepend_tokens_for_twists=False,
+    condition_twist_on_tokens=None, huggingface_model=None):
 
     assert true_posterior_samples.shape[0] > 0
 
