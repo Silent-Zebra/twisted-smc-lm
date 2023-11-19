@@ -1890,7 +1890,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
 
 
 # TODO NOV 17 REVERT LATER (test with more settings)
-n_samples_for_plots = [1, 500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
+n_samples_for_plots = [1, 32, 500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
 # if args.hface_nn_twist or args.separate_hface_twist_model:
 #     n_samples_for_plots = [args.n_twist]
 
@@ -2252,7 +2252,6 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     for n in range(len(n_samples_for_plots)):
         print(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n]).shape)
         print(x_range.shape)
-
 
         plot_with_conf_bounds(np.transpose(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n])), x_range, label=f"Log(Z) IWAE UB ({n_samples_for_plots[n]} Samples)")
         plot_with_conf_bounds(np.transpose(np.stack(logZ_lbs_iwae_across_samples_time_seeds[n])), x_range, label=f"Log(Z) IWAE LB ({n_samples_for_plots[n]} Samples)")
