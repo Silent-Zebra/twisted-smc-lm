@@ -3205,7 +3205,7 @@ def main():
     plot_over_time_list = [
         [], [], [], [], [], [], [], [], [], [],
         logZ_ubs_iwae_across_samples_seeds_time, logZ_lbs_iwae_across_samples_seeds_time,
-        logZ_ubs_smc_across_samples_seeds_time, logZ_lbs_smc_across_samples_seeds_time
+        logZ_ubs_smc_across_samples_seeds_time, logZ_lbs_smc_across_samples_seeds_time]
 
 
     print_every_twist_updates = args.print_every_twist_updates
