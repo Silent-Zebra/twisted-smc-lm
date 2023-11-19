@@ -1890,7 +1890,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
 
 
 # TODO NOV 17 REVERT LATER (test with more settings)
-n_samples_for_plots = [1, 32, 500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
+n_samples_for_plots = [32, 500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
 # if args.hface_nn_twist or args.separate_hface_twist_model:
 #     n_samples_for_plots = [args.n_twist]
 
