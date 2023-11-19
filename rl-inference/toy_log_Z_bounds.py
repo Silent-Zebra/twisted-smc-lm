@@ -1954,11 +1954,11 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     logZ_lbs_iwae_across_samples_and_seeds = []
     logZ_ubs_smc_across_samples_and_seeds = []
     logZ_lbs_smc_across_samples_and_seeds = []
-    logZ_all_bounds_across_seeds_and_time = [
+    logZ_all_bounds_across_samples_and_seeds = [
         logZ_ubs_iwae_across_samples_and_seeds, logZ_lbs_iwae_across_samples_and_seeds,
         logZ_ubs_smc_across_samples_and_seeds, logZ_lbs_smc_across_samples_and_seeds
     ]
-    for lst in logZ_all_bounds_across_seeds_and_time:
+    for lst in logZ_all_bounds_across_samples_and_seeds:
         for n in range(len(n_samples_for_plots)):
             lst.append([])
 
@@ -3188,9 +3188,25 @@ def main():
 
     true_log_z = None
 
+    logZ_ubs_iwae_across_samples_seeds_time = []
+    logZ_lbs_iwae_across_samples_seeds_time = []
+    logZ_ubs_smc_across_samples_seeds_time = []
+    logZ_lbs_smc_across_samples_seeds_time = []
+    logZ_all_bounds_across_samples_seeds_time = [
+        logZ_ubs_iwae_across_samples_seeds_time,
+        logZ_lbs_iwae_across_samples_seeds_time,
+        logZ_ubs_smc_across_samples_seeds_time,
+        logZ_lbs_smc_across_samples_seeds_time
+    ]
+    for lst in logZ_all_bounds_across_samples_seeds_time:
+        for n in range(len(n_samples_for_plots)):
+            lst.append([])
+
     plot_over_time_list = [
         [], [], [], [], [], [], [], [], [], [],
-        [[]] * len(n_samples_for_plots), [[]] * len(n_samples_for_plots), [[]] * len(n_samples_for_plots), [[]] * len(n_samples_for_plots)]
+        logZ_ubs_iwae_across_samples_seeds_time, logZ_lbs_iwae_across_samples_seeds_time,
+        logZ_ubs_smc_across_samples_seeds_time, logZ_lbs_smc_across_samples_seeds_time
+
 
     print_every_twist_updates = args.print_every_twist_updates
 
