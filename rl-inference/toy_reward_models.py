@@ -782,7 +782,7 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indexe
 
                 num_posterior_samples = \
                 posterior_samples.shape[0]
-                print("NUM samples")
+                print("NUM samples", flush=True)
                 print(num_posterior_samples)
 
             print(posterior_samples)
@@ -840,7 +840,7 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continu
 
             num_posterior_samples = \
             posterior_samples.shape[0]
-            print("NUM samples")
+            print("NUM samples", flush=True)
             print(num_posterior_samples)
 
             print(posterior_samples)
@@ -1040,7 +1040,7 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
 
 
                 num_samples_satisfying_threshold = posterior_samples_satisfying_threshold.shape[0]
-                print("NUM samples")
+                print("NUM samples", flush=True)
                 print(num_samples_satisfying_threshold)
 
             print(posterior_samples_satisfying_threshold)

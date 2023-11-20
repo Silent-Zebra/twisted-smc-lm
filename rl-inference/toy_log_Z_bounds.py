@@ -2621,7 +2621,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             input_ids_and_mask = tokenizer(["How? Sure, here's how"], return_tensors="np",
                                        padding=False)
             indexes_of_sure_heres = input_ids_and_mask['input_ids'][0]
-            print(indexes_of_sure_heres)
+            print(indexes_of_sure_heres, flush=True)
             # 1/0
             # indexes_of_continuation = [10889, 11, 994, 338] # "Sure, here's"
             indexes_of_continuation = [10889, 11]
