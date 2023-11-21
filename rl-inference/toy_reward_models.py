@@ -247,7 +247,7 @@ def log_curried_reward_seq_contains_token_eps(index_of_fixed_token, prompt_len):
 
 @partial(jax.jit, static_argnames=["cfg_p", "beta_temp", "huggingface_model", "return_log_w_no_temp"])
 def log_reward_model_p_of_continuation(
-    seq, cfg_p, params_p, indexes_of_continuation, beta_temp=None,
+    seq, cfg_p, params_p, indices_of_continuation, beta_temp=None,
     huggingface_model=None, return_log_w_no_temp=False):
 
     do_reshape = False
@@ -259,7 +259,7 @@ def log_reward_model_p_of_continuation(
 
     original_seq_len_incl_prompt = seq.shape[-1]
 
-    jnp_continuation = indexes_of_continuation
+    jnp_continuation = indices_of_continuation
     batch_continuation = jnp.full((seq.shape[0], jnp_continuation.shape[-1]), jnp_continuation)
 
     seq = jnp.concatenate((seq, batch_continuation), axis=1)
@@ -274,15 +274,15 @@ def log_reward_model_p_of_continuation(
         return jnp.exp(log_prob_of_continuation.sum(axis=-1)) * beta_temp # in the e^(beta r) formulation, the log is going to be just beta * r
 
 
-def curried_log_reward_model_p_of_continuation(cfg_p, params_p, indexes_of_continuation, beta_temp, huggingface_model=None):
+def curried_log_reward_model_p_of_continuation(cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None):
     def new_rm(seq):
-        return log_reward_model_p_of_continuation(seq, cfg_p, params_p, indexes_of_continuation, beta_temp, huggingface_model=huggingface_model)
+        return log_reward_model_p_of_continuation(seq, cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=huggingface_model)
     return new_rm
 
 
-def curried_log_p_of_continuation(cfg_p, params_p, indexes_of_continuation, huggingface_model=None):
+def curried_log_p_of_continuation(cfg_p, params_p, indices_of_continuation, huggingface_model=None):
     def new_rm(seq):
-        return log_reward_model_p_of_continuation(seq, cfg_p, params_p, indexes_of_continuation, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
+        return log_reward_model_p_of_continuation(seq, cfg_p, params_p, indices_of_continuation, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
     return new_rm
 
 
@@ -290,7 +290,7 @@ def curried_log_p_of_continuation(cfg_p, params_p, indexes_of_continuation, hugg
 
 
 # Takes in sequences of some length (prompt_len + output_len + continuation_len) and evaluates the probability of the last continuation_len number of tokens in those sequences
-# Essentially: like the p_continuation, except here the indexes of interest are determined by whatever is in the last few tokens
+# Essentially: like the p_continuation, except here the indices of interest are determined by whatever is in the last few tokens
 @partial(jax.jit, static_argnames=["cfg_p", "beta_temp", "huggingface_model", "continuation_len", "return_log_w_no_temp"])
 def log_reward_model_p_of_last_tokens(
     seq, cfg_p, params_p, continuation_len, beta_temp=None,
@@ -327,12 +327,12 @@ def batch_check_contains_token(seq, index_of_token):
 
     return jnp.minimum(is_token.sum(axis=-1), jnp.ones_like(is_token.shape[0]))
 
-def check_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
+def check_only_contains_tokens(seq, indices_of_tokens, prompt_len):
     output_to_check = seq[:, prompt_len:]
 
     is_one_of_the_tokens = jnp.zeros_like(output_to_check, dtype=jnp.int32)
 
-    for index_of_token in indexes_of_tokens:
+    for index_of_token in indices_of_tokens:
         is_token = jnp.where(
             jnp.abs(output_to_check - index_of_token) == jnp.zeros_like(output_to_check),
             jnp.ones_like(output_to_check), jnp.zeros_like(output_to_check))
@@ -343,12 +343,12 @@ def check_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
 
     return contains_only_tokens
 
-def check_only_contains_tokens_t_limited(seq, indexes_of_tokens, prompt_len, t_steps):
+def check_only_contains_tokens_t_limited(seq, indices_of_tokens, prompt_len, t_steps):
     output_to_check = seq[:, prompt_len:prompt_len+t_steps]
 
     is_one_of_the_tokens = jnp.zeros_like(output_to_check, dtype=jnp.int32)
 
-    for index_of_token in indexes_of_tokens:
+    for index_of_token in indices_of_tokens:
         is_token = jnp.where(
             jnp.abs(output_to_check - index_of_token) == jnp.zeros_like(output_to_check),
             jnp.ones_like(output_to_check), jnp.zeros_like(output_to_check))
@@ -378,11 +378,11 @@ def check_only_contains_tokens_t_limited(seq, indexes_of_tokens, prompt_len, t_s
 #     #         return True
 #     # return False
 #
-# def batch_check_array_contained_in_other_array(seq, indexes_of_continuation):
+# def batch_check_array_contained_in_other_array(seq, indices_of_continuation):
 #     if len(seq.shape) == 2:
-#         return jax.vmap(check_array_contained_in_other_array, in_axes=(0, None))(seq, indexes_of_continuation)
+#         return jax.vmap(check_array_contained_in_other_array, in_axes=(0, None))(seq, indices_of_continuation)
 #     elif len(seq.shape) == 1:
-#         return check_array_contained_in_other_array(seq, indexes_of_continuation)
+#         return check_array_contained_in_other_array(seq, indices_of_continuation)
 #     else:
 #         raise NotImplementedError
 
@@ -399,28 +399,28 @@ eps = 1e-16 # just to avoid inf when taking log of 0
 
 @partial(jax.jit, static_argnames=["prompt_len"])
 # TODO do the same thing but now including the above one
-def reward_model_contains_continuation(seq, indexes_of_continuation, prompt_len):
+def reward_model_contains_continuation(seq, indices_of_continuation, prompt_len):
     if len(seq.shape) == 3:
         raise NotImplementedError
 
-    contains_continuation = batch_check_array_contained_in_other_array(seq[:, prompt_len:], indexes_of_continuation)
+    contains_continuation = batch_check_array_contained_in_other_array(seq[:, prompt_len:], indices_of_continuation)
 
     # Below (commented) prob calc is insufficient because it doesn't consider continuations that are cut off. E.g. if you have the desired continuation starting from the second last token
     # So for now let's just do the eps check within the sequence.
-    # log_prob_of_continuation_at_end = log_reward_model_p_of_continuation(seq, cfg_p, params_p, indexes_of_continuation, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
+    # log_prob_of_continuation_at_end = log_reward_model_p_of_continuation(seq, cfg_p, params_p, indices_of_continuation, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
     # log_p_contains_continuation = jnp.maximum(log_prob_of_continuation_at_end, jnp.log(contains_continuation))
     log_contains_continuation = jnp.log(contains_continuation + eps)
 
     return log_contains_continuation
 
 
-def curried_reward_contains_continuation(indexes_of_continuation, prompt_len):
+def curried_reward_contains_continuation(indices_of_continuation, prompt_len):
     def new_rm(seq):
-        return reward_model_contains_continuation(seq, indexes_of_continuation, prompt_len)
+        return reward_model_contains_continuation(seq, indices_of_continuation, prompt_len)
     return new_rm
 
 
-def reward_model_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
+def reward_model_only_contains_tokens(seq, indices_of_tokens, prompt_len):
     do_reshape = False
     if len(seq.shape) == 3:
         original_shape = seq.shape
@@ -428,15 +428,15 @@ def reward_model_only_contains_tokens(seq, indexes_of_tokens, prompt_len):
         seq = seq.reshape(-1, seq.shape[-1])
         1/0
 
-    total_contains_token = check_only_contains_tokens(seq, indexes_of_tokens, prompt_len)
+    total_contains_token = check_only_contains_tokens(seq, indices_of_tokens, prompt_len)
 
     indicator_only_contains_tokens_plus_eps = total_contains_token + eps
 
     return jnp.log(indicator_only_contains_tokens_plus_eps)
 
-def curried_reward_only_contains_tokens(indexes_of_tokens, prompt_len):
+def curried_reward_only_contains_tokens(indices_of_tokens, prompt_len):
     def new_rm(seq):
-        return reward_model_only_contains_tokens(seq, indexes_of_tokens, prompt_len)
+        return reward_model_only_contains_tokens(seq, indices_of_tokens, prompt_len)
     return new_rm
 
 
@@ -732,14 +732,14 @@ def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_ind
 
 
 
-def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indexes_of_continuation, beta_temp, huggingface_model=None):
+def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None):
     # This here is a reward model in the framework phi = e^(beta r) where r = probability of continuation | prompt, s_{1:T} (r = p(continuation | s_{1:T}, prompt))
     # No posterior samples here
     log_true_final_twists = []
     for jnp_prompt in jnp_prompts:
         # prompt_len = jnp_prompt.shape[-1]
         log_true_final_twist = curried_log_reward_model_p_of_continuation(
-            cfg_p, params_p, indexes_of_continuation,
+            cfg_p, params_p, indices_of_continuation,
             beta_temp, huggingface_model=huggingface_model)
 
         log_true_final_twists.append(log_true_final_twist)
@@ -748,19 +748,19 @@ def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indexes_of_
 
 
 
-def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indexes_of_continuation, output_len,
+def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indices_of_continuation, output_len,
                                    n_samples_at_a_time, tokenizer=None, huggingface_model=None, get_true_posterior_samples=True):
     # Posterior samples can be gotten here; the way this works is that we generate tokens up to
     # output len + number of tokens in the continuation, and we check that the last tokens match the continuation
     # This way, we get true posterior samples that satisfy the indicator function on the last tokens matching the continuation
     # which is equivalent to the posterior defined by phi = probability of the last tokens being this sequence
 
-    num_tokens_in_continuation = indexes_of_continuation.shape[0]
+    num_tokens_in_continuation = indices_of_continuation.shape[0]
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
-        log_true_final_twist = curried_log_p_of_continuation(cfg_p, params_p, indexes_of_continuation, huggingface_model)
+        log_true_final_twist = curried_log_p_of_continuation(cfg_p, params_p, indices_of_continuation, huggingface_model)
         log_true_final_twists.append(log_true_final_twist)
 
         if get_true_posterior_samples:
@@ -774,7 +774,7 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indexe
                                                           n_samples_at_a_time,
                                                           huggingface_model=huggingface_model)
 
-                check_satisfies_posterior = (batch_check_array_contained_in_other_array(p_samples[:, prompt_len + output_len:], indexes_of_continuation) == 1)
+                check_satisfies_posterior = (batch_check_array_contained_in_other_array(p_samples[:, prompt_len + output_len:], indices_of_continuation) == 1)
                 # print(check_satisfies_posterior)
                 # print(p_samples[check_satisfies_posterior])
 
@@ -799,7 +799,7 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indexe
                 print(text_outputs)
 
             # token = ordered_token_list[i]
-            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
+            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
             # assert extracted_true_posterior_samples.shape[0] != 0
 
             true_posterior_samples_by_prompt.append(
@@ -808,6 +808,67 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indexe
     # print(true_posterior_samples_by_prompt_and_by_token)
 
     return log_true_final_twists, None, true_posterior_samples_by_prompt
+
+
+
+def build_p_of_continuation_one_post_twists(
+    rng_key, jnp_prompts, cfg_p, params_p, output_len, num_tokens_in_continuation,
+    tokenizer=None, huggingface_model=None,):
+    # Like build_p_of_continuation_twists except instead of a specific continuation
+    # we just take one sample per prompt, and whatever the last num_tokens_in_continuation tokens are, that's our continuation
+
+    indices_of_continuations_chosen_by_prompt = []
+    log_true_final_twists = []
+    true_posterior_samples_by_prompt = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+
+        rng_key, sk = jax.random.split(rng_key)
+        p_sample = stochastic_transformer_sample(sk, cfg_p, params_p,
+                                                  jnp_prompt,
+                                                  output_len + num_tokens_in_continuation,
+                                                  1,
+                                                  huggingface_model=huggingface_model)
+
+        print(p_sample.shape)
+        posterior_sample = p_sample[:, :prompt_len + output_len]
+
+        print(posterior_sample.shape)
+        indices_of_continuation = p_sample[:, prompt_len + output_len:]
+
+        print(indices_of_continuation.shape)
+        indices_of_continuation = indices_of_continuation.reshape(indices_of_continuation.shape[-1],)
+        print(indices_of_continuation.shape)
+
+        log_true_final_twist = curried_log_p_of_continuation(cfg_p, params_p, indices_of_continuation, huggingface_model)
+        log_true_final_twists.append(log_true_final_twist)
+
+        if tokenizer is not None:
+            text_outputs = tokenizer.batch_decode(
+                p_sample, skip_special_tokens=True)
+            print(text_outputs)
+
+            print("Continuation only")
+            text_outputs = tokenizer.batch_decode(
+                p_sample[:, prompt_len + output_len:], skip_special_tokens=True)
+            print(text_outputs)
+
+        true_posterior_samples_by_prompt.append(
+            posterior_sample)
+
+        print("True posterior log_p value:")
+        print(log_true_final_twist(posterior_sample))
+
+        indices_of_continuations_chosen_by_prompt.append(indices_of_continuation)
+
+        # TODO FIGURE OUT how to make use of the indices of continuations chosen by prompt and
+        # pass that into the rest of the code such that it still works...
+        # Then test it, get a plot that shows wide divergences...
+
+
+    # print(true_posterior_samples_by_prompt_and_by_token)
+
+    return log_true_final_twists, indices_of_continuations_chosen_by_prompt, true_posterior_samples_by_prompt
 
 
 
@@ -857,7 +918,7 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continu
                 print(text_outputs)
 
             # token = ordered_token_list[i]
-            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
+            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
             # assert extracted_true_posterior_samples.shape[0] != 0
 
             true_posterior_samples_by_prompt.append(
@@ -962,7 +1023,7 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
 
 
 
-def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indexes_of_continuation, huggingface_model=None, get_true_posterior_samples=True):
+def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indices_of_continuation, huggingface_model=None, get_true_posterior_samples=True):
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
 
@@ -980,10 +1041,10 @@ def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, ou
                                                                        output_len,
                                                                        n_samples_at_a_time, huggingface_model=huggingface_model)
 
-                # print(batch_check_array_contained_in_other_array(true_posterior_samples, indexes_of_continuation))
+                # print(batch_check_array_contained_in_other_array(true_posterior_samples, indices_of_continuation))
 
                 posterior_samples_containing_continuation = true_posterior_samples[
-                    (batch_check_array_contained_in_other_array(true_posterior_samples, indexes_of_continuation) == 1)]
+                    (batch_check_array_contained_in_other_array(true_posterior_samples, indices_of_continuation) == 1)]
 
                 print(posterior_samples_containing_continuation)
                 print(posterior_samples_containing_continuation.shape)
@@ -994,9 +1055,9 @@ def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, ou
             print(true_posterior_samples)
 
         # token = ordered_token_list[i]
-        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
+        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
         # assert extracted_true_posterior_samples.shape[0] != 0
-        log_true_final_twist = curried_reward_contains_continuation(indexes_of_continuation, prompt_len=prompt_len)
+        log_true_final_twist = curried_reward_contains_continuation(indices_of_continuation, prompt_len=prompt_len)
 
         log_true_final_twists.append(log_true_final_twist)
         true_posterior_samples_by_prompt.append(posterior_samples_containing_continuation)
@@ -1029,7 +1090,7 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
                                                           output_len, n_samples_at_a_time,
                                                           huggingface_model=huggingface_model)
 
-                # print(batch_check_array_contained_in_other_array(true_posterior_samples, indexes_of_continuation))
+                # print(batch_check_array_contained_in_other_array(true_posterior_samples, indices_of_continuation))
 
                 # posterior_samples_satisfying_threshold = p_samples[
                 #     (log_true_final_twist(p_samples))]
@@ -1056,7 +1117,7 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
             print(text_outputs)
 
         # token = ordered_token_list[i]
-        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indexes_of_continuation)]
+        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
         # assert extracted_true_posterior_samples.shape[0] != 0
 
         true_posterior_samples_by_prompt.append(posterior_samples_satisfying_threshold)
@@ -1118,7 +1179,7 @@ def build_contains_token_eps_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
     return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
 
 
-def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indexes_of_tokens, huggingface_model=None):
+def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indices_of_tokens, huggingface_model=None):
     log_true_final_twists = []
     true_posterior_samples_by_prompt_and_by_token = []
     for jnp_prompt in jnp_prompts:
@@ -1134,7 +1195,7 @@ def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, outp
                                                                    output_len, # No +1 here, just have eps to deal with the log 0 issue.
                                                                    n_samples_at_a_time, huggingface_model=huggingface_model)
 
-            posterior_samples_only_containing_token = p_samples[(check_only_contains_tokens(p_samples, indexes_of_tokens, prompt_len) == 1)]
+            posterior_samples_only_containing_token = p_samples[(check_only_contains_tokens(p_samples, indices_of_tokens, prompt_len) == 1)]
 
             print(posterior_samples_only_containing_token)
             print(posterior_samples_only_containing_token.shape)
@@ -1144,7 +1205,7 @@ def build_only_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, outp
 
         # token = ordered_token_list[i]
         assert posterior_samples_only_containing_token.shape[0] != 0
-        log_true_final_twist = curried_reward_only_contains_tokens(indexes_of_tokens, prompt_len=prompt_len)
+        log_true_final_twist = curried_reward_only_contains_tokens(indices_of_tokens, prompt_len=prompt_len)
 
         log_true_final_twists.append(log_true_final_twist)
 

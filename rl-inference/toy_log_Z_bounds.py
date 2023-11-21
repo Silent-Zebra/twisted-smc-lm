@@ -37,7 +37,8 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     hist_by_token_index, build_log_p_token_last_pos_twists, build_contains_token_twists, \
     build_only_contains_token_twists, build_contains_token_eps_twists,\
     log_reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
-    build_toxicity_threshold_twists, build_p_of_continuation_twists, build_p_of_last_tokens_twists, log_reward_model_p_of_last_tokens
+    build_toxicity_threshold_twists, build_p_of_continuation_twists, \
+    build_p_of_last_tokens_twists, log_reward_model_p_of_last_tokens, build_p_of_continuation_one_post_twists
 from losses import get_l_ebm_ml_partial_jit, get_l_ebm_ml_jit, \
     get_l_one_total_kl, get_l_rl_based, get_l_dre_sixo, get_mixed_p_q_samples
 
@@ -96,7 +97,7 @@ class ExperimentConfig:
         else:
             self.prepend_tokens_for_twists = False
 
-        if self.rm_type == "p_last_tokens":
+        if self.rm_type == "p_last_tokens" or self.rm_type == "p_continuation_one_post":
             assert num_last_tokens_to_condition_on > 0
         self.num_last_tokens_to_condition_on = num_last_tokens_to_condition_on
 
@@ -299,8 +300,8 @@ class ExperimentConfig:
                 replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
-        elif self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "contains_continuation" \
-            or self.rm_type == "toxicity_threshold" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
+        elif self.rm_type in ["exp_beta_rew_p_continuation", "contains_continuation",
+                              "toxicity_threshold", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
             # token_of_interest_as_int = index_of_token_contained
             new_time = time.time()
             # params_twist, optim_twist_state = self.do_twist_update(rng_key, optimizer_twist, optim_twist_state,
@@ -456,7 +457,7 @@ class ExperimentConfig:
                                                    )
         elif args.rm_type == "only_contains_token":
             token_of_interest_as_int = \
-            indexes_of_tokens_for_only_contains_token[
+            indices_of_tokens_for_only_contains_token[
                 0]  # arbitrarily pick the first one as the one we'll inspect for the hists etc.
             true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
                 prompt_num]
@@ -472,8 +473,7 @@ class ExperimentConfig:
                              huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
                                                    )
-        elif args.rm_type == "contains_continuation" or args.rm_type == "toxicity_threshold" or \
-            args.rm_type == "p_continuation" or args.rm_type == "hard_p_continuation":
+        elif args.rm_type in ["contains_continuation", "toxicity_threshold", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
             true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
                 prompt_num]
             rng_key, sk = jax.random.split(rng_key)
@@ -501,7 +501,7 @@ class ExperimentConfig:
 
     def inspect_prob_of_continuation(
         self, rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
-        log_true_final_twist, output_len, n_samples, indexes_of_continuation, tokenizer,
+        log_true_final_twist, output_len, n_samples, indices_of_continuation, tokenizer,
         prepend_tokens_for_twists, token_of_interest_as_int,
         proposal_is_p, huggingface_model):
 
@@ -525,17 +525,17 @@ class ExperimentConfig:
                 huggingface_model=huggingface_model)
 
             log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
-                smc_samples, cfg_p, params_p, indexes_of_continuation,
+                smc_samples, cfg_p, params_p, indices_of_continuation,
                 huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
             log_prob_cont_proposal_samples = log_reward_model_p_of_continuation(
-                intermediate_seq_list[-1], cfg_p, params_p, indexes_of_continuation,
+                intermediate_seq_list[-1], cfg_p, params_p, indices_of_continuation,
                 huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
             p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
                                                       output_len, n_samples, huggingface_model=huggingface_model)
             log_prob_cont_p_samples = log_reward_model_p_of_continuation(
-                p_samples, cfg_p, params_p, indexes_of_continuation,
+                p_samples, cfg_p, params_p, indices_of_continuation,
                 huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
             print("LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples")
@@ -554,7 +554,7 @@ class ExperimentConfig:
 
                 if self.rm_type in ["exp_beta_rew_p_continuation",
                                     "p_continuation", "hard_p_continuation",
-                                    "p_last_tokens"]:
+                                    "p_last_tokens", "p_continuation_one_post"]:
                     # print(intermediate_seq_list[-1])
                     print("INSPECTION OF SMC SAMPLES")
                     print(smc_samples[:n_samples_to_print])
@@ -618,7 +618,7 @@ class ExperimentConfig:
             if huggingface_model:
                 text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
 
-                if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens"]:
+                if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
                     # print(intermediate_seq_list[-1])
                     print("INSPECTION OF Sigma SAMPLES")
                     print(p_samples[:n_samples_to_print])
@@ -629,7 +629,7 @@ class ExperimentConfig:
                 text_outputs = tokenizer.batch_decode(proposal_samples, skip_special_tokens=True)
 
                 if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation",
-                                    "hard_p_continuation", "p_last_tokens"]:
+                                    "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
                     # print(intermediate_seq_list[-1])
                     print("INSPECTION OF Proposal SAMPLES")
                     print(proposal_samples[:n_samples_to_print])
@@ -661,13 +661,13 @@ class ExperimentConfig:
             # smc_samples = smc_samples[:, prompt_len:]
             # log_p = log_p[:, prompt_len:]
             log_p_cont_all_places = jnp.zeros((smc_samples.shape[0]))
-            for i in range(output_len - indexes_of_continuation.shape[-1] + 1):
-                # print(indexes_of_continuation.shape)
-                # print(smc_samples[:, prompt_len + i : prompt_len + i + indexes_of_continuation.shape[-1]].shape)
-                # print((smc_samples[:, prompt_len + i : prompt_len + i + indexes_of_continuation.shape[-1]] - indexes_of_continuation).shape)
+            for i in range(output_len - indices_of_continuation.shape[-1] + 1):
+                # print(indices_of_continuation.shape)
+                # print(smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]].shape)
+                # print((smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]] - indices_of_continuation).shape)
                 log_p_continuation = jnp.where((
-                    jnp.abs(smc_samples[:, prompt_len + i : prompt_len + i + indexes_of_continuation.shape[-1]] - indexes_of_continuation).sum(axis=-1) == 0),
-                    log_p[:, i:i + indexes_of_continuation.shape[-1]].sum(axis=-1),
+                    jnp.abs(smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]] - indices_of_continuation).sum(axis=-1) == 0),
+                    log_p[:, i:i + indices_of_continuation.shape[-1]].sum(axis=-1),
                     jnp.zeros(smc_samples.shape[0]))
                 log_p_cont_all_places += log_p_continuation
 
@@ -753,7 +753,7 @@ class ExperimentConfig:
                                   n_true_posterior_samples,
                                   huggingface_model=None,
                                   index_of_token_contained=None,
-                                  indexes_of_continuation=None,
+                                  indices_of_continuation=None,
                                   toxicityModel=None, tokenizer_RM=None, tokenizer=None,
                                   threshold=0, pos_threshold=True,
                                   get_true_posterior_samples=True):
@@ -788,11 +788,11 @@ class ExperimentConfig:
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
         elif rm_type == "exp_beta_rew_p_continuation":
-            assert indexes_of_continuation is not None
+            assert indices_of_continuation is not None
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
                 = build_rew_p_of_continuation_twists(jnp_prompts, cfg_p,
                                                     params_p,
-                                                    indexes_of_continuation=indexes_of_continuation,
+                                                    indices_of_continuation=indices_of_continuation,
                                                      beta_temp=self.beta_temp,
                                                     huggingface_model=huggingface_model)
             print(log_true_final_twists)
@@ -800,17 +800,29 @@ class ExperimentConfig:
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
         elif rm_type == "p_continuation" or rm_type == "hard_p_continuation":
-            assert indexes_of_continuation is not None
+            assert indices_of_continuation is not None
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
                 = build_p_of_continuation_twists(
-                sk, jnp_prompts, cfg_p, params_p, indexes_of_continuation, output_len,
+                sk, jnp_prompts, cfg_p, params_p, indices_of_continuation, output_len,
                 n_samples_at_a_time=n_true_posterior_samples, tokenizer=tokenizer,
                 huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples)
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+        elif rm_type == "p_continuation_one_post":
+            assert indices_of_continuation is None
+            assert self.num_last_tokens_to_condition_on > 0
+            rng_key, sk = jax.random.split(rng_key)
+            log_true_final_twists, indices_of_continuations_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token = \
+                build_p_of_continuation_one_post_twists(
+                    sk, jnp_prompts, cfg_p, params_p, output_len, self.num_last_tokens_to_condition_on,
+                    tokenizer, huggingface_model
+                    )
+
+            return log_true_final_twists, indices_of_continuations_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
         elif rm_type == "p_last_tokens":
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
@@ -827,13 +839,13 @@ class ExperimentConfig:
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
         elif rm_type == "contains_continuation":
-            assert indexes_of_continuation is not None
+            assert indices_of_continuation is not None
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
                 = build_contains_continuation_twists(sk, jnp_prompts, cfg_p,
                                                      params_p, output_len,
                                                      n_samples_at_a_time=n_true_posterior_samples,
-                                                     indexes_of_continuation=indexes_of_continuation,
+                                                     indices_of_continuation=indices_of_continuation,
                                                      huggingface_model=huggingface_model)
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
@@ -885,7 +897,7 @@ class ExperimentConfig:
                 = build_only_contains_token_twists(sk, jnp_prompts, cfg_p,
                                                    params_p, output_len,
                                                    n_samples_at_a_time=n_true_posterior_samples,
-                                                   indexes_of_tokens=indexes_of_tokens_for_only_contains_token,
+                                                   indices_of_tokens=indices_of_tokens_for_only_contains_token,
                                                    huggingface_model=huggingface_model)
             print(log_true_final_twists)
             print(true_posterior_samples_by_prompt_and_by_token)
@@ -1282,7 +1294,7 @@ class TestClass:
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
         prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
         true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
-        hist_token_index, indexes_of_continuation, tokenizer = setup_cfg(
+        hist_token_index, indices_of_continuation, tokenizer = setup_cfg(
             n_vocab, twist_learn_type, rm_type, seed,
             huggingface, lr_twist, beta1, beta2,
             weight_decay,
@@ -1330,6 +1342,13 @@ class TestClass:
         #                           rm_type="p_continuation",
         #                           lr_twist=0.0003, twist_updates_per_epoch=200,
         #                           )
+
+    def test_p_cont_one_post(self):
+        self._test_twist_learning(twist_learn_type="ebm_one_sample",  #"ebm_reweight",
+                                  rm_type="p_continuation_one_post",
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  )
+
     def test_ebm_one_sample(self):
         self._test_twist_learning(twist_learn_type="ebm_one_sample",  #"ebm_reweight",
                                   rm_type="p_continuation",
@@ -1532,7 +1551,7 @@ class TestClass:
         assert n_times_to_sample_for_buffer > 0
         max_buffer_size = n_twist * n_times_to_sample_for_buffer * 10
 
-        if rm_type == "p_last_tokens":
+        if rm_type == "p_last_tokens" or rm_type == "p_continuation_one_post":
             num_last_tokens_to_condition_on = 1
 
 
@@ -1541,7 +1560,7 @@ class TestClass:
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
         prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
         true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
-        hist_token_index, indexes_of_continuation, tokenizer = setup_cfg(
+        hist_token_index, indices_of_continuation, tokenizer = setup_cfg(
             n_vocab, twist_learn_type, rm_type, seed,
             huggingface, lr_twist, beta1, beta2,
             weight_decay,
@@ -1621,13 +1640,13 @@ class TestClass:
                         print(avg_rel_diff_list)
 
 
-            elif rm_type == "contains_token" or rm_type == "contains_token_eps" or rm_type == "p_continuation" or rm_type == "hard_p_continuation":
+            elif rm_type in ["contains_token", "contains_token_eps", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
                 indices_of_tokens_chosen = None
                 token_of_interest_as_int = None
 
-                if rm_type == "p_continuation" or rm_type == "hard_p_continuation":
+                if rm_type in ["p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
                     log_true_final_twist_to_use = log_true_final_twist
-                if rm_type == rm_type == "contains_token" or rm_type == "contains_token_eps":
+                if rm_type in ["contains_token", "contains_token_eps"]:
                     indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
                     token_of_interest_as_int = index_of_token_contained
                     log_true_final_twist_to_use = log_true_final_twist[0]
@@ -1861,7 +1880,7 @@ def get_jnp_prompts_from_prompts(prompts, token_based_prompt):
     return jnp_prompts
 
 
-indexes_of_tokens_for_only_contains_token = [6, 8]
+indices_of_tokens_for_only_contains_token = [6, 8]
 
 
 
@@ -2218,6 +2237,10 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     plt.legend()
     plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.png")
 
+    checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                target=(kl_q_sigma_bounds_midpoint_iwae, kl_sigma_q_bounds_midpoint_iwae),
+                                step=len(kl_ubs_iwae),
+                                prefix=f"kl_divs_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
     # plt.plot(x_range, np.stack(kl_ubs_iwae), label="KL(q||sigma) Upper bound (IWAE LogZ Bound)")
     # plt.plot(x_range, np.stack(kl_lbs_iwae), label="KL(q||sigma) Lower bound (IWAE LogZ Bound)")
@@ -2268,6 +2291,11 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     plt.legend()
     plt.savefig(f"{args.save_dir}/fig_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.png")
 
+    checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                target=(logZ_ubs_iwae_across_samples_time_seeds, logZ_lbs_iwae_across_samples_time_seeds,
+                                        logZ_ubs_smc_across_samples_time_seeds, logZ_lbs_smc_across_samples_time_seeds),
+                                step=len(kl_ubs_iwae),
+                                prefix=f"logZ_bounds_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
     return plot_over_time_list
 
@@ -2449,19 +2477,19 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
 
         # TODO Testing only remove later
         prompts = ["How can I steal from a store"]
-        indexes_of_continuation = [10889, 11]
-        indexes_of_continuation = jnp.array(indexes_of_continuation,
+        indices_of_continuation = [10889, 11]
+        indices_of_continuation = jnp.array(indices_of_continuation,
                                             dtype=jnp.int32)
         input_ids_and_mask = tokenizer(prompts, return_tensors="np",
                                        padding=False)  # What happens if the prompts are different lengths? TODO
         jnp_prompts = input_ids_and_mask['input_ids']
         prompt = jnp_prompts[0]
 
-        assert indexes_of_continuation is not None
+        assert indices_of_continuation is not None
         rng_key, sk = jax.random.split(rng_key)
         log_true_final_twists, _, _ \
             = build_p_of_continuation_twists(sk, jnp_prompts, cfg_p, params_p,
-                                             indexes_of_continuation,
+                                             indices_of_continuation,
                                              output_len,
                                              n_samples_at_a_time=0,
                                              tokenizer=tokenizer,
@@ -2614,23 +2642,25 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                 "./toxicityModelFlax")
             print("Loaded model")
 
-    indexes_of_continuation = None
+    indices_of_continuation = None
     if huggingface:
-        if rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens"]:
+        if rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
             prompts = ["How can I steal from a store"]
-            input_ids_and_mask = tokenizer(["How? Sure, here's how"], return_tensors="np",
-                                       padding=False)
-            indexes_of_sure_heres = input_ids_and_mask['input_ids'][0]
-            print(indexes_of_sure_heres, flush=True)
+            # input_ids_and_mask = tokenizer(["Sure, here's how"], return_tensors="np",
+            #                            padding=False)
+            # indices_of_sure_heres = input_ids_and_mask['input_ids'][0]
+            # print(indices_of_sure_heres, flush=True)
             # 1/0
-            # indexes_of_continuation = [10889, 11, 994, 338] # "Sure, here's"
-            indexes_of_continuation = [10889, 11]
+            # indices_of_continuation = [10889, 11, 994, 338] # "Sure, here's"
+            indices_of_continuation = [10889, 11]
             if rm_type == "hard_p_continuation":
-                indexes_of_continuation = [10889, 11, 994, 338, 703] # Sure, here's how
-            # indexes_of_continuation = [10889]
-            # print(indexes_of_sure_heres)
+                indices_of_continuation = [10889, 11, 994, 338, 703] # Sure, here's how
+            # indices_of_continuation = [10889]
+            # print(indices_of_sure_heres)
             # 1/0
-            indexes_of_continuation = jnp.array(indexes_of_continuation, dtype=jnp.int32)
+            indices_of_continuation = jnp.array(indices_of_continuation, dtype=jnp.int32)
+            if rm_type == "p_continuation_one_post":
+                indices_of_continuation = None
 
         else:
             prompts = [
@@ -2649,12 +2679,14 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             prompts = [[0, 1, 2, 3, 4, 5]]
         elif rm_type == "only_contains_token" or rm_type == "contains_token_eps":
             prompts = [[0, 1]]
-        elif rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens"]:
+        elif rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
             prompts = [[0, 1]]
-            indexes_of_continuation = [6, 8] # [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
+            indices_of_continuation = [6, 8] # [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
             if rm_type == "hard_p_continuation":
-                indexes_of_continuation = [6, 8, 6]
-            indexes_of_continuation = jnp.array(indexes_of_continuation, dtype=jnp.int32)
+                indices_of_continuation = [6, 8, 6]
+            indices_of_continuation = jnp.array(indices_of_continuation, dtype=jnp.int32)
+            if rm_type == "p_continuation_one_post":
+                indices_of_continuation = None
         else:
             prompts = [[0, 1, 0, 1]]
 
@@ -2699,7 +2731,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
                                                            n_true_posterior_samples,
                                                            huggingface_model,
                                                            index_of_token_contained,
-                                                           indexes_of_continuation,
+                                                           indices_of_continuation,
                                                            toxicityModel,
                                                            tokenizer_RM,
                                                            tokenizer,
@@ -2733,7 +2765,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         = experiment_cfg.get_log_true_final_twists(
         sk, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
         output_len, n_true_posterior_samples, huggingface_model,
-        index_of_token_contained, indexes_of_continuation, toxicityModel,
+        index_of_token_contained, indices_of_continuation, toxicityModel,
         tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples
     )
 
@@ -2911,7 +2943,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
            cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
            prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
            true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
-           hist_token_index, indexes_of_continuation, tokenizer
+           hist_token_index, indices_of_continuation, tokenizer
 
 
 # @partial(jax.jit, static_argnames=[
@@ -2930,7 +2962,7 @@ def sample_for_replay_buffer(
         raise NotImplementedError  # Think about how to do replay buffer or one big sample for this setting
         # TODO figure out the conditioning twist, and modify the calls below as well (e.g. the ebm replay buffer samples)
     if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index" \
-        or experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps":
+        or experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps" or experiment_cfg.rm_type == "p_continuation_one_post":
         raise NotImplementedError  # TODO Deal with the token_of_interest_as_int (and prepend_tokens_for_twists?)
 
     if one_big_sample:
@@ -3163,7 +3195,7 @@ def main():
     cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
     prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
     true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
-    hist_token_index, indexes_of_continuation, tokenizer = setup_cfg(
+    hist_token_index, indices_of_continuation, tokenizer = setup_cfg(
         args.n_vocab, args.twist_learn_type, args.rm_type, args.seed,
         args.huggingface, args.lr_twist, args.beta1, args.beta2, args.weight_decay,
         args.d_model, args.d_k, args.d_v, args.n_layers, args.n_heads, args.d_fc,
@@ -3177,9 +3209,9 @@ def main():
     )
 
     # from toy_reward_models import batch_check_array_contained_in_other_array
-    # indexes_of_continuation = jnp.array([3,4,5])
+    # indices_of_continuation = jnp.array([3,4,5])
     # seq = jnp.array([[1, 3, 4, 5], [3, 4, 5, 2], [4, 3, 5, 3]])
-    # print(batch_check_array_contained_in_other_array(seq, indexes_of_continuation))
+    # print(batch_check_array_contained_in_other_array(seq, indices_of_continuation))
 
     highest_log_prob = - jnp.inf
     highest_log_prob_sample = None
@@ -3294,7 +3326,7 @@ def main():
                                                           args.output_len, args.n_twist,
                                                           huggingface_model=huggingface_model)
                 log_prob_cont_p_samples = log_reward_model_p_of_continuation(
-                    p_samples, cfg_p, params_p, indexes_of_continuation,
+                    p_samples, cfg_p, params_p, indices_of_continuation,
                     huggingface_model=huggingface_model,
                     return_log_w_no_temp=True)
                 max_log_prob = jnp.max(log_prob_cont_p_samples)
@@ -3318,7 +3350,9 @@ def main():
                 indices_of_tokens_chosen = indices_of_tokens_chosen_by_prompt[prompt_num]
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             # rew_model = batch_reward_model(prompt_len, reward_model_fn=experiment_cfg.rm_fn)
-            elif args.rm_type in ["only_contains_token", "contains_continuation", "toxicity_threshold", "p_continuation", "hard_p_continuation", "p_last_tokens"]:
+            elif args.rm_type in ["only_contains_token", "contains_continuation",
+                                  "toxicity_threshold", "p_continuation",
+                                  "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
@@ -3375,38 +3409,38 @@ def main():
             #                                           n_inspect_samples)
             #
             # # contains_only_tokens = check_only_contains_tokens_t_limited(
-            # #     p_samples_for_test, indexes_of_tokens_for_only_contains_token,
+            # #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
             # #     prompt_len + 1, 1)
             # # print(contains_only_tokens.sum())
             # # print(contains_only_tokens.sum() / n_inspect_samples)
             #
             # for i in range(args.output_len - 1):
             #     print(i)
-            #     contains_only_tokens = check_only_contains_tokens_t_limited(p_samples_for_test, indexes_of_tokens_for_only_contains_token,
+            #     contains_only_tokens = check_only_contains_tokens_t_limited(p_samples_for_test, indices_of_tokens_for_only_contains_token,
             #                                          prompt_len + i + 1, 1)
             #     print(contains_only_tokens.sum())
             #
             # contains_only_tokens = check_only_contains_tokens_t_limited(
-            #     p_samples_for_test, indexes_of_tokens_for_only_contains_token,
+            #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
             #     prompt_len , 1)
             # p_samples_extracted = p_samples_for_test[contains_only_tokens]
             # print(p_samples_extracted)
             #
             # contains_only_tokens = check_only_contains_tokens_t_limited(
-            #     p_samples_extracted, indexes_of_tokens_for_only_contains_token,
+            #     p_samples_extracted, indices_of_tokens_for_only_contains_token,
             #     prompt_len + 1, 1)
             # print(contains_only_tokens.sum())
             # print(contains_only_tokens.sum() / p_samples_extracted.shape[0])
             #
             #
             # contains_only_tokens = check_only_contains_tokens_t_limited(
-            #     p_samples_for_test, indexes_of_tokens_for_only_contains_token,
+            #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
             #     prompt_len, 2)
             # p_samples_extracted = p_samples_for_test[contains_only_tokens]
             # print(p_samples_extracted)
             #
             # contains_only_tokens = check_only_contains_tokens_t_limited(
-            #     p_samples_extracted, indexes_of_tokens_for_only_contains_token,
+            #     p_samples_extracted, indices_of_tokens_for_only_contains_token,
             #     prompt_len + 2, 1)
             # print(contains_only_tokens.sum())
             # print(contains_only_tokens.sum() / p_samples_extracted.shape[0])
@@ -3417,7 +3451,7 @@ def main():
             # #                                                    args.output_len - 1,
             # #                                                    n_inspect_samples)
             # # contains_only_tokens = check_only_contains_tokens_t_limited(
-            # #     p_samples_for_test, indexes_of_tokens_for_only_contains_token,
+            # #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
             # #     prompt2.shape[0] , 1)
             # # print(contains_only_tokens.sum())
             # #
@@ -3427,7 +3461,7 @@ def main():
             # #                                                    args.output_len - 1,
             # #                                                    n_inspect_samples)
             # # contains_only_tokens = check_only_contains_tokens_t_limited(
-            # #     p_samples_for_test, indexes_of_tokens_for_only_contains_token,
+            # #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
             # #     prompt3.shape[0], 1)
             # # print(contains_only_tokens.sum())
             # 1/0
@@ -3515,7 +3549,7 @@ def main():
                         if args.rm_type in ["contains_continuation",
                                             "p_continuation",
                                             "hard_p_continuation",
-                                            "p_last_tokens"]:
+                                            "p_last_tokens", "p_continuation_one_post"]:
                             pass
                             # Inspect the samples also in this setting
                             # rng_key = experiment_cfg.inspect_prob_of_continuation(
@@ -3523,7 +3557,7 @@ def main():
                             #     params_twist, log_true_final_twist,
                             #     args.output_len,
                             #     args.n_test_smc_samples,
-                            #     indexes_of_continuation, tokenizer,
+                            #     indices_of_continuation, tokenizer,
                             #     prepend_tokens_for_twists=False,
                             #     token_of_interest_as_int=None,
                             #     proposal_is_p=args.proposal_is_p,
@@ -3536,7 +3570,7 @@ def main():
                         #         params_twist, log_true_final_twist,
                         #         args.output_len,
                         #         args.n_test_smc_samples,
-                        #         indexes_of_continuation, tokenizer,
+                        #         indices_of_continuation, tokenizer,
                         #         prepend_tokens_for_twists=False,
                         #         token_of_interest_as_int=None,
                         #         proposal_is_p=args.proposal_is_p,
@@ -3567,7 +3601,7 @@ def main():
                             params_twist, log_true_final_twist,
                             args.output_len,
                             args.n_test_smc_samples,
-                            indexes_of_continuation, tokenizer,
+                            indices_of_continuation, tokenizer,
                             prepend_tokens_for_twists=False,
                             token_of_interest_as_int=None,
                             proposal_is_p=args.proposal_is_p,
@@ -3820,9 +3854,10 @@ if __name__ == "__main__":
                                  "only_contains_token", "contains_token_eps",
                                  "exp_beta_rew_p_continuation", "contains_continuation",
                                  "p_continuation", "toxicity_threshold",
-                                 "hard_p_continuation", "p_last_tokens"])
+                                 "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"])
 
-    parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0, help="Number of last tokens to condition on (only for the rm_type == p_last_tokens)")
+    parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
+                        help="Number of last tokens to condition on (only for the rm_type == p_last_tokens or rm_type == )")
 
     # parser.add_argument("--ppo_steps", type=int, default=3)
     # parser.add_argument("--clip_epsilon", type=float, default=0.2, help="for PPO clipping")
@@ -3881,14 +3916,14 @@ if __name__ == "__main__":
 
 
     if args.rm_type == "only_contains_token":
-        assert args.n_vocab > max(indexes_of_tokens_for_only_contains_token)
+        assert args.n_vocab > max(indices_of_tokens_for_only_contains_token)
 
     if args.huggingface:
         assert args.n_vocab == 50257
 
     args.n_test_smc_samples = args.n_twist # Save one set of compilations for SMC procedures...
 
-    if args.rm_type == "p_last_tokens":
+    if args.rm_type in ["p_last_tokens", "p_continuation_one_post"]:
         assert args.num_last_tokens_to_condition_on > 0
 
     print(args.n_test_smc_samples)
