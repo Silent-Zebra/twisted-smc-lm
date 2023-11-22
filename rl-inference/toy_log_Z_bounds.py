@@ -1913,8 +1913,8 @@ n_samples_for_plots = [32, 500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64,
 # if args.hface_nn_twist or args.separate_hface_twist_model:
 #     n_samples_for_plots = [args.n_twist]
 color_list_for_iwae_ub_plots = ['xkcd:light blue', 'xkcd:blue', 'xkcd:dark blue']
-color_list_for_iwae_lb_plots = ['xkcd:light orange', 'xkcd:orange', 'xkcd:dark orange']
-color_list_for_smc_ub_plots = ['xkcd:light green', 'xkcd:green', 'xkcd:dark green']
+color_list_for_iwae_lb_plots = ['xkcd:light green', 'xkcd:green', 'xkcd:dark green']
+color_list_for_smc_ub_plots = ['xkcd:light orange', 'xkcd:orange', 'xkcd:dark orange']
 color_list_for_smc_lb_plots = ['xkcd:light red', 'xkcd:red', 'xkcd:dark red']
 
 linestyle_list = ['dashed', 'solid', 'dotted']
