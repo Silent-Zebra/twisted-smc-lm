@@ -433,7 +433,7 @@ class ExperimentConfig:
         self, rng_key, indices_of_tokens_chosen, true_posterior_samples_by_token,
         prompt, prompt_len, output_len, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, start, hist_token_index, epoch, huggingface_model, proposal_is_p,
-        true_posterior_samples_by_prompt_and_by_token, prompt_num, true_log_z, plot_over_time_list
+        true_posterior_samples_by_prompt_and_by_token, prompt_num, true_log_z, plot_over_time_list, tokenizer=None
     ):
 
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
@@ -453,7 +453,7 @@ class ExperimentConfig:
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                              huggingface_model=huggingface_model,
-                                                   proposal_is_p=proposal_is_p,
+                                                   proposal_is_p=proposal_is_p, tokenizer=tokenizer
                                                    )
         elif args.rm_type == "only_contains_token":
             token_of_interest_as_int = \
@@ -471,7 +471,7 @@ class ExperimentConfig:
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                              huggingface_model=huggingface_model,
-                                                   proposal_is_p=proposal_is_p,
+                                                   proposal_is_p=proposal_is_p, tokenizer=tokenizer
                                                    )
         elif args.rm_type in ["contains_continuation", "toxicity_threshold", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
             true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
@@ -486,7 +486,7 @@ class ExperimentConfig:
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                              huggingface_model=huggingface_model,
-                                                   proposal_is_p=proposal_is_p,
+                                                   proposal_is_p=proposal_is_p, tokenizer=tokenizer
                                                    )
         elif args.rm_type == "p_last_tokens":
             # TODO OCT 29 - later what I can do is pick a particular continuation of interest, e.g. "Sure, here's", and then condition the twist model on that
@@ -1886,7 +1886,7 @@ indices_of_tokens_for_only_contains_token = [6, 8]
 
 
 
-def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
+def plot_with_conf_bounds(record, x_range, label, z_score=1.96, **kwargs):
 
     print("RECORD")
     print(record.shape)
@@ -1903,21 +1903,27 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96):
     lower_conf_bound = avg - z_score * stdev / np.sqrt(
         record.shape[0])
 
-    plt.plot(x_range, avg, label=label)
+    plt.plot(x_range, avg, label=label, **kwargs)
     plt.fill_between(x_range, lower_conf_bound,
-                     upper_conf_bound, alpha=0.3)
+                     upper_conf_bound, alpha=0.3, **kwargs)
 
 
 # TODO NOV 17 REVERT LATER (test with more settings)
 n_samples_for_plots = [32, 500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
 # if args.hface_nn_twist or args.separate_hface_twist_model:
 #     n_samples_for_plots = [args.n_twist]
+color_list_for_iwae_ub_plots = ['xkcd:light blue', 'xkcd:blue', 'xkcd:dark blue']
+color_list_for_iwae_lb_plots = ['xkcd:light orange', 'xkcd:orange', 'xkcd:dark orange']
+color_list_for_smc_ub_plots = ['xkcd:light green', 'xkcd:green', 'xkcd:dark green']
+color_list_for_smc_lb_plots = ['xkcd:light red', 'xkcd:red', 'xkcd:dark red']
+
+linestyle_list = ['dashed', 'solid', 'dotted']
 
 
 def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, prompt, prompt_len, output_len, cfg_p,
                      params_p, cfg_twist, params_twist, log_true_final_twist, start, hist_token_index, epoch,
                      true_log_z, plot_over_time_list, smc_procedure_type, proposal_is_p=False,
-                     prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=None):
+                     prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None):
 
     # for x in range(10):
     #     rng_key, sk = jax.random.split(rng_key)
@@ -2092,6 +2098,11 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
 
                 print(smc_samples)
 
+                if tokenizer is not None:
+                    text_outputs = tokenizer.batch_decode(
+                        smc_samples, skip_special_tokens=True)
+                    print(text_outputs)
+
 
         iwae_lbs_across_seeds.append(np.stack(iwae_lbs))
         iwae_ubs_across_seeds.append(np.stack(iwae_ubs))
@@ -2231,14 +2242,18 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     plt.clf()
     x_range = np.arange(1, len(kl_ubs_iwae) + 1)
     plt.plot(x_range, kl_q_sigma_bounds_midpoint_iwae, label="KL(q||sigma) (Midpoint based on IWAE LogZ Bounds)")
+    plt.fill_between(x_range, np.stack(kl_lbs_iwae), np.stack(kl_ubs_iwae), alpha=0.3)
     plt.plot(x_range, kl_sigma_q_bounds_midpoint_iwae, label="KL(sigma||q) (Midpoint based on IWAE LogZ Bounds)")
+    plt.fill_between(x_range, np.stack(kl_sigma_q_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), alpha=0.3)
+
+
     plt.xlabel(f"Epoch")
     plt.ylabel(f"KL Divergence")
     plt.legend()
     plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.png")
 
     checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                target=(kl_q_sigma_bounds_midpoint_iwae, kl_sigma_q_bounds_midpoint_iwae),
+                                target=(np.stack(kl_ubs_iwae), np.stack(kl_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), np.stack(kl_sigma_q_lbs_iwae)),
                                 step=len(kl_ubs_iwae),
                                 prefix=f"kl_divs_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
@@ -2276,10 +2291,26 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         print(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n]).shape)
         print(x_range.shape)
 
-        plot_with_conf_bounds(np.transpose(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n])), x_range, label=f"Log(Z) IWAE UB ({n_samples_for_plots[n]} Samples)")
-        plot_with_conf_bounds(np.transpose(np.stack(logZ_lbs_iwae_across_samples_time_seeds[n])), x_range, label=f"Log(Z) IWAE LB ({n_samples_for_plots[n]} Samples)")
-        plot_with_conf_bounds(np.transpose(np.stack(logZ_ubs_smc_across_samples_time_seeds[n])), x_range, label=f"Log(Z) SMC UB ({n_samples_for_plots[n]} Samples)")
-        plot_with_conf_bounds(np.transpose(np.stack(logZ_lbs_smc_across_samples_time_seeds[n])), x_range, label=f"Log(Z) SMC LB ({n_samples_for_plots[n]} Samples)")
+        plot_with_conf_bounds(
+            np.transpose(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n])),
+            x_range, label=f"Log(Z) IWAE UB ({n_samples_for_plots[n]} Samples)",
+            color=color_list_for_iwae_ub_plots[n], linestyle=linestyle_list[n]
+        )
+        plot_with_conf_bounds(
+            np.transpose(np.stack(logZ_lbs_iwae_across_samples_time_seeds[n])),
+            x_range, label=f"Log(Z) IWAE LB ({n_samples_for_plots[n]} Samples)",
+            color=color_list_for_iwae_lb_plots[n], linestyle=linestyle_list[n]
+        )
+        plot_with_conf_bounds(
+            np.transpose(np.stack(logZ_ubs_smc_across_samples_time_seeds[n])),
+            x_range, label=f"Log(Z) SMC UB ({n_samples_for_plots[n]} Samples)",
+            color=color_list_for_smc_ub_plots[n], linestyle=linestyle_list[n]
+        )
+        plot_with_conf_bounds(
+            np.transpose(np.stack(logZ_lbs_smc_across_samples_time_seeds[n])),
+            x_range, label=f"Log(Z) SMC LB ({n_samples_for_plots[n]} Samples)",
+            color=color_list_for_smc_lb_plots[n], linestyle=linestyle_list[n]
+        )
 
     if not huggingface_model and (true_log_z is not None):
         plt.plot(x_range, np.ones_like(x_range) * true_log_z,
@@ -3544,7 +3575,7 @@ def main():
                             log_true_final_twist, start, hist_token_index,
                             epoch, huggingface_model, args.proposal_is_p,
                             true_posterior_samples_by_prompt_and_by_token,
-                            prompt_num, true_log_z, plot_over_time_list
+                            prompt_num, true_log_z, plot_over_time_list, tokenizer
                         )
                         if args.rm_type in ["contains_continuation",
                                             "p_continuation",
