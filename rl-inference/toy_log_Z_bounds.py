@@ -3247,6 +3247,10 @@ def main():
         args.load_prefix_posterior_samples
     )
 
+    print("sleeping")
+    time.sleep(5)
+    1/0
+
     # from toy_reward_models import batch_check_array_contained_in_other_array
     # indices_of_continuation = jnp.array([3,4,5])
     # seq = jnp.array([[1, 3, 4, 5], [3, 4, 5, 2], [4, 3, 5, 3]])
