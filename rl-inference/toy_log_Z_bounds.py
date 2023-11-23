@@ -2360,10 +2360,6 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     model = None
     tokenizer = None
 
-    print("sleeping")
-    time.sleep(5)
-    1/0
-
     if huggingface:
         model_config = "distilgpt2"
         tokenizer = get_tokenizer(model_config)
@@ -3209,8 +3205,6 @@ def sample_for_replay_buffer(
 
 
 def main():
-    import os
-    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".5"
 
     start = time.time()
 
