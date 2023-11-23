@@ -113,25 +113,24 @@ class ExperimentConfig:
 
 
     def _get_dre_grad_fn(self):
+        get_l_ebm_fn = get_l_ebm_ml_jit
         if self.rm_type == "toxicity_threshold":
-            assert self.twist_learn_type == "ebm" or self.twist_learn_type == "ebm_partial_jit" # Others not yet implemented
-            dre_grad_fn = jax.grad(get_l_ebm_ml_partial_jit, argnums=5)
-            return dre_grad_fn
+            get_l_ebm_fn = get_l_ebm_ml_partial_jit
 
         if self.twist_learn_type == "ebm":
-            dre_grad_fn = jax.grad(get_l_ebm_ml_jit, argnums=5)
+            dre_grad_fn = jax.grad(get_l_ebm_fn, argnums=5)
         elif self.twist_learn_type == "ebm_one_sample":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit, only_one_sample=True), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=5)
         elif self.twist_learn_type == "ebm_reweight":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit, reweight_for_second_term=True), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True), argnums=5)
         elif self.twist_learn_type == "ebm_partial_jit":
             dre_grad_fn = jax.grad(get_l_ebm_ml_partial_jit, argnums=5)
         # elif self.twist_learn_type == "ebm_q_rsmp":
         #     dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=5)
         elif self.twist_learn_type == "ebm_mixed_p_q":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit, mixed_p_q_sample=True), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_ebm_fn, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "ebm_mixed_p_q_reweight":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
@@ -1912,12 +1911,21 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96, **kwargs):
 n_samples_for_plots = [32, 500] # [1, 500] #[1, 500, 1000]  # [4, 8, 16, 32, 64, 128]
 # if args.hface_nn_twist or args.separate_hface_twist_model:
 #     n_samples_for_plots = [args.n_twist]
-color_list_for_iwae_ub_plots = ['xkcd:light blue', 'xkcd:blue', 'xkcd:dark blue']
-color_list_for_iwae_lb_plots = ['xkcd:light green', 'xkcd:green', 'xkcd:dark green']
-color_list_for_smc_ub_plots = ['xkcd:light orange', 'xkcd:orange', 'xkcd:dark orange']
-color_list_for_smc_lb_plots = ['xkcd:light red', 'xkcd:red', 'xkcd:dark red']
+# color_list_for_iwae_ub_plots = ['xkcd:light blue', 'xkcd:blue', 'xkcd:dark blue']
+# color_list_for_iwae_lb_plots = ['xkcd:light green', 'xkcd:green', 'xkcd:dark green']
+# color_list_for_smc_ub_plots = ['xkcd:light orange', 'xkcd:orange', 'xkcd:dark orange']
+# color_list_for_smc_lb_plots = ['xkcd:light red', 'xkcd:red', 'xkcd:dark red']
+# linestyle_list = ['dashed', 'solid', 'dotted']
 
-linestyle_list = ['dashed', 'solid', 'dotted']
+color_list_for_iwae_ub_plots = ['xkcd:blue', 'xkcd:green']
+color_list_for_iwae_lb_plots = ['xkcd:light blue', 'xkcd:light green']
+color_list_for_smc_ub_plots = ['xkcd:orange', 'xkcd:red']
+color_list_for_smc_lb_plots = ['xkcd:light orange', 'xkcd:light red']
+
+linestyle_list_for_iwae_ub_plots = ['dashed', 'dashed']
+linestyle_list_for_iwae_lb_plots = ['solid', 'solid']
+linestyle_list_for_smc_ub_plots = ['dashed', 'dashed']
+linestyle_list_for_smc_lb_plots = ['solid', 'solid']
 
 
 def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, prompt, prompt_len, output_len, cfg_p,
@@ -2294,22 +2302,22 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         plot_with_conf_bounds(
             np.transpose(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n])),
             x_range, label=f"Log(Z) IWAE UB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_iwae_ub_plots[n], linestyle=linestyle_list[n]
+            color=color_list_for_iwae_ub_plots[n], linestyle=linestyle_list_for_iwae_ub_plots[n]
         )
         plot_with_conf_bounds(
             np.transpose(np.stack(logZ_lbs_iwae_across_samples_time_seeds[n])),
             x_range, label=f"Log(Z) IWAE LB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_iwae_lb_plots[n], linestyle=linestyle_list[n]
+            color=color_list_for_iwae_lb_plots[n], linestyle=linestyle_list_for_iwae_lb_plots[n]
         )
         plot_with_conf_bounds(
             np.transpose(np.stack(logZ_ubs_smc_across_samples_time_seeds[n])),
             x_range, label=f"Log(Z) SMC UB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_smc_ub_plots[n], linestyle=linestyle_list[n]
+            color=color_list_for_smc_ub_plots[n], linestyle=linestyle_list_for_smc_ub_plots[n]
         )
         plot_with_conf_bounds(
             np.transpose(np.stack(logZ_lbs_smc_across_samples_time_seeds[n])),
             x_range, label=f"Log(Z) SMC LB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_smc_lb_plots[n], linestyle=linestyle_list[n]
+            color=color_list_for_smc_lb_plots[n], linestyle=linestyle_list_for_smc_lb_plots[n]
         )
 
     if not huggingface_model and (true_log_z is not None):
