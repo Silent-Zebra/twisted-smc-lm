@@ -3515,6 +3515,8 @@ def main():
 
             # DO plotting before the twist updates
             test_info = True
+            if args.no_test_info:
+                test_info = False
 
             if true_posterior_samples_by_token is None:
                 plot_logZ_bounds = False
@@ -3945,6 +3947,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--only_collect_true_posterior_samples", action="store_true", help="Don't do any training. Just get a bunch of true posterior samples")
     parser.add_argument("--num_samples_if_only_collect_true_posterior_samples", type=int, default=100, help="How many true posterior samples to get IF USING THE only_collect_true_posterior_samples flag ")
+
+    parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. In general, don't use this flag.")
+
 
     args = parser.parse_args()
 
