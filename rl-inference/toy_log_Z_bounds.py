@@ -3209,6 +3209,8 @@ def sample_for_replay_buffer(
 
 
 def main():
+    import os
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".5"
 
     start = time.time()
 
