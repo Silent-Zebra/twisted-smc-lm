@@ -2360,6 +2360,10 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     model = None
     tokenizer = None
 
+    print("sleeping")
+    time.sleep(5)
+    1/0
+
     if huggingface:
         model_config = "distilgpt2"
         tokenizer = get_tokenizer(model_config)
@@ -3247,9 +3251,7 @@ def main():
         args.load_prefix_posterior_samples
     )
 
-    print("sleeping")
-    time.sleep(5)
-    1/0
+
 
     # from toy_reward_models import batch_check_array_contained_in_other_array
     # indices_of_continuation = jnp.array([3,4,5])
