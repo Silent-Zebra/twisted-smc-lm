@@ -944,11 +944,11 @@ class ExperimentConfig:
 #     print(iwae_upper_bound_estimate)
 
 
-# TODO SEP 30 CONSIDER REJIT
-@partial(jax.jit, static_argnames=[
-    "log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
-    "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",
-    "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type"])
+
+# @partial(jax.jit, static_argnames=[
+#     "log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
+#     "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",
+#     "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type"])
 def inspect_and_record_evidence_setting_for_index(
     rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
     params_twist, n_vocab, output_len, log_true_final_twist,
@@ -1093,6 +1093,14 @@ def inspect_and_record_evidence_setting_for_index(
          kl_q_sigma_smc_lower_bound_estimate]
 
     return list_of_things_to_append_for_record_list, smc_samples
+
+inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argnames=[
+    "log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
+    "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",
+    "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type"
+])(inspect_and_record_evidence_setting_for_index)
+
+
 
 # def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_posterior_samples_by_token, prompt, prompt_len, cfg_p, params_p, cfg_twist,
 #                              params_twist, n_vocab, output_len, log_true_final_twist_not_yet_indexed, n_test_smc_samples, hist_token_index,
@@ -2015,8 +2023,12 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
 
             rng_key, sk = jax.random.split(rng_key)
 
+            inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index_jit
+            if smc_procedure_type == "partial_jit":
+                inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index
+
             # print(f"Number of Particles: {n_test_smc_samples}")
-            list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_for_index(
+            list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_fn(
                 sk, prompt, prompt_len, cfg_p, params_p, cfg_twist,
                 params_twist, args.n_vocab,
                 output_len, log_true_final_twist,
