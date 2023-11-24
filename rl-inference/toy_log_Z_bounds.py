@@ -3605,31 +3605,20 @@ def main():
                                             "p_continuation",
                                             "hard_p_continuation",
                                             "p_last_tokens", "p_continuation_one_post"]:
-                            pass
+
                             # Inspect the samples also in this setting
-                            # rng_key = experiment_cfg.inspect_prob_of_continuation(
-                            #     rng_key, prompt, cfg_p, params_p, cfg_twist,
-                            #     params_twist, log_true_final_twist,
-                            #     args.output_len,
-                            #     args.n_test_smc_samples,
-                            #     indices_of_continuation, tokenizer,
-                            #     prepend_tokens_for_twists=False,
-                            #     token_of_interest_as_int=None,
-                            #     proposal_is_p=args.proposal_is_p,
-                            #     huggingface_model=huggingface_model)
+                            rng_key = experiment_cfg.inspect_prob_of_continuation(
+                                rng_key, prompt, cfg_p, params_p, cfg_twist,
+                                params_twist, log_true_final_twist,
+                                args.output_len,
+                                args.n_test_smc_samples,
+                                indices_of_continuation, tokenizer,
+                                prepend_tokens_for_twists=False,
+                                token_of_interest_as_int=None,
+                                proposal_is_p=args.proposal_is_p,
+                                huggingface_model=huggingface_model)
                             # PASS ON THIS NOW FOR MEMORY REASONS TODO later can reinstate
 
-                        # elif args.rm_type == "p_last_tokens":
-                        #     rng_key = experiment_cfg.inspect_prob_of_continuation(
-                        #         rng_key, prompt, cfg_p, params_p, cfg_twist,
-                        #         params_twist, log_true_final_twist,
-                        #         args.output_len,
-                        #         args.n_test_smc_samples,
-                        #         indices_of_continuation, tokenizer,
-                        #         prepend_tokens_for_twists=False,
-                        #         token_of_interest_as_int=None,
-                        #         proposal_is_p=args.proposal_is_p,
-                        #         huggingface_model=huggingface_model)
                         elif args.rm_type == "toxicity_threshold":
                             rng_key, sk = jax.random.split(rng_key)
                             _, smc_samples = smc_procedure(
