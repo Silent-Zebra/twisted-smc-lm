@@ -270,7 +270,7 @@ def get_l_ebm_ml_partial_jit(
 
     else:
         if mixed_p_q_sample:
-            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _ = \
+            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _, _ = \
                 get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                             output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
                            proposal_is_p, huggingface_model, tempered_twist, beta_prop)
@@ -535,8 +535,10 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
         log_q_eval))  # 50/50 mixture of the two distributions, so for the density, just take 50% prob of each
     mixture_log_prob_eval = jnp.log(mixture_prob_eval)
 
-    log_unnormalized_sigma_vals = log_p_eval + evaluate_log_phi_final(combined_seqs,
-                                                           log_true_final_twist)
+    log_phi_final_eval = evaluate_log_phi_final(combined_seqs, log_true_final_twist)
+
+    log_unnormalized_sigma_vals = log_p_eval + log_phi_final_eval
+
     log_w_t_tilde_sigma_over_q_mix = log_unnormalized_sigma_vals - mixture_log_prob_eval
 
     log_w_t_tilde_sigma_over_q_mix = jax.lax.stop_gradient(log_w_t_tilde_sigma_over_q_mix) # unnormalized log w_t
@@ -546,7 +548,7 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
         log_w_t_tilde_sigma_over_q_mix)
     # print(normalized_w_t_sigma_samples)
 
-    return rng_key, combined_seqs, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix, jax.lax.stop_gradient(mixture_log_prob_eval)
+    return rng_key, combined_seqs, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix, jax.lax.stop_gradient(mixture_log_prob_eval), log_phi_final_eval
 
 
 # TODO Oct 29 - I guess that the sigma samples should come from outside of this function, since this works for any set of (approximate) sigma samples
@@ -580,7 +582,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 
     else:
         if mixed_p_q_sample:
-            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _ = \
+            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _, _ = \
                 get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                             output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
                            proposal_is_p, huggingface_model, tempered_twist, beta_prop)
@@ -751,12 +753,16 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
+    log_phi_final_eval = None
+
     if true_sigma_samples is not None:
         # if we have true posteriors (e.g. one true posterior, every example is from the
         samples_to_evaluate_over = true_sigma_samples
         log_w_t = jnp.zeros((true_sigma_samples.shape[0]))
 
     elif replay_buffer is not None:
+        replay_buffer_log_w_ts, replay_buffer_log_phi_final_eval = replay_buffer_log_w_ts
+
         rng_key, sk_sample = jax.random.split(rng_key)
         if evaluate_over_samples_from == "sigma":
             assert replay_buffer_log_w_ts is not None
@@ -769,8 +775,10 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
         if replay_buffer.shape[0] == n_twist:
             print("Using the full replay buffer with no sampling")
             samples_to_evaluate_over = replay_buffer
+            log_phi_final_eval = replay_buffer_log_phi_final_eval
         else:
             samples_to_evaluate_over = replay_buffer[indices]
+            log_phi_final_eval = replay_buffer_log_phi_final_eval[indices]
         log_w_t = jnp.zeros((n_twist,))
 
     else:
@@ -881,7 +889,11 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     # However, the T+1 twists are never trained (ie the output of psi at the last token s_T). So perhaps what we need to do is for the learned twists at time T, simply do a mean square error
     # with the actual twist at time T, the true log phi value.
     # So just replace the last time step target with the log phi value.
-    target_term = target_term.at[:, -1].set(evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist))
+
+    if log_phi_final_eval is None:
+        log_phi_final_eval = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist)
+
+    target_term = target_term.at[:, -1].set(log_phi_final_eval)
     target_term = jax.lax.stop_gradient(target_term)
 
     values = evaluate_log_psi_selected_tokens(

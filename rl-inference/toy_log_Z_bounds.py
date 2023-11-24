@@ -1585,6 +1585,7 @@ class TestClass:
         replay_buffers_by_prompt = [None] * len(jnp_prompts)
         replay_buffer_log_w_ts_by_prompt = [None] * len(jnp_prompts)
         replay_buffer_log_prob_eval_by_prompt = [None] * len(jnp_prompts)
+        replay_buffer_log_phi_final_eval_by_prompt = [None] * len(jnp_prompts)
 
 
         prompt_num = 0
@@ -1593,6 +1594,7 @@ class TestClass:
             replay_buffer_log_w_ts = replay_buffer_log_w_ts_by_prompt[
                 prompt_num]
             replay_buffer_log_prob_eval = replay_buffer_log_prob_eval_by_prompt[prompt_num]
+            replay_buffer_log_phi_final_eval = replay_buffer_log_phi_final_eval_by_prompt[prompt_num]
 
             prompt_len = prompt.shape[-1]
             log_true_final_twist = log_true_final_twists[prompt_num]
@@ -1695,8 +1697,8 @@ class TestClass:
                         if use_replay_buffer:
                             if twist_update % twist_updates_between_buffer_samples == 0:  # Note: NOT twist_update + 1, because we want to get a replay buffer sample before the updates start
                                 print("UPDATING REPLAY BUFFER", flush=True)
-                                rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval = sample_for_replay_buffer(
-                                    rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval,
+                                rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval, replay_buffer_log_phi_final_eval = sample_for_replay_buffer(
+                                    rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval, replay_buffer_log_phi_final_eval,
                                     prompt, cfg_p, params_p, cfg_twist,
                                     params_twist, log_true_final_twist,
                                     experiment_cfg, output_len,
@@ -1728,6 +1730,25 @@ class TestClass:
                                     index_of_token_contained,
                                     tempered_twist, beta_prop, replay_buffer,
                                     (replay_buffer_log_w_ts, replay_buffer_log_prob_eval)
+                                )
+                        elif use_replay_buffer and experiment_cfg.twist_learn_type in  [
+                            "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
+                            "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
+                            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc"]:
+                            rng_key, params_twist, optim_twist_state = \
+                                experiment_cfg.update_twist(
+                                    rng_key, indices_of_tokens_chosen, prompt,
+                                    args.n_twist,
+                                    args.output_len, cfg_p, params_p, cfg_twist,
+                                    params_twist,
+                                    log_true_final_twist, args.proposal_is_p,
+                                    huggingface_model,
+                                    optimizer_twist, optim_twist_state,
+                                    args.index_of_token_contained,
+                                    args.tempered_twist, args.beta_prop,
+                                    replay_buffer,
+                                    (replay_buffer_log_w_ts,
+                                     replay_buffer_log_phi_final_eval)
                                 )
                         else:
                             rng_key, params_twist, optim_twist_state = \
@@ -3003,11 +3024,11 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
 #     "one_big_sample", "proposal_is_p", "tempered_twist", "beta_prop", "max_buffer_size" ])
 # # TODO If using jit, should make the for loops a scan
 def sample_for_replay_buffer(
-    rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval,
+    rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval, replay_buffer_log_phi_final_eval,
     prompt, cfg_p, params_p, cfg_twist,
     params_twist, log_true_final_twist, experiment_cfg, output_len,
     n_buffer_samples_at_a_time, n_times_to_sample_for_buffer, huggingface_model,
-    one_big_sample, proposal_is_p, tempered_twist, beta_prop, max_buffer_size
+    one_big_sample, proposal_is_p, tempered_twist, beta_prop, max_buffer_size,
 ):
     if experiment_cfg.rm_type == "p_last_tokens":
         raise NotImplementedError  # Think about how to do replay buffer or one big sample for this setting
@@ -3021,9 +3042,11 @@ def sample_for_replay_buffer(
         replay_buffer = None
         replay_buffer_log_w_ts = None
         replay_buffer_log_prob_eval = None
+        replay_buffer_log_phi_final_eval = None
 
         # TODO Nov: consider other sampling procedures besides mixed_p_q (also: lax.scan): use args.replay_buffer_sample_type
         for _ in range(n_times_to_sample_for_buffer):
+            log_phi_final_eval = None
 
             if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight", "ebm_one_sample"]:
                 # do a q-based sample (Ebm no mixed p_q). Right now, do the one sample version.
@@ -3080,7 +3103,8 @@ def sample_for_replay_buffer(
                 raise NotImplementedError
 
             else:
-                rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix, log_prob_eval = \
+                rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, \
+                log_w_t_tilde_sigma_over_q_mix, log_prob_eval, log_phi_final_eval = \
                     get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p,
                                           cfg_twist, params_twist,
                                           log_true_final_twist,
@@ -3103,6 +3127,8 @@ def sample_for_replay_buffer(
                 replay_buffer = prompt_w_sigma_sample_s_1_to_t
                 replay_buffer_log_w_ts = log_w_t_sigma_over_proposal
                 replay_buffer_log_prob_eval = log_prob_eval
+                if log_phi_final_eval is not None:
+                    replay_buffer_log_phi_final_eval = log_phi_final_eval
             else:
                 replay_buffer = jnp.concatenate(
                     (replay_buffer, prompt_w_sigma_sample_s_1_to_t), axis=0)
@@ -3110,14 +3136,19 @@ def sample_for_replay_buffer(
                     (replay_buffer_log_w_ts, log_w_t_sigma_over_proposal), axis=0)
                 replay_buffer_log_prob_eval = jnp.concatenate(
                     (replay_buffer_log_prob_eval, log_prob_eval), axis=0)
-
+                if log_phi_final_eval is not None:
+                    replay_buffer_log_phi_final_eval = jnp.concatenate(
+                        (replay_buffer_log_phi_final_eval, log_phi_final_eval), axis=0)
 
 
     else: # Rolling/FIFO queue replay buffer
         replay_buffer_samples_to_add = None
         log_w_ts_to_add = None
         replay_buffer_log_prob_eval_to_add = None
+        replay_buffer_log_phi_final_eval_to_add = None
+
         for _ in range(n_times_to_sample_for_buffer):
+            log_phi_final_eval = None
             if experiment_cfg.twist_learn_type in ["ebm", "ebm_partial_jit", "ebm_reweight", "ebm_one_sample"]:
                 # do a q-based sample (Ebm no mixed p_q)
                 rng_key, sk2 = jax.random.split(rng_key)
@@ -3143,7 +3174,8 @@ def sample_for_replay_buffer(
                 )
 
             else:
-                rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, log_w_t_tilde_sigma_over_q_mix, log_prob_eval = \
+                rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, \
+                log_w_t_tilde_sigma_over_q_mix, log_prob_eval, log_phi_final_eval = \
                     get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p,
                                           cfg_twist, params_twist,
                                           log_true_final_twist,
@@ -3165,6 +3197,8 @@ def sample_for_replay_buffer(
                 replay_buffer_samples_to_add = prompt_w_sigma_sample_s_1_to_t
                 log_w_ts_to_add = log_w_t_sigma_over_proposal
                 replay_buffer_log_prob_eval_to_add = log_prob_eval
+                if log_phi_final_eval is not None:
+                    replay_buffer_log_phi_final_eval_to_add = log_phi_final_eval
                 # Here we need log softmax in order to get normalized log w_ts
                 # we need this because with a rolling/queue buffer, we may possibly
                 # have samples drawn from different q distributions
@@ -3178,6 +3212,9 @@ def sample_for_replay_buffer(
                     (log_w_ts_to_add, log_w_t_sigma_over_proposal), axis=0)
                 replay_buffer_log_prob_eval_to_add = jnp.concatenate(
                     (replay_buffer_log_prob_eval_to_add, log_prob_eval), axis=0)
+                if log_phi_final_eval is not None:
+                    replay_buffer_log_phi_final_eval_to_add = jnp.concatenate(
+                        (replay_buffer_log_phi_final_eval_to_add, log_phi_final_eval), axis=0)
 
         if replay_buffer is None:
             replay_buffer = replay_buffer_samples_to_add
@@ -3190,30 +3227,38 @@ def sample_for_replay_buffer(
             # Now, when we actually go draw from the replay buffer, we could separate into chunks, and pick chunks uniformly at random,
             # then sample within those chunks according to their (either normalized or unnormalized) weights
             # Or we could just normalize each chunk first, and then draw from the whole set of possible weights (this may have the possibility of duplicates or oversampling from some chunk, but in expectation should be the same)
+            if replay_buffer_log_phi_final_eval_to_add is not None:
+                replay_buffer_log_phi_final_eval = replay_buffer_log_phi_final_eval_to_add
         else:
             replay_buffer = jnp.concatenate((replay_buffer, replay_buffer_samples_to_add), axis=0)
             replay_buffer_log_w_ts = jnp.concatenate((replay_buffer_log_w_ts, jax.nn.log_softmax(log_w_ts_to_add)), axis=0)
             if replay_buffer_log_prob_eval_to_add is not None:
                 replay_buffer_log_prob_eval = jnp.concatenate((replay_buffer_log_prob_eval, replay_buffer_log_prob_eval_to_add), axis=0)
+            if replay_buffer_log_phi_final_eval_to_add is not None:
+                replay_buffer_log_phi_final_eval = jnp.concatenate((replay_buffer_log_phi_final_eval, replay_buffer_log_phi_final_eval_to_add), axis=0)
 
         if replay_buffer.shape[0] > max_buffer_size:
             replay_buffer = replay_buffer[-max_buffer_size:]
             replay_buffer_log_w_ts = replay_buffer_log_w_ts[-max_buffer_size:]
             if replay_buffer_log_prob_eval is not None:
                 replay_buffer_log_prob_eval = replay_buffer_log_prob_eval[-max_buffer_size:]
+            if replay_buffer_log_phi_final_eval is not None:
+                replay_buffer_log_phi_final_eval = replay_buffer_log_phi_final_eval[-max_buffer_size:]
 
     print("Replay buffer shapes:", flush=True)
     print(replay_buffer.shape)
     print(replay_buffer_log_w_ts.shape)
     if replay_buffer_log_prob_eval is not None:
         print(replay_buffer_log_prob_eval.shape)
+    if replay_buffer_log_phi_final_eval is not None:
+        print(replay_buffer_log_phi_final_eval.shape)
 
     replay_buffer = jax.lax.stop_gradient(replay_buffer)
     replay_buffer_log_w_ts = jax.lax.stop_gradient(replay_buffer_log_w_ts)
     if replay_buffer_log_prob_eval is not None:
         replay_buffer_log_prob_eval = jax.lax.stop_gradient(replay_buffer_log_prob_eval)
 
-    return rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval
+    return rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval, replay_buffer_log_phi_final_eval
 
 
 def main():
@@ -3361,6 +3406,7 @@ def main():
     replay_buffers_by_prompt = [None] * len(jnp_prompts)
     replay_buffer_log_w_ts_by_prompt = [None] * len(jnp_prompts)
     replay_buffer_log_prob_eval_by_prompt = [None] * len(jnp_prompts)
+    replay_buffer_log_phi_final_eval_by_prompt = [None] * len(jnp_prompts)
 
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
@@ -3371,6 +3417,7 @@ def main():
             replay_buffer = replay_buffers_by_prompt[prompt_num]
             replay_buffer_log_w_ts = replay_buffer_log_w_ts_by_prompt[prompt_num]
             replay_buffer_log_prob_eval = replay_buffer_log_prob_eval_by_prompt[prompt_num]
+            replay_buffer_log_phi_final_eval = replay_buffer_log_phi_final_eval_by_prompt[prompt_num]
 
             if args.rm_type == "exp_beta_rew_p_continuation" and args.rejection_sample_naive:
                 rng_key, sk = jax.random.split(rng_key)
@@ -3677,8 +3724,8 @@ def main():
                     if twist_update % args.twist_updates_between_buffer_samples == 0: # Note: NOT twist_update + 1, because we want to get a replay buffer sample before the updates start
                         print("UPDATING REPLAY BUFFER", flush=True)
                         print(f"TIME: {time.time() - start}", flush=True)
-                        rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval = sample_for_replay_buffer(
-                            rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval,
+                        rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval, replay_buffer_log_phi_final_eval = sample_for_replay_buffer(
+                            rng_key, replay_buffer, replay_buffer_log_w_ts, replay_buffer_log_prob_eval, replay_buffer_log_phi_final_eval,
                             prompt, cfg_p,
                             params_p, cfg_twist,
                             params_twist, log_true_final_twist,
@@ -3728,6 +3775,24 @@ def main():
                             args.index_of_token_contained,
                             args.tempered_twist, args.beta_prop, replay_buffer,
                             (replay_buffer_log_w_ts, replay_buffer_log_prob_eval)
+                        )
+                elif experiment_cfg.twist_learn_type in ["rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
+                                 "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
+                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc"]:
+
+                    rng_key, params_twist, optim_twist_state = \
+                        experiment_cfg.update_twist(
+                            rng_key, indices_of_tokens_chosen, prompt,
+                            args.n_twist,
+                            args.output_len, cfg_p, params_p, cfg_twist,
+                            params_twist,
+                            log_true_final_twist, args.proposal_is_p,
+                            huggingface_model,
+                            optimizer_twist, optim_twist_state,
+                            args.index_of_token_contained,
+                            args.tempered_twist, args.beta_prop,
+                            replay_buffer,
+                            (replay_buffer_log_w_ts, replay_buffer_log_phi_final_eval)
                         )
                 else:
                     rng_key, params_twist, optim_twist_state = \
