@@ -1112,11 +1112,11 @@ smc_jit = partial(jax.jit,
 
 # in the case of the seqs just being one true posterior, then this gives us a one-sample estimate of G(q), which combined with estimate on log Z, can give us estimates of KL(sigma | q)
 # wait... can't I also use this on seqs from q and then this gives me the F(q) estimate???
-@partial(jax.jit, static_argnames=[
-    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len",
-    "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p",
-    "huggingface_model"
-])
+# @partial(jax.jit, static_argnames=[
+#     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len",
+#     "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p",
+#     "huggingface_model"
+# ])
 def iwae_backward(
     seqs, prompt, cfg_p, params_p, cfg_twist, params_twist, output_len,
     log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
