@@ -756,16 +756,17 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
                                    "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop", "train_final_twist_only"])
 def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                        output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
-                            evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error_in_log_space", tempered_twist=False, beta_prop=None,
-                            train_final_twist_only=False, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None):
+                   output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+                   smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
+                   evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error_in_log_space", tempered_twist=False, beta_prop=None,
+                   train_final_twist_only=False, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
     log_phi_final_eval = None
 
-    if true_sigma_samples is not None:
+    if true_sigma_samples is not None and evaluate_over_samples_from == "sigma":
         # if we have true posteriors (e.g. one true posterior, every example is from the
         samples_to_evaluate_over = true_sigma_samples
         log_w_t = jnp.zeros((true_sigma_samples.shape[0]))
@@ -844,6 +845,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
                 resample=resample_for_sigma_samples, no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop
             )
         elif evaluate_over_samples_from == "mixed_p_q":
+            assert n_twist % 2 == 0
             # Mix of 50% p samples and 50% q (twist proposal) samples
             samples_to_evaluate_over_p = stochastic_transformer_sample(sk1, cfg_p,
                                                                      params_p,
@@ -851,13 +853,18 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
                                                                      output_len,
                                                                      n_twist // 2,
                                                                      huggingface_model=huggingface_model)
+
+            condition_twist_on_tokens_to_use_for_q_samples = None
+            if condition_twist_on_tokens is not None:
+                condition_twist_on_tokens_to_use_for_q_samples = condition_twist_on_tokens[n_twist // 2:, :]
+
             (_, _, _), _, (intermediate_twist_samples_hist,
                            intermediate_log_w_t_hist) = smc_procedure(
                 sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
                 log_true_final_twist, output_len, n_twist // 2,
                 smc_procedure_type=smc_procedure_type,
                 get_intermediate_sample_history_based_on_learned_twists=True,
-                prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+                prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_to_use_for_q_samples,
                 token_of_interest_as_int=token_of_interest_as_int,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                 resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop

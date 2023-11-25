@@ -651,8 +651,10 @@ class ExperimentConfig:
 
             print("G_q estimates")
             print(g_q_estimates)
+            print(f"Average G_q: {g_q_estimates.mean()}")
             print("F_q estimates")
             print(f_q_estimates)
+            print(f"Average F_q: {f_q_estimates.mean()}")
             print("Gaps")
             print(g_q_estimates - f_q_estimates)
             print(f"Average gap: {(g_q_estimates - f_q_estimates).mean()}")
@@ -1497,12 +1499,32 @@ class TestClass:
 
 
     def test_rl_p_last_tokens(self):
-        self._test_twist_learning(twist_learn_type="rl_p_lsq", # The type of sampling doesn't matter if we use rm_type "p_last_tokens" since we have true posterior sigma samples always
+        self._test_twist_learning(twist_learn_type="rl_p_lsq", # NOW The type of sampling DOES matter if we use rm_type "p_last_tokens"
                                   rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003, twist_updates_per_epoch=1000,#200,
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  output_len=3, n_vocab=20
+                                  )
+    def test_rl_q_last_tokens(self):
+        self._test_twist_learning(twist_learn_type="rl_q_lsq", # NOW The type of sampling DOES matter if we use rm_type "p_last_tokens"
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
                                   output_len=3, n_vocab=20
                                   )
 
+    def test_rl_sigma_last_tokens(self):
+        self._test_twist_learning(twist_learn_type="rl_sigma_lsq",
+                                  # NOW The type of sampling DOES matter if we use rm_type "p_last_tokens"
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  output_len=3, n_vocab=20
+                                  )
+    def test_rl_mixed_p_q_last_tokens(self):
+        self._test_twist_learning(twist_learn_type="rl_mixed_p_q_lsq",
+                                  # NOW The type of sampling DOES matter if we use rm_type "p_last_tokens"
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  output_len=3, n_vocab=20
+                                  )
     def test_sixo(self):
         self._test_twist_learning(twist_learn_type="sixo",
                                   rm_type=self.rm_type_to_test,
