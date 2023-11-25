@@ -353,9 +353,12 @@ def evaluate_log_p_selected_tokens(seq, prompt_len, cfg_p, params_p, huggingface
     return log_p_selected[jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(seq_selected.shape[1]), seq_selected]
 
 
-
-def evaluate_log_phi_final(seq, log_true_final_twist):
-    return log_true_final_twist(seq) # THIS ONLY WORKS ASSUMING in the case e.g. of phi = e^(-beta r(s)), then log phi = -beta r(s)
+# THIS ONLY WORKS ASSUMING in the case e.g. of phi = e^(-beta r(s)), then log phi = -beta r(s)
+def evaluate_log_phi_final(seq, log_true_final_twist, condition_twist_on_tokens=None):
+    if condition_twist_on_tokens is None:
+        return log_true_final_twist(seq)
+    else:
+        return log_true_final_twist(seq, condition_twist_on_tokens)
 
 # def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(seq, cfg_p, params_p, log_true_final_twist):
 #     # Takes in batches of sequences s_{1:t}
@@ -826,7 +829,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + log_p_theta_t_eval
 
     # if use_log_true_final_twist_for_final_weight_calc:
-    log_phi_t_eval = evaluate_log_phi_final(full_seq, log_true_final_twist)
+    log_phi_t_eval = evaluate_log_phi_final(full_seq, log_true_final_twist, condition_twist_on_tokens)
     # else:
 
     # print(log_phi_t_eval)
@@ -1134,7 +1137,8 @@ def iwae_backward(
                                                               output_len,
                                                               huggingface_model=huggingface_model) \
                                   + evaluate_log_phi_final(log_phi_final_seqs,
-                                                           log_true_final_twist)
+                                                           log_true_final_twist,
+                                                           condition_twist_on_tokens)
     if proposal_is_p:
         log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(seqs,
                                                               cfg_p, params_p,
@@ -1275,7 +1279,7 @@ def smc_backward(rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, 
 def upper_bound_log_Z_sigma_estimate(posterior_samples, log_true_final_twist, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
                                      output_len, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
     log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(posterior_samples, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model) \
-                                  + evaluate_log_phi_final(posterior_samples, log_true_final_twist)
+                                  + evaluate_log_phi_final(posterior_samples, log_true_final_twist, condition_twist_on_tokens)
     if proposal_is_p:
         log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(posterior_samples, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
     else:
@@ -1509,10 +1513,10 @@ def calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p,
 
     if condition_twist_on_token is not None:
         log_phi_all_seqs = evaluate_log_phi_final(
-            jnp.concatenate((all_seqs, jnp.ones(all_seqs.shape[0], dtype=jnp.int32)[:, None] * condition_twist_on_token), axis=-1),
-            log_true_final_twist)
+            all_seqs, log_true_final_twist,
+            jnp.ones(all_seqs.shape[0], dtype=jnp.int32)[:, None] * condition_twist_on_token)
     else:
-        log_phi_all_seqs = evaluate_log_phi_final(all_seqs, log_true_final_twist)
+        log_phi_all_seqs = evaluate_log_phi_final(all_seqs, log_true_final_twist, None)
 
     # print((log_p_all_seqs + log_phi_all_seqs).shape)
     normalizing_constant = jnp.exp((log_p_all_seqs + log_phi_all_seqs)).sum()

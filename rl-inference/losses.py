@@ -330,10 +330,20 @@ def get_l_ebm_ml_partial_jit(
         #         a_t_learned]
         #     ebm_second_term += log_r_psi_t_eval_w_potential_resample.mean()
 
+
+        # This does not work. But we should in principle have something to adjust the negative samples...
+        # if condition_twist_on_tokens is not None and true_sigma_samples is not None:
+        #     for i in range(intermediate_log_w_t_hist.shape[0]):
+        #         ebm_second_term += jnp.dot(jax.lax.stop_gradient(intermediate_log_w_t_hist[i]),
+        #             # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
+        #             log_psi_t_eval_list_proposal_samples[i])
+
+
         for i in range(intermediate_log_w_t_hist.shape[0]):
             ebm_second_term += jnp.dot(
                 jax.nn.softmax(jax.lax.stop_gradient(intermediate_log_w_t_hist[i])), # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
                 log_psi_t_eval_list_proposal_samples[i])
+
 
         ebm_second_term /= intermediate_log_w_t_hist.shape[0]
 
@@ -535,7 +545,7 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
         log_q_eval))  # 50/50 mixture of the two distributions, so for the density, just take 50% prob of each
     mixture_log_prob_eval = jnp.log(mixture_prob_eval)
 
-    log_phi_final_eval = evaluate_log_phi_final(combined_seqs, log_true_final_twist)
+    log_phi_final_eval = evaluate_log_phi_final(combined_seqs, log_true_final_twist, condition_twist_on_tokens)
 
     log_unnormalized_sigma_vals = log_p_eval + log_phi_final_eval
 
@@ -861,7 +871,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
             raise NotImplementedError
 
         if loss_type == "monte_carlo":
-            phi_vals = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist)
+            phi_vals = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist, condition_twist_on_tokens)
             twist_vals = jnp.exp(evaluate_log_psi_selected_tokens(
                 samples_to_evaluate_over, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
                 token_of_interest_as_int, huggingface_model))
@@ -891,7 +901,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     # So just replace the last time step target with the log phi value.
 
     if log_phi_final_eval is None:
-        log_phi_final_eval = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist)
+        log_phi_final_eval = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist, condition_twist_on_tokens)
 
     target_term = target_term.at[:, -1].set(log_phi_final_eval)
     target_term = jax.lax.stop_gradient(target_term)

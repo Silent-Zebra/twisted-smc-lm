@@ -492,6 +492,9 @@ class ExperimentConfig:
             # And then inspect the UB and LB and do all the plots and whatever on that particular continuation
             # Of course, the training is based on all the possible twists
             # But we can just inspect that one particular one.
+            # Call using condition_twist_on_token should do something like:
+            # posterior_samples = posterior_samples_w_condition_tokens[:, :prompt_len + output_len]
+            # condition_twist_on_token = posterior_samples_w_condition_tokens[:, prompt_len + output_len:]
             pass
         else:
             raise NotImplementedError
@@ -1466,26 +1469,35 @@ class TestClass:
     # Do p_token_last_index and maybe p_continuation as well
 
 
-    def test_rob_no_sample(self):
+    def test_rob_no_sample_p_last_tokens(self):
         self._test_twist_learning(twist_learn_type="one_total_kl", # one_total_kl_mixed_p_q, the same. The type of sampling doesn't matter if we use rm_type "p_last_tokens" since we have true posterior sigma samples always
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003, twist_updates_per_epoch=200
                                   )
-    def test_rob_sample(self):
+    def test_rob_sample_p_last_tokens(self):
         self._test_twist_learning(twist_learn_type="one_total_kl_sample",
                                   rm_type=self.rm_type_to_test,
                                   lr_twist=0.0003, twist_updates_per_epoch=200
                                   )
-    def test_ebm(self):
+    def test_ebm_p_last_tokens(self):
         self._test_twist_learning(twist_learn_type="ebm",
                                   rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003, twist_updates_per_epoch=200
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  output_len=3, n_vocab=20
+                                  )
+    def test_ebm_reweight_p_last_tokens(self):
+        self._test_twist_learning(twist_learn_type="ebm_reweight",
+                                  rm_type=self.rm_type_to_test,
+                                  lr_twist=0.0003, twist_updates_per_epoch=200,
+                                  output_len=3, n_vocab=20
                                   )
 
-    def test_rl(self):
+
+    def test_rl_p_last_tokens(self):
         self._test_twist_learning(twist_learn_type="rl_p_lsq", # The type of sampling doesn't matter if we use rm_type "p_last_tokens" since we have true posterior sigma samples always
                                   rm_type=self.rm_type_to_test,
-                                  lr_twist=0.0003, twist_updates_per_epoch=200
+                                  lr_twist=0.0003, twist_updates_per_epoch=1000,#200,
+                                  output_len=3, n_vocab=20
                                   )
 
     def test_sixo(self):
@@ -1511,12 +1523,11 @@ class TestClass:
 
     def _test_twist_learning(self, twist_learn_type, rm_type="p_token_last_index", seed=1,
                              lr_twist=0.0001, twist_updates_per_epoch=2000,
-                             use_replay_buffer=False, one_big_sample=False, debug=False):
+                             use_replay_buffer=False, one_big_sample=False, debug=False,
+                             output_len=2, n_vocab=9):
         # Test that the DRE learns close to the optimal twists. Takes a bit of time.
         # 70 seconds on GPU for 100 twist updates 3 epochs
-        output_len = 2
         n_true_posterior_samples = 1
-        n_vocab = 9
         huggingface = False
         beta1 = 0.9
         beta2 = 0.99
@@ -1560,8 +1571,6 @@ class TestClass:
 
         if rm_type == "p_last_tokens" or rm_type == "p_continuation_one_post":
             num_last_tokens_to_condition_on = 1
-
-
 
         experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
         cfg_twist, params_twist, optimizer_twist, optim_twist_state, \

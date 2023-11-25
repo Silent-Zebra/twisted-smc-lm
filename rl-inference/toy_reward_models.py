@@ -314,9 +314,11 @@ def log_reward_model_p_of_last_tokens(
     # Then you feed those samples (sigma or generated q ones) into the twist model, prepending the twists based on the sigma samples (last few tokens of interest)
     # And then all your other calculations should work
 
-def curried_log_reward_model_p_of_last_tokens(cfg_p, params_p, continuation_len, huggingface_model=None):
-    def new_rm(seq):
-        return log_reward_model_p_of_last_tokens(seq, cfg_p, params_p, continuation_len, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
+def curried_log_reward_model_p_of_last_tokens(cfg_p, params_p, huggingface_model=None):
+    def new_rm(seq, condition_twist_on_tokens):
+        continuation_len = condition_twist_on_tokens.shape[-1]
+        new_seq = jnp.concatenate((seq, condition_twist_on_tokens), axis=-1)
+        return log_reward_model_p_of_last_tokens(new_seq, cfg_p, params_p, continuation_len, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
     return new_rm
 
 
@@ -882,10 +884,13 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continu
 
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
+    # true_posterior_samples_condition_on_tokens_by_prompt = []
+
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
         log_true_final_twist = curried_log_reward_model_p_of_last_tokens(
-            cfg_p, params_p, continuation_len, huggingface_model)
+            cfg_p, params_p, huggingface_model)
+
         log_true_final_twists.append(log_true_final_twist)
 
         if get_true_posterior_samples:
@@ -896,8 +901,10 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continu
                                                       n_samples_at_a_time,
                                                       huggingface_model=huggingface_model)
 
-            # posterior_samples = p_samples[:, :prompt_len + output_len]
-            posterior_samples = p_samples
+            posterior_samples_w_condition_tokens = p_samples
+            # posterior_samples = posterior_samples_w_condition_tokens
+            posterior_samples = p_samples[:, :prompt_len + output_len]
+            posterior_samples_condition_on_tokens = p_samples[:, prompt_len + output_len:]
 
             num_posterior_samples = \
             posterior_samples.shape[0]
@@ -906,14 +913,14 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continu
 
             print(posterior_samples)
             print(posterior_samples.shape)
-            print(log_true_final_twist(posterior_samples))
-            print(log_true_final_twist(p_samples[:10]))
+            print(log_true_final_twist(posterior_samples, posterior_samples_condition_on_tokens))
+            print(log_true_final_twist(posterior_samples[:10], posterior_samples_condition_on_tokens[:10]))
             if tokenizer is not None:
-                text_outputs = tokenizer.batch_decode(
-                    posterior_samples,
-                    skip_special_tokens=True)
-                print(text_outputs)
-                text_outputs = tokenizer.batch_decode(p_samples[:10],
+                # text_outputs = tokenizer.batch_decode(
+                #     p_samples,
+                #     skip_special_tokens=True)
+                # print(text_outputs)
+                text_outputs = tokenizer.batch_decode(posterior_samples_w_condition_tokens[:10],
                                                       skip_special_tokens=True)
                 print(text_outputs)
 
@@ -922,7 +929,7 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continu
             # assert extracted_true_posterior_samples.shape[0] != 0
 
             true_posterior_samples_by_prompt.append(
-                posterior_samples)
+                posterior_samples_w_condition_tokens)
 
     # print(true_posterior_samples_by_prompt_and_by_token)
 
