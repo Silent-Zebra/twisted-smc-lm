@@ -600,7 +600,8 @@ class ExperimentConfig:
             print(intermediate_seq_list)
             print(intermediate_seq_list[-1])
             print(condition_twist_on_tokens.shape)
-            proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
+            proposal_samples = intermediate_seq_list[-1]
+            # proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
 
             log_prob_cont_proposal_samples = log_reward_model_p_of_last_tokens(
                 proposal_samples, cfg_p, params_p,

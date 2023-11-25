@@ -1127,16 +1127,16 @@ def iwae_backward(
 
     prompt_len = prompt.shape[-1]
 
-    log_phi_final_seqs = seqs
-    if condition_twist_on_tokens is not None:
-        log_phi_final_seqs = jnp.concatenate((seqs, condition_twist_on_tokens), axis=-1)
+    # log_phi_final_seqs = seqs
+    # if condition_twist_on_tokens is not None:
+    #     log_phi_final_seqs = jnp.concatenate((seqs, condition_twist_on_tokens), axis=-1)
 
     log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(seqs,
                                                               cfg_p, params_p,
                                                               prompt_len,
                                                               output_len,
                                                               huggingface_model=huggingface_model) \
-                                  + evaluate_log_phi_final(log_phi_final_seqs,
+                                  + evaluate_log_phi_final(seqs,
                                                            log_true_final_twist,
                                                            condition_twist_on_tokens)
     if proposal_is_p:
