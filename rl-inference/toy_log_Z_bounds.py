@@ -649,11 +649,13 @@ class ExperimentConfig:
                 params_twist, output_len, log_true_final_twist, prepend_tokens_for_twists,
                 condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p, huggingface_model)
 
-            print("G(q) and F(q) estimates")
+            print("G_q estimates")
             print(g_q_estimates)
+            print("F_q estimates")
             print(f_q_estimates)
-            print(f_q_estimates - g_q_estimates)
-            print(f"Average gap: {(f_q_estimates - g_q_estimates).mean()}")
+            print("Gaps")
+            print(g_q_estimates - f_q_estimates)
+            print(f"Average gap: {(g_q_estimates - f_q_estimates).mean()}")
 
         if self.rm_type == "contains_continuation":
             # print(intermediate_seq_list)
