@@ -604,7 +604,7 @@ class ExperimentConfig:
             # proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
 
             log_prob_cont_proposal_samples = log_reward_model_p_of_last_tokens(
-                proposal_samples, cfg_p, params_p,
+                jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1), cfg_p, params_p,
                 self.num_last_tokens_to_condition_on,
                 huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
