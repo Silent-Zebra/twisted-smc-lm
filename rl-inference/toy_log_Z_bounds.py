@@ -501,6 +501,37 @@ class ExperimentConfig:
 
         return rng_key, plot_over_time_list
 
+
+    def plot_plasttokens(self, g_q_estimates_list, f_q_estimates_list):
+        plt.clf()
+        x_range = np.arange(1, len(g_q_estimates_list) + 1)
+        plot_with_conf_bounds(
+            np.transpose(np.stack(g_q_estimates_list)),
+            x_range, label=f"G(q) (1-Sample UB) Estimate Over {np.stack(g_q_estimates_list).shape[-1]} True Posterior Samples",
+            color='xkcd:blue',
+            linestyle='solid'
+        )
+        plot_with_conf_bounds(
+            np.transpose(np.stack(f_q_estimates_list)),
+            x_range,
+            label=f"F(q) (1-Sample UB) Estimate Over {np.stack(f_q_estimates_list).shape[-1]} True Posterior Samples",
+            color='xkcd:orange',
+            linestyle='solid'
+        )
+
+        plt.xlabel(f"Epoch")
+        # plt.ylabel("")
+        plt.legend()
+        plt.savefig(f"{args.save_dir}/fig_g_q_f_q_estimates{len(g_q_estimates_list) + 1}.png")
+
+        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                    target=(np.stack(g_q_estimates_list),
+                                            np.stack(f_q_estimates_list)
+                                            ),
+                                    step=len(g_q_estimates_list),
+                                    prefix=f"g_q_f_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+
+
     def inspect_prob_of_continuation(
         self, rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, output_len, n_samples, indices_of_continuation, tokenizer,
@@ -512,6 +543,8 @@ class ExperimentConfig:
         prompt_len = prompt.shape[-1]
 
         n_samples_to_print = 10
+
+        aux_info = None
 
         if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
 
@@ -659,6 +692,8 @@ class ExperimentConfig:
             print(g_q_estimates - f_q_estimates)
             print(f"Average gap: {(g_q_estimates - f_q_estimates).mean()}")
 
+            aux_info = (g_q_estimates, f_q_estimates)
+
         if self.rm_type == "contains_continuation":
             # print(intermediate_seq_list)
             print("Log indicator (+ eps) on whether sequence contains (0 means contains)")
@@ -690,7 +725,7 @@ class ExperimentConfig:
                 print(log_p_cont_all_places[i])
             # print(f"Max log prob of continuation: {-(-log_p_cont_all_places).max()}")
 
-        return rng_key
+        return rng_key, aux_info
 
 
 
@@ -3442,6 +3477,9 @@ def main():
     replay_buffer_log_prob_eval_by_prompt = [None] * len(jnp_prompts)
     replay_buffer_log_phi_final_eval_by_prompt = [None] * len(jnp_prompts)
 
+    g_q_estimates_list = []
+    f_q_estimates_list = []
+
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
@@ -3688,7 +3726,7 @@ def main():
                                             "p_last_tokens", "p_continuation_one_post"]:
 
                             # Inspect the samples also in this setting
-                            rng_key = experiment_cfg.inspect_prob_of_continuation(
+                            rng_key, aux_info = experiment_cfg.inspect_prob_of_continuation(
                                 rng_key, prompt, cfg_p, params_p, cfg_twist,
                                 params_twist, log_true_final_twist,
                                 args.output_len,
@@ -3699,6 +3737,12 @@ def main():
                                 proposal_is_p=args.proposal_is_p,
                                 huggingface_model=huggingface_model)
                             # PASS ON THIS NOW FOR MEMORY REASONS TODO later can reinstate
+
+                            if args.rm_type == "p_last_tokens":
+                                g_q_estimates, f_q_estimates = aux_info
+                                g_q_estimates_list.append(g_q_estimates)
+                                f_q_estimates_list.append(f_q_estimates)
+                                experiment_cfg.plot_plasttokens(g_q_estimates_list, f_q_estimates_list)
 
                         elif args.rm_type == "toxicity_threshold":
                             rng_key, sk = jax.random.split(rng_key)
@@ -3721,7 +3765,7 @@ def main():
 
 
                     elif only_inspect_samples:
-                        rng_key = experiment_cfg.inspect_prob_of_continuation(
+                        rng_key, aux_info = experiment_cfg.inspect_prob_of_continuation(
                             rng_key, prompt, cfg_p, params_p, cfg_twist,
                             params_twist, log_true_final_twist,
                             args.output_len,
