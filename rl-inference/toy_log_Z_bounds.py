@@ -522,7 +522,7 @@ class ExperimentConfig:
         plt.xlabel(f"Epoch")
         # plt.ylabel("")
         plt.legend()
-        plt.savefig(f"{args.save_dir}/fig_g_q_f_q_estimates{len(g_q_estimates_list) + 1}.png")
+        plt.savefig(f"{args.save_dir}/fig_g_q_f_q_estimates{len(g_q_estimates_list)}.png")
 
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                     target=(np.stack(g_q_estimates_list),
