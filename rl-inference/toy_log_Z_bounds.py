@@ -22,6 +22,10 @@ import datetime
 
 import numpy as np
 
+import matplotlib
+
+matplotlib.use('PDF')
+
 import matplotlib.pyplot as plt
 
 from custom_transformer import transformer_init_params
