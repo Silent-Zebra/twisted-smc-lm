@@ -1,4 +1,4 @@
-import torch
+# import torch
 # For some reason my dependencies are messed up, so torch has to go first?
 
 from jax import vmap, jit
@@ -2283,15 +2283,16 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     target_dist_weights = iwae_backward(true_posterior_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
                   output_len, log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
                   token_of_interest_as_int, proposal_is_p, huggingface_model)
-    g_q_estimate = target_dist_weights.mean()
+    g_q_all_posts = target_dist_weights
+    avg_g_q_estimate = target_dist_weights.mean()
     print("G_q for each posterior sample:")
     print(target_dist_weights)
     num_true_posterior_samples = true_posterior_samples.shape[0]
-    print(f"G_q {num_true_posterior_samples} posterior sample(s) estimate: {g_q_estimate}")
-    kl_sigma_q_ub_iwae = g_q_estimate - iwae_lower_bound_across_seeds # Note this is correct, you need LB to get the UB on KL(sigma|q)
-    kl_sigma_q_lb_iwae = g_q_estimate - iwae_upper_bound_across_seeds # and you need UB to get LB on KL(sigma|q)
-    kl_sigma_q_ub_smc = g_q_estimate - smc_lower_bound_across_seeds # Note this is correct, you need LB to get the UB on KL(sigma|q)
-    kl_sigma_q_lb_smc = g_q_estimate - smc_upper_bound_across_seeds # and you need UB to get LB on KL(sigma|q)
+    print(f"G_q {num_true_posterior_samples} posterior sample(s) estimate: {avg_g_q_estimate}")
+    kl_sigma_q_ub_iwae = avg_g_q_estimate - iwae_lower_bound_across_seeds # Note this is correct, you need LB to get the UB on KL(sigma|q)
+    kl_sigma_q_lb_iwae = avg_g_q_estimate - iwae_upper_bound_across_seeds # and you need UB to get LB on KL(sigma|q)
+    kl_sigma_q_ub_smc = avg_g_q_estimate - smc_lower_bound_across_seeds # Note this is correct, you need LB to get the UB on KL(sigma|q)
+    kl_sigma_q_lb_smc = avg_g_q_estimate - smc_upper_bound_across_seeds # and you need UB to get LB on KL(sigma|q)
     print(
         f"Avg KL(sigma||q) upper bound (using IWAE bound on log Z and {num_true_posterior_samples} true posterior sample for G(q)): {kl_sigma_q_ub_iwae}")
     print(
@@ -2301,13 +2302,27 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     print(
         f"Avg KL(sigma||q) lower bound (using SMC bound on log Z and {num_true_posterior_samples} true posterior sample for G(q)): {kl_sigma_q_lb_smc}")
 
-    append_list = [avg_f_q_estimate, kl_ub_iwae_across_seeds, kl_lb_iwae_across_seeds,
+    append_list = [avg_f_q_estimate, avg_g_q_estimate, kl_ub_iwae_across_seeds, kl_lb_iwae_across_seeds,
                    kl_ub_smc_across_seeds, kl_lb_smc_across_seeds,
-                   g_q_estimate, kl_sigma_q_ub_iwae, kl_sigma_q_lb_iwae, kl_sigma_q_ub_smc, kl_sigma_q_lb_smc]
+                   kl_sigma_q_ub_iwae, kl_sigma_q_lb_iwae, kl_sigma_q_ub_smc, kl_sigma_q_lb_smc]
 
+    iwae_logZ_gap = iwae_upper_bound_across_seeds - iwae_lower_bound_across_seeds
+    smc_logZ_gap = smc_upper_bound_across_seeds - smc_lower_bound_across_seeds
+    print(iwae_logZ_gap)
+    print(smc_logZ_gap)
+    if smc_logZ_gap > iwae_logZ_gap:
+        logZ_midpoint_estimate = (smc_upper_bound_across_seeds + smc_lower_bound_across_seeds) / 2.
+        print("SMC Gap better")
+    else:
+        logZ_midpoint_estimate = (iwae_upper_bound_across_seeds + iwae_lower_bound_across_seeds) / 2.
+        print("IWAE Gap better")
+    # logZ_midpoint_estimate is our current estimate which should be the best estimate we have given our learned twists
+    print(f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
 
     plot_over_time_list[0].append(f_q_list_by_seed)
-    for i in range(1, len(append_list)):
+    plot_over_time_list[1].append(g_q_all_posts)
+
+    for i in range(2, len(append_list)):
         plot_over_time_list[i].append(np.array(append_list[i]))
     logZ_ubs_iwae_across_samples_time_seeds = plot_over_time_list[len(append_list)]
     logZ_lbs_iwae_across_samples_time_seeds = plot_over_time_list[len(append_list) + 1]
@@ -2324,8 +2339,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     plot_over_time_list[len(append_list) + 3] = logZ_lbs_smc_across_samples_time_seeds
 
     f_q_estimates_list_of_arrays = plot_over_time_list[0]
-    kl_ubs_iwae, kl_lbs_iwae, kl_ubs_smc, kl_lbs_smc = plot_over_time_list[1], plot_over_time_list[2], plot_over_time_list[3], plot_over_time_list[4]
-    g_q_estimates = plot_over_time_list[5]
+    g_q_estimates_list_of_arrays = plot_over_time_list[1]
+    kl_ubs_iwae, kl_lbs_iwae, kl_ubs_smc, kl_lbs_smc = plot_over_time_list[2], plot_over_time_list[3], plot_over_time_list[4], plot_over_time_list[5]
     kl_sigma_q_ubs_iwae, kl_sigma_q_lbs_iwae, kl_sigma_q_ubs_smc, kl_sigma_q_lbs_smc = plot_over_time_list[6], plot_over_time_list[7], plot_over_time_list[8], plot_over_time_list[9]
 
 
@@ -2367,25 +2382,40 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.savefig(f"{args.save_dir}/fig_f_q_g_q_epoch{epoch + 1}.png")
 
 
-    kl_q_sigma_bounds_midpoint_iwae = (np.stack(kl_ubs_iwae) + np.stack(kl_lbs_iwae)) / 2.
-    kl_sigma_q_bounds_midpoint_iwae = (np.stack(kl_sigma_q_ubs_iwae) + np.stack(kl_sigma_q_lbs_iwae)) / 2.
+    # kl_q_sigma_bounds_midpoint_iwae = (np.stack(kl_ubs_iwae) + np.stack(kl_lbs_iwae)) / 2.
+    # kl_sigma_q_bounds_midpoint_iwae = (np.stack(kl_sigma_q_ubs_iwae) + np.stack(kl_sigma_q_lbs_iwae)) / 2.
+    # plt.clf()
+    # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
+    # plt.plot(x_range, kl_q_sigma_bounds_midpoint_iwae, label="KL(q||sigma) (Midpoint based on IWAE LogZ Bounds)")
+    # plt.fill_between(x_range, np.stack(kl_lbs_iwae), np.stack(kl_ubs_iwae), alpha=0.3)
+    # plt.plot(x_range, kl_sigma_q_bounds_midpoint_iwae, label="KL(sigma||q) (Midpoint based on IWAE LogZ Bounds)")
+    # plt.fill_between(x_range, np.stack(kl_sigma_q_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), alpha=0.3)
+
+    only_one_post = ""
+    print("G_q estimates shape")
+    print(np.stack(g_q_estimates_list_of_arrays).shape)
+    if np.stack(g_q_estimates_list_of_arrays).shape[-1] == 1:
+        only_one_post = " (Only 1 Post.)"
+
     plt.clf()
     x_range = np.arange(1, len(kl_ubs_iwae) + 1)
-    plt.plot(x_range, kl_q_sigma_bounds_midpoint_iwae, label="KL(q||sigma) (Midpoint based on IWAE LogZ Bounds)")
-    plt.fill_between(x_range, np.stack(kl_lbs_iwae), np.stack(kl_ubs_iwae), alpha=0.3)
-    plt.plot(x_range, kl_sigma_q_bounds_midpoint_iwae, label="KL(sigma||q) (Midpoint based on IWAE LogZ Bounds)")
-    plt.fill_between(x_range, np.stack(kl_sigma_q_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), alpha=0.3)
-
+    plot_with_conf_bounds(logZ_midpoint_estimate - np.transpose(np.stack(f_q_estimates_list_of_arrays)), x_range, label="KL(q||sigma) (Best LogZ Bounds Midpoint)")
+    plot_with_conf_bounds(np.transpose(np.stack(g_q_estimates_list_of_arrays)) - logZ_midpoint_estimate, x_range, label=f"KL(sigma||q) (Best LogZ Bounds Midpoint){only_one_post}")
 
     plt.xlabel(f"Epoch")
     plt.ylabel(f"KL Divergence")
     plt.legend()
     plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.png")
 
+    # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+    #                             target=(np.stack(kl_ubs_iwae), np.stack(kl_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), np.stack(kl_sigma_q_lbs_iwae)),
+    #                             step=len(kl_ubs_iwae),
+    #                             prefix=f"kl_divs_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
     checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                target=(np.stack(kl_ubs_iwae), np.stack(kl_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), np.stack(kl_sigma_q_lbs_iwae)),
+                                target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
+                                        logZ_midpoint_estimate),
                                 step=len(kl_ubs_iwae),
-                                prefix=f"kl_divs_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+                                prefix=f"f_q_g_q_logZbestmidpoint_info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
     # plt.plot(x_range, np.stack(kl_ubs_iwae), label="KL(q||sigma) Upper bound (IWAE LogZ Bound)")
     # plt.plot(x_range, np.stack(kl_lbs_iwae), label="KL(q||sigma) Lower bound (IWAE LogZ Bound)")
