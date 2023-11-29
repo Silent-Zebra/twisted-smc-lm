@@ -56,7 +56,7 @@ def kl_div_jax_sum_last_axis(log_p, log_q):
 
 class ExperimentConfig:
     def __init__(self, twist_learn_type, rm_type, rl_loss_type="custom", beta_kl=0, ppo_steps=0, clip_epsilon=0, gamma=1., gae_lambda=1., beta_ent=0,
-                 toxicityModel=None, tokenizer_RM=None, device=None, tokenizer=None):
+                 rewardModel=None, tokenizer_RM=None, device=None, tokenizer=None):
         self.twist_learn_type = twist_learn_type.lower()
 
         self.dre_grad_fn = self._get_dre_grad_fn()
@@ -74,11 +74,11 @@ class ExperimentConfig:
             self.clip_epsilon = clip_epsilon
 
         if rm_type == "toxicity":
-            assert toxicityModel is not None
+            assert rewardModel is not None
             assert tokenizer_RM is not None
             # assert device is not None
             assert tokenizer is not None
-            self.toxicityModel = toxicityModel
+            self.rewardModel = rewardModel
             self.tokenizer_RM = tokenizer_RM
             # self.device = device
             self.tokenizer = tokenizer
@@ -118,7 +118,7 @@ class ExperimentConfig:
         if self.rm_type == "binary":
             return reward_model_binary
         elif self.rm_type == "toxicity":
-            curried_rm = curried_reward_model_toxicity(self.toxicityModel, self.tokenizer_RM, self.tokenizer)
+            curried_rm = curried_reward_model_toxicity(self.rewardModel, self.tokenizer_RM, self.tokenizer)
             return curried_rm
             # return reward_model_toxicity_w_callback(curried_rm)
         else:
@@ -328,7 +328,7 @@ def reward_model_binary(seq, prompt_len):
 
 
 
-def reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenizer):
+def reward_model_toxicity(seq, prompt_len, rewardModel, tokenizer_RM, tokenizer):
     # print(seq)
     # print(seq.shape)
     # This is a really awkward way of gluing together 2 models (GPT and BERT)
@@ -361,7 +361,7 @@ def reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenize
     # Then test that, and finally begin experiments using that
     # print(tokens)
     # tokens.to(device)
-    score = toxicityModel(**tokens)[0]
+    score = rewardModel(**tokens)[0]
     # print("SCORE SHAPE")
     # print(score.squeeze(-1).shape)
 
@@ -370,9 +370,9 @@ def reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenize
 
     return score.squeeze(-1)
 
-def curried_reward_model_toxicity(toxicityModel, tokenizer_RM, tokenizer):
+def curried_reward_model_toxicity(rewardModel, tokenizer_RM, tokenizer):
     def new_rm(seq, prompt_len):
-        return reward_model_toxicity(seq, prompt_len, toxicityModel, tokenizer_RM, tokenizer)
+        return reward_model_toxicity(seq, prompt_len, rewardModel, tokenizer_RM, tokenizer)
     return new_rm
 
 
@@ -1365,32 +1365,32 @@ def main():
     model_twist = CustomLM(rng_key, model_config, d_model=768, output_size=args.n_vocab)
     model_baseline = CustomLM(rng_key, model_config, d_model=768, output_size=1)
 
-    toxicityModel, tokenizer_RM, device = None, None, None
+    rewardModel, tokenizer_RM, device = None, None, None
 
     if args.rm_type == "toxicity":
         # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         tokenizer_RM = AutoTokenizer.from_pretrained(
             "nicholasKluge/ToxicityModel")
-        # toxicityModelpt = AutoModelForSequenceClassification.from_pretrained(
+        # rewardModelpt = AutoModelForSequenceClassification.from_pretrained(
         #     "nicholasKluge/ToxicityModel")
 
         load_pt_model = False
         if load_pt_model:
-            toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(
                 "nicholasKluge/ToxicityModel",
                 from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
-            toxicityModel.save_pretrained("./toxicityModelFlax")
+            rewardModel.save_pretrained("./toxicityModelFlax")
         else:
             print("Loading model")
-            toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained("./toxicityModelFlax")
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained("./toxicityModelFlax")
             print("Loaded model")
 
 
     experiment_cfg = ExperimentConfig(twist_learn_type=args.twist_learn_type, rm_type=args.rm_type, rl_loss_type=args.rl_loss_type,
                                       beta_kl=args.beta_kl, ppo_steps=args.ppo_steps, clip_epsilon=args.clip_epsilon,
                                       gamma=args.gamma, gae_lambda=args.gae_lambda, beta_ent=args.beta_ent,
-                                      toxicityModel=toxicityModel, tokenizer_RM=tokenizer_RM, device=device, tokenizer=tokenizer)
+                                      rewardModel=rewardModel, tokenizer_RM=tokenizer_RM, device=device, tokenizer=tokenizer)
 
     eps = 1e-8
     weight_decay = 0.01

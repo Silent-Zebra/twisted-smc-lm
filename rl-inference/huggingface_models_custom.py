@@ -177,7 +177,7 @@ def main():
     # model_baseline = CustomLM(rng_key, model_config, d_model=768, output_size=1)
     model = CustomLMWithTwistHead(rng_key, model_config)
 
-    toxicityModel, tokenizer_RM, device = None, None, None
+    rewardModel, tokenizer_RM, device = None, None, None
 
 
     # if args.rm_type == "toxicity":
@@ -185,18 +185,18 @@ def main():
     #
     #     tokenizer_RM = AutoTokenizer.from_pretrained(
     #         "nicholasKluge/ToxicityModel")
-    #     # toxicityModelpt = AutoModelForSequenceClassification.from_pretrained(
+    #     # rewardModelpt = AutoModelForSequenceClassification.from_pretrained(
     #     #     "nicholasKluge/ToxicityModel")
     #
     #     load_pt_model = False
     #     if load_pt_model:
-    #         toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+    #         rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(
     #             "nicholasKluge/ToxicityModel",
     #             from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
-    #         toxicityModel.save_pretrained("./toxicityModelFlax")
+    #         rewardModel.save_pretrained("./toxicityModelFlax")
     #     else:
     #         print("Loading model")
-    #         toxicityModel = FlaxAutoModelForSequenceClassification.from_pretrained("./toxicityModelFlax")
+    #         rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained("./toxicityModelFlax")
     #         print("Loaded model")
 
     prompts = [
