@@ -15,8 +15,8 @@ from custom_transformer import linear_init_normal, linear
 
 class CustomLMWithTwistHead:
     def __init__(self, key, model_name, output_size=-1, hface_nn_twist=False, softmax_twist=False,
-                 conditional_twist=False, num_last_tokens_to_condition_on=0):
-        self.huggingface_model = FlaxAutoModel.from_pretrained(model_name)  # Produces embeddings of d_model size
+                 conditional_twist=False, num_last_tokens_to_condition_on=0, from_pt=False):
+        self.huggingface_model = FlaxAutoModel.from_pretrained(model_name, from_pt=from_pt)  # Produces embeddings of d_model size
         if conditional_twist:
             assert num_last_tokens_to_condition_on > 0
             self.conditional_twist = conditional_twist
@@ -145,8 +145,8 @@ class CustomLMWithTwistHead:
 
 # Just so I don't have to call [0] everywhere
 class CustomLMHeadModel:
-    def __init__(self, model_name):
-        self.huggingface_model = FlaxAutoModelForCausalLM.from_pretrained(model_name)
+    def __init__(self, model_name, from_pt=False):
+        self.huggingface_model = FlaxAutoModelForCausalLM.from_pretrained(model_name, from_pt=from_pt)
         # Output size is n_vocab, ie. 50257
 
     def __call__(self, **kwargs):

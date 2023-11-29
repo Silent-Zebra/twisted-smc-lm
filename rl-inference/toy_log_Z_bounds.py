@@ -514,7 +514,7 @@ class ExperimentConfig:
         plot_with_conf_bounds(
             np.transpose(np.stack(f_q_estimates_list)),
             x_range,
-            label=f"F(q) (1-Sample UB) Estimate Over {np.stack(f_q_estimates_list).shape[-1]} True Posterior Samples",
+            label=f"F(q) (1-Sample UB) Estimate Over {np.stack(f_q_estimates_list).shape[-1]} Samples",
             color='xkcd:orange',
             linestyle='solid'
         )
@@ -1292,6 +1292,7 @@ class TestClass:
         n_true_posterior_samples = 1
         n_vocab = 9
         huggingface = False
+        hface_model_type = None
         beta1 = 0.9
         beta2 = 0.99
         weight_decay = 0.01
@@ -1346,7 +1347,7 @@ class TestClass:
         true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
         hist_token_index, indices_of_continuation, tokenizer = setup_cfg(
             n_vocab, twist_learn_type, rm_type, seed,
-            huggingface, lr_twist, beta1, beta2,
+            huggingface, hface_model_type, lr_twist, beta1, beta2,
             weight_decay,
             d_model, d_k, d_v, n_layers, n_heads, d_fc,
             d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist,
@@ -1589,6 +1590,7 @@ class TestClass:
         # 70 seconds on GPU for 100 twist updates 3 epochs
         n_true_posterior_samples = 1
         huggingface = False
+        hface_model_type = None
         beta1 = 0.9
         beta2 = 0.99
         weight_decay = 0.01
@@ -1638,7 +1640,7 @@ class TestClass:
         true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
         hist_token_index, indices_of_continuation, tokenizer = setup_cfg(
             n_vocab, twist_learn_type, rm_type, seed,
-            huggingface, lr_twist, beta1, beta2,
+            huggingface, hface_model_type, lr_twist, beta1, beta2,
             weight_decay,
             d_model, d_k, d_v, n_layers, n_heads, d_fc,
             d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist,
@@ -2441,7 +2443,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     return plot_over_time_list
 
 
-def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
+def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model_type, lr_twist,
           beta1, beta2, weight_decay, d_model, d_k, d_v, n_layers, n_heads, d_fc,
           d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist, d_fc_twist,
           indicator_pos_zero_index, output_len, n_true_posterior_samples, index_of_token_contained,
@@ -2463,7 +2465,16 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
     tokenizer = None
 
     if huggingface:
-        model_config = "distilgpt2"
+
+        if hface_model_type == "distilgpt2":
+            model_config = "distilgpt2"
+            from_pt = False
+        elif hface_model_type == "TinyStories":
+            model_config = "roneneldan/TinyStories-33M"
+            from_pt = True
+        else:
+            raise NotImplementedError
+
         tokenizer = get_tokenizer(model_config)
         rng_key, sk = jax.random.split(rng_key, 2)
 
@@ -2485,12 +2496,12 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
             conditional_twist = True
 
         if separate_hface_twist_model:
-            model_p = CustomLMHeadModel(model_config)
+            model_p = CustomLMHeadModel(model_config, from_pt=from_pt)
 
             model_twist = CustomLMWithTwistHead(
                 sk, model_config, hface_nn_twist=hface_nn_twist,
                 softmax_twist=softmax_twist, conditional_twist=conditional_twist,
-                num_last_tokens_to_condition_on=num_last_tokens_to_condition_on
+                num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt
             )
 
             params_p = model_p.huggingface_model.params
@@ -2511,7 +2522,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, lr_twist,
         else:
             model = CustomLMWithTwistHead(
                 sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist,
-                conditional_twist=conditional_twist, num_last_tokens_to_condition_on=num_last_tokens_to_condition_on
+                conditional_twist=conditional_twist, num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt
             )
             params_p = model.huggingface_model.params
             params_twist = model.twist_head_params
@@ -3338,7 +3349,7 @@ def main():
         # TODO later if using the ones where I split by token as well, check that; that functionality hasn't been tested in a while
         true_posterior_samples_by_prompt = setup_cfg(
             args.n_vocab, args.twist_learn_type, args.rm_type, args.seed,
-            args.huggingface, args.lr_twist, args.beta1, args.beta2, args.weight_decay,
+            args.huggingface, args.hface_model_type, args.lr_twist, args.beta1, args.beta2, args.weight_decay,
             args.d_model, args.d_k, args.d_v, args.n_layers, args.n_heads, args.d_fc,
             args.d_model_twist, args.d_k_twist, args.d_v_twist, args.n_layers_twist,
             args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
@@ -3362,7 +3373,7 @@ def main():
     true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
     hist_token_index, indices_of_continuation, tokenizer = setup_cfg(
         args.n_vocab, args.twist_learn_type, args.rm_type, args.seed,
-        args.huggingface, args.lr_twist, args.beta1, args.beta2, args.weight_decay,
+        args.huggingface, args.hface_model_type, args.lr_twist, args.beta1, args.beta2, args.weight_decay,
         args.d_model, args.d_k, args.d_v, args.n_layers, args.n_heads, args.d_fc,
         args.d_model_twist, args.d_k_twist, args.d_v_twist, args.n_layers_twist,
         args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
@@ -4065,6 +4076,9 @@ if __name__ == "__main__":
     parser.add_argument("--beta_temp", type=float, help="beta used for the temperature scaling; right now just for the reward model based on the prob of the continuation",
                         default=1.)
     parser.add_argument("--huggingface", action="store_true", help="Use huggingface transformer. Obviates the need for setting transformer parameters")
+    parser.add_argument("--hface_model_type", type=str, default="distilgpt2",
+                        choices=["distilgpt2", "TinyStories"])
+
     # TODO SEP 15; add flags for different models e.g. GPT2small, GPT2medium, other archs...
     parser.add_argument("--rejection_sample_naive", action="store_true", help="Only for a specific test/check")
 
