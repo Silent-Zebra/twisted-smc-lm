@@ -1020,7 +1020,13 @@ def inspect_and_record_evidence_setting_for_index(
 
     assert true_posterior_samples.shape[0] > 0
 
-    posterior_sample = true_posterior_samples[0]
+    print("NUM true posterior samples:")
+    print(true_posterior_samples.shape[0])
+
+    rng_key, sk_unif = jax.random.split(rng_key)
+    index_of_posterior_sample_to_use = jax.random.randint(sk_unif, (1,), 0, true_posterior_samples.shape[0])
+
+    posterior_sample = true_posterior_samples[index_of_posterior_sample_to_use]
 
     # rng_key, sk_i = jax.random.split(rng_key)
     # iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
