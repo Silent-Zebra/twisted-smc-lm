@@ -1089,7 +1089,8 @@ def build_contains_token_twists(rng_key, jnp_prompts, cfg_p, params_p, output_le
 
 
 
-def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time, indices_of_continuation, huggingface_model=None, get_true_posterior_samples=True):
+def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time,
+                                       indices_of_continuation, huggingface_model=None, get_true_posterior_samples=True):
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
 

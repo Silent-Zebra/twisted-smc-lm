@@ -894,7 +894,7 @@ class ExperimentConfig:
                                                      params_p, output_len,
                                                      n_samples_at_a_time=n_true_posterior_samples,
                                                      indices_of_continuation=indices_of_continuation,
-                                                     huggingface_model=huggingface_model)
+                                                     huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples)
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
@@ -906,7 +906,7 @@ class ExperimentConfig:
                                                      params_p, output_len,
                                                      n_true_posterior_samples,
                                                   rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold,
-                                                     huggingface_model=huggingface_model)
+                                                     huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples)
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
@@ -918,7 +918,7 @@ class ExperimentConfig:
                                                      params_p, output_len,
                                                      n_true_posterior_samples,
                                                   rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold,
-                                                     huggingface_model=huggingface_model)
+                                                     huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples)
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
@@ -1024,7 +1024,7 @@ def inspect_and_record_evidence_setting_for_index(
     print(true_posterior_samples.shape[0])
 
     rng_key, sk_unif = jax.random.split(rng_key)
-    index_of_posterior_sample_to_use = jax.random.randint(sk_unif, (1,), 0, true_posterior_samples.shape[0])
+    index_of_posterior_sample_to_use = jax.random.randint(sk_unif, (1,), 0, true_posterior_samples.shape[0]).squeeze()
 
     posterior_sample = true_posterior_samples[index_of_posterior_sample_to_use]
 
