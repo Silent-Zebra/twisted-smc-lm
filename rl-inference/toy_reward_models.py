@@ -1097,6 +1097,7 @@ def build_contains_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, ou
 
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
+        posterior_samples_containing_continuation = None
 
         if get_true_posterior_samples:
             num_samples_containing_continuation = 0
@@ -1147,6 +1148,8 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
         # log_true_final_twist = reward_model_toxicity_threshold_w_callback(curried_rm)
 
         log_true_final_twists.append(log_true_final_twist)
+
+        posterior_samples_satisfying_threshold = None
 
         if get_true_posterior_samples:
             num_samples_satisfying_threshold = 0
@@ -1201,6 +1204,7 @@ def build_sentiment_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outp
     true_posterior_samples_by_prompt = []
     for jnp_prompt in jnp_prompts:
         # prompt_len = jnp_prompt.shape[-1]
+        posterior_samples_satisfying_threshold = None
 
         curried_rm = curried_log_sentiment_threshold(rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
         log_true_final_twist = curried_rm
