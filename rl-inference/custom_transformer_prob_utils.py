@@ -561,8 +561,9 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
     # print(log_z_hat_t)
     # print("-----")
 
-
     log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval
+
+    log_w_t_before_resample = None
 
     if resample:
         # Do resampling
