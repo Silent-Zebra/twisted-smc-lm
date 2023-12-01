@@ -578,6 +578,8 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
             log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval.at[1:].set(log_p_theta_1_to_t_eval[a_t])
 
+            log_w_t_before_resample = log_w_t
+
             log_w_t = jnp.zeros_like(log_w_t) # still set all the weights to 0
 
             log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval.at[1:].set(log_r_psi_t_eval[a_t])
@@ -603,6 +605,8 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
             # Same for the p values:
             log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
 
+            log_w_t_before_resample = log_w_t
+
             log_w_t = jnp.zeros_like(log_w_t)
 
             log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval[a_t]
@@ -627,7 +631,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
     carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
     output_len, params_p, params_twist, prompt_len, log_z_hat_t)
 
-    return carry, (full_seq, log_w_t, log_r_psi_t_eval_w_potential_resample)
+    return carry, (full_seq, log_w_t, log_r_psi_t_eval_w_potential_resample, log_w_t_before_resample)
 
 
 @partial(jax.jit, static_argnames=["resample", "resample_for_log_psi_t_eval_list"])
@@ -888,7 +892,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
     log_psi_t_eval_list = []
 
     for t in range(output_len - 1):
-        carry, (full_seq, log_w_t, log_psi_t_eval) =\
+        carry, (full_seq, log_w_t, log_psi_t_eval, log_w_t_before_resample) =\
             partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist,
                 prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
                 resample=resample,
@@ -974,7 +978,7 @@ def smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, o
     carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
     output_len, params_p, params_twist, prompt_len, log_z_hat_t)
 
-    carry, (full_seq_list, log_w_t_list, log_psi_t_eval_list) = jax.lax.scan(
+    carry, (full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list) = jax.lax.scan(
         partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens, resample=resample,
                 token_of_interest_as_int=token_of_interest_as_int, true_posterior_sample=true_posterior_sample,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
@@ -991,7 +995,7 @@ def smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, o
     output_len, params_p, params_twist, prompt_len, log_z_hat_t = carry
 
     return rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
-           prompt_len, log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list
+           prompt_len, log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list
 
 
 def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
@@ -1004,7 +1008,7 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
     # start = time.time()
 
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, prompt_len, \
-    log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list = \
+    log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list = \
         smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist,
                         params_twist,
                         output_len,
@@ -1044,8 +1048,8 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
     if get_intermediate_sample_history_based_on_learned_twists:
         if condition_twist_on_tokens is not None:
             # TODO Oct 29 - the reason I use none is because the final weights are not correctly calculated - need to pass in a concatenated sequence into the true final twist
-            return (None, None, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list)
-        return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list)
+            return (None, None, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list, log_w_t_before_resample_list)
+        return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list, log_w_t_before_resample_list)
 
     if condition_twist_on_tokens is not None:
         # TODO Oct 29 - the reason I use none is because the final weights are not correctly calculated - need to pass in a concatenated sequence into the true final twist

@@ -554,7 +554,7 @@ class ExperimentConfig:
 
         if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
 
-            _, smc_samples, (intermediate_seq_list, _) = smc_procedure(
+            _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(
                 sk1, prompt, cfg_p, params_p, cfg_twist, params_twist,
                 log_true_final_twist, output_len, n_samples,
                 smc_procedure_type=self.smc_procedure_type,
@@ -619,7 +619,7 @@ class ExperimentConfig:
             # TODO OCT 29
             # And then figure out how to do the UB LB stuff... I guess just no SMC bounds, just IWAE bounds then... because we only have 1 particle per posterior anyway.
 
-            _, _, (intermediate_seq_list, _) = smc_procedure(
+            _, _, (intermediate_seq_list, _, _) = smc_procedure(
                 sk1, prompt, cfg_p, params_p,
                 cfg_twist, params_twist,
                 log_true_final_twist,
@@ -2720,7 +2720,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         condition_twist_on_tokens = None
         n_test_smc_samples = 16
         rng_key, sk_smc = jax.random.split(rng_key)
-        (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list) = smc_procedure(
+        (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list, log_w_t_before_resample_list) = smc_procedure(
             sk_smc, prompt, cfg_p, params_p,
             cfg_twist, params_twist,
             log_true_final_twist,
@@ -3230,7 +3230,7 @@ def sample_for_replay_buffer(
                 #     resample=False,
                 #     tempered_twist=tempered_twist, beta_prop=beta_prop
                 # )
-                (log_w_t_sigma_samples, _, _), q_samples, (_, log_w_t_learned_twist_list) = smc_procedure(
+                (log_w_t_sigma_samples, _, _), q_samples, (_, log_w_t_learned_twist_list, log_w_t_before_resample_list) = smc_procedure(
                     sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
                     log_true_final_twist, output_len, n_buffer_samples_at_a_time,
                     smc_procedure_type=experiment_cfg.smc_procedure_type,
@@ -3845,7 +3845,7 @@ def main():
 
                         elif args.rm_type in ["toxicity_threshold", "sentiment_threshold"]:
                             rng_key, sk = jax.random.split(rng_key)
-                            _, smc_samples, (_, log_w_t_list) = smc_procedure(
+                            _, smc_samples, (_, _, log_w_t_before_resample_list) = smc_procedure(
                                 sk, prompt, cfg_p, params_p,
                                 cfg_twist, params_twist,
                                 log_true_final_twist,
@@ -3864,7 +3864,7 @@ def main():
                             print(text_outputs)
                             print(log_true_final_twist(smc_samples))
 
-                            for log_w_t in log_w_t_list:
+                            for log_w_t in log_w_t_before_resample_list:
                                 print("Log importance weights variance")
                                 print(log_w_t)
                                 print(jnp.var(log_w_t))

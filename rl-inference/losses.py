@@ -303,7 +303,7 @@ def get_l_ebm_ml_partial_jit(
     if reweight_for_second_term: # Get approximate p(s_{1:t}) psi_t(s_{1:t}) samples by reweighting the produce of conditionals q(s_1) q(s_2|s_1)...
         (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
             intermediate_twist_samples_hist,
-            intermediate_log_w_t_hist) = smc_procedure(
+            intermediate_log_w_t_hist, _) = smc_procedure(
             sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
             log_true_final_twist, output_len, n_twist,
             smc_procedure_type=smc_procedure_type,
@@ -351,7 +351,7 @@ def get_l_ebm_ml_partial_jit(
         # Get q samples with no resampling anywhere
         (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
         intermediate_twist_samples_hist,
-        intermediate_log_w_t_hist) = smc_procedure(
+        intermediate_log_w_t_hist, _) = smc_procedure(
             sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
             log_true_final_twist, output_len, n_twist,
             smc_procedure_type=smc_procedure_type,
@@ -493,7 +493,7 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
 
     (log_w_t_sigma_samples, _, _), q_samples, (
         intermediate_twist_samples_hist,
-        intermediate_log_w_t_hist) = smc_procedure(
+        intermediate_log_w_t_hist, _) = smc_procedure(
         sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, output_len, n_twist // 2,
         smc_procedure_type=smc_procedure_type,
@@ -506,7 +506,7 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
     )
 
     # (_, _, _), _, (intermediate_twist_samples_hist,
-    #                intermediate_log_w_t_hist) = smc_procedure(
+    #                intermediate_log_w_t_hist, _) = smc_procedure(
     #     sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
     #     log_true_final_twist, output_len, n_twist // 2,
     #     smc_procedure_type=smc_procedure_type,
@@ -601,7 +601,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
             # The first part is the same as Roger's/EBM-ML approach; the first term is going to be the same
             (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t, (
             intermediate_twist_samples_hist,
-            intermediate_log_w_t_hist) = smc_procedure(
+            intermediate_log_w_t_hist, _) = smc_procedure(
                 sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
                 log_true_final_twist, output_len, n_twist,
                 smc_procedure_type=smc_procedure_type,
@@ -707,7 +707,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 #     l_kl = 0.
 #
 #     # The first part is the same as Roger's/EBM-ML approach; the first term is going to be the same
-#     _, prompt_w_sigma_sample_s_1_to_t, (intermediate_twist_samples_hist, intermediate_log_w_t_hist) = smc_procedure(
+#     _, prompt_w_sigma_sample_s_1_to_t, (intermediate_twist_samples_hist, intermediate_log_w_t_hist, _) = smc_procedure(
 #         sk2, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len, n_twist,
 #         get_intermediate_sample_history_based_on_learned_twists=True,
 #         prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
@@ -803,7 +803,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
         elif evaluate_over_samples_from == "q":
             # Get q samples with no resampling anywhere
             (_, _, _), _, (intermediate_twist_samples_hist,
-                   intermediate_log_w_t_hist) = smc_procedure(
+                   intermediate_log_w_t_hist, _) = smc_procedure(
                 sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
                 log_true_final_twist, output_len, n_twist,
                 smc_procedure_type=smc_procedure_type,
@@ -820,7 +820,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
         elif evaluate_over_samples_from == "qrsmp":
             # Get q samples with no resampling anywhere
             (log_w_t, _, _), _, (intermediate_twist_samples_hist,
-                   intermediate_log_w_t_hist) = smc_procedure(
+                   intermediate_log_w_t_hist, _) = smc_procedure(
                 sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
                 log_true_final_twist, output_len, n_twist,
                 smc_procedure_type=smc_procedure_type,
@@ -859,7 +859,7 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
                 condition_twist_on_tokens_to_use_for_q_samples = condition_twist_on_tokens[n_twist // 2:, :]
 
             (_, _, _), _, (intermediate_twist_samples_hist,
-                           intermediate_log_w_t_hist) = smc_procedure(
+                           intermediate_log_w_t_hist, _) = smc_procedure(
                 sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
                 log_true_final_twist, output_len, n_twist // 2,
                 smc_procedure_type=smc_procedure_type,
