@@ -128,7 +128,7 @@ def get_l_ebm_ml_partial_jit(
         assert replay_buffer is None
         (log_w_t_sigma_samples, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
             intermediate_twist_samples_hist,
-            intermediate_log_w_t_hist) = smc_procedure(
+            intermediate_log_w_t_hist, _) = smc_procedure(
             sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
             log_true_final_twist, output_len, n_twist,
             smc_procedure_type=smc_procedure_type,
