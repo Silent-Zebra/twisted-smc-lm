@@ -2404,12 +2404,18 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         only_one_post = " (Only 1 Post.)"
 
     plt.clf()
-    x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
+    if args.exp_num_twist_updates:
+        x_range = np.arange(len(kl_ubs_iwae))
+        plt.xlabel(f"2^ of Number of Twist Updates")
+
+    else:
+        x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
+        plt.xlabel(f"Number of Twist Updates")
+
     plot_with_conf_bounds(logZ_midpoint_estimate - np.transpose(np.stack(f_q_estimates_list_of_arrays)), x_range, label="KL(q||sigma) (Best LogZ Bounds Midpoint)")
     plot_with_conf_bounds(np.transpose(np.stack(g_q_estimates_list_of_arrays)) - logZ_midpoint_estimate, x_range, label=f"KL(sigma||q) (Best LogZ Bounds Midpoint){only_one_post}")
 
     # plt.xlabel(f"Epoch")
-    plt.xlabel(f"Number of Twist Updates")
     plt.ylabel(f"KL Divergence")
     plt.legend()
     plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.pdf")
@@ -2448,10 +2454,14 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.legend()
     # plt.savefig(f"{args.save_dir}/fig_kl_sigma_q_epoch{epoch + 1}.pdf")
 
-    # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
-    x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
-
     plt.clf()
+    # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
+    if args.exp_num_twist_updates:
+        x_range = np.arange(len(kl_ubs_iwae))
+        plt.xlabel(f"2^ of Number of Twist Updates")
+    else:
+        x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
+        plt.xlabel(f"Number of Twist Updates")
 
     print(logZ_ubs_iwae_across_samples_time_seeds)
 
@@ -2487,7 +2497,6 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.xlabel(f"{power_base}^ Number of Particles")
 
     # plt.xlabel(f"Epoch")
-    plt.xlabel(f"Number of Twist Updates")
     plt.ylabel(f"Log(Z) Bound")
 
     plt.legend()
@@ -3278,7 +3287,6 @@ def sample_for_replay_buffer(
                                           tempered_twist=tempered_twist,
                                           beta_prop=beta_prop)
                 log_w_t_sigma_over_proposal = log_w_t_tilde_sigma_over_q_mix
-                intermediate_log_w_t_hist = None
 
             log_prob_eval = jax.lax.stop_gradient(log_prob_eval)
 
@@ -3519,6 +3527,7 @@ def main():
                     or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
                     indices_of_tokens_chosen = \
                     indices_of_tokens_chosen_by_prompt[prompt_num]
+
 
                 for twist_update in range(args.twist_updates_per_epoch):
 
@@ -3836,7 +3845,7 @@ def main():
 
                         elif args.rm_type in ["toxicity_threshold", "sentiment_threshold"]:
                             rng_key, sk = jax.random.split(rng_key)
-                            _, smc_samples = smc_procedure(
+                            _, smc_samples, (_, log_w_t_list) = smc_procedure(
                                 sk, prompt, cfg_p, params_p,
                                 cfg_twist, params_twist,
                                 log_true_final_twist,
@@ -3845,13 +3854,20 @@ def main():
                                 smc_procedure_type="partial_jit",
                                 n_vocab=args.n_vocab,
                                 proposal_is_p=args.proposal_is_p,
-                                huggingface_model=huggingface_model)
+                                huggingface_model=huggingface_model,
+                                get_intermediate_sample_history_based_on_learned_twists=True
+                            )
                             print(smc_samples)
                             text_outputs = tokenizer.batch_decode(
                                 smc_samples,
                                 skip_special_tokens=True)
                             print(text_outputs)
                             print(log_true_final_twist(smc_samples))
+
+                            for log_w_t in log_w_t_list:
+                                print("Log importance weights variance")
+                                print(log_w_t)
+                                print(jnp.var(log_w_t))
 
 
                     elif only_inspect_samples:
@@ -3886,7 +3902,15 @@ def main():
 
             avg_update_time = 0.
 
-            for twist_update in range(args.twist_updates_per_epoch):
+            num_twist_updates_to_do = args.twist_updates_per_epoch
+
+            if args.exp_num_twist_updates:
+                if epoch == 0:
+                    num_twist_updates_to_do = 2
+                else:
+                    num_twist_updates_to_do = 2 ** epoch
+
+            for twist_update in range(num_twist_updates_to_do):
 
                 if args.use_replay_buffer:
                     if twist_update % args.twist_updates_between_buffer_samples == 0: # Note: NOT twist_update + 1, because we want to get a replay buffer sample before the updates start
@@ -4123,6 +4147,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--seed", type=int, default=0)
 
+    parser.add_argument("--exp_num_twist_updates", action="store_true", help="Use an exponentially increasing power of twist updates (base 2) instead of a set number of twist updates per epoch")
+
     parser.add_argument("--twist_updates_per_epoch", type=int, default=100)
 
     parser.add_argument("--rm_type", type=str, default="p_token_last_index",
@@ -4192,8 +4218,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # if args.analytic_sigma_sample:
-    #     assert args.twist_updates_per_epoch == 0
 
     assert args.indicator_pos_zero_index < args.output_len
 
