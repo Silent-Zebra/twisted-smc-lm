@@ -1,6 +1,11 @@
 # import torch
 # For some reason my dependencies are messed up, so torch has to go first?
 
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
+os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".5"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"]="platform"
+
 from jax import vmap, jit
 
 import time
