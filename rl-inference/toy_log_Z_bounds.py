@@ -528,7 +528,7 @@ class ExperimentConfig:
         plt.xlabel(f"Epoch")
         # plt.ylabel("")
         plt.legend()
-        plt.savefig(f"{args.save_dir}/fig_g_q_f_q_estimates{len(g_q_estimates_list)}.png")
+        plt.savefig(f"{args.save_dir}/fig_g_q_f_q_estimates{len(g_q_estimates_list)}.pdf")
 
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                     target=(np.stack(g_q_estimates_list),
@@ -2374,7 +2374,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.xlabel(f"Number of Particles")
     #
     # plt.legend()
-    # plt.savefig(f"{args.save_dir}/fig_bounds_by_samples_epoch{epoch + 1}.png")
+    # plt.savefig(f"{args.save_dir}/fig_bounds_by_samples_epoch{epoch + 1}.pdf")
 
 
     # plt.clf()
@@ -2385,7 +2385,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.xlabel(f"Epoch")
     # # plt.ylabel(f"F(q) Estimate")
     # plt.legend()
-    # plt.savefig(f"{args.save_dir}/fig_f_q_g_q_epoch{epoch + 1}.png")
+    # plt.savefig(f"{args.save_dir}/fig_f_q_g_q_epoch{epoch + 1}.pdf")
 
 
     # kl_q_sigma_bounds_midpoint_iwae = (np.stack(kl_ubs_iwae) + np.stack(kl_lbs_iwae)) / 2.
@@ -2404,14 +2404,15 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         only_one_post = " (Only 1 Post.)"
 
     plt.clf()
-    x_range = np.arange(1, len(kl_ubs_iwae) + 1)
+    x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
     plot_with_conf_bounds(logZ_midpoint_estimate - np.transpose(np.stack(f_q_estimates_list_of_arrays)), x_range, label="KL(q||sigma) (Best LogZ Bounds Midpoint)")
     plot_with_conf_bounds(np.transpose(np.stack(g_q_estimates_list_of_arrays)) - logZ_midpoint_estimate, x_range, label=f"KL(sigma||q) (Best LogZ Bounds Midpoint){only_one_post}")
 
-    plt.xlabel(f"Epoch")
+    # plt.xlabel(f"Epoch")
+    plt.xlabel(f"Number of Twist Updates")
     plt.ylabel(f"KL Divergence")
     plt.legend()
-    plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.png")
+    plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.pdf")
 
     # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
     #                             target=(np.stack(kl_ubs_iwae), np.stack(kl_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), np.stack(kl_sigma_q_lbs_iwae)),
@@ -2431,7 +2432,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.xlabel(f"Epoch")
     # plt.ylabel(f"KL(q||sigma) bound")
     # plt.legend()
-    # plt.savefig(f"{args.save_dir}/fig_kl_q_sigma_epoch{epoch + 1}.png")
+    # plt.savefig(f"{args.save_dir}/fig_kl_q_sigma_epoch{epoch + 1}.pdf")
     #
     #
     # plt.clf()
@@ -2445,9 +2446,11 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.xlabel(f"Epoch")
     # plt.ylabel(f"KL(sigma||q) bound")
     # plt.legend()
-    # plt.savefig(f"{args.save_dir}/fig_kl_sigma_q_epoch{epoch + 1}.png")
+    # plt.savefig(f"{args.save_dir}/fig_kl_sigma_q_epoch{epoch + 1}.pdf")
 
-    x_range = np.arange(1, len(kl_ubs_iwae) + 1)
+    # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
+    x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
+
     plt.clf()
 
     print(logZ_ubs_iwae_across_samples_time_seeds)
@@ -2482,11 +2485,13 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         plt.plot(x_range, np.ones_like(x_range) * true_log_z,
                  label="True Log(Z)")
     # plt.xlabel(f"{power_base}^ Number of Particles")
-    plt.xlabel(f"Epoch")
+
+    # plt.xlabel(f"Epoch")
+    plt.xlabel(f"Number of Twist Updates")
     plt.ylabel(f"Log(Z) Bound")
 
     plt.legend()
-    plt.savefig(f"{args.save_dir}/fig_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.png")
+    plt.savefig(f"{args.save_dir}/fig_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf")
 
     checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                 target=(logZ_ubs_iwae_across_samples_time_seeds, logZ_lbs_iwae_across_samples_time_seeds,
