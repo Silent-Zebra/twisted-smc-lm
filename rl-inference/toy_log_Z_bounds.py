@@ -2316,7 +2316,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     smc_logZ_gap = smc_upper_bound_across_seeds - smc_lower_bound_across_seeds
     print(iwae_logZ_gap)
     print(smc_logZ_gap)
-    if smc_logZ_gap > iwae_logZ_gap:
+    if smc_logZ_gap < iwae_logZ_gap:
         logZ_midpoint_estimate = (smc_upper_bound_across_seeds + smc_lower_bound_across_seeds) / 2.
         print("SMC Gap better")
     else:
