@@ -47,7 +47,7 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     build_only_contains_token_twists, build_contains_token_eps_twists,\
     log_reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
     build_toxicity_threshold_twists, build_sentiment_threshold_twists, build_p_of_continuation_twists, \
-    build_p_of_last_tokens_twists, log_reward_model_p_of_last_tokens, build_p_of_continuation_one_post_twists
+    build_p_of_last_tokens_twists, log_reward_model_p_of_last_tokens, build_p_of_continuation_one_post_twists, build_exp_beta_toxicity_twists
 from losses import get_l_ebm_ml_partial_jit, get_l_ebm_ml_jit, \
     get_l_one_total_kl, get_l_rl_based, get_l_dre_sixo, get_mixed_p_q_samples
 
@@ -111,7 +111,7 @@ class ExperimentConfig:
         self.num_last_tokens_to_condition_on = num_last_tokens_to_condition_on
 
 
-        if self.rm_type in ["toxicity_threshold", "sentiment_threshold"]:
+        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity", "sentiment_threshold"]:
             self.smc_procedure_type = "partial_jit"
         else:
             self.smc_procedure_type = "jit"
@@ -123,7 +123,7 @@ class ExperimentConfig:
 
     def _get_dre_grad_fn(self):
         get_l_ebm_fn = get_l_ebm_ml_jit
-        if self.rm_type in ["toxicity_threshold", "sentiment_threshold"]:
+        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity", "sentiment_threshold"]:
             get_l_ebm_fn = get_l_ebm_ml_partial_jit
 
         if self.twist_learn_type == "ebm_old":
@@ -308,7 +308,7 @@ class ExperimentConfig:
                 replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
-        elif self.rm_type in ["exp_beta_rew_p_continuation", "contains_continuation",
+        elif self.rm_type in ["exp_beta_rew_p_continuation", "exp_beta_toxicity", "contains_continuation",
                               "toxicity_threshold", "sentiment_threshold",
                               "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
             # token_of_interest_as_int = index_of_token_contained
@@ -543,7 +543,7 @@ class ExperimentConfig:
                                     prefix=f"g_q_f_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
 
-    def inspect_prob_of_continuation(
+    def inspect_results(
         self, rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, output_len, n_samples, indices_of_continuation, tokenizer,
         prepend_tokens_for_twists, token_of_interest_as_int,
@@ -557,7 +557,7 @@ class ExperimentConfig:
 
         aux_info = None
 
-        if self.rm_type == "exp_beta_rew_p_continuation" or self.rm_type == "p_continuation" or self.rm_type == "hard_p_continuation":
+        if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation", "exp_beta_toxicity"]:
 
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(
                 sk1, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -570,43 +570,61 @@ class ExperimentConfig:
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model)
 
-            log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
-                smc_samples, cfg_p, params_p, indices_of_continuation,
-                huggingface_model=huggingface_model, return_log_w_no_temp=True)
+            p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p,
+                                                      prompt,
+                                                      output_len, n_samples,
+                                                      huggingface_model=huggingface_model)
 
-            log_prob_cont_proposal_samples = log_reward_model_p_of_continuation(
-                intermediate_seq_list[-1], cfg_p, params_p, indices_of_continuation,
-                huggingface_model=huggingface_model, return_log_w_no_temp=True)
+            if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation"]:
+                log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
+                    smc_samples, cfg_p, params_p, indices_of_continuation,
+                    huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
-            p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
-                                                      output_len, n_samples, huggingface_model=huggingface_model)
-            log_prob_cont_p_samples = log_reward_model_p_of_continuation(
-                p_samples, cfg_p, params_p, indices_of_continuation,
-                huggingface_model=huggingface_model, return_log_w_no_temp=True)
+                log_prob_cont_proposal_samples = log_reward_model_p_of_continuation(
+                    intermediate_seq_list[-1], cfg_p, params_p, indices_of_continuation,
+                    huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
-            print("LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples")
-            print(log_prob_cont_smc_samples[:n_samples_to_print])
-            print(log_prob_cont_proposal_samples[:n_samples_to_print])
-            print(log_prob_cont_p_samples[:n_samples_to_print])
+                log_prob_cont_p_samples = log_reward_model_p_of_continuation(
+                    p_samples, cfg_p, params_p, indices_of_continuation,
+                    huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
-            print("Averages of the above for SMC samples, proposal samples, p samples")
-            print(log_prob_cont_smc_samples.mean())
-            print(log_prob_cont_proposal_samples.mean())
-            print(log_prob_cont_p_samples.mean())
+                print("LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples")
+                print(log_prob_cont_smc_samples[:n_samples_to_print])
+                print(log_prob_cont_proposal_samples[:n_samples_to_print])
+                print(log_prob_cont_p_samples[:n_samples_to_print])
+
+                print("Averages of the above for SMC samples, proposal samples, p samples")
+                print(log_prob_cont_smc_samples.mean())
+                print(log_prob_cont_proposal_samples.mean())
+                print(log_prob_cont_p_samples.mean())
+            else:
+                score_smc_samples = log_true_final_twist(smc_samples) / args.beta_temp
+                score_proposal_samples = log_true_final_twist(intermediate_seq_list[-1]) / args.beta_temp
+                score_p_samples = log_true_final_twist(p_samples) / args.beta_temp
+
+                print("Scores for: SMC samples, proposal samples, p samples")
+                print(score_smc_samples[:n_samples_to_print])
+                print(score_proposal_samples[:n_samples_to_print])
+                print(score_p_samples[:n_samples_to_print])
+
+                print("Averages of the above for SMC samples, proposal samples, p samples")
+                print(score_smc_samples.mean())
+                print(score_proposal_samples.mean())
+                print(score_p_samples.mean())
 
             if huggingface_model:
                 text_outputs = tokenizer.batch_decode(smc_samples,
                                                       skip_special_tokens=True)
 
-                if self.rm_type in ["exp_beta_rew_p_continuation",
-                                    "p_continuation", "hard_p_continuation",
-                                    "p_last_tokens", "p_continuation_one_post"]:
+                # if self.rm_type in ["exp_beta_rew_p_continuation",
+                #                     "p_continuation", "hard_p_continuation",
+                #                     "p_last_tokens", "p_continuation_one_post"]:
                     # print(intermediate_seq_list[-1])
-                    print("INSPECTION OF SMC SAMPLES")
-                    print(smc_samples[:n_samples_to_print])
-                    if huggingface_model:
-                        for s in text_outputs[:n_samples_to_print]:
-                            print(s)
+                print("INSPECTION OF SMC SAMPLES")
+                # print(smc_samples[:n_samples_to_print])
+                if huggingface_model:
+                    for s in text_outputs[:n_samples_to_print]:
+                        print(s)
 
         elif self.rm_type == "p_last_tokens":
             p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p,
@@ -665,24 +683,24 @@ class ExperimentConfig:
             if huggingface_model:
                 text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
 
-                if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
+                # if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
                     # print(intermediate_seq_list[-1])
-                    print("INSPECTION OF Sigma SAMPLES")
-                    print(p_samples[:n_samples_to_print])
-                    if huggingface_model:
-                        for s in text_outputs[:n_samples_to_print]:
-                            print(s)
+                print("INSPECTION OF Sigma SAMPLES")
+                print(p_samples[:n_samples_to_print])
+                if huggingface_model:
+                    for s in text_outputs[:n_samples_to_print]:
+                        print(s)
 
                 text_outputs = tokenizer.batch_decode(proposal_samples, skip_special_tokens=True)
 
-                if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation",
-                                    "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
+                # if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation",
+                #                     "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
                     # print(intermediate_seq_list[-1])
-                    print("INSPECTION OF Proposal SAMPLES")
-                    print(proposal_samples[:n_samples_to_print])
-                    if huggingface_model:
-                        for s in text_outputs[:n_samples_to_print]:
-                            print(s)
+                print("INSPECTION OF Proposal SAMPLES")
+                print(proposal_samples[:n_samples_to_print])
+                if huggingface_model:
+                    for s in text_outputs[:n_samples_to_print]:
+                        print(s)
 
             g_q_estimates = iwae_backward(
                 true_sigma_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -848,6 +866,15 @@ class ExperimentConfig:
                                                     indices_of_continuation=indices_of_continuation,
                                                      beta_temp=self.beta_temp,
                                                     huggingface_model=huggingface_model)
+            print(log_true_final_twists)
+            print(indices_of_tokens_chosen_by_prompt)
+            print(true_posterior_samples_by_prompt_and_by_token)
+            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+        elif rm_type == "exp_beta_toxicity":
+            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+                = build_exp_beta_toxicity_twists(
+                jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp=self.beta_temp
+            )
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
@@ -2402,11 +2429,11 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     # plt.plot(x_range, kl_sigma_q_bounds_midpoint_iwae, label="KL(sigma||q) (Midpoint based on IWAE LogZ Bounds)")
     # plt.fill_between(x_range, np.stack(kl_sigma_q_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), alpha=0.3)
 
-    only_one_post = ""
-    print("G_q estimates shape")
-    print(np.stack(g_q_estimates_list_of_arrays).shape)
-    if np.stack(g_q_estimates_list_of_arrays).shape[-1] == 1:
-        only_one_post = " (Only 1 Post.)"
+    numpost = np.stack(g_q_estimates_list_of_arrays).shape[-1]
+    # print("G_q estimates shape")
+    # print(np.stack(g_q_estimates_list_of_arrays).shape)
+    # if np.stack(g_q_estimates_list_of_arrays).shape[-1] == 1:
+    #     only_one_post = " (Only 1 Post.)"
 
     plt.clf()
     if args.exp_num_twist_updates:
@@ -2418,7 +2445,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         plt.xlabel(f"Number of Twist Updates")
 
     plot_with_conf_bounds(logZ_midpoint_estimate - np.transpose(np.stack(f_q_estimates_list_of_arrays)), x_range, label="KL(q||sigma) (Best LogZ Bounds Midpoint)")
-    plot_with_conf_bounds(np.transpose(np.stack(g_q_estimates_list_of_arrays)) - logZ_midpoint_estimate, x_range, label=f"KL(sigma||q) (Best LogZ Bounds Midpoint){only_one_post}")
+    plot_with_conf_bounds(np.transpose(np.stack(g_q_estimates_list_of_arrays)) - logZ_midpoint_estimate, x_range, label=f"KL(sigma||q) (Best LogZ Bounds Midpoint) ({numpost} True Post.)")
 
     # plt.xlabel(f"Epoch")
     plt.ylabel(f"KL Divergence")
@@ -2847,7 +2874,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
 
     rewardModel = None
     tokenizer_RM = None
-    if rm_type == "toxicity_threshold":
+    if rm_type in ["toxicity_threshold", "exp_beta_toxicity"]:
         from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
         assert huggingface
         tokenizer_RM = AutoTokenizer.from_pretrained(
@@ -2924,7 +2951,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             prompts = [[0, 1, 2, 3, 4, 5]]
         elif rm_type == "only_contains_token" or rm_type == "contains_token_eps":
             prompts = [[0, 1]]
-        elif rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
+        elif rm_type in ["exp_beta_rew_p_continuation", "exp_beta_toxicity", "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
             prompts = [[0, 1]]
             indices_of_continuation = [6, 8] # [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
             if rm_type == "hard_p_continuation":
@@ -3485,6 +3512,10 @@ def main():
 
     highest_log_prob = - jnp.inf
     highest_log_prob_sample = None
+    highest_score = - jnp.inf
+    highest_score_sample = None
+    lowest_score = jnp.inf
+    lowest_score_sample = None
 
     last_ckpt_epoch = -1
 
@@ -3594,28 +3625,69 @@ def main():
             replay_buffer_log_w_ts = replay_buffer_log_w_ts_by_prompt[prompt_num]
             replay_buffer_log_prob_eval = replay_buffer_log_prob_eval_by_prompt[prompt_num]
             replay_buffer_log_phi_final_eval = replay_buffer_log_phi_final_eval_by_prompt[prompt_num]
+            log_true_final_twist = log_true_final_twists[prompt_num]
 
-            if args.rm_type == "exp_beta_rew_p_continuation" and args.rejection_sample_naive:
+            if args.rejection_sample_naive:
                 rng_key, sk = jax.random.split(rng_key)
                 p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
                                                           prompt,
-                                                          args.output_len, args.n_twist,
+                                                          args.output_len,
+                                                          args.n_twist,
                                                           huggingface_model=huggingface_model)
-                log_prob_cont_p_samples = log_reward_model_p_of_continuation(
-                    p_samples, cfg_p, params_p, indices_of_continuation,
-                    huggingface_model=huggingface_model,
-                    return_log_w_no_temp=True)
-                max_log_prob = jnp.max(log_prob_cont_p_samples)
-                if max_log_prob > highest_log_prob:
-                    highest_log_prob = max_log_prob
-                    max_log_prob_samples = p_samples[(log_prob_cont_p_samples - max_log_prob) == 0]
-                    highest_log_prob_sample = max_log_prob_samples[0]
-                # print(max_log_prob_samples)
-                # print(max_log_prob_samples[0])
-                print(max_log_prob)
-                print(highest_log_prob)
-                print(highest_log_prob_sample)
-                continue
+                if args.rm_type == "exp_beta_rew_p_continuation":
+                    log_prob_cont_p_samples = log_reward_model_p_of_continuation(
+                        p_samples, cfg_p, params_p, indices_of_continuation,
+                        huggingface_model=huggingface_model,
+                        return_log_w_no_temp=True)
+                    max_log_prob = jnp.max(log_prob_cont_p_samples)
+                    if max_log_prob > highest_log_prob:
+                        highest_log_prob = max_log_prob
+                        max_log_prob_samples = p_samples[(log_prob_cont_p_samples - max_log_prob) == 0]
+                        highest_log_prob_sample = max_log_prob_samples[0]
+                    # print(max_log_prob_samples)
+                    # print(max_log_prob_samples[0])
+                    print(max_log_prob)
+                    print(highest_log_prob)
+                    print(highest_log_prob_sample)
+                    continue
+                elif args.rm_type == "exp_beta_toxicity":
+                    score = log_true_final_twist(p_samples) / args.beta_temp # because log e ^ beta r is just beta r, then divide by beta returns r
+
+                    if args.beta_temp > 0:
+                        max_score = jnp.max(score)
+                        if max_score > highest_score:
+                            highest_score = max_score
+                            max_score_samples = p_samples[
+                                (score - max_score) == 0]
+                            highest_score_sample = max_score_samples[0]
+
+                        print(max_score)
+                        print(highest_score)
+                        text_outputs = tokenizer.decode(max_score_samples[0], skip_special_tokens=True)
+                        print(text_outputs)
+                        text_outputs = tokenizer.decode(highest_score_sample, skip_special_tokens=True)
+                        print(text_outputs)
+                    elif args.beta_temp < 0:
+                        min_score = jnp.min(score)
+                        if min_score < lowest_score:
+                            lowest_score = min_score
+                            min_score_samples = p_samples[
+                                (score - min_score) == 0]
+                            lowest_score_sample = min_score_samples[0]
+
+                        print(min_score)
+                        print(lowest_score)
+                        text_outputs = tokenizer.decode(min_score_samples[0], skip_special_tokens=True)
+                        print(text_outputs)
+
+                        text_outputs = tokenizer.decode(lowest_score_sample, skip_special_tokens=True)
+                        print(text_outputs)
+                    else:
+                        raise Exception("Why are we doing beta = 0??")
+
+
+                    continue
+
 
             prompt_len = prompt.shape[-1]
             log_true_final_twist = log_true_final_twists[prompt_num]
@@ -3827,10 +3899,15 @@ def main():
                         if args.rm_type in ["contains_continuation",
                                             "p_continuation",
                                             "hard_p_continuation",
-                                            "p_last_tokens", "p_continuation_one_post"]:
+                                            "p_last_tokens", "p_continuation_one_post", "exp_beta_toxicity"]:
+                            # TODO DEC: should clean this up by having various config flags for each experiment setting:
+                            # E.g. has_true_posterior_samples, then whenever that's true, you do the bunch of code related to that
+                            # And then do_inspect_results, for which you do the below
+                            # use_partial_jit
+                            # etc.
 
                             # Inspect the samples also in this setting
-                            rng_key, aux_info = experiment_cfg.inspect_prob_of_continuation(
+                            rng_key, aux_info = experiment_cfg.inspect_results(
                                 rng_key, prompt, cfg_p, params_p, cfg_twist,
                                 params_twist, log_true_final_twist,
                                 args.output_len,
@@ -3876,7 +3953,7 @@ def main():
 
 
                     elif only_inspect_samples:
-                        rng_key, aux_info = experiment_cfg.inspect_prob_of_continuation(
+                        rng_key, aux_info = experiment_cfg.inspect_results(
                             rng_key, prompt, cfg_p, params_p, cfg_twist,
                             params_twist, log_true_final_twist,
                             args.output_len,
@@ -4161,7 +4238,7 @@ if __name__ == "__main__":
                                  "p_token_last_index", "contains_token",
                                  "only_contains_token", "contains_token_eps",
                                  "exp_beta_rew_p_continuation", "contains_continuation",
-                                 "p_continuation", "toxicity_threshold", "sentiment_threshold",
+                                 "p_continuation", "exp_beta_toxicity", "toxicity_threshold", "sentiment_threshold",
                                  "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"])
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,

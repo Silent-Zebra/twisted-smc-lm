@@ -271,7 +271,7 @@ def log_reward_model_p_of_continuation(
         return log_prob_of_continuation.sum(axis=-1)
     else:
         assert beta_temp is not None
-        return jnp.exp(log_prob_of_continuation.sum(axis=-1)) * beta_temp # in the e^(beta r) formulation, the log is going to be just beta * r
+        return jnp.exp(log_prob_of_continuation.sum(axis=-1)) * beta_temp # in the phi = e^(beta r) formulation, the log phi is going to be just beta * r
 
 
 def curried_log_reward_model_p_of_continuation(cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None):
@@ -456,6 +456,7 @@ def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
         # do_reshape = True
         # seq = seq.reshape(-1, seq.shape[-1])
 
+    seq = jax.lax.stop_gradient(seq)
     text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
     tokens = tokenizer_RM(text_outputs,
                           truncation=True,
@@ -475,24 +476,7 @@ def curried_reward_model_toxicity(rewardModel, tokenizer_RM, tokenizer):
     return new_rm
 
 def reward_model_toxicity_threshold(seq, rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold):
-    if len(seq.shape) == 3:
-        raise NotImplementedError
-        # original_shape = seq.shape
-        # do_reshape = True
-        # seq = seq.reshape(-1, seq.shape[-1])
-
-    seq = jax.lax.stop_gradient(seq)
-    text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
-    tokens = tokenizer_RM(text_outputs,
-                          truncation=True,
-                          padding=True,
-                          max_length=512,
-                          return_token_type_ids=False,
-                          return_tensors="np",
-                          return_attention_mask=True)
-
-    score = get_toxicity_score(tokens, rewardModel)
-
+    score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer)
     if pos_threshold:
         return (score > threshold)
     else:
@@ -504,20 +488,18 @@ def curried_log_toxicity_threshold(rewardModel, tokenizer_RM, tokenizer, thresho
         return jnp.log(reward_model_toxicity_threshold(seq, rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold) + eps)
     return new_rm
 
-# def curried_reward_model_toxicity_threshold(rewardModel, tokenizer_RM, tokenizer, threshold=0, pos_threshold=True):
-#     def new_rm(seq):
-#         return reward_model_toxicity_threshold(seq, rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
-#     return new_rm
 
-# # Note that jax.pure_callback requires a fixed size known in advance, however since we can pass in the padded sequences, then that size is just whatever the final padded size is
-# def reward_model_toxicity_threshold_w_callback(curried_rm):
-#     def new_rm_fn(seq):
-#         # print(seq.shape)
-#         result_shape = jax.core.ShapedArray(seq.shape[:-1], dtype=jnp.float32)
-#         # print(result_shape)
-#         return jax.pure_callback(curried_rm, result_shape, seq)
-#     return new_rm_fn
+def log_exp_beta_toxicity(
+    seq, rewardModel, tokenizer_RM, tokenizer, beta_temp,
+):
+    score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer)
 
+    return score * beta_temp # in the phi = e^(beta r) formulation (here r = score), the log phi is going to be just beta * r
+
+def curried_log_exp_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_temp):
+    def new_rm(seq):
+        return log_exp_beta_toxicity(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp)
+    return new_rm
 
 def get_sentiment_score(tokens, rewardModel):
     classification_logits = rewardModel(**tokens)[0]
@@ -807,6 +789,14 @@ def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indices_of_
 
     return log_true_final_twists, None, None
 
+
+
+def build_exp_beta_toxicity_twists(jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp):
+    log_true_final_twists = []
+    for jnp_prompt in jnp_prompts:
+        log_true_final_twist = curried_log_exp_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_temp)
+        log_true_final_twists.append(log_true_final_twist)
+    return log_true_final_twists, None, None
 
 
 def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indices_of_continuation, output_len,
