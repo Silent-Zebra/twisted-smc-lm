@@ -3655,10 +3655,10 @@ def main():
 
                     if args.beta_temp > 0:
                         max_score = jnp.max(score)
+                        max_score_samples = p_samples[
+                            (score - max_score) == 0]
                         if max_score > highest_score:
                             highest_score = max_score
-                            max_score_samples = p_samples[
-                                (score - max_score) == 0]
                             highest_score_sample = max_score_samples[0]
 
                         print(max_score)
@@ -3669,10 +3669,10 @@ def main():
                         print(text_outputs)
                     elif args.beta_temp < 0:
                         min_score = jnp.min(score)
+                        min_score_samples = p_samples[
+                            (score - min_score) == 0]
                         if min_score < lowest_score:
                             lowest_score = min_score
-                            min_score_samples = p_samples[
-                                (score - min_score) == 0]
                             lowest_score_sample = min_score_samples[0]
 
                         print(min_score)
