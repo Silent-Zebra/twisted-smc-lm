@@ -641,7 +641,7 @@ class ExperimentConfig:
                     output_len, n_samples,
                     self.n_vocab, smc_procedure_type=self.smc_procedure_type,
                     prepend_tokens_for_twists=prepend_tokens_for_twists,
-                    condition_twist_on_tokens=False,
+                    condition_twist_on_tokens=None,
                     # TODO later may need to set up the conditional beta...
                     token_of_interest_as_int=token_of_interest_as_int,
                     proposal_is_p=proposal_is_p,
