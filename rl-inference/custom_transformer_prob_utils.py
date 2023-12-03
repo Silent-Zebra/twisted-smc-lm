@@ -1160,6 +1160,25 @@ def iwae_backward(
     return target_dist_weights
 
 
+def get_f_q_estimate(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                                  output_len, n_smc_samples, n_vocab,
+                                  prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
+    (log_w_t, _, _), full_seq_from_twist_since_no_resample = smc_procedure(
+        rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        log_true_final_twist, output_len, n_smc_samples,
+        smc_procedure_type=smc_procedure_type,
+        get_intermediate_sample_history_based_on_learned_twists=False,
+        n_vocab=n_vocab,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        condition_twist_on_tokens=condition_twist_on_tokens,
+        token_of_interest_as_int=token_of_interest_as_int,
+        resample=False,  # NO resample is very important here
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+
+    f_q_estimate = log_w_t.mean()
+    return f_q_estimate
+
+
 def iwae_forward_and_backward(rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                                   output_len, n_smc_samples, n_vocab,
                                   prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):

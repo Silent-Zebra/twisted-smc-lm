@@ -38,7 +38,8 @@ from custom_transformer import transformer_init_params
 from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_final, smc_scan_iter_final, \
     smc_procedure, calc_analytic_sigma_vals, \
     get_analytic_sigma_sample, upper_bound_log_Z_sigma_estimate, \
-    iwae_forward_and_backward, iwae_backward, smc_backward, stochastic_transformer_sample, evaluate_log_p_selected_tokens, \
+    iwae_forward_and_backward, iwae_backward, smc_backward, stochastic_transformer_sample, \
+    evaluate_log_p_selected_tokens, get_f_q_estimate, \
     evaluate_normalized_log_q_1_to_t
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, \
     tokens_to_jnp_indices, ordered_token_list, batch_reward_model, build_log_true_final_twists_positive_rew, \
@@ -70,6 +71,9 @@ records_labels_list = ["True Log Z",
                        "KL(q||sigma) Upper Bound Estimate (SMC)",
                        "KL(q||sigma) Lower Bound Estimate (SMC)",
                        ] # TODO Sep 16 make dynamic later
+
+
+n_seeds = 10
 
 
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
@@ -553,7 +557,7 @@ class ExperimentConfig:
 
         prompt_len = prompt.shape[-1]
 
-        n_samples_to_print = 10
+        n_samples_to_print = 100
 
         aux_info = None
 
@@ -612,6 +616,7 @@ class ExperimentConfig:
                 print(score_proposal_samples.mean())
                 print(score_p_samples.mean())
 
+
             if huggingface_model:
                 text_outputs = tokenizer.batch_decode(smc_samples,
                                                       skip_special_tokens=True)
@@ -625,6 +630,26 @@ class ExperimentConfig:
                 if huggingface_model:
                     for s in text_outputs[:n_samples_to_print]:
                         print(s)
+
+            avg_f_q_estimate = 0.
+            for i in range(n_seeds):
+                rng_key, sk_i = jax.random.split(rng_key)
+                f_q_estimate = get_f_q_estimate(
+                    sk_i, prompt, cfg_p,
+                    params_p, cfg_twist,
+                    params_twist, log_true_final_twist,
+                    output_len, n_samples,
+                    self.n_vocab, smc_procedure_type=self.smc_procedure_type,
+                    prepend_tokens_for_twists=prepend_tokens_for_twists,
+                    condition_twist_on_tokens=False,
+                    # TODO later may need to set up the conditional beta...
+                    token_of_interest_as_int=token_of_interest_as_int,
+                    proposal_is_p=proposal_is_p,
+                    huggingface_model=huggingface_model)
+                avg_f_q_estimate += f_q_estimate
+            avg_f_q_estimate /= n_seeds
+
+            print(f"Avg F_q Estimate: {avg_f_q_estimate}")
 
         elif self.rm_type == "p_last_tokens":
             p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p,
@@ -2132,7 +2157,6 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     iwae_ubs_across_seeds = []
     smc_lbs_across_seeds = []
     smc_ubs_across_seeds = []
-    n_seeds = 10
     print(f"Sampling Runs Starting")
     print(f"TIME: {time.time() - start}", flush=True)
 
