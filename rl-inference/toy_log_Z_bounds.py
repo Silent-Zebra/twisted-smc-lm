@@ -510,7 +510,32 @@ class ExperimentConfig:
             # Call using condition_twist_on_token should do something like:
             # posterior_samples = posterior_samples_w_condition_tokens[:, :prompt_len + output_len]
             # condition_twist_on_token = posterior_samples_w_condition_tokens[:, prompt_len + output_len:]
-            pass
+
+            # One option here is I just pass in the condition twist on tokens that is different for each sample
+            # Then in the code that takes the true_posterior_sample[index], it also takes the condition_twist_on_tokens[index] and broadcasts that and then uses that (if the condition twist_on_tokens is not None)
+            true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
+                prompt_num]
+            true_posterior_samples_without_condition_tokens = true_posterior_samples[:,:-self.num_last_tokens_to_condition_on]
+            condition_twist_on_tokens = true_posterior_samples[:,-self.num_last_tokens_to_condition_on:]
+            rng_key, sk = jax.random.split(rng_key)
+
+            plot_over_time_list = plot_logZ_bounds(sk, true_posterior_samples_without_condition_tokens,
+                                                   None,
+                                                   prompt, prompt_len,
+                                                   output_len, cfg_p,
+                                                   params_p, cfg_twist,
+                                                   params_twist,
+                                                   log_true_final_twist, start,
+                                                   hist_token_index, epoch,
+                                                   true_log_z,
+                                                   plot_over_time_list,
+                                                   smc_procedure_type=self.smc_procedure_type,
+                                                   prepend_tokens_for_twists=self.prepend_tokens_for_twists,
+                                                   condition_twist_on_tokens=condition_twist_on_tokens,
+                                                   huggingface_model=huggingface_model,
+                                                   proposal_is_p=proposal_is_p,
+                                                   tokenizer=tokenizer
+                                                   )
         else:
             raise NotImplementedError
 
@@ -621,10 +646,8 @@ class ExperimentConfig:
                 text_outputs = tokenizer.batch_decode(smc_samples,
                                                       skip_special_tokens=True)
 
-                # if self.rm_type in ["exp_beta_rew_p_continuation",
-                #                     "p_continuation", "hard_p_continuation",
-                #                     "p_last_tokens", "p_continuation_one_post"]:
-                    # print(intermediate_seq_list[-1])
+
+                # print(intermediate_seq_list[-1])
                 print("INSPECTION OF SMC SAMPLES")
                 # print(smc_samples[:n_samples_to_print])
                 if huggingface_model:
@@ -708,8 +731,7 @@ class ExperimentConfig:
             if huggingface_model:
                 text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
 
-                # if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
-                    # print(intermediate_seq_list[-1])
+                # print(intermediate_seq_list[-1])
                 print("INSPECTION OF Sigma SAMPLES")
                 print(p_samples[:n_samples_to_print])
                 if huggingface_model:
@@ -718,9 +740,8 @@ class ExperimentConfig:
 
                 text_outputs = tokenizer.batch_decode(proposal_samples, skip_special_tokens=True)
 
-                # if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation",
-                #                     "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
-                    # print(intermediate_seq_list[-1])
+
+                # print(intermediate_seq_list[-1])
                 print("INSPECTION OF Proposal SAMPLES")
                 print(proposal_samples[:n_samples_to_print])
                 if huggingface_model:
@@ -1073,17 +1094,27 @@ def inspect_and_record_evidence_setting_for_index(
     n_test_smc_samples, token_of_interest_as_int, true_posterior_samples,
     true_log_z, analytic_kl_q_sigma, smc_procedure_type,
     proposal_is_p=False, prepend_tokens_for_twists=False,
-    condition_twist_on_tokens=None, huggingface_model=None):
+    condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0):
 
     assert true_posterior_samples.shape[0] > 0
 
     print("NUM true posterior samples:")
     print(true_posterior_samples.shape[0])
 
-    rng_key, sk_unif = jax.random.split(rng_key)
-    index_of_posterior_sample_to_use = jax.random.randint(sk_unif, (1,), 0, true_posterior_samples.shape[0]).squeeze()
+    # rng_key, sk_unif = jax.random.split(rng_key)
+    # index_of_posterior_sample_to_use = jax.random.randint(sk_unif, (1,), 0, true_posterior_samples.shape[0]).squeeze()
+    # posterior_sample = true_posterior_samples[index_of_posterior_sample_to_use]
+    # Deterministic may be better so that you always have a consistent set against which you're evaluating at each epoch...
+    posterior_sample = true_posterior_samples[index_of_true_posterior_sample]
 
-    posterior_sample = true_posterior_samples[index_of_posterior_sample_to_use]
+    if condition_twist_on_tokens is not None:
+        print("BE CAREFUL: results here are going to use one true posterior and one conditioning continuation at a time, but the results in the plot_logZ for the g_q estimate may use all the posterior estimates. This means the f_q estimate may average over fewer samples than the g_q estimate")
+        # What I'm doing here is: if we want to do n>1, essentially I take the conditioning tokens associated with the true posterior sample
+        # and then I'm broacasting it to however many n samples we want, so that we can do SMC or whatever we want with everything conditioned on the same set of tokens
+        condition_twist_on_tokens_for_chosen_posterior_sample = condition_twist_on_tokens[index_of_true_posterior_sample]
+        print(condition_twist_on_tokens_for_chosen_posterior_sample.shape)
+        condition_twist_on_tokens_broadcasted = jnp.full((n_test_smc_samples, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens_for_chosen_posterior_sample)
+        print(condition_twist_on_tokens_broadcasted.shape)
 
     # rng_key, sk_i = jax.random.split(rng_key)
     # iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
@@ -1131,7 +1162,7 @@ def inspect_and_record_evidence_setting_for_index(
         params_twist, log_true_final_twist,
         output_len, n_test_smc_samples,
         n_vocab, smc_procedure_type=smc_procedure_type,
-        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
     iwae_lower_bound_estimate = jax.nn.logsumexp(
@@ -1144,19 +1175,22 @@ def inspect_and_record_evidence_setting_for_index(
     print("hihi1")
     jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory1.prof")
 
-    true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
-        true_posterior_samples, log_true_final_twist, cfg_p,
-        params_p, cfg_twist, params_twist, prompt_len,
-        output_len, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-        token_of_interest_as_int=token_of_interest_as_int,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+    # true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
+    #     true_posterior_samples, log_true_final_twist, cfg_p,
+    #     params_p, cfg_twist, params_twist, prompt_len,
+    #     output_len, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+    #     token_of_interest_as_int=token_of_interest_as_int,
+    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+    #
+    # true_one_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
+    #     posterior_sample[None, :], log_true_final_twist, cfg_p,
+    #     params_p, cfg_twist, params_twist, prompt_len,
+    #     output_len, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+    #     token_of_interest_as_int=token_of_interest_as_int,
+    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
-    true_one_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
-        posterior_sample[None, :], log_true_final_twist, cfg_p,
-        params_p, cfg_twist, params_twist, prompt_len,
-        output_len, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-        token_of_interest_as_int=token_of_interest_as_int,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
+    true_all_post_upper_bound_estimate = None
+    true_one_post_upper_bound_estimate = None
 
     # kl_q_sigma_estimate = true_all_post_upper_bound_estimate - lower_bound_estimate
     # print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
@@ -1176,7 +1210,7 @@ def inspect_and_record_evidence_setting_for_index(
         n_test_smc_samples,
         smc_procedure_type=smc_procedure_type,
         n_vocab=n_vocab,
-        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
         token_of_interest_as_int=token_of_interest_as_int,
     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
@@ -1193,7 +1227,7 @@ def inspect_and_record_evidence_setting_for_index(
                                             output_len,
                                             n_test_smc_samples,
                                             n_vocab, smc_procedure_type=smc_procedure_type,
-                                            prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+                                            prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
                                             token_of_interest_as_int=token_of_interest_as_int,
                                             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
 
@@ -2126,9 +2160,9 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     #                         true_posterior_samples,
     #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
     # 1/0
-
-    print("TOKEN OF INTEREST")
-    print(token_of_interest_as_int)
+    if token_of_interest_as_int is not None:
+        print("TOKEN OF INTEREST")
+        print(token_of_interest_as_int)
 
     if not huggingface_model:
 
@@ -2207,8 +2241,11 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 n_test_smc_samples,
                 token_of_interest_as_int, true_posterior_samples,
                 true_log_z, analytic_kl_q_sigma, smc_procedure_type,
-                proposal_is_p, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-            huggingface_model=huggingface_model)
+                proposal_is_p, prepend_tokens_for_twists=prepend_tokens_for_twists,
+                condition_twist_on_tokens=condition_twist_on_tokens,
+                huggingface_model=huggingface_model,
+                index_of_true_posterior_sample=seed
+            )
             (true_log_z, true_one_post_upper_bound_estimate,
              true_all_post_upper_bound_estimate,
              iwae_upper_bound_estimate, iwae_lower_bound_estimate,
@@ -4340,5 +4377,9 @@ if __name__ == "__main__":
         assert args.num_last_tokens_to_condition_on > 0
 
     print(args.n_test_smc_samples)
+
+    if args.rm_type == "p_last_tokens":
+        n_samples_for_plots = [1, 32]
+        n_seeds = 30
 
     main()

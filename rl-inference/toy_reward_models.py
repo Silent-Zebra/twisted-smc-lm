@@ -867,6 +867,7 @@ def build_p_of_continuation_one_post_twists(
     tokenizer=None, huggingface_model=None,):
     # Like build_p_of_continuation_twists except instead of a specific continuation
     # we just take one sample per prompt, and whatever the last num_tokens_in_continuation tokens are, that's our continuation
+    # That is, this is still us having a particular continuation that we are going to test. But it's just one that's drawn from p samples (so that we always have exactly one true posterior sample) instead of us predefining that continuation and having to rejection sample in order to get a true posterior
 
     indices_of_continuations_chosen_by_prompt = []
     log_true_final_twists = []

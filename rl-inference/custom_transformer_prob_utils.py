@@ -1047,14 +1047,14 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
     # print(time.time() - start)
 
     if get_intermediate_sample_history_based_on_learned_twists:
-        if condition_twist_on_tokens is not None:
-            # TODO Oct 29 - the reason I use none is because the final weights are not correctly calculated - need to pass in a concatenated sequence into the true final twist
-            return (None, None, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list, log_w_t_before_resample_list)
+        # This should be fine, shouldn't be needed now
+        # if condition_twist_on_tokens is not None:
+        #     return (None, None, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list, log_w_t_before_resample_list)
         return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list, log_w_t_before_resample_list)
 
-    if condition_twist_on_tokens is not None:
-        # TODO Oct 29 - the reason I use none is because the final weights are not correctly calculated - need to pass in a concatenated sequence into the true final twist
-        return (None, None, log_psi_t_eval_list), full_seq_based_on_true_twist
+    # This should be fine, shouldn't be needed now
+    # if condition_twist_on_tokens is not None:
+    #     return (None, None, log_psi_t_eval_list), full_seq_based_on_true_twist
     return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist
 
 
