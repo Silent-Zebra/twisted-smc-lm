@@ -601,6 +601,8 @@ class ExperimentConfig:
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model)
 
+            proposal_samples = intermediate_seq_list[-1]
+
             p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p,
                                                       prompt,
                                                       output_len, n_samples,
@@ -612,7 +614,7 @@ class ExperimentConfig:
                     huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
                 log_prob_cont_proposal_samples = log_reward_model_p_of_continuation(
-                    intermediate_seq_list[-1], cfg_p, params_p, indices_of_continuation,
+                    proposal_samples, cfg_p, params_p, indices_of_continuation,
                     huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
                 log_prob_cont_p_samples = log_reward_model_p_of_continuation(
@@ -630,7 +632,7 @@ class ExperimentConfig:
                 print(log_prob_cont_p_samples.mean())
             else:
                 score_smc_samples = log_true_final_twist(smc_samples) / args.beta_temp
-                score_proposal_samples = log_true_final_twist(intermediate_seq_list[-1]) / args.beta_temp
+                score_proposal_samples = log_true_final_twist(proposal_samples) / args.beta_temp
                 score_p_samples = log_true_final_twist(p_samples) / args.beta_temp
 
                 print("Scores for: SMC samples, proposal samples, p samples")
@@ -645,15 +647,23 @@ class ExperimentConfig:
 
 
             if huggingface_model:
-                text_outputs = tokenizer.batch_decode(smc_samples,
+                text_outputs_smc = tokenizer.batch_decode(smc_samples,
                                                       skip_special_tokens=True)
-
 
                 # print(intermediate_seq_list[-1])
                 print("INSPECTION OF SMC SAMPLES")
                 # print(smc_samples[:n_samples_to_print])
                 if huggingface_model:
-                    for s in text_outputs[:n_samples_to_print]:
+                    for s in text_outputs_smc[:n_samples_to_print]:
+                        print(s)
+
+                text_outputs_proposal = tokenizer.batch_decode(proposal_samples,
+                                                      skip_special_tokens=True)
+
+                print("INSPECTION OF PROPOSAL SAMPLES")
+                # print(smc_samples[:n_samples_to_print])
+                if huggingface_model:
+                    for s in text_outputs_proposal[:n_samples_to_print]:
                         print(s)
 
             avg_f_q_estimate = 0.
