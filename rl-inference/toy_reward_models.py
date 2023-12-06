@@ -496,10 +496,39 @@ def log_exp_beta_toxicity(
 
     return score * beta_temp # in the phi = e^(beta r) formulation (here r = score), the log phi is going to be just beta * r
 
+def log_exp_beta_toxicity_class_logprob(
+    seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class
+):
+    # Here what we're going to do is set r = log p(c | s) where c is either 0 or 1, toxic or nontoxic, depending on what we want
+    # Then we have phi = e^(beta r) = e^(beta log p(c|s))
+    # The point of this is that when beta = 1, we have phi = e^(log p(c|s)) = p(c|s), so then sigma = p phi = p(s)p(c|s) = p(c,s) = p(s|c)p(c) which is prop. to p(s|c)
+    # That is, for beta=1, this has a natural Bayesian interpretation.
+    # What about when beta = -1? We get phi = 1/e^(log p(c|s)) = 1/p(c|s). Not sure what meaning this has...
+    # Anyway, with phi = e^(beta log p(c|s)), then log phi = beta log p(c|s)
+
+    score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer)
+    nontoxic_class_prob = jax.nn.sigmoid(score)
+
+    if pos_class:
+        log_prob_of_class = jnp.log(nontoxic_class_prob)
+    else:
+        toxic_class_prob = 1 - nontoxic_class_prob
+        log_prob_of_class = jnp.log(toxic_class_prob)
+
+    return log_prob_of_class * beta_temp # in the phi = e^(beta r) formulation (here r = log p(c|s)), the log phi is going to be just beta * r
+
+
 def curried_log_exp_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_temp):
     def new_rm(seq):
         return log_exp_beta_toxicity(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp)
     return new_rm
+
+def curried_log_exp_beta_toxicity_class_logprob(rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class):
+    def new_rm(seq):
+        return log_exp_beta_toxicity_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class)
+    return new_rm
+
+
 
 def get_sentiment_score(tokens, rewardModel):
     classification_logits = rewardModel(**tokens)[0]
@@ -797,6 +826,16 @@ def build_exp_beta_toxicity_twists(jnp_prompts, rewardModel, tokenizer_RM, token
         log_true_final_twist = curried_log_exp_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_temp)
         log_true_final_twists.append(log_true_final_twist)
     return log_true_final_twists, None, None
+
+def build_exp_beta_toxicity_class_logprob_twists(jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class):
+    log_true_final_twists = []
+    for jnp_prompt in jnp_prompts:
+        log_true_final_twist = curried_log_exp_beta_toxicity_class_logprob(rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class)
+        log_true_final_twists.append(log_true_final_twist)
+    return log_true_final_twists, None, None
+
+
+
 
 
 def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indices_of_continuation, output_len,
