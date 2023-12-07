@@ -589,7 +589,7 @@ class ExperimentConfig:
 
         prompt_len = prompt.shape[-1]
 
-        n_samples_to_print = 100
+        n_samples_to_print = n_samples
 
         aux_info = None
 
@@ -725,6 +725,7 @@ class ExperimentConfig:
 
                 print("WEIGHTS OF THE NO-INTERMEDIATE-RESAMPLE SAMPLES")
                 print(jax.lax.stop_gradient(log_w_t_sigma_samples))
+                print(jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples)))
 
 
             avg_f_q_estimate = 0.
@@ -3100,8 +3101,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                     "This man is a",
                     # "This woman is a"
                 ]
-        input_ids_and_mask = tokenizer(prompts, return_tensors="np",
-                                       padding=False)  # What happens if the prompts are different lengths? TODO
+        input_ids_and_mask = tokenizer(prompts, return_tensors="np", padding=False)  # What happens if the prompts are different lengths? TODO
 
         jnp_prompts = input_ids_and_mask['input_ids']
 
