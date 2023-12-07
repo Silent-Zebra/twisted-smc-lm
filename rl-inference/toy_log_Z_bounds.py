@@ -3094,7 +3094,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         else:
             if hface_model_type == "TinyStories":
                 prompts = [
-                    "This is a story about",
+                    "Once upon a time",
                 ]
             else:
                 prompts = [
