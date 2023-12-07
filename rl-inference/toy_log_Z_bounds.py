@@ -663,12 +663,12 @@ class ExperimentConfig:
                     return_log_w_no_temp=True)
 
                 print(
-                    "LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples", flush=True)
+                    "LOG PROB OF CONTINUATION FOR NO-INTERMEDIATE-RESAMPLE: SMC samples, proposal samples, p samples", flush=True)
                 print(log_prob_cont_smc_samples[:n_samples_to_print])
                 print(log_prob_cont_proposal_samples[:n_samples_to_print])
 
                 print(
-                    "Averages of the above for SMC samples, proposal samples, p samples", flush=True)
+                    "Averages of the above FOR NO-INTERMEDIATE-RESAMPLE for SMC samples, proposal samples, p samples", flush=True)
                 print(log_prob_cont_smc_samples.mean())
                 print(log_prob_cont_proposal_samples.mean())
 
@@ -687,6 +687,20 @@ class ExperimentConfig:
                 print(score_smc_samples.mean())
                 print(score_proposal_samples.mean())
                 print(score_p_samples.mean())
+
+                score_smc_samples = log_true_final_twist(
+                    no_intermediate_resample_smc_samples) / args.beta_temp
+                score_proposal_samples = log_true_final_twist(
+                    no_intermediate_resample_proposal_samples) / args.beta_temp
+
+                print("Scores FOR NO-INTERMEDIATE-RESAMPLE: SMC samples, proposal samples, p samples")
+                print(score_smc_samples[:n_samples_to_print])
+                print(score_proposal_samples[:n_samples_to_print])
+
+                print(
+                    "Averages of the above FOR NO-INTERMEDIATE-RESAMPLE SMC samples, proposal samples, p samples")
+                print(score_smc_samples.mean())
+                print(score_proposal_samples.mean())
 
 
             if huggingface_model:
