@@ -33,6 +33,8 @@ matplotlib.use('PDF')
 
 import matplotlib.pyplot as plt
 
+from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
+
 from custom_transformer import transformer_init_params
 
 from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_final, smc_scan_iter_final, \
@@ -49,7 +51,7 @@ from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_comp
     log_reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
     build_toxicity_threshold_twists, build_sentiment_threshold_twists, build_p_of_continuation_twists, \
     build_p_of_last_tokens_twists, log_reward_model_p_of_last_tokens, build_p_of_continuation_one_post_twists, \
-    build_exp_beta_toxicity_twists, build_exp_beta_toxicity_class_logprob_twists
+    build_exp_beta_toxicity_twists, build_exp_beta_toxicity_class_logprob_twists, build_exp_beta_sentiment_class_logprob_twists
 from losses import get_l_ebm_ml_partial_jit, get_l_ebm_ml_jit, \
     get_l_one_total_kl, get_l_rl_based, get_l_dre_sixo, get_mixed_p_q_samples
 
@@ -94,7 +96,7 @@ def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twis
 
 
 class ExperimentConfig:
-    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0):
+    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0, sentiment_class=1):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
         self.beta_temp = beta_temp
@@ -116,19 +118,21 @@ class ExperimentConfig:
         self.num_last_tokens_to_condition_on = num_last_tokens_to_condition_on
 
 
-        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "sentiment_threshold"]:
+        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "sentiment_threshold", "exp_beta_sentiment_class_logprob"]:
             self.smc_procedure_type = "partial_jit"
         else:
             self.smc_procedure_type = "jit"
 
         self.dre_grad_fn = self._get_dre_grad_fn()
 
+        self.sentiment_class = sentiment_class - 1 # This is important because we need 0 based indexing, ie 0,1,2,3,4. Why not just use those as the args? Because the stars are 1,2,3,4,5
+
 
 
 
     def _get_dre_grad_fn(self):
         get_l_ebm_fn = get_l_ebm_ml_jit
-        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "sentiment_threshold"]:
+        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "sentiment_threshold", "exp_beta_sentiment_class_logprob"]:
             get_l_ebm_fn = get_l_ebm_ml_partial_jit
 
         if self.twist_learn_type == "ebm_old":
@@ -314,7 +318,8 @@ class ExperimentConfig:
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
         elif self.rm_type in ["exp_beta_rew_p_continuation", "exp_beta_toxicity",
-                              "exp_beta_toxicity_class_logprob", "contains_continuation",
+                              "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob",
+                              "contains_continuation",
                               "toxicity_threshold", "sentiment_threshold",
                               "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
             # token_of_interest_as_int = index_of_token_contained
@@ -588,7 +593,8 @@ class ExperimentConfig:
 
         aux_info = None
 
-        if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob"]:
+        if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation",
+                            "exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"]:
 
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(
                 sk1, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -607,6 +613,20 @@ class ExperimentConfig:
                                                       prompt,
                                                       output_len, n_samples,
                                                       huggingface_model=huggingface_model)
+
+            _, no_intermediate_resample_smc_samples, (intermediate_seq_list2, _, _) = smc_procedure(
+                sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, # actually reusing the same subkey here might be interesting, see if you can see some commonalities
+                log_true_final_twist, output_len, n_samples,
+                smc_procedure_type=self.smc_procedure_type,
+                n_vocab=self.n_vocab,
+                get_intermediate_sample_history_based_on_learned_twists=True,
+                prepend_tokens_for_twists=prepend_tokens_for_twists,
+                token_of_interest_as_int=token_of_interest_as_int,
+                resample=False,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model)
+
+            no_intermediate_resample_proposal_samples = intermediate_seq_list2[-1]
 
             if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation"]:
                 log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
@@ -630,6 +650,29 @@ class ExperimentConfig:
                 print(log_prob_cont_smc_samples.mean())
                 print(log_prob_cont_proposal_samples.mean())
                 print(log_prob_cont_p_samples.mean())
+
+
+                log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
+                    no_intermediate_resample_smc_samples, cfg_p, params_p, indices_of_continuation,
+                    huggingface_model=huggingface_model,
+                    return_log_w_no_temp=True)
+
+                log_prob_cont_proposal_samples = log_reward_model_p_of_continuation(
+                    no_intermediate_resample_proposal_samples, cfg_p, params_p, indices_of_continuation,
+                    huggingface_model=huggingface_model,
+                    return_log_w_no_temp=True)
+
+                print(
+                    "LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples")
+                print(log_prob_cont_smc_samples[:n_samples_to_print])
+                print(log_prob_cont_proposal_samples[:n_samples_to_print])
+
+                print(
+                    "Averages of the above for SMC samples, proposal samples, p samples")
+                print(log_prob_cont_smc_samples.mean())
+                print(log_prob_cont_proposal_samples.mean())
+
+
             else:
                 score_smc_samples = log_true_final_twist(smc_samples) / args.beta_temp
                 score_proposal_samples = log_true_final_twist(proposal_samples) / args.beta_temp
@@ -653,18 +696,30 @@ class ExperimentConfig:
                 # print(intermediate_seq_list[-1])
                 print("INSPECTION OF SMC SAMPLES")
                 # print(smc_samples[:n_samples_to_print])
-                if huggingface_model:
-                    for s in text_outputs_smc[:n_samples_to_print]:
-                        print(s)
+                for s in text_outputs_smc[:n_samples_to_print]:
+                    print(s)
 
                 text_outputs_proposal = tokenizer.batch_decode(proposal_samples,
                                                       skip_special_tokens=True)
 
                 print("INSPECTION OF PROPOSAL SAMPLES")
                 # print(smc_samples[:n_samples_to_print])
-                if huggingface_model:
-                    for s in text_outputs_proposal[:n_samples_to_print]:
-                        print(s)
+                for s in text_outputs_proposal[:n_samples_to_print]:
+                    print(s)
+
+                text_outputs_smc_no_intermediate_resample = tokenizer.batch_decode(no_intermediate_resample_smc_samples,
+                                                          skip_special_tokens=True)
+
+                print("INSPECTION OF NO-INTERMEDIATE-RESAMPLE SMC SAMPLES")
+                for s in text_outputs_smc_no_intermediate_resample[:n_samples_to_print]:
+                    print(s)
+
+                text_outputs_proposal_no_intermediate_resample = tokenizer.batch_decode(no_intermediate_resample_proposal_samples,
+                                                               skip_special_tokens=True)
+
+                print("INSPECTION OF NO-INTERMEDIATE-RESAMPLE PROPOSAL SAMPLES")
+                for s in text_outputs_proposal_no_intermediate_resample[:n_samples_to_print]:
+                    print(s)
 
             avg_f_q_estimate = 0.
             for i in range(n_seeds):
@@ -942,6 +997,16 @@ class ExperimentConfig:
                 = build_exp_beta_toxicity_class_logprob_twists(
                 jnp_prompts, rewardModel, tokenizer_RM, tokenizer,
                 beta_temp=self.beta_temp, pos_class=pos_threshold
+            )
+            print(log_true_final_twists)
+            print(indices_of_tokens_chosen_by_prompt)
+            print(true_posterior_samples_by_prompt_and_by_token)
+            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+        elif rm_type == "exp_beta_sentiment_class_logprob":
+            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+                = build_exp_beta_sentiment_class_logprob_twists(
+                jnp_prompts, rewardModel, tokenizer_RM, tokenizer,
+                beta_temp=self.beta_temp, class_num=self.sentiment_class
             )
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
@@ -2624,12 +2689,13 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
               load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
               num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
               num_samples_if_only_collect_true_posterior_samples=100,
-              load_posterior_samples=False, load_prefix_posterior_samples=None):
+              load_posterior_samples=False, load_prefix_posterior_samples=None, sentiment_class=1):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
                                       beta_temp=beta_temp,
-                                      num_last_tokens_to_condition_on=num_last_tokens_to_condition_on)
+                                      num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
+                                      sentiment_class=sentiment_class)
 
     rng_key = jax.random.PRNGKey(seed)
 
@@ -2948,7 +3014,6 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
     rewardModel = None
     tokenizer_RM = None
     if rm_type in ["toxicity_threshold", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob"]:
-        from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
         assert huggingface
         tokenizer_RM = AutoTokenizer.from_pretrained(
             "nicholasKluge/ToxicityModel")
@@ -2967,7 +3032,6 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                 "./toxicityModelFlax")
             print("Loaded model")
     elif rm_type == "sentiment_threshold":
-        from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
         assert huggingface
         tokenizer_RM = AutoTokenizer.from_pretrained(
             "m-aamir95/finetuning-sentiment-classification-model-with-amazon-appliances-data")
@@ -2982,6 +3046,19 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             print("Loading model")
             rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(
                 "./sentimentModelFlax")
+            print("Loaded model")
+    elif rm_type == "exp_beta_sentiment_class_logprob":
+        assert huggingface
+        tokenizer_RM = AutoTokenizer.from_pretrained("LiYuan/amazon-review-sentiment-analysis")
+
+        load_pt_model = True
+        if load_pt_model:
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained("LiYuan/amazon-review-sentiment-analysis", from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
+            rewardModel.save_pretrained("./sentimentClassifierFlax")
+        else:
+            print("Loading model")
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "./sentimentClassifierFlax")
             print("Loaded model")
 
     indices_of_continuation = None
@@ -3003,15 +3080,20 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             indices_of_continuation = jnp.array(indices_of_continuation, dtype=jnp.int32)
             if rm_type == "p_continuation_one_post":
                 indices_of_continuation = None
-        elif rm_type in ["sentiment_threshold"]:
+        elif rm_type in ["sentiment_threshold", "exp_beta_sentiment_class_logprob"]:
             prompts = [
                 "This product is"
             ]
         else:
-            prompts = [
-                "This man is a",
-                # "This woman is a"
-            ]
+            if hface_model_type == "TinyStories":
+                prompts = [
+                    "This is a story about",
+                ]
+            else:
+                prompts = [
+                    "This man is a",
+                    # "This woman is a"
+                ]
         input_ids_and_mask = tokenizer(prompts, return_tensors="np",
                                        padding=False)  # What happens if the prompts are different lengths? TODO
 
@@ -3024,7 +3106,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             prompts = [[0, 1, 2, 3, 4, 5]]
         elif rm_type == "only_contains_token" or rm_type == "contains_token_eps":
             prompts = [[0, 1]]
-        elif rm_type in ["exp_beta_rew_p_continuation", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
+        elif rm_type in ["exp_beta_rew_p_continuation", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob",
                          "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
             prompts = [[0, 1]]
             indices_of_continuation = [6, 8] # [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
@@ -3551,7 +3633,7 @@ def main():
             args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model,
             args.num_last_tokens_to_condition_on, only_collect_true_posterior_samples=True,
             num_samples_if_only_collect_true_posterior_samples=args.num_samples_if_only_collect_true_posterior_samples,
-            load_posterior_samples=False
+            load_posterior_samples=False, sentiment_class=args.sentiment_class
         )
         print(true_posterior_samples_by_prompt)
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
@@ -3574,7 +3656,7 @@ def main():
         args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
         args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model,
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
-        args.load_prefix_posterior_samples
+        args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class
     )
 
 
@@ -3620,10 +3702,12 @@ def main():
     # Pretrain the final twist in the hopes that this will keep the later updates more grounded...
     if args.pretrain_final_twist: # Doesn't have to be RL, can be used with other twist training as well...
         print("Pretraining Final Twist", flush=True)
-        experiment_cfg_pretrain = ExperimentConfig(n_vocab=args.n_vocab,
-                                          twist_learn_type="pretrain_final_twist_lsq",
-                                          rm_type=args.rm_type,
-                                          beta_temp=args.beta_temp)
+        experiment_cfg_pretrain = ExperimentConfig(
+            n_vocab=args.n_vocab,
+            twist_learn_type="pretrain_final_twist_lsq",
+            rm_type=args.rm_type, beta_temp=args.beta_temp,
+            sentiment_class=args.sentiment_class
+        )
 
         for epoch in range(args.pretrain_twist_epochs):
             if (epoch + 1) % args.print_every == 0:
@@ -3723,7 +3807,7 @@ def main():
                     print(highest_log_prob)
                     print(highest_log_prob_sample)
                     continue
-                elif args.rm_type in ["exp_beta_toxicity", "exp_beta_toxicity_class_logprob"]:
+                elif args.rm_type in ["exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"]:
                     score = log_true_final_twist(p_samples) / args.beta_temp # because log e ^ beta r is just beta r, then divide by beta returns r
 
                     if args.beta_temp > 0:
@@ -3972,7 +4056,8 @@ def main():
                         if args.rm_type in [
                             "contains_continuation", "p_continuation",
                             "hard_p_continuation", "p_last_tokens",
-                            "p_continuation_one_post", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob"]:
+                            "p_continuation_one_post", "exp_beta_toxicity",
+                            "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"]:
                             # TODO DEC: should clean this up by having various config flags for each experiment setting:
                             # E.g. has_true_posterior_samples, then whenever that's true, you do the bunch of code related to that
                             # And then do_inspect_results, for which you do the below
@@ -4311,6 +4396,7 @@ if __name__ == "__main__":
                                  "only_contains_token", "contains_token_eps",
                                  "exp_beta_rew_p_continuation", "contains_continuation",
                                  "p_continuation", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
+                                 "exp_beta_sentiment_class_logprob",
                                  "toxicity_threshold", "sentiment_threshold",
                                  "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"])
 
@@ -4345,6 +4431,8 @@ if __name__ == "__main__":
     parser.add_argument("--threshold", type=float, default=0., help="The threshold for the toxicity score")
     parser.add_argument("--pos_threshold", action="store_true",
                         help="Use a positive (>) threshold for the toxicity threshold reward model. If not set, then uses negative (<) threshold. Now also used for the exp_beta_toxicity_class_logprob; set to true means use the pos class, otherwise we are using the neg class")
+    parser.add_argument("--sentiment_class", type=int, default=1, choices=[1, 2, 3, 4, 5],
+                        help="Only for the sentiment classifier")
 
     parser.add_argument("--tempered_twist", action="store_true", help="Use beta_prop to temper the twists (purpose is to maintain exploration)")
     parser.add_argument("--beta_prop", type=float, help="beta used for temperature scaling ON THE q (smart twist) PROPOSAL (and q/twist weights for SMC); purpose is to serve as interp between p and q sampling; purpose of that is to maintain exploration/avoid immediately focusing on one mode of posterior. Default 1 means just sample from q (p psi), whereas 0 means sample from p only",

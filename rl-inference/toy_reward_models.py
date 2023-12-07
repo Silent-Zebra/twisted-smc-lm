@@ -503,8 +503,6 @@ def log_exp_beta_toxicity_class_logprob(
     # Then we have phi = e^(beta r) = e^(beta log p(c|s))
     # The point of this is that when beta = 1, we have phi = e^(log p(c|s)) = p(c|s), so then sigma = p phi = p(s)p(c|s) = p(c,s) = p(s|c)p(c) which is prop. to p(s|c)
     # That is, for beta=1, this has a natural Bayesian interpretation.
-    # What about when beta = -1? We get phi = 1/e^(log p(c|s)) = 1/p(c|s). Not sure what meaning this has...
-    # Anyway, with phi = e^(beta log p(c|s)), then log phi = beta log p(c|s)
 
     score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer)
     nontoxic_class_prob = jax.nn.sigmoid(score)
@@ -517,6 +515,20 @@ def log_exp_beta_toxicity_class_logprob(
 
     return log_prob_of_class * beta_temp # in the phi = e^(beta r) formulation (here r = log p(c|s)), the log phi is going to be just beta * r
 
+def log_exp_beta_sentiment_class_logprob(
+    seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num
+):
+    # Here what we're going to do is set r = log p(c | s) where c is 1,2,3,4,5 (number of stars)
+    # Then we have phi = e^(beta r) = e^(beta log p(c|s))
+    # Again, when beta = 1, we have phi = e^(log p(c|s)) = p(c|s), so then sigma = p phi = p(s)p(c|s) = p(c,s) = p(s|c)p(c) which is prop. to p(s|c)
+    # That is, for beta=1, this has a natural Bayesian interpretation. TODO perhaps later we can combine some of the other reward model / prob of whatever continuations with this framework where beta=1 automatically captures that
+    # What about when beta = -1? We get phi = 1/e^(log p(c|s)) = 1/p(c|s). We're sort of then applying a modifier to the base model p(s) such that we reduce the probability in accordance with p(c|s), that is, the more likely a string s is to be of class c, the more we reduce its probability - essentially high positive beta approaches sampling the most likely string that matches class c, while very negative beta approaches sampling the string LEAST likely to be of class c. Not necessarily the one most likely to be of any other class (except in the binary classifier case).
+    # Anyway, with phi = e^(beta log p(c|s)), then log phi = beta log p(c|s)
+
+    class_prob = reward_model_sentiment_class_prob(seq, rewardModel, tokenizer_RM, tokenizer, class_num)
+    log_prob_of_class = jnp.log(class_prob)
+    return log_prob_of_class * beta_temp
+
 
 def curried_log_exp_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_temp):
     def new_rm(seq):
@@ -528,6 +540,10 @@ def curried_log_exp_beta_toxicity_class_logprob(rewardModel, tokenizer_RM, token
         return log_exp_beta_toxicity_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class)
     return new_rm
 
+def curried_log_exp_beta_sentiment_class_logprob(rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num):
+    def new_rm(seq):
+        return log_exp_beta_sentiment_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num)
+    return new_rm
 
 
 def get_sentiment_score(tokens, rewardModel):
@@ -555,10 +571,41 @@ def reward_model_sentiment(seq, rewardModel, tokenizer_RM, tokenizer):
 
     return score
 
+def get_sentiment_class_prob(tokens, sentimentClassifier, class_num):
+    classification_logits = sentimentClassifier(**tokens)[0]
+    classification_probs = jax.nn.softmax(classification_logits, axis=-1)
+    class_prob = classification_probs[:, class_num]
+    # Note that the above is equivalent to doing softmax, then inverse sigmoid (is this interesting in any way?)
+    # score = score.squeeze(-1)
+    return class_prob
+
+
+def reward_model_sentiment_class_prob(seq, sentimentClassifier, tokenizer_RM, tokenizer, class_num):
+    if len(seq.shape) == 3:
+        raise NotImplementedError
+
+    text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
+    tokens = tokenizer_RM(text_outputs,
+                          truncation=True,
+                          padding=True,
+                          max_length=512,
+                          return_token_type_ids=False,
+                          return_tensors="np",
+                          return_attention_mask=True)
+
+    class_prob = get_sentiment_class_prob(tokens, sentimentClassifier, class_num)
+
+    return class_prob
+
 def curried_reward_model_sentiment(rewardModel, tokenizer_RM, tokenizer):
     def new_rm(seq):
         return reward_model_sentiment(seq, rewardModel, tokenizer_RM, tokenizer)
     return new_rm
+
+# def curried_log_sentiment_class_prob(sentimentClassifier, tokenizer_RM, tokenizer, class_num):
+#     def new_rm(seq):
+#         return jnp.log(reward_model_sentiment_class_prob(seq, sentimentClassifier, tokenizer_RM, tokenizer, class_num))
+#     return new_rm
 
 def reward_model_sentiment_threshold(seq, rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold):
     if len(seq.shape) == 3:
@@ -835,8 +882,13 @@ def build_exp_beta_toxicity_class_logprob_twists(jnp_prompts, rewardModel, token
     return log_true_final_twists, None, None
 
 
-
-
+def build_exp_beta_sentiment_class_logprob_twists(jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num):
+    log_true_final_twists = []
+    for jnp_prompt in jnp_prompts:
+        log_true_final_twist = curried_log_exp_beta_sentiment_class_logprob(
+            rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num)
+        log_true_final_twists.append(log_true_final_twist)
+    return log_true_final_twists, None, None
 
 def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indices_of_continuation, output_len,
                                    n_samples_at_a_time, tokenizer=None, huggingface_model=None, get_true_posterior_samples=True):
