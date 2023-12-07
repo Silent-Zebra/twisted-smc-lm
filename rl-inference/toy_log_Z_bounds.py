@@ -695,7 +695,7 @@ class ExperimentConfig:
 
                 # print(intermediate_seq_list[-1])
                 print("INSPECTION OF SMC SAMPLES")
-                # print(smc_samples[:n_samples_to_print])
+                print(smc_samples[:n_samples_to_print])
                 for s in text_outputs_smc[:n_samples_to_print]:
                     print(s)
 
@@ -703,7 +703,7 @@ class ExperimentConfig:
                                                       skip_special_tokens=True)
 
                 print("INSPECTION OF PROPOSAL SAMPLES")
-                # print(smc_samples[:n_samples_to_print])
+                print(proposal_samples[:n_samples_to_print])
                 for s in text_outputs_proposal[:n_samples_to_print]:
                     print(s)
 
@@ -711,6 +711,7 @@ class ExperimentConfig:
                                                           skip_special_tokens=True)
 
                 print("INSPECTION OF NO-INTERMEDIATE-RESAMPLE SMC SAMPLES")
+                print(no_intermediate_resample_smc_samples[:n_samples_to_print])
                 for s in text_outputs_smc_no_intermediate_resample[:n_samples_to_print]:
                     print(s)
 
@@ -718,6 +719,7 @@ class ExperimentConfig:
                                                                skip_special_tokens=True)
 
                 print("INSPECTION OF NO-INTERMEDIATE-RESAMPLE PROPOSAL SAMPLES")
+                print(no_intermediate_resample_proposal_samples[:n_samples_to_print])
                 for s in text_outputs_proposal_no_intermediate_resample[:n_samples_to_print]:
                     print(s)
 
