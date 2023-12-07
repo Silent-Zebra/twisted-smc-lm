@@ -614,7 +614,7 @@ class ExperimentConfig:
                                                       output_len, n_samples,
                                                       huggingface_model=huggingface_model)
 
-            _, no_intermediate_resample_smc_samples, (intermediate_seq_list2, _, _) = smc_procedure(
+            (log_w_t_sigma_samples, _, _), no_intermediate_resample_smc_samples, (intermediate_seq_list2, _, _) = smc_procedure(
                 sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, # actually reusing the same subkey here might be interesting, see if you can see some commonalities
                 log_true_final_twist, output_len, n_samples,
                 smc_procedure_type=self.smc_procedure_type,
@@ -641,12 +641,12 @@ class ExperimentConfig:
                     p_samples, cfg_p, params_p, indices_of_continuation,
                     huggingface_model=huggingface_model, return_log_w_no_temp=True)
 
-                print("LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples")
+                print("LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples", flush=True)
                 print(log_prob_cont_smc_samples[:n_samples_to_print])
                 print(log_prob_cont_proposal_samples[:n_samples_to_print])
                 print(log_prob_cont_p_samples[:n_samples_to_print])
 
-                print("Averages of the above for SMC samples, proposal samples, p samples")
+                print("Averages of the above for SMC samples, proposal samples, p samples", flush=True)
                 print(log_prob_cont_smc_samples.mean())
                 print(log_prob_cont_proposal_samples.mean())
                 print(log_prob_cont_p_samples.mean())
@@ -663,12 +663,12 @@ class ExperimentConfig:
                     return_log_w_no_temp=True)
 
                 print(
-                    "LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples")
+                    "LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples", flush=True)
                 print(log_prob_cont_smc_samples[:n_samples_to_print])
                 print(log_prob_cont_proposal_samples[:n_samples_to_print])
 
                 print(
-                    "Averages of the above for SMC samples, proposal samples, p samples")
+                    "Averages of the above for SMC samples, proposal samples, p samples", flush=True)
                 print(log_prob_cont_smc_samples.mean())
                 print(log_prob_cont_proposal_samples.mean())
 
@@ -722,6 +722,10 @@ class ExperimentConfig:
                 print(no_intermediate_resample_proposal_samples[:n_samples_to_print])
                 for s in text_outputs_proposal_no_intermediate_resample[:n_samples_to_print]:
                     print(s)
+
+                print("WEIGHTS OF THE NO-INTERMEDIATE-RESAMPLE SAMPLES")
+                print(jax.lax.stop_gradient(log_w_t_sigma_samples))
+
 
             avg_f_q_estimate = 0.
             for i in range(n_seeds):
