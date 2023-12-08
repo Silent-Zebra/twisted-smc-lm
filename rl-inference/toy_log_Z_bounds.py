@@ -4500,7 +4500,7 @@ if __name__ == "__main__":
     print(args.n_test_smc_samples)
 
     if args.rm_type == "p_last_tokens":
-        n_samples_for_plots = [1, 32]
+        # n_samples_for_plots = [1, 32]
         n_seeds = 30
 
     main()
