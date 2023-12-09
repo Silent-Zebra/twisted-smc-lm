@@ -43,15 +43,7 @@ from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_fi
     iwae_forward_and_backward, iwae_backward, smc_backward, stochastic_transformer_sample, \
     evaluate_log_p_selected_tokens, get_f_q_estimate, \
     evaluate_normalized_log_q_1_to_t
-from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, \
-    tokens_to_jnp_indices, ordered_token_list, batch_reward_model, build_log_true_final_twists_positive_rew, \
-    build_indicator_twists_all_tokens_at_position, reward_model_bad_word, \
-    hist_by_token_index, build_log_p_token_last_pos_twists, build_contains_token_twists, \
-    build_only_contains_token_twists, build_contains_token_eps_twists,\
-    log_reward_model_p_of_continuation, build_rew_p_of_continuation_twists, build_contains_continuation_twists, \
-    build_toxicity_threshold_twists, build_sentiment_threshold_twists, build_p_of_continuation_twists, \
-    build_p_of_last_tokens_twists, log_reward_model_p_of_last_tokens, build_p_of_continuation_one_post_twists, \
-    build_exp_beta_toxicity_twists, build_exp_beta_toxicity_class_logprob_twists, build_exp_beta_sentiment_class_logprob_twists
+from toy_reward_models import *
 from losses import get_l_ebm_ml_partial_jit, get_l_ebm_ml_jit, \
     get_l_one_total_kl, get_l_rl_based, get_l_dre_sixo, get_mixed_p_q_samples
 
@@ -1014,24 +1006,50 @@ class ExperimentConfig:
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
         elif rm_type == "exp_beta_toxicity_class_logprob":
-            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = build_exp_beta_toxicity_class_logprob_twists(
-                jnp_prompts, rewardModel, tokenizer_RM, tokenizer,
-                beta_temp=self.beta_temp, pos_class=pos_threshold
-            )
+            curried_log_true_final_twist_function = curried_log_exp_beta_toxicity_class_logprob
+            # TODO DEC 8 replace this with a 0 1 class system...
+            # TODO DEC 8 COMPLETE CODE OVERHAUL, REMOVE ALL TODOS, REMOVE ALL UNUSED CODE BRANCHES/OLD EXPERIMENTAL PATHS
+            # TODO Make the code clean, avoid repetition, make things look nice, and easy to add new things
+            # TODO DEC 8 UNIT TEST EVERY IMPORTANT THING. REALLY UNIT TEST, TEST EACH INDIVIDUAL COMPONENT TO ENSURE THEY'RE DOING WHAT YOU EXPECT. Check that sentiment makes sense. Check that SMC samples approach true. Etc.
+            if pos_threshold:
+                class_num = 1
+            else:
+                class_num = 0
+
+            if self.beta_temp != 1:
+                get_true_posterior_samples = False
+
+            rng_key, log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token = \
+                build_exp_beta_twists(
+                    rng_key, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model,
+                    curried_log_true_final_twist_function, jnp_prompts, rewardModel,
+                    tokenizer_RM, tokenizer, self.beta_temp, class_num, get_true_posterior_samples
+                )
+
             print(log_true_final_twists)
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
         elif rm_type == "exp_beta_sentiment_class_logprob":
-            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = build_exp_beta_sentiment_class_logprob_twists(
-                jnp_prompts, rewardModel, tokenizer_RM, tokenizer,
-                beta_temp=self.beta_temp, class_num=self.sentiment_class
-            )
-            print(log_true_final_twists)
-            print(indices_of_tokens_chosen_by_prompt)
-            print(true_posterior_samples_by_prompt_and_by_token)
+            if self.beta_temp != 1:
+                get_true_posterior_samples = False
+            curried_log_true_final_twist_function = curried_log_exp_beta_sentiment_class_logprob
+            rng_key, log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token = \
+                build_exp_beta_twists(
+                    rng_key, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model,
+                    curried_log_true_final_twist_function, jnp_prompts, rewardModel,
+                    tokenizer_RM, tokenizer, self.beta_temp, self.sentiment_class, get_true_posterior_samples
+                )
+
+            # log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+            #     = build_exp_beta_sentiment_class_logprob_twists(
+            #     jnp_prompts, rewardModel, tokenizer_RM, tokenizer,
+            #     beta_temp=self.beta_temp, class_num=self.sentiment_class
+            # )
+            # print(log_true_final_twists)
+            # print(indices_of_tokens_chosen_by_prompt)
+            # print(true_posterior_samples_by_prompt_and_by_token)
+
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
         elif rm_type == "p_continuation" or rm_type == "hard_p_continuation":
             assert indices_of_continuation is not None
@@ -3170,22 +3188,12 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         while not enough_samples:
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = experiment_cfg.get_log_true_final_twists(sk, jnp_prompts,
-                                                           cfg_p,
-                                                           params_p,
-                                                           rm_type,
-                                                           indicator_pos_zero_index,
-                                                           output_len,
-                                                           n_true_posterior_samples,
-                                                           huggingface_model,
-                                                           index_of_token_contained,
-                                                           indices_of_continuation,
-                                                           rewardModel,
-                                                           tokenizer_RM,
-                                                           tokenizer,
-                                                           threshold,
-                                                           pos_threshold
-                                                           )
+                = experiment_cfg.get_log_true_final_twists(
+                sk, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
+                output_len, n_true_posterior_samples, huggingface_model,
+                index_of_token_contained, indices_of_continuation, rewardModel,
+                tokenizer_RM, tokenizer,threshold, pos_threshold, get_true_posterior_samples=True
+            )
             if combined_true_posterior_samples is None:
                 combined_true_posterior_samples = true_posterior_samples_by_prompt_and_by_token
             else:
@@ -4343,7 +4351,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--beta1", type=float, help="Adam beta1", default=0.9)
     parser.add_argument("--beta2", type=float, help="Adam beta2", default=0.99)
-    parser.add_argument("--weight_decay", type=float, help="AdamW weight decay", default=0.01)
+    parser.add_argument("--weight_decay", type=float, help="AdamW weight decay", default=0.001)
 
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--print_every", type=int, default=1)
