@@ -3239,145 +3239,6 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         true_posterior_samples_by_prompt_and_by_token = list(x['0'].values())
 
 
-    # # TIME TEST ONLY
-    # from custom_transformer_prob_utils import get_log_psi_all_vocab, \
-    #     evaluate_log_psi_selected_tokens, smc_procedure
-    #
-    # # seqs = jnp.ones((args.n_twist, prompt_len + args.output_len),
-    # #                 dtype=jnp.int32)
-    # prompt = jnp_prompts[0]
-    # prompt_len = prompt.shape[-1]
-    #
-    # log_true_final_twist = log_true_final_twists[0]
-    #
-    # from transformers import FlaxAutoModelForCausalLM
-    # hfacemodel = FlaxAutoModelForCausalLM.from_pretrained(model_config)
-    #
-    # @partial(jax.jit, static_argnames=["hfacemodel"])
-    # def test_generate(sk, hfacemodel, input_ids):
-    #     x = hfacemodel.generate(input_ids=input_ids, max_length=output_len,
-    #                    do_sample=True, prng_key=sk)
-    #     return x
-    #
-    # def test_twist():
-    #     return log_true_final_twist(jnp.ones((args.n_twist, prompt_len + args.output_len), dtype=jnp.int32))
-    #
-    # # @jax.jit
-    # def test_func(params_twist, params_p):
-    #
-    #     # # log_psi_all_vocab = get_log_psi_all_vocab(seqs, cfg_twist, params_twist,
-    #     # #                       prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
-    #     # #                       token_of_interest_as_int=None,
-    #     # #                       huggingface_model=huggingface_model)
-    #     #
-    #     # # log_psi = evaluate_log_psi_selected_tokens(seqs, prompt_len, cfg_twist,
-    #     # #                                            params_twist,
-    #     # #                                            prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
-    #     # #                                            huggingface_model=huggingface_model)
-    #     #
-    #     # _, samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
-    #     #                            cfg_twist, params_twist,
-    #     #                            log_true_final_twist,
-    #     #                            args.output_len,
-    #     #                            args.n_test_smc_samples,
-    #     #                            smc_procedure_type="partial_jit",
-    #     #                            n_vocab=args.n_vocab,
-    #     #                            proposal_is_p=args.proposal_is_p,
-    #     #                            huggingface_model=huggingface_model)
-    #
-    #     (_, _, log_psi_t_eval_list_proposal_samples), samples, (
-    #     intermediate_twist_samples_hist,
-    #     intermediate_log_w_t_hist) = smc_procedure(
-    #         rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
-    #         log_true_final_twist, output_len, args.n_test_smc_samples,
-    #         smc_procedure_type="partial_jit",
-    #         get_intermediate_sample_history_based_on_learned_twists=True,
-    #         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model,
-    #         resample=False,
-    #         # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
-    #         resample_for_log_psi_t_eval_list=True,
-    #     )
-    #
-    #     log_psi = evaluate_log_psi_selected_tokens(samples, prompt_len, cfg_twist,
-    #                                                params_twist,
-    #                                                prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
-    #                                                huggingface_model=huggingface_model)
-    #
-    #     # log_psi_all_vocab = huggingface_model(input_ids=jnp.ones((args.n_twist, prompt_len + args.output_len), dtype=jnp.int32),
-    #     #                   ret="twist",
-    #     #                   params_twist_head=params_twist,
-    #     #                   hface_model_params=params_p)
-    #     # return log_psi_all_vocab.sum()
-    #     return log_psi.sum()
-    #
-    #     # return get_l_ebm_ml(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
-    #     #              log_true_final_twist,
-    #     #              output_len, args.n_twist, False,
-    #     #              "partial_jit", token_of_interest_as_int=None,
-    #     #              proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
-    #
-    #     # return experiment_cfg.get_grad_params_twist(
-    #     #         sk, prompt, experiment_cfg.n_vocab, args.n_twist,
-    #     #         output_len, cfg_p, params_p, cfg_twist,
-    #     #         params_twist, log_true_final_twist,
-    #     #         # Only one set of log final twists (for the token we are interested in)
-    #     #         prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=experiment_cfg.condition_twist_on_tokens,
-    #     #         proposal_is_p=args.proposal_is_p,
-    #     #         huggingface_model=huggingface_model
-    #     #     )
-    #
-    # test_grad_fn = jax.grad(test_func, argnums=0)
-    #
-    # batch_prompt = jnp.full((args.n_twist, prompt.shape[0]), prompt)
-    #
-    # @partial(jax.jit, static_argnames=["optimizer_twist"])
-    # def full_fwd_bckwd(params_twist, params_p, optimizer_twist,
-    #                    optim_twist_state):
-    #     grad_params_twist = test_grad_fn(params_twist, params_p)
-    #     params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
-    #         optimizer_twist, grad_params_twist, optim_twist_state,
-    #         params_twist)
-    #     # updates_twist, optim_twist_state = optimizer_twist.update(
-    #     #     grad_params_twist, optim_twist_state, params_twist)
-    #     # params_twist = optax.apply_updates(params_twist, updates_twist)
-    #     return params_twist, optim_twist_state
-    #
-    # # jax.block_until_ready(test_generate(sk, hfacemodel, input_ids=batch_prompt))
-    # jax.block_until_ready(test_twist())
-    # # x = test_generate(sk, hfacemodel, input_ids=batch_prompt)
-    # # print(x)
-    # # 1/0
-    # # jax.block_until_ready(
-    # #     full_fwd_bckwd(params_twist, params_p, optimizer_twist,
-    # #                    optim_twist_state))
-    # # jax.block_until_ready(stochastic_transformer_sample(sk, cfg_p, params_p, prompt, output_len, args.n_twist, huggingface_model))
-    # # jax.block_until_ready(test_func(params_twist, params_p))
-    # print("hihi", flush=True)
-    #
-    #
-    # num_iters = 20
-    # start_time = time.time()
-    # for i in range(num_iters):
-    #     new_time = time.time()
-    #     # params_twist, optim_twist_state = jax.block_until_ready(
-    #     #     full_fwd_bckwd(params_twist, params_p, optimizer_twist,
-    #     #                    optim_twist_state))
-    #     # x = jax.block_until_ready(test_generate(sk, hfacemodel, input_ids=batch_prompt))
-    #     x = jax.block_until_ready(test_twist())
-    #     # x = jax.block_until_ready(
-    #     #     stochastic_transformer_sample(sk, cfg_p, params_p, prompt,
-    #     #                                   output_len, args.n_twist,
-    #     #                                   huggingface_model))
-    #     # jax.block_until_ready(test_func(params_twist, params_p))
-    #
-    #     print(time.time() - new_time, flush=True)
-    # x = time.time() - start_time
-    # print(x)
-    # print(x / num_iters)
-    # 1 / 0
-
-
-
     # records_list_by_prompt_then_twist = []
     # for _ in jnp_prompts:
     #     records_list_by_twist = []
@@ -3897,115 +3758,8 @@ def main():
             else:
                 true_posterior_samples_by_token = None
 
-            # get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist,
-            #                    params_twist, log_true_final_twist,
-            #                    args.output_len, args.n_twist,
-            #                    prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
-            #                    smc_procedure_type=experiment_cfg.smc_procedure_type,
-            #                    token_of_interest_as_int=None,
-            #                    proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model,
-            #                    mixed_p_q_sample=False,
-            #                    exact_expectation=False)
-
-            # from custom_transformer_prob_utils import smc_partial_jit
-            # rng_key, sk = jax.random.split(rng_key)
-            # _, smc_samples = smc_partial_jit(
-            #     sk, prompt, cfg_p, params_p,
-            #     cfg_twist, params_twist,
-            #     log_true_final_twist,
-            #     args.output_len,
-            #     args.n_test_smc_samples,
-            #     proposal_is_p=args.proposal_is_p,
-            #     huggingface_model=huggingface_model)
-            # print(smc_samples)
-            # text_outputs = tokenizer.batch_decode(smc_samples,
-            #                                       skip_special_tokens=True)
-            # print(text_outputs)
-            # print(log_true_final_twist(smc_samples))
-            #
-            # _, smc_samples = smc_procedure(
-            #     sk, prompt, cfg_p, params_p,
-            #     cfg_twist, params_twist,
-            #     log_true_final_twist,
-            #     args.output_len,
-            #     args.n_test_smc_samples,
-            #     n_vocab=args.n_vocab,
-            #     proposal_is_p=args.proposal_is_p,
-            #     huggingface_model=huggingface_model)
-            # print(smc_samples)
-            # text_outputs = tokenizer.batch_decode(smc_samples,
-            #                                       skip_special_tokens=True)
-            # print(text_outputs)
-            # print(log_true_final_twist(smc_samples))
-            # 1/0
-
 
             rng_key, sk = jax.random.split(rng_key)
-            # inspect model prob
-            # n_inspect_samples = 1000
-            # p_samples_for_test = stochastic_transformer_sample(sk, cfg_p,
-            #                                           params_p, prompt,
-            #                                           args.output_len,
-            #                                           n_inspect_samples)
-            #
-            # # contains_only_tokens = check_only_contains_tokens_t_limited(
-            # #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
-            # #     prompt_len + 1, 1)
-            # # print(contains_only_tokens.sum())
-            # # print(contains_only_tokens.sum() / n_inspect_samples)
-            #
-            # for i in range(args.output_len - 1):
-            #     print(i)
-            #     contains_only_tokens = check_only_contains_tokens_t_limited(p_samples_for_test, indices_of_tokens_for_only_contains_token,
-            #                                          prompt_len + i + 1, 1)
-            #     print(contains_only_tokens.sum())
-            #
-            # contains_only_tokens = check_only_contains_tokens_t_limited(
-            #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
-            #     prompt_len , 1)
-            # p_samples_extracted = p_samples_for_test[contains_only_tokens]
-            # print(p_samples_extracted)
-            #
-            # contains_only_tokens = check_only_contains_tokens_t_limited(
-            #     p_samples_extracted, indices_of_tokens_for_only_contains_token,
-            #     prompt_len + 1, 1)
-            # print(contains_only_tokens.sum())
-            # print(contains_only_tokens.sum() / p_samples_extracted.shape[0])
-            #
-            #
-            # contains_only_tokens = check_only_contains_tokens_t_limited(
-            #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
-            #     prompt_len, 2)
-            # p_samples_extracted = p_samples_for_test[contains_only_tokens]
-            # print(p_samples_extracted)
-            #
-            # contains_only_tokens = check_only_contains_tokens_t_limited(
-            #     p_samples_extracted, indices_of_tokens_for_only_contains_token,
-            #     prompt_len + 2, 1)
-            # print(contains_only_tokens.sum())
-            # print(contains_only_tokens.sum() / p_samples_extracted.shape[0])
-            #
-            # # prompt2 = jnp.array([0, 1, 6])
-            # # p_samples_for_test = stochastic_transformer_sample(sk, cfg_p,
-            # #                                                    params_p, prompt2,
-            # #                                                    args.output_len - 1,
-            # #                                                    n_inspect_samples)
-            # # contains_only_tokens = check_only_contains_tokens_t_limited(
-            # #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
-            # #     prompt2.shape[0] , 1)
-            # # print(contains_only_tokens.sum())
-            # #
-            # # prompt3 = jnp.array([0, 1, 8])
-            # # p_samples_for_test = stochastic_transformer_sample(sk, cfg_p,
-            # #                                                    params_p, prompt3,
-            # #                                                    args.output_len - 1,
-            # #                                                    n_inspect_samples)
-            # # contains_only_tokens = check_only_contains_tokens_t_limited(
-            # #     p_samples_for_test, indices_of_tokens_for_only_contains_token,
-            # #     prompt3.shape[0], 1)
-            # # print(contains_only_tokens.sum())
-            # 1/0
-
 
 
             # if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
@@ -4084,7 +3838,7 @@ def main():
                             params_p, cfg_twist,
                             params_twist,
                             log_true_final_twist, start, hist_token_index,
-                            epoch, huggingface_model, args.proposal_is_p,
+                            epoch, huggingface_model, args.proposal_is_p_for_plots,
                             true_posterior_samples_by_prompt_and_by_token,
                             prompt_num, true_log_z, plot_over_time_list, tokenizer
                         )
@@ -4108,7 +3862,7 @@ def main():
                                 indices_of_continuation, tokenizer,
                                 prepend_tokens_for_twists=False,
                                 token_of_interest_as_int=None,
-                                proposal_is_p=args.proposal_is_p,
+                                proposal_is_p=args.proposal_is_p_for_plots,
                                 huggingface_model=huggingface_model)
                             # PASS ON THIS NOW FOR MEMORY REASONS TODO later can reinstate
 
@@ -4154,7 +3908,7 @@ def main():
                             indices_of_continuation, tokenizer,
                             prepend_tokens_for_twists=False,
                             token_of_interest_as_int=None,
-                            proposal_is_p=args.proposal_is_p,
+                            proposal_is_p=args.proposal_is_p_for_plots,
                             huggingface_model=huggingface_model)
 
                     else:
@@ -4269,23 +4023,6 @@ def main():
                             optimizer_twist, optim_twist_state, args.index_of_token_contained,
                             args.tempered_twist, args.beta_prop, replay_buffer, replay_buffer_log_w_ts
                         )
-                # if twist_update != 0:
-                #     update_time = time.time() - new_time
-                #     print(f"UPDATE TIME: {update_time}")
-                #     avg_update_time += update_time
-
-                # new_x = huggingface_model['p'](
-                #     input_ids=jnp_prompts)  # model (embeddings)
-                # new_y, new_z = huggingface_model['twist'](
-                #     input_ids=jnp_prompts, ret="both",
-                #     hface_model_params=params_twist[0],
-                #     params_twist_head=params_twist[1]
-                # )
-                # print(jnp.abs(start_x - new_x).sum())
-                # print(jnp.abs(start_y - new_y).sum())
-                # print(jnp.abs(start_z - new_z).sum())
-            # print("AVG UPDATE TIME")
-            # print(avg_update_time / (args.twist_updates_per_epoch - 1))
 
 
             prompt_num += 1
@@ -4311,10 +4048,6 @@ def main():
                         #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
                 last_ckpt_epoch = epoch
 
-    # print(records_list)
-    # print("---")
-    # print(*records_list)
-    # print("---
 
     save_ckpt_at_end = False
 
@@ -4453,6 +4186,8 @@ if __name__ == "__main__":
     parser.add_argument("--indicator_pos_zero_index", type=int, default=0)
     parser.add_argument("--n_true_posterior_samples", type=int, default=10)
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
+    parser.add_argument("--proposal_is_p_for_plots", action="store_true", help="Use q = p for the proposal ONLY FOR PLOTTING AND INSPECTION")
+
     parser.add_argument("--index_of_token_contained", type=int, default=6, help="for the contains_token environment, the token we are interested in checking")
     parser.add_argument("--beta_temp", type=float, help="beta used for the temperature scaling; right now just for the reward model based on the prob of the continuation",
                         default=1.)
