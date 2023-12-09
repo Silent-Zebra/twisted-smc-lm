@@ -117,7 +117,7 @@ class ExperimentConfig:
 
         self.dre_grad_fn = self._get_dre_grad_fn()
 
-        self.sentiment_class = sentiment_class - 1 # This is important because we need 0 based indexing, ie 0,1,2,3,4. Why not just use those as the args? Because the stars are 1,2,3,4,5
+        self.sentiment_class_zero_index = sentiment_class - 1 # This is important because we need 0 based indexing, ie 0,1,2,3,4. Why not just use those as the args? Because the stars are 1,2,3,4,5
 
 
 
@@ -486,7 +486,8 @@ class ExperimentConfig:
                                                    proposal_is_p=proposal_is_p, tokenizer=tokenizer
                                                    )
         elif args.rm_type in ["contains_continuation", "toxicity_threshold", "sentiment_threshold",
-                              "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
+                              "p_continuation", "hard_p_continuation", "p_continuation_one_post",
+                              "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"]:
             true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
                 prompt_num]
             rng_key, sk = jax.random.split(rng_key)
@@ -1010,6 +1011,9 @@ class ExperimentConfig:
             # TODO DEC 8 replace this with a 0 1 class system...
             # TODO DEC 8 COMPLETE CODE OVERHAUL, REMOVE ALL TODOS, REMOVE ALL UNUSED CODE BRANCHES/OLD EXPERIMENTAL PATHS
             # TODO Make the code clean, avoid repetition, make things look nice, and easy to add new things
+            # MAKE BETTER USE OF THE EXPERIMENT_CFG class. Right now it's a bit underused. Make the code significantly cleaner all around
+            # Maybe even move the experiment_cfg to a separate file.
+            # Try to reduce the number of flags if possible as well. Try to consolidate things where possible.
             # TODO DEC 8 UNIT TEST EVERY IMPORTANT THING. REALLY UNIT TEST, TEST EACH INDIVIDUAL COMPONENT TO ENSURE THEY'RE DOING WHAT YOU EXPECT. Check that sentiment makes sense. Check that SMC samples approach true. Etc.
             if pos_threshold:
                 class_num = 1
@@ -1023,7 +1027,7 @@ class ExperimentConfig:
                 build_exp_beta_twists(
                     rng_key, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model,
                     curried_log_true_final_twist_function, jnp_prompts, rewardModel,
-                    tokenizer_RM, tokenizer, self.beta_temp, class_num, get_true_posterior_samples
+                    tokenizer_RM, tokenizer, self.beta_temp, class_num, get_true_posterior_samples, singledimlogit=True
                 )
 
             print(log_true_final_twists)
@@ -1038,13 +1042,13 @@ class ExperimentConfig:
                 build_exp_beta_twists(
                     rng_key, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model,
                     curried_log_true_final_twist_function, jnp_prompts, rewardModel,
-                    tokenizer_RM, tokenizer, self.beta_temp, self.sentiment_class, get_true_posterior_samples
+                    tokenizer_RM, tokenizer, self.beta_temp, self.sentiment_class_zero_index, get_true_posterior_samples, singledimlogit=False
                 )
 
             # log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
             #     = build_exp_beta_sentiment_class_logprob_twists(
             #     jnp_prompts, rewardModel, tokenizer_RM, tokenizer,
-            #     beta_temp=self.beta_temp, class_num=self.sentiment_class
+            #     beta_temp=self.beta_temp, class_num=self.sentiment_class_zero_index
             # )
             # print(log_true_final_twists)
             # print(indices_of_tokens_chosen_by_prompt)
@@ -1233,6 +1237,7 @@ def inspect_and_record_evidence_setting_for_index(
     # Deterministic may be better so that you always have a consistent set against which you're evaluating at each epoch...
     posterior_sample = true_posterior_samples[index_of_true_posterior_sample]
 
+    condition_twist_on_tokens_broadcasted = None
     if condition_twist_on_tokens is not None:
         print("BE CAREFUL: results here are going to use one true posterior and one conditioning continuation at a time, but the results in the plot_logZ for the g_q estimate may use all the posterior estimates. This means the f_q estimate may average over fewer samples than the g_q estimate")
         # What I'm doing here is: if we want to do n>1, essentially I take the conditioning tokens associated with the true posterior sample
@@ -3886,6 +3891,8 @@ def main():
             elif args.rm_type in ["only_contains_token", "contains_continuation",
                                   "toxicity_threshold", "sentiment_threshold", "p_continuation",
                                   "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
+                true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
+            elif args.rm_type in ["exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"] and true_posterior_samples_by_prompt_and_by_token: # check len(true_posterior_samples_by_prompt_and_by_token) != 0, ie it is not an empty list
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None

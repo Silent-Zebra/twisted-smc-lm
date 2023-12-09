@@ -536,30 +536,44 @@ def curried_log_exp_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_tem
         return log_exp_beta_toxicity(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp)
     return new_rm
 
-def curried_log_exp_beta_toxicity_class_logprob(rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class):
+def curried_log_exp_beta_toxicity_class_logprob(rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index):
     def new_rm(seq):
-        return log_exp_beta_toxicity_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class)
+        return log_exp_beta_toxicity_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index)
     return new_rm
 
-def curried_log_exp_beta_sentiment_class_logprob(rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num):
+def curried_log_exp_beta_sentiment_class_logprob(rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index):
     def new_rm(seq):
-        return log_exp_beta_sentiment_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num)
+        return log_exp_beta_sentiment_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index)
     return new_rm
 
 
-def stochastic_classify(rng_key, seq, sentimentClassifier, tokenizer_RM, tokenizer):
+def stochastic_classify(rng_key, seq, classifier, tokenizer_RM, tokenizer, singledimlogit=False):
     rng_key, subkey = jax.random.split(rng_key)
     text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
     tokens = tokenizer_RM(
         text_outputs, truncation=True, padding=True, max_length=512,
         return_token_type_ids=False, return_tensors="np", return_attention_mask=True
     )
-    classification_logits = sentimentClassifier(**tokens)[0]
-    classes = jax.random.categorical(subkey, classification_logits, shape=classification_logits.shape)
 
-    print(classes)
-    print(classes.shape)
-    1/0
+    if singledimlogit:
+        score = get_toxicity_score(tokens, classifier)
+        nontoxic_class_prob = jax.nn.sigmoid(score)
+        toxic_class_prob = 1 - nontoxic_class_prob
+        classification_logits = jnp.log(jnp.concatenate((toxic_class_prob[:, None], nontoxic_class_prob[:, None]), axis=-1))
+        # print(classification_logits.shape)
+    else:
+        classification_logits = classifier(**tokens)[0]
+
+    classes = jax.random.categorical(subkey, classification_logits, shape=(classification_logits.shape[0],))
+
+    # for i in range(classification_logits.shape[0]):
+    #     print(text_outputs[i])
+    #     print(classification_logits[i])
+    #     print(classes[i])
+    #
+    # print(classes)
+    # print(classes.shape)
+    # 1/0
 
     return rng_key, classes
 
@@ -866,13 +880,13 @@ def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indices_of_
 def build_exp_beta_twists(
     rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
     curried_log_true_final_twist_function, jnp_prompts, rewardModel,
-    tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples=False
+    tokenizer_RM, tokenizer, beta_temp, class_num_zero_index, get_true_posterior_samples=False, singledimlogit=False
 ):
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
 
     for jnp_prompt in jnp_prompts:
-        log_true_final_twist = curried_log_true_final_twist_function(rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num)
+        log_true_final_twist = curried_log_true_final_twist_function(rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index)
         log_true_final_twists.append(log_true_final_twist)
         # prompt_len = jnp.prompt.shape[-1]
 
@@ -892,9 +906,9 @@ def build_exp_beta_twists(
                 # But you have to reject all the ones outside of the class you want, in the current formulation...
                 # Anyway, just set up the check satisfies posterior here, which is now done stochastically...
 
-                rng_key, classes = stochastic_classify(rng_key, p_samples, rewardModel, tokenizer_RM, tokenizer)
+                rng_key, classes = stochastic_classify(rng_key, p_samples, rewardModel, tokenizer_RM, tokenizer, singledimlogit=singledimlogit)
 
-                check_satisfies_posterior = (classes == 1)
+                check_satisfies_posterior = (classes == class_num_zero_index)
 
                 posterior_samples = p_samples[check_satisfies_posterior]
 
