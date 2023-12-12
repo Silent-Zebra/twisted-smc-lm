@@ -2713,7 +2713,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             softmax_twist = True
 
         if hface_nn_twist:
-            print("Using NN for huggingface model twist head")
+            print("Using NN for huggingface model twist head", flush=True)
 
         cfg_p = None
         cfg_twist = None
@@ -3205,6 +3205,9 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
 
         return combined_true_posterior_samples
 
+    print("Starting building final twists and getting posterior samples", flush=True)
+    print(f"TIME: {time.time()}", flush=True)
+
     get_true_posterior_samples = True
     if load_posterior_samples:
         get_true_posterior_samples = False
@@ -3216,6 +3219,9 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         index_of_token_contained, indices_of_continuation, rewardModel,
         tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples
     )
+
+    print("Finished building final twists and getting posterior samples", flush=True)
+    print(f"TIME: {time.time()}", flush=True)
 
     if load_posterior_samples:
         x = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=None, prefix=load_prefix_posterior_samples)
