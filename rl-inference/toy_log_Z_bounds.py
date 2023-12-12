@@ -3176,7 +3176,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                 indices_of_continuation = None
         elif rm_type in ["sentiment_threshold", "exp_beta_sentiment_class_logprob"]:
             prompts = [
-                "This product is"
+                "I bought this"
+                # "This product is"
             ]
         else:
             if hface_model_type == "TinyStories":
