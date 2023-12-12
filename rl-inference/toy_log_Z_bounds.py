@@ -2761,6 +2761,9 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         elif hface_model_type == "gpt2medium":
             model_config = 'gpt2-medium'
             from_pt = False
+        elif hface_model_type == "gpt2large":
+            model_config = 'gpt2-large'
+            from_pt = False
         elif hface_model_type == "TinyStories":
             model_config = "roneneldan/TinyStories-33M"
             from_pt = True
@@ -4244,7 +4247,7 @@ if __name__ == "__main__":
                         default=1.)
     parser.add_argument("--huggingface", action="store_true", help="Use huggingface transformer. Obviates the need for setting transformer parameters")
     parser.add_argument("--hface_model_type", type=str, default="distilgpt2",
-                        choices=["distilgpt2", "gpt2small", "gpt2medium", "TinyStories"])
+                        choices=["distilgpt2", "gpt2small", "gpt2medium", "gpt2large", "TinyStories"])
 
     # TODO SEP 15; add flags for different models e.g. GPT2small, GPT2medium, other archs...
     parser.add_argument("--rejection_sample_naive", action="store_true", help="Only for a specific test/check")
