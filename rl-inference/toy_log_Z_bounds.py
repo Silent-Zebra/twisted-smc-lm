@@ -2809,13 +2809,14 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                 import lorax
 
                 def decision_fn(path, param):
-                    # print(path)
-                    # print(path[0])
+                    print(path)
+                    print(path[0])
                     # print(path[0].key)
                     # print(path[0][0])
                     # print(type(path[0]))
                     # if 'embedding' in path:
-                    if path[0].key == 'head':
+                    if path[0] == 'head':
+                    # if path[0].key == 'head':
                         print(f'Fully finetuning param {path}')
                         return LORA_FULL
                     dim = 4
