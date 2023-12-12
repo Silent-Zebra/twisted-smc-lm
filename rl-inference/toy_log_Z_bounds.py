@@ -2848,8 +2848,6 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                 huggingface_model = HashableDict(
                     {'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "lora"})
 
-                if hface_nn_twist:
-                    raise Exception("This is not tested yet. Ensure the separate nn twist is also being tuned... May need to put the head params in the lora_params, as a list or dict, and then modify the decsion fn to include it as well")
 
         else:
             model = CustomLMWithTwistHead(
