@@ -38,6 +38,8 @@ import matplotlib.pyplot as plt
 
 from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
 
+import copy
+
 from custom_transformer import transformer_init_params
 
 from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_final, smc_scan_iter_final, \
@@ -446,11 +448,11 @@ class ExperimentConfig:
 
     def plot_logZ_bounds_based_on_cfg(
         self, rng_key, indices_of_tokens_chosen, true_posterior_samples_by_token,
-        prompt, prompt_len, output_len, cfg_p, params_p, cfg_twist, params_twist,
+        prompt, output_len, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, start, hist_token_index, epoch, huggingface_model, proposal_is_p,
         true_posterior_samples_by_prompt_and_by_token, prompt_num, true_log_z, plot_over_time_list, tokenizer=None
     ):
-
+        prompt_len = prompt.shape[-1]
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
             or self.rm_type == "contains_token" or self.rm_type == "contains_token_eps":
 
@@ -853,36 +855,78 @@ class ExperimentConfig:
 
             aux_info = (g_q_estimates, f_q_estimates)
 
-        if self.rm_type == "contains_continuation":
-            # print(intermediate_seq_list)
-            print("Log indicator (+ eps) on whether sequence contains (0 means contains)")
+        elif self.rm_type == "contains_continuation":
+            raise NotImplementedError
+
+            # _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(
+            #     sk1, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            #     log_true_final_twist, output_len, n_samples,
+            #     smc_procedure_type=self.smc_procedure_type,
+            #     n_vocab=self.n_vocab,
+            #     get_intermediate_sample_history_based_on_learned_twists=True,
+            #     prepend_tokens_for_twists=prepend_tokens_for_twists,
+            #     token_of_interest_as_int=token_of_interest_as_int,
+            #     proposal_is_p=proposal_is_p,
+            #     huggingface_model=huggingface_model)
+            #
+            # # print(intermediate_seq_list)
+            # print("Log indicator (+ eps) on whether sequence contains (0 means contains)")
+            # print(log_true_final_twist(smc_samples))
+            # log_p = evaluate_log_p_selected_tokens(smc_samples, prompt_len, cfg_p, params_p, huggingface_model)
+            # print(log_p)
+            # # smc_samples = smc_samples[:, prompt_len:]
+            # # log_p = log_p[:, prompt_len:]
+            # log_p_cont_all_places = jnp.zeros((smc_samples.shape[0]))
+            # for i in range(output_len - indices_of_continuation.shape[-1] + 1):
+            #     # print(indices_of_continuation.shape)
+            #     # print(smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]].shape)
+            #     # print((smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]] - indices_of_continuation).shape)
+            #     log_p_continuation = jnp.where((
+            #         jnp.abs(smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]] - indices_of_continuation).sum(axis=-1) == 0),
+            #         log_p[:, i:i + indices_of_continuation.shape[-1]].sum(axis=-1),
+            #         jnp.zeros(smc_samples.shape[0]))
+            #     log_p_cont_all_places += log_p_continuation
+            #
+            # print("Log prob of continuation, if it appears (0 if doesn't appear)")
+            # print(log_p_cont_all_places)
+            #
+            # print("Breakdown by each sample:")
+            # for i in range(smc_samples.shape[0]):
+            #     print(smc_samples[i, prompt_len:])
+            #     if huggingface_model:
+            #         print(text_outputs[i])
+            #     print(log_p[i])
+            #     print(log_p_cont_all_places[i])
+            # # print(f"Max log prob of continuation: {-(-log_p_cont_all_places).max()}")
+
+        elif args.rm_type in ["toxicity_threshold",
+                              "sentiment_threshold"]:
+            rng_key, sk = jax.random.split(rng_key)
+            _, smc_samples, (
+                _, _, log_w_t_before_resample_list) = smc_procedure(
+                sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                log_true_final_twist, output_len, n_samples,
+                smc_procedure_type="partial_jit",
+                n_vocab=self.n_vocab,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model,
+                get_intermediate_sample_history_based_on_learned_twists=True
+            )
+            print(smc_samples)
+            text_outputs = tokenizer.batch_decode(
+                smc_samples,
+                skip_special_tokens=True)
+            print(text_outputs)
             print(log_true_final_twist(smc_samples))
-            log_p = evaluate_log_p_selected_tokens(smc_samples, prompt_len, cfg_p, params_p, huggingface_model)
-            print(log_p)
-            # smc_samples = smc_samples[:, prompt_len:]
-            # log_p = log_p[:, prompt_len:]
-            log_p_cont_all_places = jnp.zeros((smc_samples.shape[0]))
-            for i in range(output_len - indices_of_continuation.shape[-1] + 1):
-                # print(indices_of_continuation.shape)
-                # print(smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]].shape)
-                # print((smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]] - indices_of_continuation).shape)
-                log_p_continuation = jnp.where((
-                    jnp.abs(smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]] - indices_of_continuation).sum(axis=-1) == 0),
-                    log_p[:, i:i + indices_of_continuation.shape[-1]].sum(axis=-1),
-                    jnp.zeros(smc_samples.shape[0]))
-                log_p_cont_all_places += log_p_continuation
 
-            print("Log prob of continuation, if it appears (0 if doesn't appear)")
-            print(log_p_cont_all_places)
+            # for log_w_t in log_w_t_before_resample_list:
+            #     print("Log importance weights variance")
+            #     print(log_w_t)
+            #     print(jnp.var(log_w_t))
 
-            print("Breakdown by each sample:")
-            for i in range(smc_samples.shape[0]):
-                print(smc_samples[i, prompt_len:])
-                if huggingface_model:
-                    print(text_outputs[i])
-                print(log_p[i])
-                print(log_p_cont_all_places[i])
-            # print(f"Max log prob of continuation: {-(-log_p_cont_all_places).max()}")
+
+        else:
+            raise NotImplementedError
 
         return rng_key, aux_info
 
@@ -1222,7 +1266,7 @@ class ExperimentConfig:
 #     "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",
 #     "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type"])
 def inspect_and_record_evidence_setting_for_index(
-    rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
+    rng_key, prompt, cfg_p, params_p, cfg_twist,
     params_twist, n_vocab, output_len, log_true_final_twist,
     n_test_smc_samples, token_of_interest_as_int, true_posterior_samples,
     true_log_z, analytic_kl_q_sigma, smc_procedure_type,
@@ -1250,44 +1294,6 @@ def inspect_and_record_evidence_setting_for_index(
         condition_twist_on_tokens_broadcasted = jnp.full((n_test_smc_samples, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens_for_chosen_posterior_sample)
         print(condition_twist_on_tokens_broadcasted.shape)
 
-    # rng_key, sk_i = jax.random.split(rng_key)
-    # iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
-    #     sk_i, posterior_sample, prompt, cfg_p,
-    #     params_p, cfg_twist,
-    #     params_twist, log_true_final_twist,
-    #     output_len, n_test_smc_samples,
-    #     n_vocab, smc_procedure_type=smc_procedure_type,
-    #     prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-    #     token_of_interest_as_int=token_of_interest_as_int,
-    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
-    # rng_key, sk = jax.random.split(rng_key)
-    # (_, log_z_hat_t, _), smc_samples = smc_procedure(
-    #     sk, prompt, cfg_p, params_p,
-    #     cfg_twist, params_twist,
-    #     log_true_final_twist,
-    #     output_len,
-    #     n_test_smc_samples,
-    #     smc_procedure_type=smc_procedure_type,
-    #     n_vocab=n_vocab,
-    #     prepend_tokens_for_twists=prepend_tokens_for_twists,
-    #     condition_twist_on_tokens=condition_twist_on_tokens,
-    #     token_of_interest_as_int=token_of_interest_as_int,
-    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model)
-    # rng_key, sk = jax.random.split(rng_key)
-    # smc_upper_bound_estimate = smc_backward(sk, posterior_sample,
-    #                                         prompt, cfg_p, params_p,
-    #                                         cfg_twist, params_twist,
-    #                                         log_true_final_twist,
-    #                                         output_len,
-    #                                         n_test_smc_samples,
-    #                                         n_vocab,
-    #                                         smc_procedure_type=smc_procedure_type,
-    #                                         prepend_tokens_for_twists=prepend_tokens_for_twists,
-    #                                         condition_twist_on_tokens=condition_twist_on_tokens,
-    #                                         token_of_interest_as_int=token_of_interest_as_int,
-    #                                         proposal_is_p=proposal_is_p,
-    #                                         huggingface_model=huggingface_model)
-    # 1/0
 
     rng_key, sk_i = jax.random.split(rng_key)
     iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
@@ -1305,7 +1311,6 @@ def inspect_and_record_evidence_setting_for_index(
     iwae_upper_bound_estimate = jax.nn.logsumexp(
         iwae_log_w_upper) - jnp.log(
         iwae_log_w_upper.shape[0])
-
 
     # true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
     #     true_posterior_samples, log_true_final_twist, cfg_p,
@@ -1329,7 +1334,6 @@ def inspect_and_record_evidence_setting_for_index(
 
     kl_q_sigma_iwae_upper_bound_estimate = iwae_upper_bound_estimate - f_q_estimate
     kl_q_sigma_iwae_lower_bound_estimate = iwae_lower_bound_estimate - f_q_estimate
-
 
 
     rng_key, sk_smc = jax.random.split(rng_key)
@@ -1366,8 +1370,6 @@ def inspect_and_record_evidence_setting_for_index(
     kl_q_sigma_smc_lower_bound_estimate = smc_lower_bound_estimate - f_q_estimate
 
 
-
-
     list_of_things_to_append_for_record_list = \
         [true_log_z, true_one_post_upper_bound_estimate,
          true_all_post_upper_bound_estimate,
@@ -1382,7 +1384,7 @@ def inspect_and_record_evidence_setting_for_index(
     return list_of_things_to_append_for_record_list, smc_samples
 
 inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argnames=[
-    "log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
+    "log_true_final_twist", 'output_len', 'n_test_smc_samples',
     "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",
     "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type"
 ])(inspect_and_record_evidence_setting_for_index)
@@ -2363,7 +2365,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
 
             # print(f"Number of Particles: {n_test_smc_samples}")
             list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_fn(
-                sk, prompt, prompt_len, cfg_p, params_p, cfg_twist,
+                sk, prompt, cfg_p, params_p, cfg_twist,
                 params_twist, args.n_vocab,
                 output_len, log_true_final_twist,
                 n_test_smc_samples,
@@ -2567,122 +2569,47 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     kl_sigma_q_ubs_iwae, kl_sigma_q_lbs_iwae, kl_sigma_q_ubs_smc, kl_sigma_q_lbs_smc = plot_over_time_list[6], plot_over_time_list[7], plot_over_time_list[8], plot_over_time_list[9]
 
 
-
-    # x_range = np.array(n_samples, dtype=np.int32)
-    # plt.clf()
-    # print(iwae_ubs_across_seeds)
-    # print(np.stack(iwae_ubs_across_seeds).shape)
-    # print(smc_ubs_across_seeds)
-    # print(np.stack(smc_ubs_across_seeds).shape)
-    #
-    # plot_with_conf_bounds(np.stack(iwae_ubs_across_seeds), x_range,
-    #                       label="IWAE Upper bounds", z_score=1.96)
-    # plot_with_conf_bounds(np.stack(iwae_lbs_across_seeds), x_range,
-    #                       label="IWAE Lower bounds", z_score=1.96)
-    # plot_with_conf_bounds(np.stack(smc_ubs_across_seeds), x_range,
-    #                       label="SMC Upper bounds", z_score=1.96)
-    # plot_with_conf_bounds(np.stack(smc_lbs_across_seeds), x_range,
-    #                       label="SMC Lower bounds", z_score=1.96)
-    #
-    # if not huggingface_model and (true_log_z is not None):
-    #     plt.plot(x_range, np.ones_like(x_range) * true_log_z,
-    #              label="True Log Z")
-    # # plt.xlabel(f"{power_base}^ Number of Particles")
-    # plt.xlabel(f"Number of Particles")
-    #
-    # plt.legend()
-    # plt.savefig(f"{args.save_dir}/fig_bounds_by_samples_epoch{epoch + 1}.pdf")
-
-
-    # plt.clf()
-    # x_range = np.arange(1, len(g_q_estimates) + 1)
-    # # plt.plot(x_range, np.stack(f_q_estimates), label="F(q) Estimate")
-    # plot_with_conf_bounds(np.transpose(np.stack(f_q_estimates_list_of_arrays)), x_range, label="F(q) Estimate")
-    # plt.plot(x_range, np.stack(g_q_estimates), label="G(q) Estimate")
-    # plt.xlabel(f"Epoch")
-    # # plt.ylabel(f"F(q) Estimate")
-    # plt.legend()
-    # plt.savefig(f"{args.save_dir}/fig_f_q_g_q_epoch{epoch + 1}.pdf")
-
-
-    # kl_q_sigma_bounds_midpoint_iwae = (np.stack(kl_ubs_iwae) + np.stack(kl_lbs_iwae)) / 2.
-    # kl_sigma_q_bounds_midpoint_iwae = (np.stack(kl_sigma_q_ubs_iwae) + np.stack(kl_sigma_q_lbs_iwae)) / 2.
-    # plt.clf()
-    # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
-    # plt.plot(x_range, kl_q_sigma_bounds_midpoint_iwae, label="KL(q||sigma) (Midpoint based on IWAE LogZ Bounds)")
-    # plt.fill_between(x_range, np.stack(kl_lbs_iwae), np.stack(kl_ubs_iwae), alpha=0.3)
-    # plt.plot(x_range, kl_sigma_q_bounds_midpoint_iwae, label="KL(sigma||q) (Midpoint based on IWAE LogZ Bounds)")
-    # plt.fill_between(x_range, np.stack(kl_sigma_q_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), alpha=0.3)
-
     numpost = np.stack(g_q_estimates_list_of_arrays).shape[-1]
     # print("G_q estimates shape")
     # print(np.stack(g_q_estimates_list_of_arrays).shape)
     # if np.stack(g_q_estimates_list_of_arrays).shape[-1] == 1:
     #     only_one_post = " (Only 1 Post.)"
 
-    plt.clf()
     if args.exp_num_twist_updates:
         x_range = np.arange(len(kl_ubs_iwae))
-        plt.xlabel(f"2^ of Number of Twist Updates")
-
+        plt_xlabel_text = f"2^ of Number of Twist Updates"
     else:
         x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
-        plt.xlabel(f"Number of Twist Updates")
+        plt_xlabel_text = f"Number of Twist Updates"
 
-    plot_with_conf_bounds(logZ_midpoint_estimate - np.transpose(np.stack(f_q_estimates_list_of_arrays)), x_range, label="KL(q||sigma) (Best LogZ Bounds Midpoint)")
-    plot_with_conf_bounds(np.transpose(np.stack(g_q_estimates_list_of_arrays)) - logZ_midpoint_estimate, x_range, label=f"KL(sigma||q) (Best LogZ Bounds Midpoint) ({numpost} True Post.)")
+    do_checkpoint_of_plot_info = False
 
-    # plt.xlabel(f"Epoch")
-    plt.ylabel(f"KL Divergence")
-    plt.legend()
-    plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.pdf")
+    if not proposal_is_p:
+        # Save KL DIV Plot, only do this if not proposal_is_p
+        plt.clf()
+        plt.xlabel(plt_xlabel_text)
 
-    # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-    #                             target=(np.stack(kl_ubs_iwae), np.stack(kl_lbs_iwae), np.stack(kl_sigma_q_ubs_iwae), np.stack(kl_sigma_q_lbs_iwae)),
-    #                             step=len(kl_ubs_iwae),
-    #                             prefix=f"kl_divs_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
-    checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
-                                        logZ_midpoint_estimate),
-                                step=len(kl_ubs_iwae),
-                                prefix=f"f_q_g_q_logZbestmidpoint_info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+        plot_with_conf_bounds(logZ_midpoint_estimate - np.transpose(np.stack(f_q_estimates_list_of_arrays)), x_range, label="KL(q||sigma) (Best LogZ Bounds Midpoint)")
+        plot_with_conf_bounds(np.transpose(np.stack(g_q_estimates_list_of_arrays)) - logZ_midpoint_estimate, x_range, label=f"KL(sigma||q) (Best LogZ Bounds Midpoint) ({numpost} True Post.)")
 
-    # plt.plot(x_range, np.stack(kl_ubs_iwae), label="KL(q||sigma) Upper bound (IWAE LogZ Bound)")
-    # plt.plot(x_range, np.stack(kl_lbs_iwae), label="KL(q||sigma) Lower bound (IWAE LogZ Bound)")
-    # plt.plot(x_range, np.stack(kl_ubs_smc), label="KL(q||sigma) Upper bound (SMC LogZ Bound)")
-    # plt.plot(x_range, np.stack(kl_lbs_smc), label="KL(q||sigma) Lower bound (SMC LogZ Bound)")
-    #
-    # plt.xlabel(f"Epoch")
-    # plt.ylabel(f"KL(q||sigma) bound")
-    # plt.legend()
-    # plt.savefig(f"{args.save_dir}/fig_kl_q_sigma_epoch{epoch + 1}.pdf")
-    #
-    #
-    # plt.clf()
-    # x_range = np.arange(1, len(kl_sigma_q_ubs_iwae) + 1)
-    # # LogZ bounds use the max number of samples in n_samples (the list of num samples to try for the "scaling laws" plot)
-    # plt.plot(x_range, np.stack(kl_sigma_q_ubs_iwae), label="KL(sigma||q) Upper bound (IWAE LogZ Bound)")
-    # plt.plot(x_range, np.stack(kl_sigma_q_lbs_iwae), label="KL(sigma||q) Lower bound (IWAE LogZ Bound)")
-    # plt.plot(x_range, np.stack(kl_sigma_q_ubs_smc), label="KL(sigma||q) Upper bound (SMC LogZ Bound)")
-    # plt.plot(x_range, np.stack(kl_sigma_q_lbs_smc), label="KL(sigma||q) Lower bound (SMC LogZ Bound)")
-    #
-    # plt.xlabel(f"Epoch")
-    # plt.ylabel(f"KL(sigma||q) bound")
-    # plt.legend()
-    # plt.savefig(f"{args.save_dir}/fig_kl_sigma_q_epoch{epoch + 1}.pdf")
+        plt.ylabel(f"KL Divergence")
+        plt.legend()
+        plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.pdf")
+
+        if do_checkpoint_of_plot_info:
+
+            checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                        target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
+                                                logZ_midpoint_estimate),
+                                        step=len(kl_ubs_iwae),
+                                        prefix=f"f_q_g_q_logZbestmidpoint_info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
     plt.clf()
     # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
-    if args.exp_num_twist_updates:
-        x_range = np.arange(len(kl_ubs_iwae))
-        plt.xlabel(f"2^ of Number of Twist Updates")
-    else:
-        x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
-        plt.xlabel(f"Number of Twist Updates")
+    plt.xlabel(plt_xlabel_text)
 
     print(logZ_ubs_iwae_across_samples_time_seeds)
 
-    # TODO Plot with different colours (shades of colours) afterwards
     for n in range(len(n_samples_for_plots)):
         print(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n]).shape)
         print(x_range.shape)
@@ -2717,13 +2644,19 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     plt.ylabel(f"Log(Z) Bound")
 
     plt.legend()
-    plt.savefig(f"{args.save_dir}/fig_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf")
 
-    checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                target=(logZ_ubs_iwae_across_samples_time_seeds, logZ_lbs_iwae_across_samples_time_seeds,
-                                        logZ_ubs_smc_across_samples_time_seeds, logZ_lbs_smc_across_samples_time_seeds),
-                                step=len(kl_ubs_iwae),
-                                prefix=f"logZ_bounds_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+    if proposal_is_p:
+        plt.savefig(f"{args.save_dir}/fig_pproposal_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf")
+    else:
+        plt.savefig(f"{args.save_dir}/fig_twistproposal_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf")
+
+        if do_checkpoint_of_plot_info:
+
+            checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                        target=(logZ_ubs_iwae_across_samples_time_seeds, logZ_lbs_iwae_across_samples_time_seeds,
+                                                logZ_ubs_smc_across_samples_time_seeds, logZ_lbs_smc_across_samples_time_seeds),
+                                        step=len(kl_ubs_iwae),
+                                        prefix=f"logZ_bounds_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
     return plot_over_time_list
 
@@ -3644,6 +3577,8 @@ def main():
         logZ_ubs_iwae_across_samples_seeds_time, logZ_lbs_iwae_across_samples_seeds_time,
         logZ_ubs_smc_across_samples_seeds_time, logZ_lbs_smc_across_samples_seeds_time]
 
+    plot_over_time_list_p_proposal = copy.deepcopy(plot_over_time_list)
+
 
     print_every_twist_updates = args.print_every_twist_updates
 
@@ -3827,157 +3762,108 @@ def main():
             if args.no_test_info:
                 test_info = False
 
-            if true_posterior_samples_by_token is None:
-                plot_logZ_bounds = False
-                only_inspect_samples = True
-            else:
-                plot_logZ_bounds = True
-                only_inspect_samples = False
-
-            if (epoch + 1) % args.print_every == 0:
+            if test_info and ((epoch + 1) % args.print_every == 0):
                 token_of_interest_as_int = None
 
-                if test_info:
-                    print(f"TEST INFO STARTING", flush=True)
-                    print(f"TIME: {time.time() - start}", flush=True)
-                    if plot_logZ_bounds:
-                        assert true_posterior_samples_by_token is not None
+                print(f"TEST INFO STARTING", flush=True)
+                print(f"TIME: {time.time() - start}", flush=True)
 
-                        if not huggingface_model:
-
-                            if true_log_z is None:
-                                if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index" \
-                                    or experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps":
-                                    i = 0  # Just check the first twist, that's fine for this illustration
-                                    token_of_interest_as_int = \
-                                    indices_of_tokens_chosen[i]
-                                condition_twist_on_token = None
-                                if experiment_cfg.rm_type == "p_last_tokens":
-                                    raise NotImplementedError
-
-                                _, _, true_log_z = \
-                                    calc_analytic_sigma_vals(prompt,
-                                                             prompt_len,
-                                                             args.n_vocab,
-                                                             args.output_len,
-                                                             cfg_p,
-                                                             params_p,
-                                                             log_true_final_twist,
-                                                             condition_twist_on_token=condition_twist_on_token,
-                                                             return_log=True)
-                                analytic_kl_p_sigma = calc_analytic_kl(
-                                    prompt,
-                                    prompt_len,
-                                    args.n_vocab,
-                                    args.output_len,
-                                    cfg_p,
-                                    params_p,
-                                    cfg_twist,
-                                    params_twist,
-                                    log_true_final_twist,
-                                    prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
-                                    condition_twist_on_token=condition_twist_on_token,
-                                    token_of_interest_as_int=token_of_interest_as_int,
-                                    calc_kl_with_p_and_sigma=True)
-                                print(f"True log Z: {true_log_z}",
-                                      flush=True)
-                                print(
-                                    f"Analytic KL(p||sigma): {analytic_kl_p_sigma}",
-                                    flush=True)
-
-                        rng_key, plot_over_time_list = experiment_cfg.plot_logZ_bounds_based_on_cfg(
-                            rng_key, indices_of_tokens_chosen,
-                            true_posterior_samples_by_token,
-                            prompt, prompt_len, args.output_len, cfg_p,
-                            params_p, cfg_twist,
-                            params_twist,
-                            log_true_final_twist, start, hist_token_index,
-                            epoch, huggingface_model, args.proposal_is_p_for_plots,
-                            true_posterior_samples_by_prompt_and_by_token,
-                            prompt_num, true_log_z, plot_over_time_list, tokenizer
-                        )
-                        if args.rm_type in [
-                            "contains_continuation", "p_continuation",
-                            "hard_p_continuation", "p_last_tokens",
-                            "p_continuation_one_post", "exp_beta_toxicity",
-                            "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"]:
-                            # TODO DEC: should clean this up by having various config flags for each experiment setting:
-                            # E.g. has_true_posterior_samples, then whenever that's true, you do the bunch of code related to that
-                            # And then do_inspect_results, for which you do the below
-                            # use_partial_jit
-                            # etc.
-
-                            # Inspect the samples also in this setting
-                            rng_key, aux_info = experiment_cfg.inspect_results(
-                                rng_key, prompt, cfg_p, params_p, cfg_twist,
-                                params_twist, log_true_final_twist,
-                                args.output_len,
-                                args.n_test_smc_samples,
-                                indices_of_continuation, tokenizer,
-                                prepend_tokens_for_twists=False,
-                                token_of_interest_as_int=None,
-                                proposal_is_p=args.proposal_is_p_for_plots,
-                                huggingface_model=huggingface_model)
-                            # PASS ON THIS NOW FOR MEMORY REASONS TODO later can reinstate
-
-                            if args.rm_type == "p_last_tokens":
-                                g_q_estimates, f_q_estimates = aux_info
-                                g_q_estimates_list.append(g_q_estimates)
-                                f_q_estimates_list.append(f_q_estimates)
-                                experiment_cfg.plot_plasttokens(g_q_estimates_list, f_q_estimates_list)
-
-                        elif args.rm_type in ["toxicity_threshold", "sentiment_threshold"]:
-                            rng_key, sk = jax.random.split(rng_key)
-                            _, smc_samples, (_, _, log_w_t_before_resample_list) = smc_procedure(
-                                sk, prompt, cfg_p, params_p,
-                                cfg_twist, params_twist,
-                                log_true_final_twist,
-                                args.output_len,
-                                args.n_test_smc_samples,
-                                smc_procedure_type="partial_jit",
-                                n_vocab=args.n_vocab,
-                                proposal_is_p=args.proposal_is_p,
-                                huggingface_model=huggingface_model,
-                                get_intermediate_sample_history_based_on_learned_twists=True
-                            )
-                            print(smc_samples)
-                            text_outputs = tokenizer.batch_decode(
-                                smc_samples,
-                                skip_special_tokens=True)
-                            print(text_outputs)
-                            print(log_true_final_twist(smc_samples))
-
-                            for log_w_t in log_w_t_before_resample_list:
-                                print("Log importance weights variance")
-                                print(log_w_t)
-                                print(jnp.var(log_w_t))
-
-
-                    elif only_inspect_samples:
-                        rng_key, aux_info = experiment_cfg.inspect_results(
-                            rng_key, prompt, cfg_p, params_p, cfg_twist,
-                            params_twist, log_true_final_twist,
-                            args.output_len,
-                            args.n_test_smc_samples,
-                            indices_of_continuation, tokenizer,
-                            prepend_tokens_for_twists=False,
-                            token_of_interest_as_int=None,
-                            proposal_is_p=args.proposal_is_p_for_plots,
-                            huggingface_model=huggingface_model)
-
-                    else:
-
+                if (not huggingface_model) and (true_log_z is None):
+                    if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index" \
+                        or experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps":
+                        i = 0  # Just check the first twist, that's fine for this illustration
+                        token_of_interest_as_int = \
+                            indices_of_tokens_chosen[i]
+                    condition_twist_on_token = None
+                    if experiment_cfg.rm_type == "p_last_tokens":
                         raise NotImplementedError
-                        # rng_key = experiment_cfg.test_info(rng_key, start,
-                        #           indices_of_tokens_chosen,
-                        #           true_posterior_samples_by_token, prompt,
-                        #           prompt_len,
-                        #           cfg_p, params_p, cfg_twist, params_twist,
-                        #           args.output_len,
-                        #           log_true_final_twist, args.n_test_smc_samples,
-                        #           hist_token_index, records_list_by_twist,
-                        #           args.proposal_is_p, prepend_tokens_for_twists, condition_twist_on_tokens,
-                        #                                    token_of_interest_as_int, huggingface_model)
+
+                    _, _, true_log_z = \
+                        calc_analytic_sigma_vals(
+                            prompt, prompt_len, args.n_vocab, args.output_len,
+                            cfg_p, params_p, log_true_final_twist,
+                            condition_twist_on_token=condition_twist_on_token,
+                            return_log=True)
+                    analytic_kl_p_sigma = calc_analytic_kl(
+                        prompt, prompt_len, args.n_vocab,
+                        args.output_len, cfg_p, params_p,
+                        cfg_twist, params_twist, log_true_final_twist,
+                        prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+                        condition_twist_on_token=condition_twist_on_token,
+                        token_of_interest_as_int=token_of_interest_as_int,
+                        calc_kl_with_p_and_sigma=True)
+                    print(f"True log Z: {true_log_z}",
+                          flush=True)
+                    print(
+                        f"Analytic KL(p||sigma): {analytic_kl_p_sigma}",
+                        flush=True)
+
+                if true_posterior_samples_by_token is not None: # Then do plotting of logZ bounds
+
+                    # NOW do plots two ways: p proposal and not
+                    plot_args = {
+                        "rng_key": rng_key,
+                        "indices_of_tokens_chosen": indices_of_tokens_chosen,
+                        "true_posterior_samples_by_token": true_posterior_samples_by_token,
+                        "prompt": prompt, "output_len": args.output_len,
+                        "cfg_p": cfg_p, "params_p": params_p,
+                        "cfg_twist": cfg_twist, "params_twist": params_twist,
+                        "log_true_final_twist": log_true_final_twist,
+                        "start": start, "hist_token_index": hist_token_index,
+                        "epoch": epoch, "huggingface_model": huggingface_model,
+                        "proposal_is_p": False,
+                        "true_posterior_samples_by_prompt_and_by_token": true_posterior_samples_by_prompt_and_by_token,
+                        "prompt_num": prompt_num,
+                        "true_log_z": true_log_z,
+                        "plot_over_time_list": plot_over_time_list,
+                        "tokenizer": tokenizer,
+                    }
+                    rng_key, plot_over_time_list = experiment_cfg.plot_logZ_bounds_based_on_cfg(**plot_args)
+
+                    plot_args['proposal_is_p'] = True
+                    plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
+                    rng_key, plot_over_time_list_p_proposal = experiment_cfg.plot_logZ_bounds_based_on_cfg(**plot_args) # Use the same unchanged rng_key
+
+                    # rng_key, plot_over_time_list = experiment_cfg.plot_logZ_bounds_based_on_cfg(
+                    #     rng_key, indices_of_tokens_chosen,
+                    #     true_posterior_samples_by_token,
+                    #     prompt, args.output_len, cfg_p,
+                    #     params_p, cfg_twist, params_twist,
+                    #     log_true_final_twist, start, hist_token_index,
+                    #     epoch, huggingface_model, args.proposal_is_p_for_plots,
+                    #     true_posterior_samples_by_prompt_and_by_token,
+                    #     prompt_num, true_log_z, plot_over_time_list, tokenizer
+                    # )
+
+                # DO inspect samples regardless of whether we plot logZ bounds or not
+
+
+                rng_key, aux_info = experiment_cfg.inspect_results(
+                    rng_key, prompt, cfg_p, params_p, cfg_twist,
+                    params_twist, log_true_final_twist,
+                    args.output_len,
+                    args.n_test_smc_samples,
+                    indices_of_continuation, tokenizer,
+                    prepend_tokens_for_twists=False,
+                    token_of_interest_as_int=None,
+                    proposal_is_p=args.proposal_is_p,
+                    huggingface_model=huggingface_model)
+
+                if args.rm_type == "p_last_tokens":
+                    g_q_estimates, f_q_estimates = aux_info
+                    g_q_estimates_list.append(g_q_estimates)
+                    f_q_estimates_list.append(f_q_estimates)
+                    experiment_cfg.plot_plasttokens(g_q_estimates_list,
+                                                    f_q_estimates_list)
+                # TODO DEC: should clean this up by having various config flags for each experiment setting:
+                # E.g. has_true_posterior_samples, then whenever that's true, you do the bunch of code related to that
+                # And then do_inspect_results, for which you do the below
+                # use_partial_jit
+                # etc.
+
+
+
+
 
             print(f"TWIST UPDATES STARTING", flush=True)
             print(f"TIME: {time.time() - start}", flush=True)
@@ -4240,7 +4126,6 @@ if __name__ == "__main__":
     parser.add_argument("--indicator_pos_zero_index", type=int, default=0)
     parser.add_argument("--n_true_posterior_samples", type=int, default=10)
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
-    parser.add_argument("--proposal_is_p_for_plots", action="store_true", help="Use q = p for the proposal ONLY FOR PLOTTING AND INSPECTION")
 
     parser.add_argument("--index_of_token_contained", type=int, default=6, help="for the contains_token environment, the token we are interested in checking")
     parser.add_argument("--beta_temp", type=float, help="beta used for the temperature scaling; right now just for the reward model based on the prob of the continuation",
