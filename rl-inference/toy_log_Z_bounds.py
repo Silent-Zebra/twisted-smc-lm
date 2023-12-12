@@ -1,10 +1,13 @@
-# import torch
-# For some reason my dependencies are messed up, so torch has to go first?
-
 import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".5"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"]="platform"
+
+
+LORA_FREEZE = 0
+LORA_FULL = -1
+# FOR LORA: https://github.com/davisyoshida/lorax/blob/master/examples/huggingface_gpt2.py
+
 
 from jax import vmap, jit
 
@@ -2733,7 +2736,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
               load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
               num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
               num_samples_if_only_collect_true_posterior_samples=100,
-              load_posterior_samples=False, load_prefix_posterior_samples=None, sentiment_class=1):
+              load_posterior_samples=False, load_prefix_posterior_samples=None, sentiment_class=1, use_lora=False):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
@@ -2798,9 +2801,51 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                                           weight_decay=weight_decay)
             optim_twist_state = optimizer_twist.init(params_twist)
 
-            huggingface_model = HashableDict({'p': model_p.__call__, 'twist': model_twist.__call__})
+            huggingface_model = HashableDict({'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "custom"})
 
             model = {'p': model_p, 'twist': model_twist}
+
+            if use_lora:
+                import lorax
+
+                def decision_fn(path, param):
+                    # print(path)
+                    # print(path[0])
+                    # print(path[0].key)
+                    # print(path[0][0])
+                    # print(type(path[0]))
+                    # if 'embedding' in path:
+                    if path[0].key == 'head':
+                        print(f'Fully finetuning param {path}')
+                        return LORA_FULL
+                    dim = 4
+                    print(f'Using LoRA with dim={dim} for param {path}')
+                    return dim
+
+                # params_to_train = model_twist.huggingface_model.params
+                params_to_train = {'body': model_twist.huggingface_model.params, 'head': model_twist.twist_head_params}
+
+                lora_spec = lorax.simple_spec(params_to_train,
+                                              decision_fn=decision_fn,
+                                              tune_vectors=True)
+                lora_params = lorax.init_lora(params_to_train, lora_spec,
+                                              jax.random.PRNGKey(0))
+
+                optimizer_twist = lorax.wrap_optimizer(optimizer_twist, lora_spec)
+
+                optim_twist_state = optimizer_twist.init(lora_params)
+
+                model_twist = lorax.lora(model_twist)
+
+                params_twist = lora_params
+
+                # params_twist = [lora_params['body'], lora_params['head']]
+
+                huggingface_model = HashableDict(
+                    {'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "lora"})
+
+                if hface_nn_twist:
+                    raise Exception("This is not tested yet. Ensure the separate nn twist is also being tuned... May need to put the head params in the lora_params, as a list or dict, and then modify the decsion fn to include it as well")
 
         else:
             model = CustomLMWithTwistHead(
@@ -3550,7 +3595,7 @@ def main():
         args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
         args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model,
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
-        args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class
+        args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora
     )
 
 
@@ -4229,11 +4274,16 @@ if __name__ == "__main__":
 
     parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. In general, don't use this flag.")
 
+    parser.add_argument("--use_lora", action="store_true", help="Use LORA for training instead of training the full model")
+
 
     args = parser.parse_args()
 
 
     assert args.indicator_pos_zero_index < args.output_len
+
+    if args.use_lora:
+        assert args.separate_hface_twist_model
 
 
     if args.rm_type == "only_contains_token":

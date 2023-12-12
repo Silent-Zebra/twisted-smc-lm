@@ -77,11 +77,24 @@ def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twist
     # produces output of size (batch, n_vocab)
     if huggingface_model is not None: # huggingface model
         if isinstance(huggingface_model, HashableDict):
-            return huggingface_model['twist'](
-                input_ids=seq, ret="twist",
-                hface_model_params=params_twist[0],
-                params_twist_head=params_twist[1],
-                condition_twist_on_tokens=condition_twist_on_tokens
+            if huggingface_model['call_type'] == "lora":
+
+                # # TODO might have to go through the model_twist and then update the call function
+                # # Try to follow the documentation example all the way through
+                # 1/0
+
+                return huggingface_model['twist'](
+                    input_ids=seq, ret="twist",
+                    hface_model_params=params_twist['body'],
+                    params_twist_head=params_twist['head'],
+                    condition_twist_on_tokens=condition_twist_on_tokens
+                )
+            else:
+                return huggingface_model['twist'](
+                    input_ids=seq, ret="twist",
+                    hface_model_params=params_twist[0],
+                    params_twist_head=params_twist[1],
+                    condition_twist_on_tokens=condition_twist_on_tokens
             )
 
         else:
