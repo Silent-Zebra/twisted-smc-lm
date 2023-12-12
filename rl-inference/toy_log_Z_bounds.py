@@ -2755,6 +2755,9 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         if hface_model_type == "distilgpt2":
             model_config = "distilgpt2"
             from_pt = False
+        elif hface_model_type == "gpt2small":
+            model_config = "gpt2"
+            from_pt = False
         elif hface_model_type == "TinyStories":
             model_config = "roneneldan/TinyStories-33M"
             from_pt = True
@@ -2815,8 +2818,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                     # print(path[0][0])
                     # print(type(path[0]))
                     # if 'embedding' in path:
-                    if path[0] == 'head':
-                    # if path[0].key == 'head':
+                    # if 'head' in path:
+                    if path[0].key == 'head':
                         print(f'Fully finetuning param {path}')
                         return LORA_FULL
                     dim = 4
@@ -4239,7 +4242,7 @@ if __name__ == "__main__":
                         default=1.)
     parser.add_argument("--huggingface", action="store_true", help="Use huggingface transformer. Obviates the need for setting transformer parameters")
     parser.add_argument("--hface_model_type", type=str, default="distilgpt2",
-                        choices=["distilgpt2", "TinyStories"])
+                        choices=["distilgpt2", "gpt2small", "TinyStories"])
 
     # TODO SEP 15; add flags for different models e.g. GPT2small, GPT2medium, other archs...
     parser.add_argument("--rejection_sample_naive", action="store_true", help="Only for a specific test/check")
