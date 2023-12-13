@@ -3830,9 +3830,11 @@ def main():
                     }
                     rng_key, plot_over_time_list = experiment_cfg.plot_logZ_bounds_based_on_cfg(**plot_args)
 
-                    plot_args['proposal_is_p'] = True
-                    plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
-                    rng_key, plot_over_time_list_p_proposal = experiment_cfg.plot_logZ_bounds_based_on_cfg(**plot_args) # Use the same unchanged rng_key
+                    if args.hface_model_type not in ["gpt2medium", "gpt2large"]:
+
+                        plot_args['proposal_is_p'] = True
+                        plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
+                        rng_key, plot_over_time_list_p_proposal = experiment_cfg.plot_logZ_bounds_based_on_cfg(**plot_args) # Use the same unchanged rng_key
 
                     # rng_key, plot_over_time_list = experiment_cfg.plot_logZ_bounds_based_on_cfg(
                     #     rng_key, indices_of_tokens_chosen,
