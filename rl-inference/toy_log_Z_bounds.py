@@ -591,8 +591,12 @@ class ExperimentConfig:
 
         aux_info = None
 
-        if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation",
-                            "exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"]:
+        if self.rm_type in [
+            "exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation",
+            "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
+            "exp_beta_sentiment_class_logprob",
+            "toxicity_threshold", "sentiment_threshold"
+        ]:
 
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(
                 sk1, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -899,30 +903,30 @@ class ExperimentConfig:
             #     print(log_p_cont_all_places[i])
             # # print(f"Max log prob of continuation: {-(-log_p_cont_all_places).max()}")
 
-        elif args.rm_type in ["toxicity_threshold",
-                              "sentiment_threshold"]:
-            rng_key, sk = jax.random.split(rng_key)
-            _, smc_samples, (
-                _, _, log_w_t_before_resample_list) = smc_procedure(
-                sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                log_true_final_twist, output_len, n_samples,
-                smc_procedure_type="partial_jit",
-                n_vocab=self.n_vocab,
-                proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model,
-                get_intermediate_sample_history_based_on_learned_twists=True
-            )
-            print(smc_samples)
-            text_outputs = tokenizer.batch_decode(
-                smc_samples,
-                skip_special_tokens=True)
-            print(text_outputs)
-            print(log_true_final_twist(smc_samples))
-
-            # for log_w_t in log_w_t_before_resample_list:
-            #     print("Log importance weights variance")
-            #     print(log_w_t)
-            #     print(jnp.var(log_w_t))
+        # elif args.rm_type in ["toxicity_threshold",
+        #                       "sentiment_threshold"]:
+        #     rng_key, sk = jax.random.split(rng_key)
+        #     _, smc_samples, (
+        #         _, _, log_w_t_before_resample_list) = smc_procedure(
+        #         sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        #         log_true_final_twist, output_len, n_samples,
+        #         smc_procedure_type="partial_jit",
+        #         n_vocab=self.n_vocab,
+        #         proposal_is_p=proposal_is_p,
+        #         huggingface_model=huggingface_model,
+        #         get_intermediate_sample_history_based_on_learned_twists=True
+        #     )
+        #     print(smc_samples)
+        #     text_outputs = tokenizer.batch_decode(
+        #         smc_samples,
+        #         skip_special_tokens=True)
+        #     print(text_outputs)
+        #     print(log_true_final_twist(smc_samples))
+        #
+        #     # for log_w_t in log_w_t_before_resample_list:
+        #     #     print("Log importance weights variance")
+        #     #     print(log_w_t)
+        #     #     print(jnp.var(log_w_t))
 
 
         else:
