@@ -4206,6 +4206,8 @@ if __name__ == "__main__":
     if args.hface_model_type == "gpt2large":
         n_samples_for_plots = [32, 100]
         n_seeds = 5
+    elif args.hface_model_type == "gpt2medium":
+        n_samples_for_plots = [32, 100]
 
 
     main()
