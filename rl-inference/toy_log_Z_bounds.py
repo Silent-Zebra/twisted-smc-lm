@@ -3530,7 +3530,7 @@ def main():
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                     target=(true_posterior_samples_by_prompt,),
                                     step=true_posterior_samples_by_prompt[0].shape[0],
-                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_nsamples")
         1 / 0
 
     experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
