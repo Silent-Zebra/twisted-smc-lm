@@ -3828,6 +3828,10 @@ def main():
                         "plot_over_time_list": plot_over_time_list,
                         "tokenizer": tokenizer,
                     }
+
+                    if args.proposal_is_p_for_plots and args.hface_model_type in ["gpt2medium", "gpt2large"]:
+                        plot_args['proposal_is_p'] = True
+
                     rng_key, plot_over_time_list = experiment_cfg.plot_logZ_bounds_based_on_cfg(**plot_args)
 
                     if args.hface_model_type not in ["gpt2medium", "gpt2large"]:
@@ -4138,6 +4142,7 @@ if __name__ == "__main__":
     parser.add_argument("--indicator_pos_zero_index", type=int, default=0)
     parser.add_argument("--n_true_posterior_samples", type=int, default=10)
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
+    parser.add_argument("--proposal_is_p_for_plots", action="store_true", help="Use q = p for the proposal, ONLY FOR THE PLOTS AND ONLY IN MEMORY CONSTRAINED SETTINGS DOES THIS DO ANYTHING (otherwise I do both p and q for the plots)")
 
     parser.add_argument("--index_of_token_contained", type=int, default=6, help="for the contains_token environment, the token we are interested in checking")
     parser.add_argument("--beta_temp", type=float, help="beta used for the temperature scaling; right now just for the reward model based on the prob of the continuation",
