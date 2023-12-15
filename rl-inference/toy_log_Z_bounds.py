@@ -4187,6 +4187,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--use_lora", action="store_true", help="Use LORA for training instead of training the full model")
 
+    parser.add_argument("--n_samples_for_plots_smaller", type=int, default=32)
+    parser.add_argument("--n_samples_for_plots_larger", type=int, default=500)
+
 
     args = parser.parse_args()
 
@@ -4215,10 +4218,11 @@ if __name__ == "__main__":
         n_seeds = 30
 
     if args.hface_model_type == "gpt2large":
-        n_samples_for_plots = [32, 100]
+        # n_samples_for_plots = [32, 100]
         n_seeds = 5
-    elif args.hface_model_type == "gpt2medium":
-        n_samples_for_plots = [32, 100]
+    # elif args.hface_model_type == "gpt2medium":
+    #     n_samples_for_plots = [32, 100]
 
+    n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
 
     main()
