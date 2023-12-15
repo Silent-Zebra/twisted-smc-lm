@@ -1217,33 +1217,13 @@ def iwae_forward_and_backward(rng_key, posterior_sample, prompt, cfg_p, params_p
 
     full_seq = full_seq_from_twist_since_no_resample
 
-    # print("IWAE SAMPLES")
-    # print(full_seq)
-
-    # print(posterior_sample.shape)
-    # print(full_seq[1:, :].shape)
-
     # Backwards part below
-
     combined_seqs = jnp.concatenate((posterior_sample[None, :], full_seq[1:, :]), axis=0)
-    # combined_seqs = jnp.concatenate((posterior_sample, full_seq), axis=0)
-
-    # print(combined_seqs.shape)
 
     target_dist_weights = iwae_backward(
         combined_seqs, prompt, cfg_p, params_p, cfg_twist, params_twist, output_len,
         log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
         token_of_interest_as_int, proposal_is_p, huggingface_model)
-    # prompt_len = prompt.shape[-1]
-    #
-    # log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model) \
-    #                               + evaluate_log_phi_final(combined_seqs, log_true_final_twist)
-    # if proposal_is_p:
-    #     log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
-    # else:
-    #     log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(combined_seqs, cfg_p, params_p, cfg_twist, params_twist,
-    #                                                                prompt_len, output_len, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
-    # target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
 
     return proposal_dist_weights, target_dist_weights, f_q_estimate
 
@@ -1252,33 +1232,8 @@ def smc_backward(rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, 
                                   prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
                  token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
 
-    # (log_w_t_no_reset, log_w_t, log_z_hat_t), full_seq = smc_procedure(rng_key, prompt, cfg_p, params_p,
-    #                                            cfg_twist, params_twist,
-    #                                            log_true_final_twist,
-    #                                            output_len, n_smc_samples,
-    #                                            use_log_true_final_twist_for_final_weight_calc=True,
-    #                                            analytic_sigma_sample=False,
-    #                                            get_intermediate_sample_history_based_on_learned_twists=False,
-    #                                            n_vocab=n_vocab,
-    #
-    #                                            prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-    #                                            token_of_interest_as_int=token_of_interest_as_int,
-    #                                            resample=True, posterior_sample=None) # resample is very important here, otherwise is just IWAE bound
-    # # No posterior sample is also important for the lower bound
-    #
-    # lower_bound_estimate = log_z_hat_t
+    assert len(posterior_sample.shape) == 1 # single posterior sample
 
-
-
-    # (log_w_t, log_z_hat_t), samples = smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
-    #                                            log_true_final_twist, output_len, n_smc_samples,
-    #                                            analytic_sigma_sample=False,
-    #                                                 get_intermediate_sample_history_based_on_learned_twists=False,
-    #                                            n_vocab=n_vocab,
-    #                                            prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-    #                                            token_of_interest_as_int=token_of_interest_as_int,
-    #                                            resample=True, posterior_sample=posterior_sample,
-    #                                            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model) # resample is very important here, otherwise is just IWAE bound
     (log_w_t, log_z_hat_t, _), samples = smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
                                                log_true_final_twist, output_len, n_smc_samples,
                                                smc_procedure_type=smc_procedure_type,
@@ -1287,17 +1242,6 @@ def smc_backward(rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, 
                                                token_of_interest_as_int=token_of_interest_as_int,
                                                resample=True, posterior_sample=posterior_sample,
                                                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model) # resample is very important here, otherwise is just IWAE bound
-
-
-    # Posterior sample for the upper bound
-
-    # print("SMC Samples")
-    # print(samples)
-    #
-    # print(log_w_t)
-    #
-    # print(full_seq_list)
-    # print(log_w_t_list)
 
     upper_bound_estimate = log_z_hat_t
     return upper_bound_estimate

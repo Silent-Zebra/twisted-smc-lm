@@ -219,12 +219,53 @@ class ExperimentConfig:
             true_sigma_samples = None
             condition_twist_on_tokens = None
             if self.rm_type == "p_last_tokens":
-                sk, sk2 = jax.random.split(sk)
-                p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
-                                              output_len + self.num_last_tokens_to_condition_on, n_twist,
-                                              huggingface_model=huggingface_model)
-                true_sigma_samples = p_samples[:, :-self.num_last_tokens_to_condition_on]
-                condition_twist_on_tokens = p_samples[:, -self.num_last_tokens_to_condition_on:]
+                if "ebm" in self.twist_learn_type:
+                    # Do one conditioning token set at a time
+                    sk, sk2 = jax.random.split(sk)
+                    p_samples = stochastic_transformer_sample(sk2, cfg_p,
+                                                              params_p, prompt,
+                                                              output_len + self.num_last_tokens_to_condition_on,
+                                                              1,
+                                                              huggingface_model=huggingface_model)
+
+                    true_sigma_samples = p_samples[:,
+                                         :-self.num_last_tokens_to_condition_on]
+                    condition_twist_on_tokens = p_samples[:,
+                                                -self.num_last_tokens_to_condition_on:]
+                    true_posterior_sample = true_sigma_samples[0]
+                    condition_twist_on_tokens_for_chosen_posterior_sample = condition_twist_on_tokens[0]
+                    condition_twist_on_tokens_broadcasted = jnp.full(
+                        (n_twist, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens_for_chosen_posterior_sample
+                    )
+
+                    sk, sk2 = jax.random.split(sk)
+                    # Collect approximate true posteriors with the help of the 1 true posterior that we have
+                    (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
+                        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                        log_true_final_twist, output_len, n_twist,
+                        smc_procedure_type=self.smc_procedure_type,
+                        n_vocab=n_vocab,
+                        prepend_tokens_for_twists=prepend_tokens_for_twists,
+                        condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+                        token_of_interest_as_int=token_of_interest_as_int,
+                        resample=True,
+                        posterior_sample=true_posterior_sample,
+                        proposal_is_p=proposal_is_p,
+                        huggingface_model=huggingface_model
+                    ) # Note these are not really true sigma samples, but whatever, I just call them true_sigma_samples
+
+                    condition_twist_on_tokens = condition_twist_on_tokens_broadcasted
+                else:
+                    sk, sk2 = jax.random.split(sk)
+                    p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
+                                                  output_len + self.num_last_tokens_to_condition_on, n_twist,
+                                                  huggingface_model=huggingface_model)
+                    true_sigma_samples = p_samples[:, :-self.num_last_tokens_to_condition_on]
+                    condition_twist_on_tokens = p_samples[:, -self.num_last_tokens_to_condition_on:]
+
+
+
+
             grad_params_twist = self.dre_grad_fn(
                 sk, prompt, cfg_p, params_p, cfg_twist,
                 params_twist, log_true_final_twist, output_len,

@@ -85,27 +85,6 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 
 
 
-# def get_l_ebm_ml_scan_iter(carry, scan_over, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, resample_prompt_w_twist_sample=True, huggingface_model=None):
-#     l_ebm, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, rng_key = carry
-#     prompt_w_twist_sample_s_1_to_t_full_seq, t, intermediate_log_w_t = scan_over
-#
-#     if resample_prompt_w_twist_sample:
-#         # Do resampling (assumes resampling has not been done yet on the prompt with twist sample)
-#         rng_key, subkey = jax.random.split(rng_key)
-#         a_t = jax.random.categorical(subkey, intermediate_log_w_t, shape=intermediate_log_w_t.shape)
-#         prompt_w_twist_sample_s_1_to_t_full_seq = prompt_w_twist_sample_s_1_to_t_full_seq[a_t]
-#
-#     l_ebm += (
-#         evaluate_log_psi_t_full_seq(prompt_w_sigma_sample_s_1_to_t,
-#         cfg_twist, params_twist, prompt_len + t, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
-#         - evaluate_log_psi_t_full_seq(prompt_w_twist_sample_s_1_to_t_full_seq,
-#                                       cfg_twist, params_twist, prompt_len + t, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
-#     ).mean()
-#     carry = l_ebm, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, rng_key
-#     return carry, None
-
-
-
 
 # JITTING IS DONE SEPARATELY BELOW
 # This is the EBM Maximum Likelihood approach (previously called Roger's approach).
@@ -172,10 +151,7 @@ def get_l_ebm_ml_partial_jit(
     elif replay_buffer is not None:
         assert replay_buffer_log_w_ts is not None
         replay_buffer_log_w_ts, replay_buffer_log_prob_eval = replay_buffer_log_w_ts
-        # print("hihi2")
-        # print(replay_buffer_log_w_ts)
-        # print("hihi3")
-        # print(replay_buffer_log_prob_eval)
+
 
         if replay_buffer.shape[0] == n_twist:
             print("Using the full replay buffer with no sampling")
@@ -200,15 +176,6 @@ def get_l_ebm_ml_partial_jit(
             # and then take that numerator over the denominator which is exp(replay_buffer_log_prob_eval)
 
             new_log_imp_wts = log_p_1_to_t_psi_t - replay_buffer_log_prob_eval
-            # print("hihi")
-            # print(jax.lax.stop_gradient(replay_buffer_log_prob_eval))
-            # print(jax.lax.stop_gradient(log_p_1_to_t_psi_t))
-            # print(normalized_w_t_sigma_samples.shape)
-
-            # TODO NOV 15 TEST JUST THIS SPECIAL CASE OF REPLAY BUFF = N_TWIST
-            # Test it by checking that for the first iter (or just one big sample)
-            # 1) I should get the final weights equal to the log weights (well... so I would also have to have stored the previous evaluations...)
-            # 2) I get the same final results as the one sample ebm update
 
         else:
             rng_key, sk_sample = jax.random.split(rng_key)
@@ -245,27 +212,19 @@ def get_l_ebm_ml_partial_jit(
             proposal_samples, prompt_len, cfg_twist, params_twist,
             prepend_tokens_for_twists, condition_twist_on_tokens,
             token_of_interest_as_int, huggingface_model)
-        # print("hihi4")
-        # print(jax.lax.stop_gradient(proposal_samples_log_w_ts))
-        # print(jax.lax.stop_gradient(normalized_proposal_samples_log_w_ts))
+
         log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
             prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
             prepend_tokens_for_twists, condition_twist_on_tokens,
             token_of_interest_as_int, huggingface_model)
 
-        # print("hihi5")
-        # print(log_psi_on_truncated_sigma_samples.shape)
-        # print(normalized_w_t_sigma_samples.shape)
-        # print(log_psi_on_proposal_samples.shape)
-        # print(normalized_proposal_samples_log_w_ts.shape)
+
         l_ebm_new = 0.
         for i in range(log_psi_on_truncated_sigma_samples.shape[-1]):
             l_ebm_new += - (jnp.dot(log_psi_on_truncated_sigma_samples[:, i], normalized_w_t_sigma_samples) -
                             jnp.dot(log_psi_on_proposal_samples[:, i], normalized_proposal_samples_log_w_ts[:, i]))
         l_ebm_new /= log_psi_on_truncated_sigma_samples.shape[-1]
 
-        # l_ebm_new = -(jnp.dot(log_psi_on_truncated_sigma_samples.mean(axis=-1), normalized_w_t_sigma_samples)
-        #               - jnp.dot(log_psi_on_proposal_samples.mean(axis=-1), normalized_proposal_samples_log_w_ts))
         return l_ebm_new
 
     else:
@@ -284,21 +243,12 @@ def get_l_ebm_ml_partial_jit(
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                 resample=resample_for_sigma_samples, no_final_resample=no_final_resample,
                 tempered_twist=tempered_twist, beta_prop=beta_prop)
-            # print("First SMC done")
-            # print(time.time() - new_start)
-            # new_start = time.time()
+
             normalized_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
         prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
         token_of_interest_as_int, huggingface_model)
-
-    # print(time.time() - new_start)
-    # new_start = time.time()
-    # print(log_psi_on_truncated_sigma_samples.shape)
-
-    # print(jax.lax.stop_gradient(intermediate_log_w_t_hist))
-    # print(jax.lax.stop_gradient(log_psi_t_eval_list_proposal_samples))
 
     if reweight_for_second_term: # Get approximate p(s_{1:t}) psi_t(s_{1:t}) samples by reweighting the produce of conditionals q(s_1) q(s_2|s_1)...
         (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
@@ -321,23 +271,6 @@ def get_l_ebm_ml_partial_jit(
         )
 
         ebm_second_term = 0.
-
-        # for i in range(intermediate_log_w_t_hist.shape[0]):
-        #     rng_key, subkey = jax.random.split(rng_key)
-        #     a_t_learned = jax.random.categorical(subkey, intermediate_log_w_t_hist[i],
-        #                                          shape=intermediate_log_w_t_hist[i].shape)
-        #     log_r_psi_t_eval_w_potential_resample = log_psi_t_eval_list_proposal_samples[i][
-        #         a_t_learned]
-        #     ebm_second_term += log_r_psi_t_eval_w_potential_resample.mean()
-
-
-        # This does not work. But we should in principle have something to adjust the negative samples...
-        # if condition_twist_on_tokens is not None and true_sigma_samples is not None:
-        #     for i in range(intermediate_log_w_t_hist.shape[0]):
-        #         ebm_second_term += jnp.dot(jax.lax.stop_gradient(intermediate_log_w_t_hist[i]),
-        #             # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
-        #             log_psi_t_eval_list_proposal_samples[i])
-
 
         for i in range(intermediate_log_w_t_hist.shape[0]):
             ebm_second_term += jnp.dot(
@@ -371,52 +304,8 @@ def get_l_ebm_ml_partial_jit(
         ebm_second_term = jnp.transpose(log_psi_t_eval_list_proposal_samples).mean()
 
 
-    # print(jax.lax.stop_gradient(intermediate_log_w_t_hist @ jnp.transpose(log_psi_t_eval_list_proposal_samples)))
-
-    # print("Second SMC done")
-    # print(time.time() - new_start)
-    # new_start = time.time()
-
-    # print(jax.lax.stop_gradient(log_psi_on_truncated_sigma_samples))
-    # print(jax.lax.stop_gradient(log_psi_t_eval_list_proposal_samples))
-    # print(log_psi_on_truncated_sigma_samples.shape)
-    # print(log_psi_t_eval_list_proposal_samples.shape)
-
-    # print(log_psi_on_truncated_sigma_samples.shape)
-    # print(jnp.transpose(log_psi_t_eval_list_proposal_samples).shape)
-    # print(jax.lax.stop_gradient(-(jnp.dot(log_psi_on_truncated_sigma_samples.mean(axis=-1), normalized_w_t_sigma_samples) - jnp.transpose(log_psi_t_eval_list_proposal_samples).mean())))
-    # print(jax.lax.stop_gradient(-(log_psi_on_truncated_sigma_samples - jnp.transpose(log_psi_t_eval_list_proposal_samples)).mean()))
-    # 1/0
-
-    # log_psi_on_proposal_samples = evaluate_log_psi_selected_tokens(
-    #     proposal_samples, prompt_len, cfg_twist, params_twist,
-    #     prepend_tokens_for_twists, condition_twist_on_tokens,
-    #     token_of_interest_as_int, huggingface_model)
-    #
-    # print(log_psi_on_proposal_samples - jnp.transpose(log_psi_t_eval_list_proposal_samples))
-    # 1/0
-
     l_ebm_new = -(jnp.dot(log_psi_on_truncated_sigma_samples.mean(axis=-1), normalized_w_t_sigma_samples) - ebm_second_term)
 
-    # scan_over = (intermediate_twist_samples_hist, jnp.arange(output_len), intermediate_log_w_t_hist)
-    #
-    # carry = (l_ebm, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, sk3)
-    #
-    # carry, _ = jax.lax.scan(partial(get_l_ebm_ml_scan_iter, cfg_twist=cfg_twist,
-    #                                 prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-    #                                 token_of_interest_as_int=token_of_interest_as_int,
-    #                                 resample_prompt_w_twist_sample=True, huggingface_model=huggingface_model), carry, scan_over, output_len)
-    #
-    # l_ebm, _, _, _, _ = carry
-    #
-    # l_ebm /= (output_len)
-    #
-    # print(l_ebm)
-    # print(l_ebm_new)
-    # 1/0
-    # return -l_ebm  # negative because now we have a loss
-    # print(time.time() - new_start)
-    # new_start = time.time()
 
     return l_ebm_new
 
