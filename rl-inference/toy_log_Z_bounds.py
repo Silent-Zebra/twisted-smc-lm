@@ -3275,7 +3275,24 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         print(x['0']['0'].shape)
         print(list(x['0'].values()))
         true_posterior_samples_by_prompt_and_by_token = list(x['0'].values())
+        print(true_posterior_samples_by_prompt_and_by_token[0])
+        text_outputs = tokenizer.batch_decode(true_posterior_samples_by_prompt_and_by_token[0],
+                                        skip_special_tokens=True)
+        for x in set(text_outputs):
+            print(x)
+        print(len(set(text_outputs)))
+        # print(text_outputs)
 
+        # p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+        #                                           jnp_prompts[0],
+        #                                           args.output_len,
+        #                                           args.n_twist,
+        #                                           huggingface_model=huggingface_model)
+        # text_outputs = tokenizer.batch_decode(
+        #     p_samples, skip_special_tokens=True)
+        # for x in set(text_outputs):
+        #     print(x)
+        # 1/0
 
     # records_list_by_prompt_then_twist = []
     # for _ in jnp_prompts:
@@ -3562,7 +3579,7 @@ def main():
             args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
             args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
             args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
-            args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model,
+            args.load_prefix_ckpt, args.hface_nn_twist, args.separate_hface_twist_model,
             args.num_last_tokens_to_condition_on, only_collect_true_posterior_samples=True,
             num_samples_if_only_collect_true_posterior_samples=args.num_samples_if_only_collect_true_posterior_samples,
             load_posterior_samples=False, sentiment_class=args.sentiment_class
@@ -3586,7 +3603,7 @@ def main():
         args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
         args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
         args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
-        args.load_prefix, args.hface_nn_twist, args.separate_hface_twist_model,
+        args.load_prefix_ckpt, args.hface_nn_twist, args.separate_hface_twist_model,
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
         args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora
     )
@@ -3819,6 +3836,18 @@ def main():
                 print(f"TEST INFO STARTING", flush=True)
                 print(f"TIME: {time.time() - start}", flush=True)
 
+                # DO inspect samples regardless of whether we plot logZ bounds or not
+                rng_key, aux_info = experiment_cfg.inspect_results(
+                    rng_key, prompt, cfg_p, params_p, cfg_twist,
+                    params_twist, log_true_final_twist,
+                    args.output_len,
+                    args.n_test_smc_samples,
+                    indices_of_continuation, tokenizer,
+                    prepend_tokens_for_twists=False,
+                    token_of_interest_as_int=None,
+                    proposal_is_p=args.proposal_is_p,
+                    huggingface_model=huggingface_model)
+
                 if (not huggingface_model) and (true_log_z is None):
                     if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index" \
                         or experiment_cfg.rm_type == "contains_token" or experiment_cfg.rm_type == "contains_token_eps":
@@ -3892,19 +3921,17 @@ def main():
                     #     prompt_num, true_log_z, plot_over_time_list, tokenizer
                     # )
 
-                # DO inspect samples regardless of whether we plot logZ bounds or not
-
-
-                rng_key, aux_info = experiment_cfg.inspect_results(
-                    rng_key, prompt, cfg_p, params_p, cfg_twist,
-                    params_twist, log_true_final_twist,
-                    args.output_len,
-                    args.n_test_smc_samples,
-                    indices_of_continuation, tokenizer,
-                    prepend_tokens_for_twists=False,
-                    token_of_interest_as_int=None,
-                    proposal_is_p=args.proposal_is_p,
-                    huggingface_model=huggingface_model)
+                # # DO inspect samples regardless of whether we plot logZ bounds or not
+                # rng_key, aux_info = experiment_cfg.inspect_results(
+                #     rng_key, prompt, cfg_p, params_p, cfg_twist,
+                #     params_twist, log_true_final_twist,
+                #     args.output_len,
+                #     args.n_test_smc_samples,
+                #     indices_of_continuation, tokenizer,
+                #     prepend_tokens_for_twists=False,
+                #     token_of_interest_as_int=None,
+                #     proposal_is_p=args.proposal_is_p,
+                #     huggingface_model=huggingface_model)
 
                 if args.rm_type == "p_last_tokens":
                     g_q_estimates, f_q_estimates = aux_info
@@ -4175,7 +4202,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
     parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
     parser.add_argument("--load_dir", type=str, default='.', help="Where to load from for checkpoint")
-    parser.add_argument("--load_prefix", type=str, default='.')
+    parser.add_argument("--load_prefix_ckpt", type=str, default='.')
     parser.add_argument("--load_posterior_samples", action="store_true", help="load posterior samples from saved checkpoint instead of creating new ones")
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='.')
 
