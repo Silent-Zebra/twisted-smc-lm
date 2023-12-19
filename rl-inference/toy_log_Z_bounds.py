@@ -49,8 +49,7 @@ from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_fi
     evaluate_log_p_selected_tokens, get_f_q_estimate, \
     evaluate_normalized_log_q_1_to_t
 from toy_reward_models import *
-from losses import get_l_ebm_ml_partial_jit, get_l_ebm_ml_jit, \
-    get_l_one_total_kl, get_l_rl_based, get_l_dre_sixo, get_mixed_p_q_samples
+from losses import *
 
 # Update the twists, update the whole framework for the Bayesian thing.
 
@@ -180,6 +179,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         elif self.twist_learn_type == "sixo_mixed_p_q":
             dre_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=5)
+        elif self.twist_learn_type == "bce":
+            dre_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=5)
         elif self.twist_learn_type == "analytic_mse_rel":
             dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
                                    argnums=7)
@@ -215,9 +216,95 @@ class ExperimentConfig:
             grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
                                             params_p, log_true_final_twist, cfg_twist,
                                             params_twist, self.rm_type)
+
         else:
             true_sigma_samples = None
             condition_twist_on_tokens = None
+
+            if "bce" in self.twist_learn_type:
+                assert self.rm_type in [
+                    "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
+                    "exp_beta_sentiment_class_logprob"
+                ]
+                sk, sk2 = jax.random.split(sk)
+                p_samples = stochastic_transformer_sample(sk2, cfg_p,
+                                                          params_p, prompt,
+                                                          output_len,
+                                                          n_twist,
+                                                          huggingface_model=huggingface_model)
+
+                samples_to_evaluate_over = p_samples
+                log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
+                    samples_to_evaluate_over, prompt.shape[-1], cfg_twist,
+                    params_twist,
+                    prepend_tokens_for_twists, condition_twist_on_tokens,
+                    token_of_interest_as_int, huggingface_model)
+
+                # p_logits, log_psi = \
+                #     get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over,
+                #                                        params_p,
+                #                                        params_twist,
+                #                                        cfg_p, cfg_twist,
+                #                                        prepend_tokens_for_twists,
+                #                                        condition_twist_on_tokens,
+                #                                        token_of_interest_as_int,
+                #                                        huggingface_model=huggingface_model)
+
+                score = log_true_final_twist(
+                    samples_to_evaluate_over) / self.beta_temp  # because log e ^ beta r is just beta r, then divide by beta returns r = log p(c|s)
+
+                # class1_prob = jax.nn.sigmoid(score)
+                # class0_prob = 1 - class1_prob
+                # classification_logits = jnp.log(jnp.concatenate(
+                #     (class0_prob[:, None], class1_prob[:, None]), axis=-1))
+                # # print(classification_logits.shape)
+                #
+                # # classes = jax.random.categorical(subkey, classification_logits,
+                # #                              shape=(classification_logits.shape[0],))
+
+                # print(log_psi_on_p_samples)
+                # print(log_psi_on_p_samples.shape)
+                # # print(classification_logits)
+                # # print(classification_logits.shape)
+                # print(score.shape)
+                # print(jnp.full((log_psi_on_p_samples.shape), score[:, None]))
+                # print(jnp.full((log_psi_on_p_samples.shape), score[:, None]).shape)
+                #
+                # loss = optax.sigmoid_binary_cross_entropy(log_psi_on_p_samples,
+                #                                           jnp.full((log_psi_on_p_samples.shape), score[:, None]))
+                #
+                # print(loss)
+                # print(loss.shape)
+                #
+                # log_p = jax.nn.log_sigmoid(log_psi_on_p_samples)
+                # log_not_p  = jax.nn.log_sigmoid(-log_psi_on_p_samples)
+                # loss2 = -jnp.full((log_psi_on_p_samples.shape), score[:, None]) * log_p - (1. - jnp.full((log_psi_on_p_samples.shape), score[:, None])) * log_not_p
+                # print(loss2)
+                # print(loss2.shape)
+                # print((loss - loss2).sum())
+
+                # 1 / 0
+
+                true_sigma_samples = p_samples
+
+                grad_params_twist = self.dre_grad_fn(
+                    sk, prompt, cfg_p, params_p, cfg_twist,
+                    params_twist, log_true_final_twist, output_len,
+                    n_twist, smc_procedure_type=self.smc_procedure_type,
+                    prepend_tokens_for_twists=prepend_tokens_for_twists,
+                    condition_twist_on_tokens=condition_twist_on_tokens,
+                    token_of_interest_as_int=token_of_interest_as_int,
+                    proposal_is_p=proposal_is_p,
+                    huggingface_model=huggingface_model,
+                    tempered_twist=tempered_twist, beta_prop=beta_prop,
+                    true_sigma_samples=true_sigma_samples,
+                    replay_buffer=replay_buffer,
+                    replay_buffer_log_w_ts=replay_buffer_log_w_ts, score=score
+                )
+                return grad_params_twist
+
+
+
             if self.rm_type == "p_last_tokens":
                 if "ebm" in self.twist_learn_type:
                     # Do one conditioning token set at a time
@@ -322,6 +409,7 @@ class ExperimentConfig:
                      optimizer_twist, optim_twist_state, index_of_token_contained,
                      tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts
                      ):
+
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index":
             for i in range(len(indices_of_tokens_chosen)):
                 token_of_interest_as_int = indices_of_tokens_chosen[i]
@@ -2096,7 +2184,7 @@ class TestClass:
                         elif use_replay_buffer and experiment_cfg.twist_learn_type in  [
                             "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                             "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc"]:
+                            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "bce"]:
                             rng_key, params_twist, optim_twist_state = \
                                 experiment_cfg.update_twist(
                                     rng_key, indices_of_tokens_chosen, prompt,
@@ -4032,7 +4120,7 @@ def main():
                         )
                 elif experiment_cfg.twist_learn_type in ["rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                                  "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc"]:
+                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "bce"]:
 
                     rng_key, params_twist, optim_twist_state = \
                         experiment_cfg.update_twist(
@@ -4183,7 +4271,7 @@ if __name__ == "__main__":
                                  "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
                                  "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                                  "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc",  "sixo", "sixo_mixed_p_q"])
+                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc",  "sixo", "sixo_mixed_p_q", "bce"])
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=0)
@@ -4261,7 +4349,7 @@ if __name__ == "__main__":
     parser.add_argument("--only_collect_true_posterior_samples", action="store_true", help="Don't do any training. Just get a bunch of true posterior samples")
     parser.add_argument("--num_samples_if_only_collect_true_posterior_samples", type=int, default=100, help="How many true posterior samples to get IF USING THE only_collect_true_posterior_samples flag ")
 
-    parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. In general, don't use this flag.")
+    parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. Basically only for debug/testing. In general, don't use this flag.")
 
     parser.add_argument("--use_lora", action="store_true", help="Use LORA for training instead of training the full model")
 
