@@ -1010,8 +1010,11 @@ def get_l_bce(
         prepend_tokens_for_twists, condition_twist_on_tokens,
         token_of_interest_as_int, huggingface_model)
 
-    loss = optax.sigmoid_binary_cross_entropy(log_psi_on_p_samples,
-                                              jnp.full((log_psi_on_p_samples.shape), score[:, None]))
 
+    class_prob = jax.nn.sigmoid(score)
+
+    class_prob_broadcasted = jnp.full((log_psi_on_p_samples.shape), class_prob[:, None])
+
+    loss = optax.sigmoid_binary_cross_entropy(log_psi_on_p_samples, class_prob_broadcasted)
 
     return loss.mean()
