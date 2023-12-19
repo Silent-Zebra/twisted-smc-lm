@@ -12,10 +12,10 @@ no_final_resample = True # False # Turn this off (set to false) if you want the 
 resample_for_sigma_samples = False # True # Try true again. # True was what I had before; false to try no resampling (since we use the twist info already) on the approximate sigma samples
 
 
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int",
-                                   "smc_procedure_type", "proposal_is_p", "huggingface_model",
-                                   "tempered_twist", "beta_prop", "mixed_p_q_sample"])
+# @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+#                                    "prepend_tokens_for_twists", "token_of_interest_as_int",
+#                                    "smc_procedure_type", "proposal_is_p", "huggingface_model",
+#                                    "tempered_twist", "beta_prop", "mixed_p_q_sample"])
 def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                    output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
                    proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
@@ -84,6 +84,11 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     return -l_dre # negative because now we have a loss
 
 
+
+get_l_dre_sixo_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int",
+                                   "smc_procedure_type", "proposal_is_p", "huggingface_model",
+                                   "tempered_twist", "beta_prop", "mixed_p_q_sample"])(get_l_dre_sixo)
 
 
 # JITTING IS DONE SEPARATELY BELOW

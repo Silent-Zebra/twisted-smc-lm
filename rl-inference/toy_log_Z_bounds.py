@@ -176,8 +176,12 @@ class ExperimentConfig:
         elif self.twist_learn_type == "rl_mc":
             dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=5)
         elif self.twist_learn_type == "sixo":
-            dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
+            dre_grad_fn = jax.grad(get_l_dre_sixo_jit, argnums=5)
         elif self.twist_learn_type == "sixo_mixed_p_q":
+            dre_grad_fn = jax.grad(partial(get_l_dre_sixo_jit, mixed_p_q_sample=True), argnums=5)
+        elif self.twist_learn_type == "sixo_partial_jit":
+            dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
+        elif self.twist_learn_type == "sixo_mixed_p_q_partial_jit":
             dre_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "bce":
             dre_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=5)
@@ -226,6 +230,7 @@ class ExperimentConfig:
                     "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
                     "exp_beta_sentiment_class_logprob"
                 ]
+                assert self.beta_temp == 1. # because otherwise the Bayesian formulation doesn't work does it? TODO confirm
                 sk, sk2 = jax.random.split(sk)
                 p_samples = stochastic_transformer_sample(sk2, cfg_p,
                                                           params_p, prompt,
@@ -4262,16 +4267,22 @@ if __name__ == "__main__":
     parser.add_argument("--n_vocab", type=int, default=2,
                         help="Num of tokens in vocab")
 
-    parser.add_argument("--twist_learn_type", type=str, default="ebm_one_sample",
-                        choices=["ebm_old", "ebm_partial_jit", "ebm_mixed_p_q", # partial jit only for testing
-                                 "ebm_one_sample",
-                                 # "ebm_q_rsmp",
-                                 "ebm_reweight", "ebm_mixed_p_q_reweight",
-                                 "one_total_kl", "one_total_kl_mixed_p_q",
-                                 "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
-                                 "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
-                                 "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc",  "sixo", "sixo_mixed_p_q", "bce"])
+    parser.add_argument(
+        "--twist_learn_type", type=str, default="ebm_one_sample",
+        choices=[
+            "ebm_old", "ebm_partial_jit", "ebm_mixed_p_q", # partial jit only for testing
+            "ebm_one_sample",
+            # "ebm_q_rsmp",
+            "ebm_reweight", "ebm_mixed_p_q_reweight",
+            "one_total_kl", "one_total_kl_mixed_p_q",
+            "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
+            "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
+            "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
+            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc",
+            "sixo", "sixo_mixed_p_q", "sixo_mixed_p_q_partial_jit", "sixo_partial_jit",
+            "bce"
+        ]
+    )
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
 
     parser.add_argument("--seed", type=int, default=0)
