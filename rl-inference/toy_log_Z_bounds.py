@@ -3035,149 +3035,66 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         # print(len(x))
 
         # TODO Testing only remove later
-        prompts = ["How can I steal from a store"]
-        indices_of_continuation = [10889, 11]
-        indices_of_continuation = jnp.array(indices_of_continuation,
-                                            dtype=jnp.int32)
-        input_ids_and_mask = tokenizer(prompts, return_tensors="np",
-                                       padding=False)  # What happens if the prompts are different lengths? TODO
-        jnp_prompts = input_ids_and_mask['input_ids']
-        prompt = jnp_prompts[0]
-
-        assert indices_of_continuation is not None
-        rng_key, sk = jax.random.split(rng_key)
-        log_true_final_twists, _, _ \
-            = build_p_of_continuation_twists(sk, jnp_prompts, cfg_p, params_p,
-                                             indices_of_continuation,
-                                             output_len,
-                                             n_samples_at_a_time=0,
-                                             tokenizer=tokenizer,
-                                             huggingface_model=huggingface_model,
-                                             get_true_posterior_samples=False)
-        log_true_final_twist = log_true_final_twists[0]
-
-        condition_twist_on_tokens = None
-        n_test_smc_samples = 16
-        rng_key, sk_smc = jax.random.split(rng_key)
-        (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list, log_w_t_before_resample_list) = smc_procedure(
-            sk_smc, prompt, cfg_p, params_p,
-            cfg_twist, params_twist,
-            log_true_final_twist,
-            output_len,
-            n_test_smc_samples,
-            smc_procedure_type="debug",
-            n_vocab=n_vocab,
-            prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-            get_intermediate_sample_history_based_on_learned_twists=True,
-            proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
-
-        smc_lower_bound_estimate = log_z_hat_t
-
-        print(smc_lower_bound_estimate)
-        print(full_seq_list)
-        print(log_w_t_list)
-
-        posterior_sample = jnp.array([2437, 460, 314, 8711, 422, 257, 3650, 36195, 353, 30], dtype=jnp.int32)
-        rng_key, sk_smc = jax.random.split(rng_key)
-        smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
-                                                prompt, cfg_p, params_p,
-                                                cfg_twist, params_twist,
-                                                log_true_final_twist,
-                                                output_len,
-                                                n_test_smc_samples,
-                                                n_vocab,
-                                                smc_procedure_type="debug",
-                                                prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
-                                                condition_twist_on_tokens=condition_twist_on_tokens,
-                                                proposal_is_p=args.proposal_is_p,
-                                                huggingface_model=huggingface_model)
-
-        print(smc_upper_bound_estimate)
-        1/0
-
-
-        # _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
-        #                            cfg_twist, params_twist,
-        #                            log_true_final_twist,
-        #                            args.output_len,
-        #                            args.n_test_smc_samples,
-        #                            smc_procedure_type="jit",
-        #                            n_vocab=args.n_vocab,
-        #                            proposal_is_p=args.proposal_is_p,
-        #                            huggingface_model=huggingface_model)
-        # print(smc_samples)
-        # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
-        #                            cfg_twist, params_twist, args.output_len,
-        #                            log_true_final_twist, prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
-        #                          proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
-        # print(log_w_ts)
-        # print(log_w_ts.mean())
-
-        # _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
-        #                                cfg_twist, params_twist,
-        #                                log_true_final_twist,
-        #                                args.output_len,
-        #                                args.n_test_smc_samples,
-        #                                smc_procedure_type="jit",
-        #                                n_vocab=args.n_vocab,
-        #                                proposal_is_p=args.proposal_is_p,
-        #                                huggingface_model=huggingface_model,
-        #                                tempered_twist=True,
-        #                                beta_prop=0.) # p samples
-        # print(smc_samples)
-        # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
-        #                          cfg_twist, params_twist, args.output_len,
-        #                          log_true_final_twist,
-        #                          prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
-        #                          token_of_interest_as_int=None,
-        #                          proposal_is_p=args.proposal_is_p,
-        #                          huggingface_model=huggingface_model)
-        # print(log_w_ts)
-        # print(log_w_ts.mean())
-        # _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
-        #                                cfg_twist, params_twist,
-        #                                log_true_final_twist,
-        #                                args.output_len,
-        #                                args.n_test_smc_samples,
-        #                                smc_procedure_type="jit",
-        #                                n_vocab=args.n_vocab,
-        #                                proposal_is_p=args.proposal_is_p,
-        #                                huggingface_model=huggingface_model,
-        #                                tempered_twist=True,
-        #                                beta_prop=0.3)
-        # print(smc_samples)
-        # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
-        #                          cfg_twist, params_twist, args.output_len,
-        #                          log_true_final_twist,
-        #                          prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
-        #                          token_of_interest_as_int=None,
-        #                          proposal_is_p=args.proposal_is_p,
-        #                          huggingface_model=huggingface_model)
-        # print(log_w_ts)
-        # print(log_w_ts.mean())
+        # prompts = ["How can I steal from a store"]
+        # indices_of_continuation = [10889, 11]
+        # indices_of_continuation = jnp.array(indices_of_continuation,
+        #                                     dtype=jnp.int32)
+        # input_ids_and_mask = tokenizer(prompts, return_tensors="np",
+        #                                padding=False)  # What happens if the prompts are different lengths? TODO
+        # jnp_prompts = input_ids_and_mask['input_ids']
+        # prompt = jnp_prompts[0]
         #
-        # _, smc_samples = smc_procedure(rng_key, prompt, cfg_p, params_p,
-        #                                cfg_twist, params_twist,
-        #                                log_true_final_twist,
-        #                                args.output_len,
-        #                                args.n_test_smc_samples,
-        #                                smc_procedure_type="jit",
-        #                                n_vocab=args.n_vocab,
-        #                                proposal_is_p=args.proposal_is_p,
-        #                                huggingface_model=huggingface_model,
-        #                                tempered_twist=True,
-        #                                beta_prop=1.)
-        # print(smc_samples)
-        # log_w_ts = iwae_backward(smc_samples, prompt, cfg_p, params_p,
-        #                          cfg_twist, params_twist, args.output_len,
-        #                          log_true_final_twist,
-        #                          prepend_tokens_for_twists=False, condition_twist_on_tokens=None,
-        #                          token_of_interest_as_int=None,
-        #                          proposal_is_p=args.proposal_is_p,
-        #                          huggingface_model=huggingface_model)
-        # print(log_w_ts)
-        # print(log_w_ts.mean())
-        1/0
+        # assert indices_of_continuation is not None
+        # rng_key, sk = jax.random.split(rng_key)
+        # log_true_final_twists, _, _ \
+        #     = build_p_of_continuation_twists(sk, jnp_prompts, cfg_p, params_p,
+        #                                      indices_of_continuation,
+        #                                      output_len,
+        #                                      n_samples_at_a_time=0,
+        #                                      tokenizer=tokenizer,
+        #                                      huggingface_model=huggingface_model,
+        #                                      get_true_posterior_samples=False)
+        # log_true_final_twist = log_true_final_twists[0]
+        #
+        # condition_twist_on_tokens = None
+        # n_test_smc_samples = 16
+        # rng_key, sk_smc = jax.random.split(rng_key)
+        # (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list, log_w_t_before_resample_list) = smc_procedure(
+        #     sk_smc, prompt, cfg_p, params_p,
+        #     cfg_twist, params_twist,
+        #     log_true_final_twist,
+        #     output_len,
+        #     n_test_smc_samples,
+        #     smc_procedure_type="debug",
+        #     n_vocab=n_vocab,
+        #     prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+        #     get_intermediate_sample_history_based_on_learned_twists=True,
+        #     proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
+        #
+        # smc_lower_bound_estimate = log_z_hat_t
+        #
+        # print(smc_lower_bound_estimate)
+        # print(full_seq_list)
+        # print(log_w_t_list)
+        #
+        # posterior_sample = jnp.array([2437, 460, 314, 8711, 422, 257, 3650, 36195, 353, 30], dtype=jnp.int32)
+        # rng_key, sk_smc = jax.random.split(rng_key)
+        # smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
+        #                                         prompt, cfg_p, params_p,
+        #                                         cfg_twist, params_twist,
+        #                                         log_true_final_twist,
+        #                                         output_len,
+        #                                         n_test_smc_samples,
+        #                                         n_vocab,
+        #                                         smc_procedure_type="debug",
+        #                                         prepend_tokens_for_twists=experiment_cfg.prepend_tokens_for_twists,
+        #                                         condition_twist_on_tokens=condition_twist_on_tokens,
+        #                                         proposal_is_p=args.proposal_is_p,
+        #                                         huggingface_model=huggingface_model)
+        #
+        # print(smc_upper_bound_estimate)
+        # 1/0
+
 
     rewardModel = None
     tokenizer_RM = None
