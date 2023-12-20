@@ -101,7 +101,6 @@ class CustomLMWithTwistHead:
             embeddings_p = self.huggingface_model(train=train, params=hface_model_params, input_ids=input_ids, **kwargs)[0]
             embeddings_twist = embeddings_p
 
-
         # print('hihihi')
         # print(embeddings_twist.shape)
         # print(condition_twist_on_tokens)

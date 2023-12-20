@@ -2807,7 +2807,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
               load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
               num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
               num_samples_if_only_collect_true_posterior_samples=100,
-              load_posterior_samples=False, load_prefix_posterior_samples=None, sentiment_class=1, use_lora=False):
+              load_posterior_samples=False, load_prefix_posterior_samples=None, sentiment_class=1, use_lora=False, lora_rank=4):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
@@ -2899,7 +2899,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                     if path[0].key == 'head':
                         print(f'Fully finetuning param {path}')
                         return LORA_FULL
-                    dim = 4
+                    dim = lora_rank
                     print(f'Using LoRA with dim={dim} for param {path}')
                     return dim
 
@@ -3014,6 +3014,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         # print(restored_list)
         # optim_twist_state, params_twist = restored_list[0], restored_list[1]
         params_twist = x['0']
+        # optim_twist_state = x['1']
 
         # print(optim_twist_state)
         # optim_twist_state = optimizer_twist.init(params_twist)
@@ -3625,7 +3626,7 @@ def main():
         args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
         args.load_prefix_ckpt, args.hface_nn_twist, args.separate_hface_twist_model,
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
-        args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora
+        args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora, lora_rank=args.lora_rank
     )
 
 
@@ -4280,6 +4281,7 @@ if __name__ == "__main__":
     parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. Basically only for debug/testing. In general, don't use this flag.")
 
     parser.add_argument("--use_lora", action="store_true", help="Use LORA for training instead of training the full model")
+    parser.add_argument("--lora_rank", type=int, default=4, help="Rank of LORA")
 
     parser.add_argument("--n_samples_for_plots_smaller", type=int, default=32)
     parser.add_argument("--n_samples_for_plots_larger", type=int, default=500)
