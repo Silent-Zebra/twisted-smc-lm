@@ -101,8 +101,6 @@ class CustomLMWithTwistHead:
             embeddings_p = self.huggingface_model(train=train, params=hface_model_params, input_ids=input_ids, **kwargs)[0]
             embeddings_twist = embeddings_p
 
-        embeddings_p = jax.lax.stop_gradient(embeddings_p) # do this to ensure that we only train the twist head in this setting
-        embeddings_twist = jax.lax.stop_gradient(embeddings_twist) # do this to ensure that we only train the twist head in this setting
 
         # print('hihihi')
         # print(embeddings_twist.shape)
