@@ -3022,6 +3022,9 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         params_twist = x['0']
         # optim_twist_state = x['1']
 
+        if separate_hface_twist_model and hface_nn_twist:
+            params_twist = [x['0']['0'], x['0']['1']]
+
         # print(optim_twist_state)
         # optim_twist_state = optimizer_twist.init(params_twist)
         # print(optim_twist_state)
