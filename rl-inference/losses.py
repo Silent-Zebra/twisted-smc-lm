@@ -459,10 +459,6 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
 # Then the code for mixed sampling, etc, can go outside the function and just in one place, and perhaps not be repeated elsewhere
 # This is Rob's approach
 # for t = 1 to T: grad = E_sigma(s_1:t-1) [ E_sigma(s_t|s_1:t-1)[grad log psi (s_1:t)] - E_q(s_t|s_1:t-1)[grad log psi (s_1:t)]  ]
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type",
-                                   "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop",
-                                   "mixed_p_q_sample", "exact_expectation"])
 def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None,
@@ -589,61 +585,10 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 
     return -l_kl  # negative because now we have a loss
 
-# # This is Rob's approach
-# @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-#                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p", "huggingface_model"])
-# def get_l_one_total_kl_old(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-#                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None):
-#     prompt_len = prompt.shape[-1]
-#
-#     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
-#
-#     l_kl = 0.
-#
-#     # The first part is the same as Roger's/EBM-ML approach; the first term is going to be the same
-#     _, prompt_w_sigma_sample_s_1_to_t, (intermediate_twist_samples_hist, intermediate_log_w_t_hist, _) = smc_procedure(
-#         sk2, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len, n_twist,
-#         get_intermediate_sample_history_based_on_learned_twists=True,
-#         prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-#         token_of_interest_as_int=token_of_interest_as_int,
-#         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-#         resample=True
-#     )
-#
-#     # TODO make more efficient...
-#     # log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
-#     #     prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-#     #     token_of_interest_as_int, huggingface_model)
-#
-#
-#     scan_over = jnp.arange(output_len)
-#
-#     carry = (rng_key, prompt_w_sigma_sample_s_1_to_t, params_p, params_twist, prompt_len)
-#     # Then the second part, we need to truncate the sigma samples to t-1, and then sample from the proposal q for the next time step, then those will be our negative samples
-#     carry, new_seqs = jax.lax.scan(
-#         partial(
-#             get_proposal_q_sample_in_scan_non_modify, cfg_p=cfg_p, cfg_twist=cfg_twist,
-#             prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens, token_of_interest_as_int=token_of_interest_as_int, proposal_is_p=proposal_is_p, huggingface_model=huggingface_model
-#         ), carry, scan_over, output_len
-#     )
-#     rng_key, original_seq, params_p, params_twist, prompt_len = carry
-#
-#     # print(prompt_w_sigma_sample_s_1_to_t)
-#     # print(new_seqs)
-#
-#     scan_over = (new_seqs, jnp.arange(output_len), jnp.zeros(output_len)) # The last item is a dummy value, since we aren't resampling the prompt with twist sample anyway, so we don't need it
-#     carry = (l_kl, prompt_w_sigma_sample_s_1_to_t, params_twist, prompt_len, sk3)
-#
-#     carry, _ = jax.lax.scan(partial(get_l_ebm_ml_scan_iter,
-#                                     cfg_twist=cfg_twist,
-#                                     prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-#                                     token_of_interest_as_int=token_of_interest_as_int,
-#                                     resample_prompt_w_twist_sample=False, huggingface_model=huggingface_model), carry, scan_over, output_len) # can use the same calculation because it's the same grad of log twist, only difference is the expectation (choice of samples) we are evaluating over
-#
-#     l_kl, _, _, _, _ = carry
-#
-#     l_kl /= (output_len)
-#     return -l_kl  # negative because now we have a loss
+get_l_one_total_kl_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type",
+                                   "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop",
+                                   "mixed_p_q_sample", "exact_expectation"])(get_l_one_total_kl)
 
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",

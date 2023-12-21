@@ -146,13 +146,15 @@ class ExperimentConfig:
         elif self.twist_learn_type == "ebm_mixed_p_q_reweight":
             dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "one_total_kl":
-            dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
+            dre_grad_fn = jax.grad(get_l_one_total_kl_jit, argnums=5)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
-            dre_grad_fn = jax.grad(partial(get_l_one_total_kl, mixed_p_q_sample=True), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "one_total_kl_sample":
-            dre_grad_fn = jax.grad(partial(get_l_one_total_kl, exact_expectation=False), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, exact_expectation=False), argnums=5)
         elif self.twist_learn_type == "one_total_kl_sample_mixed_p_q":
-            dre_grad_fn = jax.grad(partial(get_l_one_total_kl, mixed_p_q_sample=True, exact_expectation=False), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True, exact_expectation=False), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_partial_jit":
+            dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
         elif self.twist_learn_type == "rl_p_sq":
             dre_grad_fn = jax.grad(partial(get_l_rl_based, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=5)
         elif self.twist_learn_type == "rl_q_sq":
@@ -2720,7 +2722,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
         plt_xlabel_text = f"Number of Twist Updates"
 
-    do_checkpoint_of_plot_info = False
+    do_checkpoint_of_plot_info = True
 
     if not proposal_is_p:
         # Save KL DIV Plot, only do this if not proposal_is_p
@@ -4192,7 +4194,7 @@ if __name__ == "__main__":
             "ebm_one_sample",
             # "ebm_q_rsmp",
             "ebm_reweight", "ebm_mixed_p_q_reweight",
-            "one_total_kl", "one_total_kl_mixed_p_q",
+            "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
             "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
