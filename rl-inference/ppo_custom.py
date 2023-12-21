@@ -18,22 +18,14 @@ def get_gae_advantages(rewards, values, next_val_history, gamma, gae_lambda):
 
     deltas = deltas.transpose() # use (seq_len, batch) shape here for the purpose of the scan which has to operate on the leading axis. An alternative approach would be to just vmap over the batch dimension
 
-    # print("--gae--")
-    # print(deltas.shape)
-    # print(deltas)
-
     gae = jnp.zeros_like(deltas[0, :])
 
     deltas = jnp.flip(deltas, axis=0)
-    # print(deltas.shape)
-    # print(deltas)
 
     gae, flipped_advantages = jax.lax.scan(partial(update_gae_with_delta_backwards, gamma=gamma, gae_lambda=gae_lambda), gae, deltas, deltas.shape[0])
     advantages = jnp.flip(flipped_advantages, axis=0)
 
     advantages = advantages.transpose() # return to (batch, output_len) to be consistent with the rest of the code
-    # print(advantages.shape)
-    # print(advantages)
 
     return advantages
 
@@ -59,57 +51,27 @@ def ppo_and_value_loss(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_sa
     rewards = jnp.zeros_like(curr_log_p)
     rewards = rewards.at[:, -1].set(rew_model(seq, prompt_len)) # In our setting we only have rewards at the end of the sequence; 0 rewards everywhere else
 
-    # print(rewards)
-    # print(rewards[:, -3:])
-
     # This assumes the same model arch for the baseline as in our derivation (since using cfg_baseline, params_baseline, batch_transformer, and squeeze),
     # which should be ok. Just the method of training the model is different
     values_incl_prompt = batch_transformer(cfg_baseline, params_baseline, seq).squeeze()
-    # print(values_incl_prompt.shape) # should be (batch, seq_len)
-    # print(jax.lax.stop_gradient(values_incl_prompt))
 
     values = values_incl_prompt[:, prompt_len:]
 
-    # print(values.shape) # (batch, output_len)
-    # print(jax.lax.stop_gradient(values))
 
     next_values = jnp.zeros_like(values)
     next_values = next_values.at[:, :-1].set(values[:, 1:])
     next_values = jax.lax.stop_gradient(next_values)
-    # Leave the very last next value to be 0, because after the sequence is finished, the next value is 0 (no more rewards after end of sequence; unlike in RL where env terminates but you may still be in a state that's similar to a state you previously visited)
-
-    # print(jax.lax.stop_gradient(next_values))
 
     advantages = get_gae_advantages(rewards, values, next_values, gamma, gae_lambda)
 
-    # print("--seq--")
-    # print(seq)
-    # print("-----")
-    # print(rewards)
-    # print(jax.lax.stop_gradient(advantages))
-
     cpi_objective = prob_ratio * advantages
-
-    # print(jax.lax.stop_gradient(cpi_objective))
 
     ppo_objective = jnp.minimum(cpi_objective, jnp.clip(prob_ratio, 1 - clip_epsilon, 1 + clip_epsilon ) * advantages)
 
-    # print(jax.lax.stop_gradient(ppo_objective))
-    # print(jax.lax.stop_gradient(cpi_objective - ppo_objective))
-
     ppo_loss = -ppo_objective.mean()
-
-    # print("PPO LOSS")
-    # print(jax.lax.stop_gradient(ppo_loss))
 
     val_loss = value_loss(rewards, values, jnp.zeros(seq.shape[0],), gamma) # again 0 value in the final state (e.g. T+1 state) as the sequence has finished
 
-    # print("PPO + VAL LOSS")
-    # print(jax.lax.stop_gradient(val_loss))
-    # print(jax.lax.stop_gradient(ppo_loss + val_loss))
-    # print("-----")
-
-    # return ppo_loss, curr_log_p
     return ppo_loss + val_loss, old_log_p
 
 
@@ -145,10 +107,6 @@ def value_loss(rewards, values, final_state_vals, gamma):
     # This becomes our target for the value function loss. So it's kind of a mix of Monte Carlo and bootstrap, but anyway you need the final value
     # because otherwise your value calculations will be inconsistent
     values_loss = (R_ts + final_val_discounted_to_curr - values) ** 2
-
-    # print(jax.lax.stop_gradient(values_loss))
-    # print(values_loss.shape)
-    # print(values_loss.sum(axis=0)) # (batch,) shape
 
     values_loss = values_loss.sum(axis=0).mean() # sum across time dimension, mean across batch dimension
 
