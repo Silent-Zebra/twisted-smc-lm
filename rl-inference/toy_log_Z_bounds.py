@@ -317,6 +317,9 @@ class ExperimentConfig:
 
 
             if self.rm_type == "p_last_tokens":
+                if self.beta_temp != 1.:
+                    assert "ebm" in self.twist_learn_type
+
                 if "ebm" in self.twist_learn_type:
                     # Do one conditioning token set at a time
                     sk, sk2 = jax.random.split(sk)
@@ -337,20 +340,26 @@ class ExperimentConfig:
                     )
 
                     sk, sk2 = jax.random.split(sk)
-                    # Collect approximate true posteriors with the help of the 1 true posterior that we have
-                    (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
-                        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                        log_true_final_twist, output_len, n_twist,
-                        smc_procedure_type=self.smc_procedure_type,
-                        n_vocab=n_vocab,
-                        prepend_tokens_for_twists=prepend_tokens_for_twists,
-                        condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
-                        token_of_interest_as_int=token_of_interest_as_int,
-                        resample=True,
-                        posterior_sample=true_posterior_sample,
-                        proposal_is_p=proposal_is_p,
-                        huggingface_model=huggingface_model
-                    ) # Note these are not really true sigma samples, but whatever, I just call them true_sigma_samples
+
+                    if self.beta_temp == 1:
+
+                        # Collect approximate true posteriors with the help of the 1 true posterior that we have
+                        (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
+                            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                            log_true_final_twist, output_len, n_twist,
+                            smc_procedure_type=self.smc_procedure_type,
+                            n_vocab=n_vocab,
+                            prepend_tokens_for_twists=prepend_tokens_for_twists,
+                            condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+                            token_of_interest_as_int=token_of_interest_as_int,
+                            resample=True,
+                            posterior_sample=true_posterior_sample,
+                            proposal_is_p=proposal_is_p,
+                            huggingface_model=huggingface_model
+                        ) # Note these are not really true sigma samples, but whatever, I just call them true_sigma_samples
+
+                    else:
+                        true_sigma_samples = None
 
                     condition_twist_on_tokens = condition_twist_on_tokens_broadcasted
                 else:
@@ -910,94 +919,169 @@ class ExperimentConfig:
                                                       output_len + self.num_last_tokens_to_condition_on,
                                                       n_samples,
                                                       huggingface_model=huggingface_model)
-            true_sigma_samples = p_samples[:,:-self.num_last_tokens_to_condition_on]
-            condition_twist_on_tokens = p_samples[:,-self.num_last_tokens_to_condition_on:]
 
-            log_prob_cont_sigma_samples = log_reward_model_p_of_last_tokens(
-                p_samples, cfg_p, params_p, self.num_last_tokens_to_condition_on,
-                huggingface_model=huggingface_model, beta_temp=1.)
+            condition_twist_on_tokens = p_samples[:,
+                                        -self.num_last_tokens_to_condition_on:]
 
-            # TODO OCT 29
-            # And then figure out how to do the UB LB stuff... I guess just no SMC bounds, just IWAE bounds then... because we only have 1 particle per posterior anyway.
+            if self.beta_temp == 1.:
 
-            _, _, (intermediate_seq_list, _, _) = smc_procedure(
-                sk1, prompt, cfg_p, params_p,
-                cfg_twist, params_twist,
-                log_true_final_twist,
-                output_len,
-                n_samples,
-                smc_procedure_type=self.smc_procedure_type,
-                n_vocab=self.n_vocab,
-                get_intermediate_sample_history_based_on_learned_twists=True,
-                prepend_tokens_for_twists=prepend_tokens_for_twists,
-                resample=False, # VERY IMPORTANT FOR THIS HERE
-                condition_twist_on_tokens=condition_twist_on_tokens,
-                token_of_interest_as_int=token_of_interest_as_int,
-                proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model)
+                true_sigma_samples = p_samples[:, :-self.num_last_tokens_to_condition_on]
 
-            print("hihi")
-            print(intermediate_seq_list)
-            print(intermediate_seq_list[-1])
-            print(condition_twist_on_tokens.shape)
-            proposal_samples = intermediate_seq_list[-1]
-            # proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
+                log_prob_cont_sigma_samples = log_reward_model_p_of_last_tokens(
+                    p_samples, cfg_p, params_p, self.num_last_tokens_to_condition_on,
+                    huggingface_model=huggingface_model, beta_temp=1.)
 
-            log_prob_cont_proposal_samples = log_reward_model_p_of_last_tokens(
-                jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1), cfg_p, params_p,
-                self.num_last_tokens_to_condition_on,
-                huggingface_model=huggingface_model, beta_temp=1.)
+                # TODO OCT 29
+                # And then figure out how to do the UB LB stuff... I guess just no SMC bounds, just IWAE bounds then... because we only have 1 particle per posterior anyway.
 
-            print(
-                "LOG PROB OF CONTINUATION FOR: true sigma samples, proposal samples")
-            print(log_prob_cont_sigma_samples[:n_samples_to_print])
-            print(log_prob_cont_proposal_samples[:n_samples_to_print])
+                _, _, (intermediate_seq_list, _, _) = smc_procedure(
+                    sk1, prompt, cfg_p, params_p,
+                    cfg_twist, params_twist,
+                    log_true_final_twist,
+                    output_len,
+                    n_samples,
+                    smc_procedure_type=self.smc_procedure_type,
+                    n_vocab=self.n_vocab,
+                    get_intermediate_sample_history_based_on_learned_twists=True,
+                    prepend_tokens_for_twists=prepend_tokens_for_twists,
+                    resample=False, # VERY IMPORTANT FOR THIS HERE
+                    condition_twist_on_tokens=condition_twist_on_tokens,
+                    token_of_interest_as_int=token_of_interest_as_int,
+                    proposal_is_p=proposal_is_p,
+                    huggingface_model=huggingface_model)
 
-            print(
-                "Averages of the above for SMC samples, proposal samples, p samples")
-            print(log_prob_cont_sigma_samples.mean())
-            print(log_prob_cont_proposal_samples.mean())
+                print("hihi")
+                print(intermediate_seq_list)
+                print(intermediate_seq_list[-1])
+                print(condition_twist_on_tokens.shape)
+                proposal_samples = intermediate_seq_list[-1]
+                # proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
 
-            if huggingface_model:
-                text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
+                log_prob_cont_proposal_samples = log_reward_model_p_of_last_tokens(
+                    jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1), cfg_p, params_p,
+                    self.num_last_tokens_to_condition_on,
+                    huggingface_model=huggingface_model, beta_temp=1.)
 
-                # print(intermediate_seq_list[-1])
-                print("INSPECTION OF Sigma SAMPLES")
-                print(p_samples[:n_samples_to_print])
+                print(
+                    "LOG PROB OF CONTINUATION FOR: true sigma samples, proposal samples")
+                print(log_prob_cont_sigma_samples[:n_samples_to_print])
+                print(log_prob_cont_proposal_samples[:n_samples_to_print])
+
+                print(
+                    "Averages of the above for SMC samples, proposal samples, p samples")
+                print(log_prob_cont_sigma_samples.mean())
+                print(log_prob_cont_proposal_samples.mean())
+
                 if huggingface_model:
-                    for s in text_outputs[:n_samples_to_print]:
-                        print(s)
+                    text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
 
-                text_outputs = tokenizer.batch_decode(proposal_samples, skip_special_tokens=True)
+                    # print(intermediate_seq_list[-1])
+                    print("INSPECTION OF Sigma SAMPLES")
+                    print(p_samples[:n_samples_to_print])
+                    if huggingface_model:
+                        for s in text_outputs[:n_samples_to_print]:
+                            print(s)
+
+                    text_outputs = tokenizer.batch_decode(proposal_samples, skip_special_tokens=True)
 
 
-                # print(intermediate_seq_list[-1])
-                print("INSPECTION OF Proposal SAMPLES")
-                print(proposal_samples[:n_samples_to_print])
+                    # print(intermediate_seq_list[-1])
+                    print("INSPECTION OF Proposal SAMPLES")
+                    print(proposal_samples[:n_samples_to_print])
+                    if huggingface_model:
+                        for s in text_outputs[:n_samples_to_print]:
+                            print(s)
+
+                g_q_estimates = iwae_backward(
+                    true_sigma_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                    output_len, log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+                    token_of_interest_as_int, proposal_is_p, huggingface_model)
+                f_q_estimates = iwae_backward(
+                    proposal_samples, prompt, cfg_p, params_p, cfg_twist,
+                    params_twist, output_len, log_true_final_twist, prepend_tokens_for_twists,
+                    condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p, huggingface_model)
+
+                print("G_q estimates")
+                print(g_q_estimates)
+                print(f"Average G_q: {g_q_estimates.mean()}")
+                print("F_q estimates")
+                print(f_q_estimates)
+                print(f"Average F_q: {f_q_estimates.mean()}")
+                print("Gaps")
+                print(g_q_estimates - f_q_estimates)
+                print(f"Average gap: {(g_q_estimates - f_q_estimates).mean()}")
+
+                aux_info = (g_q_estimates, f_q_estimates)
+
+            else:
+
+                _, _, (intermediate_seq_list, _, _) = smc_procedure(
+                    sk1, prompt, cfg_p, params_p,
+                    cfg_twist, params_twist,
+                    log_true_final_twist,
+                    output_len,
+                    n_samples,
+                    smc_procedure_type=self.smc_procedure_type,
+                    n_vocab=self.n_vocab,
+                    get_intermediate_sample_history_based_on_learned_twists=True,
+                    prepend_tokens_for_twists=prepend_tokens_for_twists,
+                    resample=False,  # VERY IMPORTANT FOR THIS HERE
+                    condition_twist_on_tokens=condition_twist_on_tokens,
+                    token_of_interest_as_int=token_of_interest_as_int,
+                    proposal_is_p=proposal_is_p,
+                    huggingface_model=huggingface_model)
+
+                print("hihi")
+                print(intermediate_seq_list)
+                print(intermediate_seq_list[-1])
+                print(condition_twist_on_tokens.shape)
+                proposal_samples = intermediate_seq_list[-1]
+                # proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
+
+                log_prob_cont_proposal_samples = log_reward_model_p_of_last_tokens(
+                    jnp.concatenate(
+                        (intermediate_seq_list[-1], condition_twist_on_tokens),
+                        axis=-1), cfg_p, params_p,
+                    self.num_last_tokens_to_condition_on,
+                    huggingface_model=huggingface_model, beta_temp=1.)
+
+                log_prob_cont_p_samples = log_reward_model_p_of_last_tokens(
+                    p_samples, cfg_p, params_p,
+                    self.num_last_tokens_to_condition_on,
+                    huggingface_model=huggingface_model, beta_temp=1.)
+
+
+                print(
+                    "LOG PROB OF CONTINUATION FOR: p samples, proposal samples")
+                print(log_prob_cont_p_samples[:n_samples_to_print])
+                print(log_prob_cont_proposal_samples[:n_samples_to_print])
+
+                print(
+                    "Averages of the above for p samples, proposal samples")
+                print(log_prob_cont_p_samples.mean())
+                print(log_prob_cont_proposal_samples.mean())
+
                 if huggingface_model:
-                    for s in text_outputs[:n_samples_to_print]:
-                        print(s)
+                    text_outputs = tokenizer.batch_decode(p_samples,
+                                                          skip_special_tokens=True)
 
-            g_q_estimates = iwae_backward(
-                true_sigma_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                output_len, log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-                token_of_interest_as_int, proposal_is_p, huggingface_model)
-            f_q_estimates = iwae_backward(
-                proposal_samples, prompt, cfg_p, params_p, cfg_twist,
-                params_twist, output_len, log_true_final_twist, prepend_tokens_for_twists,
-                condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p, huggingface_model)
+                    # print(intermediate_seq_list[-1])
+                    print("INSPECTION OF P SAMPLES")
+                    print(p_samples[:n_samples_to_print])
+                    if huggingface_model:
+                        for s in text_outputs[:n_samples_to_print]:
+                            print(s)
 
-            print("G_q estimates")
-            print(g_q_estimates)
-            print(f"Average G_q: {g_q_estimates.mean()}")
-            print("F_q estimates")
-            print(f_q_estimates)
-            print(f"Average F_q: {f_q_estimates.mean()}")
-            print("Gaps")
-            print(g_q_estimates - f_q_estimates)
-            print(f"Average gap: {(g_q_estimates - f_q_estimates).mean()}")
+                    text_outputs = tokenizer.batch_decode(proposal_samples,
+                                                          skip_special_tokens=True)
 
-            aux_info = (g_q_estimates, f_q_estimates)
+                    # print(intermediate_seq_list[-1])
+                    print("INSPECTION OF Proposal SAMPLES")
+                    print(proposal_samples[:n_samples_to_print])
+                    if huggingface_model:
+                        for s in text_outputs[:n_samples_to_print]:
+                            print(s)
+
 
         elif self.rm_type == "contains_continuation":
             raise NotImplementedError
@@ -3286,6 +3370,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
     get_true_posterior_samples = True
     if load_posterior_samples:
         get_true_posterior_samples = False
+    if experiment_cfg.beta_temp != 1:
+        get_true_posterior_samples = False
     rng_key, sk = jax.random.split(rng_key)
     log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
         = experiment_cfg.get_log_true_final_twists(
@@ -3839,7 +3925,11 @@ def main():
             elif args.rm_type in ["only_contains_token", "contains_continuation",
                                   "toxicity_threshold", "sentiment_threshold", "p_continuation",
                                   "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
-                true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
+                if args.beta_temp == 1:
+                    true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
+                else:
+                    true_posterior_samples_by_token = None
+
             elif args.rm_type in ["exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"] and true_posterior_samples_by_prompt_and_by_token: # check len(true_posterior_samples_by_prompt_and_by_token) != 0, ie it is not an empty list
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
@@ -3963,7 +4053,7 @@ def main():
                 #     proposal_is_p=args.proposal_is_p,
                 #     huggingface_model=huggingface_model)
 
-                if args.rm_type == "p_last_tokens":
+                if args.rm_type == "p_last_tokens" and args.beta_temp == 1.:
                     g_q_estimates, f_q_estimates = aux_info
                     g_q_estimates_list.append(g_q_estimates)
                     f_q_estimates_list.append(f_q_estimates)
