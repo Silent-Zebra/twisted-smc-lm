@@ -915,7 +915,7 @@ class ExperimentConfig:
 
             log_prob_cont_sigma_samples = log_reward_model_p_of_last_tokens(
                 p_samples, cfg_p, params_p, self.num_last_tokens_to_condition_on,
-                huggingface_model=huggingface_model, return_log_w_no_temp=True)
+                huggingface_model=huggingface_model, beta_temp=1.)
 
             # TODO OCT 29
             # And then figure out how to do the UB LB stuff... I guess just no SMC bounds, just IWAE bounds then... because we only have 1 particle per posterior anyway.
@@ -946,7 +946,7 @@ class ExperimentConfig:
             log_prob_cont_proposal_samples = log_reward_model_p_of_last_tokens(
                 jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1), cfg_p, params_p,
                 self.num_last_tokens_to_condition_on,
-                huggingface_model=huggingface_model, return_log_w_no_temp=True)
+                huggingface_model=huggingface_model, beta_temp=1.)
 
             print(
                 "LOG PROB OF CONTINUATION FOR: true sigma samples, proposal samples")
@@ -4249,7 +4249,7 @@ if __name__ == "__main__":
     parser.add_argument("--proposal_is_p_for_plots", action="store_true", help="Use q = p for the proposal, ONLY FOR THE PLOTS AND ONLY IN MEMORY CONSTRAINED SETTINGS DOES THIS DO ANYTHING (otherwise I do both p and q for the plots)")
 
     parser.add_argument("--index_of_token_contained", type=int, default=6, help="for the contains_token environment, the token we are interested in checking")
-    parser.add_argument("--beta_temp", type=float, help="beta used for the temperature scaling; right now just for the reward model based on the prob of the continuation",
+    parser.add_argument("--beta_temp", type=float, help="beta used for the temperature scaling; for reward models based on the p(x | s) formulation where x = continuation, x = is toxic class, x = is sentiment class 5, etc.",
                         default=1.)
     parser.add_argument("--huggingface", action="store_true", help="Use huggingface transformer. Obviates the need for setting transformer parameters")
     parser.add_argument("--hface_model_type", type=str, default="distilgpt2",
