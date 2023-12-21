@@ -591,10 +591,10 @@ get_l_one_total_kl_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist",
                                    "mixed_p_q_sample", "exact_expectation"])(get_l_one_total_kl)
 
 
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-                                   "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop", "train_final_twist_only"])
-def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+
+
+
+def get_l_rl_based_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                    output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
                    smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
                    evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error_in_log_space", tempered_twist=False, beta_prop=None,
@@ -802,6 +802,11 @@ def get_l_rl_based(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     # TODO afterwards: logsumexp or whatever the other RL formulation was.
 
     return loss
+
+
+get_l_rl_based_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
+                                   "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop", "train_final_twist_only"])(get_l_rl_based_partial_jit)
 
 
 
