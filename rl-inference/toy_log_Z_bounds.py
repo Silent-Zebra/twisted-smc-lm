@@ -245,11 +245,11 @@ class ExperimentConfig:
                                                           huggingface_model=huggingface_model)
 
                 samples_to_evaluate_over = p_samples
-                log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
-                    samples_to_evaluate_over, prompt.shape[-1], cfg_twist,
-                    params_twist,
-                    prepend_tokens_for_twists, condition_twist_on_tokens,
-                    token_of_interest_as_int, huggingface_model)
+                # log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
+                #     samples_to_evaluate_over, prompt.shape[-1], cfg_twist,
+                #     params_twist,
+                #     prepend_tokens_for_twists, condition_twist_on_tokens,
+                #     token_of_interest_as_int, huggingface_model)
 
                 # p_logits, log_psi = \
                 #     get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over,
@@ -860,7 +860,7 @@ class ExperimentConfig:
 
                 # print(intermediate_seq_list[-1])
                 print("INSPECTION OF SMC SAMPLES")
-                print(smc_samples[:n_samples_to_print])
+                # print(smc_samples[:n_samples_to_print])
                 for s in text_outputs_smc[:n_samples_to_print]:
                     print(s)
 
@@ -868,7 +868,7 @@ class ExperimentConfig:
                                                       skip_special_tokens=True)
 
                 print("INSPECTION OF PROPOSAL SAMPLES")
-                print(proposal_samples[:n_samples_to_print])
+                # print(proposal_samples[:n_samples_to_print])
                 for s in text_outputs_proposal[:n_samples_to_print]:
                     print(s)
 
@@ -876,7 +876,7 @@ class ExperimentConfig:
                                                           skip_special_tokens=True)
 
                 print("INSPECTION OF NO-INTERMEDIATE-RESAMPLE SMC SAMPLES")
-                print(no_intermediate_resample_smc_samples[:n_samples_to_print])
+                # print(no_intermediate_resample_smc_samples[:n_samples_to_print])
                 for s in text_outputs_smc_no_intermediate_resample[:n_samples_to_print]:
                     print(s)
 
@@ -884,7 +884,7 @@ class ExperimentConfig:
                                                                skip_special_tokens=True)
 
                 print("INSPECTION OF NO-INTERMEDIATE-RESAMPLE PROPOSAL SAMPLES")
-                print(no_intermediate_resample_proposal_samples[:n_samples_to_print])
+                # print(no_intermediate_resample_proposal_samples[:n_samples_to_print])
                 for s in text_outputs_proposal_no_intermediate_resample[:n_samples_to_print]:
                     print(s)
 
@@ -977,20 +977,31 @@ class ExperimentConfig:
 
                     # print(intermediate_seq_list[-1])
                     print("INSPECTION OF Sigma SAMPLES")
-                    print(p_samples[:n_samples_to_print])
                     if huggingface_model:
                         for s in text_outputs[:n_samples_to_print]:
                             print(s)
+                    else:
+                        print(p_samples[:n_samples_to_print])
 
                     text_outputs = tokenizer.batch_decode(proposal_samples, skip_special_tokens=True)
 
-
                     # print(intermediate_seq_list[-1])
                     print("INSPECTION OF Proposal SAMPLES")
-                    print(proposal_samples[:n_samples_to_print])
                     if huggingface_model:
                         for s in text_outputs[:n_samples_to_print]:
                             print(s)
+                    else:
+                        print(proposal_samples[:n_samples_to_print])
+
+                    text_outputs = tokenizer.batch_decode(jnp.concatenate(
+                        (proposal_samples, condition_twist_on_tokens),
+                        axis=-1), skip_special_tokens=True)
+                    print("INSPECTION OF Proposal SAMPLES together with the conditioning tokens")
+                    if huggingface_model:
+                        for s in text_outputs[:n_samples_to_print]:
+                            print(s)
+                    else:
+                        print(proposal_samples[:n_samples_to_print])
 
                 g_q_estimates = iwae_backward(
                     true_sigma_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -1031,10 +1042,10 @@ class ExperimentConfig:
                     proposal_is_p=proposal_is_p,
                     huggingface_model=huggingface_model)
 
-                print("hihi")
-                print(intermediate_seq_list)
-                print(intermediate_seq_list[-1])
-                print(condition_twist_on_tokens.shape)
+                # print("hihi")
+                # print(intermediate_seq_list)
+                # print(intermediate_seq_list[-1])
+                # print(condition_twist_on_tokens.shape)
                 proposal_samples = intermediate_seq_list[-1]
                 # proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
 
@@ -1067,20 +1078,23 @@ class ExperimentConfig:
 
                     # print(intermediate_seq_list[-1])
                     print("INSPECTION OF P SAMPLES")
-                    print(p_samples[:n_samples_to_print])
                     if huggingface_model:
                         for s in text_outputs[:n_samples_to_print]:
                             print(s)
+                    else:
+                        print(p_samples[:n_samples_to_print])
 
                     text_outputs = tokenizer.batch_decode(proposal_samples,
                                                           skip_special_tokens=True)
 
                     # print(intermediate_seq_list[-1])
                     print("INSPECTION OF Proposal SAMPLES")
-                    print(proposal_samples[:n_samples_to_print])
                     if huggingface_model:
                         for s in text_outputs[:n_samples_to_print]:
                             print(s)
+                    else:
+                        print(proposal_samples[:n_samples_to_print])
+
 
 
         elif self.rm_type == "contains_continuation":
@@ -3249,7 +3263,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                 ]
             else:
                 prompts = [
-                    "Once upon a time",
+                    "Once upon a time, there was a",
                 ]
         else:
             if rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
