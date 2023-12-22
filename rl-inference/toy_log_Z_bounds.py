@@ -2907,7 +2907,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
           beta1, beta2, weight_decay, d_model, d_k, d_v, n_layers, n_heads, d_fc,
           d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist, d_fc_twist,
           indicator_pos_zero_index, output_len, n_true_posterior_samples, index_of_token_contained,
-          beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dir=None,
+          beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dirs=None,
               load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
               num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
               num_samples_if_only_collect_true_posterior_samples=100,
@@ -2918,6 +2918,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                                       beta_temp=beta_temp,
                                       num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
                                       sentiment_class=sentiment_class)
+
+    load_dir_ckpt, load_dir_posterior_samples = load_dirs
 
     rng_key = jax.random.PRNGKey(seed)
 
@@ -3110,7 +3112,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
     if load_ckpt:
         # print(optim_twist_state)
         # print(params_twist)
-        x = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=None, prefix=load_prefix)
+        x = checkpoints.restore_checkpoint(ckpt_dir=load_dir_ckpt, target=None, prefix=load_prefix)
         # print(x)
         # restored_list = [optim_twist_state, params_twist]
         # restored_list = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=restored_list, prefix=load_prefix)
@@ -3395,7 +3397,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
     print(f"TIME: {time.time()}", flush=True)
 
     if load_posterior_samples:
-        x = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=None, prefix=load_prefix_posterior_samples)
+        x = checkpoints.restore_checkpoint(ckpt_dir=load_dir_posterior_samples, target=None, prefix=load_prefix_posterior_samples)
         # print(x)
         # print(x['0']['0'])
         print(x['0']['0'].shape)
@@ -3704,7 +3706,7 @@ def main():
             args.d_model_twist, args.d_k_twist, args.d_v_twist, args.n_layers_twist,
             args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
             args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
-            args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
+            args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, (args.load_dir_ckpt, args.load_dir_posterior_samples),
             args.load_prefix_ckpt, args.hface_nn_twist, args.separate_hface_twist_model,
             args.num_last_tokens_to_condition_on, only_collect_true_posterior_samples=True,
             num_samples_if_only_collect_true_posterior_samples=args.num_samples_if_only_collect_true_posterior_samples,
@@ -3728,7 +3730,7 @@ def main():
         args.d_model_twist, args.d_k_twist, args.d_v_twist, args.n_layers_twist,
         args.n_heads_twist, args.d_fc_twist, args.indicator_pos_zero_index,
         args.output_len, args.n_true_posterior_samples, args.index_of_token_contained,
-        args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, args.load_dir,
+        args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, (args.load_dir_ckpt, args.load_dir_posterior_samples),
         args.load_prefix_ckpt, args.hface_nn_twist, args.separate_hface_twist_model,
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
         args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora, lora_rank=args.lora_rank
@@ -4337,14 +4339,15 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
     parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
-    parser.add_argument("--load_dir", type=str, default='.', help="Where to load from for checkpoint")
+    parser.add_argument("--load_dir_ckpt", type=str, default='.', help="Where to load from for checkpoint")
+    parser.add_argument("--load_dir_posterior_samples", type=str, default='.', help="Where to load from for posterior samples")
     parser.add_argument("--load_prefix_ckpt", type=str, default='.')
     parser.add_argument("--load_posterior_samples", action="store_true", help="load posterior samples from saved checkpoint instead of creating new ones")
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='.')
 
 
     parser.add_argument("--indicator_pos_zero_index", type=int, default=0)
-    parser.add_argument("--n_true_posterior_samples", type=int, default=10)
+    parser.add_argument("--n_true_posterior_samples", type=int, default=10, help="NOTE: this is misleading. This is actually the batch size used in collecting true posterior samples. As soon as >0 posterior samples are collected, the true posterior sample collection stops.") # TODO possible refactor of this
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
     parser.add_argument("--proposal_is_p_for_plots", action="store_true", help="Use q = p for the proposal, ONLY FOR THE PLOTS AND ONLY IN MEMORY CONSTRAINED SETTINGS DOES THIS DO ANYTHING (otherwise I do both p and q for the plots)")
 
