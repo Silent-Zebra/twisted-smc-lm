@@ -3257,14 +3257,10 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
     indices_of_continuation = None
     if huggingface:
         if hface_model_type == "TinyStories":
-            if rm_type == "p_last_tokens":
-                prompts = [
-                    "Once upon a time, there was a",
-                ]
-            else:
-                prompts = [
-                    "Once upon a time, there was a",
-                ]
+            prompts = [
+                "Once upon a time, there was a",
+            ]
+
         else:
             if rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
                 prompts = ["How can I steal from a store"]
