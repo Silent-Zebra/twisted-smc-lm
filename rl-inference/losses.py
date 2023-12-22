@@ -824,7 +824,7 @@ def get_l_bce(
     output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
     smc_procedure_type, rm_type, beta_temp=1., token_of_interest_as_int=None, proposal_is_p=False,
     evaluate_over_samples_from="p", huggingface_model=None, tempered_twist=False, beta_prop=None,
-    true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None, score=None
+    true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None, log_prob_class=None
 ):
     prompt_len = prompt.shape[-1]
 
@@ -834,7 +834,7 @@ def get_l_bce(
 
     assert true_sigma_samples is not None # Not really true_sigma_samples, just the samples we run this loss on.
 
-    assert score is not None
+    assert log_prob_class is not None
 
     # if replay_buffer is not None:
     #     replay_buffer_log_w_ts, replay_buffer_log_phi_final_eval = replay_buffer_log_w_ts
@@ -966,7 +966,7 @@ def get_l_bce(
         token_of_interest_as_int, huggingface_model)
 
 
-    class_prob = jax.nn.sigmoid(score)
+    class_prob = jnp.exp(log_prob_class)
 
     class_prob_broadcasted = jnp.full((log_psi_on_p_samples.shape), class_prob[:, None])
 

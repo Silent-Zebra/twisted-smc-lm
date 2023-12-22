@@ -233,7 +233,7 @@ class ExperimentConfig:
 
             if "bce" in self.twist_learn_type:
                 assert self.rm_type in [
-                    "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
+                    "exp_beta_toxicity_class_logprob",
                     "exp_beta_sentiment_class_logprob"
                 ]
                 assert self.beta_temp == 1. # because otherwise the Bayesian formulation doesn't work does it? TODO confirm
@@ -261,7 +261,7 @@ class ExperimentConfig:
                 #                                        token_of_interest_as_int,
                 #                                        huggingface_model=huggingface_model)
 
-                score = log_true_final_twist(
+                log_prob_class = log_true_final_twist(
                     samples_to_evaluate_over) / self.beta_temp  # because log e ^ beta r is just beta r, then divide by beta returns r = log p(c|s)
 
                 # class1_prob = jax.nn.sigmoid(score)
@@ -310,7 +310,7 @@ class ExperimentConfig:
                     tempered_twist=tempered_twist, beta_prop=beta_prop,
                     true_sigma_samples=true_sigma_samples,
                     replay_buffer=replay_buffer,
-                    replay_buffer_log_w_ts=replay_buffer_log_w_ts, score=score
+                    replay_buffer_log_w_ts=replay_buffer_log_w_ts, log_prob_class=log_prob_class
                 )
                 return grad_params_twist
 
