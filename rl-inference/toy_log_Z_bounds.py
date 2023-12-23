@@ -2911,7 +2911,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
               load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
               num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
               num_samples_if_only_collect_true_posterior_samples=100,
-              load_posterior_samples=False, load_prefix_posterior_samples=None, sentiment_class=1, use_lora=False, lora_rank=4):
+              load_posterior_samples=False, load_prefix_posterior_samples=None,
+              sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
@@ -2974,7 +2975,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                 sk, model_config, hface_nn_twist=hface_nn_twist,
                 softmax_twist=softmax_twist, conditional_twist=conditional_twist,
                 num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt,
-                n_layers_twist=n_layers_twist
+                n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier
             )
 
             params_p = model_p.huggingface_model.params
@@ -3037,7 +3038,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             model = CustomLMWithTwistHead(
                 sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist,
                 conditional_twist=conditional_twist, num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
-                from_pt=from_pt, n_layers_twist=n_layers_twist
+                from_pt=from_pt, n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier
             )
             params_p = model.huggingface_model.params
             params_twist = model.twist_head_params
@@ -3735,7 +3736,8 @@ def main():
         args.beta_temp, args.threshold, args.pos_threshold, args.load_ckpt, (args.load_dir_ckpt, args.load_dir_posterior_samples),
         args.load_prefix_ckpt, args.hface_nn_twist, args.separate_hface_twist_model,
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
-        args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora, lora_rank=args.lora_rank
+        args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora, lora_rank=args.lora_rank,
+        hidden_units_multiplier=args.hidden_units_multiplier
     )
 
 
@@ -4282,6 +4284,8 @@ if __name__ == "__main__":
                         help="Feedforward layer dimension")
     parser.add_argument("--n_layers_twist", type=int, default=3,
                         help="Number of layers")
+    parser.add_argument("--hidden_units_multiplier", type=float, default=1.,
+                        help="Multiplier on number of hidden units for twist head (for hface_nn_twist); default of 1 means hidden_units = d_model for the huggingface model")
 
     parser.add_argument("--output_len", type=int, default=5,
                         help="Length of the strings we output")

@@ -15,7 +15,7 @@ from custom_transformer import linear_init_normal, linear
 
 class CustomLMWithTwistHead:
     def __init__(self, key, model_name, output_size=-1, hface_nn_twist=False, softmax_twist=False,
-                 conditional_twist=False, num_last_tokens_to_condition_on=0, from_pt=False, n_layers_twist=3):
+                 conditional_twist=False, num_last_tokens_to_condition_on=0, from_pt=False, n_layers_twist=3, hidden_units_multiplier=1.):
         self.huggingface_model = FlaxAutoModel.from_pretrained(model_name, from_pt=from_pt)  # Produces embeddings of d_model size
         if conditional_twist:
             assert num_last_tokens_to_condition_on > 0
@@ -25,6 +25,7 @@ class CustomLMWithTwistHead:
         self.n_layers_twist = n_layers_twist
 
         assert n_layers_twist >= 2
+        assert hidden_units_multiplier > 0
 
         if output_size == -1:
             output_size, d_model = self.huggingface_model._params['wte']['embedding'].shape
@@ -38,27 +39,37 @@ class CustomLMWithTwistHead:
             self.twist_head_params['linear_layers'] = []
 
             if conditional_twist:
-                for i in range(n_layers_twist - 1):
-                    key, linear_layer = linear_init_normal(
-                        key, d_model * 2, d_model * 2, d_model * 4)
-                    self.twist_head_params['linear_layers'].append(linear_layer)
+                hidden_size = int(d_model * 2 * hidden_units_multiplier)
                 key, linear_layer = linear_init_normal(
-                    key, d_model * 2, output_size, d_model * 2 + output_size)
+                    key, d_model * 2, hidden_size, d_model * 2 + hidden_size)
                 self.twist_head_params['linear_layers'].append(linear_layer)
+            else:
+                hidden_size = int(d_model * hidden_units_multiplier)
+                key, linear_layer = linear_init_normal(
+                    key, d_model, hidden_size, d_model + hidden_size)
+                self.twist_head_params['linear_layers'].append(linear_layer)
+                # for i in range(n_layers_twist - 1):
+                #     key, linear_layer = linear_init_normal(
+                #         key, hidden_size, hidden_size, hidden_size * 2)
+                #     self.twist_head_params['linear_layers'].append(linear_layer)
+                # key, linear_layer = linear_init_normal(
+                #     key, hidden_size, output_size, hidden_size + output_size)
+                # self.twist_head_params['linear_layers'].append(linear_layer)
+
+            for i in range(n_layers_twist - 2):
+                key, linear_layer = linear_init_normal(
+                    key, hidden_size, hidden_size, hidden_size * 2)
+                self.twist_head_params['linear_layers'].append(linear_layer)
+            key, linear_layer = linear_init_normal(
+                key, hidden_size, output_size, hidden_size + output_size)
+            self.twist_head_params['linear_layers'].append(linear_layer)
                 # key, self.twist_head_params['linear1'] = linear_init_normal(
                 #     key, d_model * 2, d_model * 2, d_model * 4)
                 # key, self.twist_head_params['linear2'] = linear_init_normal(
                 #     key, d_model * 2, d_model * 2, d_model * 4)
                 # key, self.twist_head_params['linear3'] = linear_init_normal(
                 #     key, d_model * 2, output_size, d_model * 2 + output_size)
-            else:
-                for i in range(n_layers_twist - 1):
-                    key, linear_layer = linear_init_normal(
-                        key, d_model, d_model, d_model + d_model)
-                    self.twist_head_params['linear_layers'].append(linear_layer)
-                key, linear_layer = linear_init_normal(
-                    key, d_model, output_size, d_model + output_size)
-                self.twist_head_params['linear_layers'].append(linear_layer)
+
 
         else:
             if conditional_twist:
