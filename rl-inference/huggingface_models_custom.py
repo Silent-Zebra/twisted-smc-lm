@@ -15,12 +15,16 @@ from custom_transformer import linear_init_normal, linear
 
 class CustomLMWithTwistHead:
     def __init__(self, key, model_name, output_size=-1, hface_nn_twist=False, softmax_twist=False,
-                 conditional_twist=False, num_last_tokens_to_condition_on=0, from_pt=False):
+                 conditional_twist=False, num_last_tokens_to_condition_on=0, from_pt=False, n_layers_twist=3):
         self.huggingface_model = FlaxAutoModel.from_pretrained(model_name, from_pt=from_pt)  # Produces embeddings of d_model size
         if conditional_twist:
             assert num_last_tokens_to_condition_on > 0
             self.conditional_twist = conditional_twist
             self.num_last_tokens_to_condition_on = num_last_tokens_to_condition_on
+
+        self.n_layers_twist = n_layers_twist
+
+        assert n_layers_twist >= 2
 
         if output_size == -1:
             output_size, d_model = self.huggingface_model._params['wte']['embedding'].shape
@@ -31,20 +35,31 @@ class CustomLMWithTwistHead:
         self.hface_nn_twist = hface_nn_twist
         if hface_nn_twist:
             self.twist_head_params = {}
+            self.twist_head_params['linear_layers'] = []
+
             if conditional_twist:
-                key, self.twist_head_params['linear1'] = linear_init_normal(
-                    key, d_model * 2, d_model * 2, d_model * 4)
-                key, self.twist_head_params['linear2'] = linear_init_normal(
-                    key, d_model * 2, d_model * 2, d_model * 4)
-                key, self.twist_head_params['linear3'] = linear_init_normal(
+                for i in range(n_layers_twist - 1):
+                    key, linear_layer = linear_init_normal(
+                        key, d_model * 2, d_model * 2, d_model * 4)
+                    self.twist_head_params['linear_layers'].append(linear_layer)
+                key, linear_layer = linear_init_normal(
                     key, d_model * 2, output_size, d_model * 2 + output_size)
+                self.twist_head_params['linear_layers'].append(linear_layer)
+                # key, self.twist_head_params['linear1'] = linear_init_normal(
+                #     key, d_model * 2, d_model * 2, d_model * 4)
+                # key, self.twist_head_params['linear2'] = linear_init_normal(
+                #     key, d_model * 2, d_model * 2, d_model * 4)
+                # key, self.twist_head_params['linear3'] = linear_init_normal(
+                #     key, d_model * 2, output_size, d_model * 2 + output_size)
             else:
-                key, self.twist_head_params['linear1'] = linear_init_normal(
-                    key, d_model, d_model, d_model + d_model)
-                key, self.twist_head_params['linear2'] = linear_init_normal(
-                    key, d_model, d_model, d_model + d_model)
-                key, self.twist_head_params['linear3'] = linear_init_normal(
+                for i in range(n_layers_twist - 1):
+                    key, linear_layer = linear_init_normal(
+                        key, d_model, d_model, d_model + d_model)
+                    self.twist_head_params['linear_layers'].append(linear_layer)
+                key, linear_layer = linear_init_normal(
                     key, d_model, output_size, d_model + output_size)
+                self.twist_head_params['linear_layers'].append(linear_layer)
+
         else:
             if conditional_twist:
                 key, self.twist_head_params = linear_init_normal(
@@ -57,11 +72,16 @@ class CustomLMWithTwistHead:
 
     def _get_model_log_psi(self, params_twist_head, embeddings):
         if self.hface_nn_twist:
-            x = linear(params_twist_head['linear1'], embeddings)
-            x = jax.nn.relu(x)
-            x = linear(params_twist_head['linear2'], x)
-            x = jax.nn.relu(x)
-            x = linear(params_twist_head['linear3'], x)
+            x = embeddings
+            for i in range(self.n_layers_twist):
+                x = linear(params_twist_head['linear_layers'][i], x)
+                if i != self.n_layers_twist - 1:
+                    x = jax.nn.relu(x)
+            # x = linear(params_twist_head['linear1'], embeddings)
+            # x = jax.nn.relu(x)
+            # x = linear(params_twist_head['linear2'], x)
+            # x = jax.nn.relu(x)
+            # x = linear(params_twist_head['linear3'], x)
             model_log_psi = x
         else:
             model_log_psi = linear(params_twist_head, embeddings)

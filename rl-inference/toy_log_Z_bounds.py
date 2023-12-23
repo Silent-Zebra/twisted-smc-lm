@@ -2973,7 +2973,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             model_twist = CustomLMWithTwistHead(
                 sk, model_config, hface_nn_twist=hface_nn_twist,
                 softmax_twist=softmax_twist, conditional_twist=conditional_twist,
-                num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt
+                num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt,
+                n_layers_twist=n_layers_twist
             )
 
             params_p = model_p.huggingface_model.params
@@ -3035,7 +3036,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         else:
             model = CustomLMWithTwistHead(
                 sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist,
-                conditional_twist=conditional_twist, num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt
+                conditional_twist=conditional_twist, num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
+                from_pt=from_pt, n_layers_twist=n_layers_twist
             )
             params_p = model.huggingface_model.params
             params_twist = model.twist_head_params
@@ -4278,7 +4280,7 @@ if __name__ == "__main__":
                         help="Attention head dimension for V")
     parser.add_argument("--d_fc_twist", type=int, default=64,
                         help="Feedforward layer dimension")
-    parser.add_argument("--n_layers_twist", type=int, default=4,
+    parser.add_argument("--n_layers_twist", type=int, default=3,
                         help="Number of layers")
 
     parser.add_argument("--output_len", type=int, default=5,
