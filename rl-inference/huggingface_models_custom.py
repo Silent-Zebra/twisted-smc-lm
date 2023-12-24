@@ -83,17 +83,18 @@ class CustomLMWithTwistHead:
 
     def _get_model_log_psi(self, params_twist_head, embeddings):
         if self.hface_nn_twist:
-            x = embeddings
-            for i in range(self.n_layers_twist):
-                x = linear(params_twist_head['linear_layers'][i], x)
-                if i != self.n_layers_twist - 1:
-                    x = jax.nn.relu(x)
-
-            # x = linear(params_twist_head['linear1'], embeddings)
-            # x = jax.nn.relu(x)
-            # x = linear(params_twist_head['linear2'], x)
-            # x = jax.nn.relu(x)
-            # x = linear(params_twist_head['linear3'], x)
+            if 'linear_layers' in params_twist_head:
+                x = embeddings
+                for i in range(self.n_layers_twist):
+                    x = linear(params_twist_head['linear_layers'][i], x)
+                    if i != self.n_layers_twist - 1:
+                        x = jax.nn.relu(x)
+            else:
+                x = linear(params_twist_head['linear1'], embeddings)
+                x = jax.nn.relu(x)
+                x = linear(params_twist_head['linear2'], x)
+                x = jax.nn.relu(x)
+                x = linear(params_twist_head['linear3'], x)
             model_log_psi = x
         else:
             model_log_psi = linear(params_twist_head, embeddings)
