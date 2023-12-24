@@ -826,138 +826,17 @@ def get_l_bce(
     evaluate_over_samples_from="p", huggingface_model=None, tempered_twist=False, beta_prop=None,
     true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None, log_prob_class=None
 ):
-    prompt_len = prompt.shape[-1]
-
-    rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
-
-    log_phi_final_eval = None
+    # prompt_len = prompt.shape[-1]
+    #
+    # rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
+    #
+    # log_phi_final_eval = None
 
     assert true_sigma_samples is not None # Not really true_sigma_samples, just the samples we run this loss on.
 
     assert log_prob_class is not None
 
-    # if replay_buffer is not None:
-    #     replay_buffer_log_w_ts, replay_buffer_log_phi_final_eval = replay_buffer_log_w_ts
-    #
-    #     rng_key, sk_sample = jax.random.split(rng_key)
-    #     if evaluate_over_samples_from == "sigma":
-    #         assert replay_buffer_log_w_ts is not None
-    #         indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
-    #     elif evaluate_over_samples_from == "mixed_p_q":
-    #         replay_buffer_log_w_ts = jnp.zeros((n_twist,)) # do uniform draws in this case, since the samples are already from p and q mixed...
-    #         indices = jax.random.categorical(sk_sample, replay_buffer_log_w_ts, shape=(n_twist,))
-    #     else:
-    #         raise NotImplementedError
-    #     if replay_buffer.shape[0] == n_twist:
-    #         print("Using the full replay buffer with no sampling")
-    #         samples_to_evaluate_over = replay_buffer
-    #         log_phi_final_eval = replay_buffer_log_phi_final_eval
-    #     else:
-    #         samples_to_evaluate_over = replay_buffer[indices]
-    #         log_phi_final_eval = replay_buffer_log_phi_final_eval[indices]
-    #     log_w_t = jnp.zeros((n_twist,))
-    #
-    # else:
-    #
-    #     if evaluate_over_samples_from == "p":
-    #         samples_to_evaluate_over = stochastic_transformer_sample(sk1, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
-    #         log_w_t = jnp.zeros((samples_to_evaluate_over.shape[0]))
-    #
-    #     elif evaluate_over_samples_from == "q":
-    #         # Get q samples with no resampling anywhere
-    #         (_, _, _), _, (intermediate_twist_samples_hist,
-    #                intermediate_log_w_t_hist, _) = smc_procedure(
-    #             sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-    #             log_true_final_twist, output_len, n_twist,
-    #             smc_procedure_type=smc_procedure_type,
-    #             get_intermediate_sample_history_based_on_learned_twists=True,
-    #             prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-    #             token_of_interest_as_int=token_of_interest_as_int,
-    #             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-    #             resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop
-    #         )
-    #         samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
-    #         print(samples_to_evaluate_over.shape)
-    #         log_w_t = jnp.zeros((samples_to_evaluate_over.shape[0])) # Do this because with the no resample case, we already have samples from the q distribution, reweighting again would do nothing, just increase variance/redundancy in samples
-    #
-    #     elif evaluate_over_samples_from == "qrsmp":
-    #         # Get q samples with no resampling anywhere
-    #         (log_w_t, _, _), _, (intermediate_twist_samples_hist,
-    #                intermediate_log_w_t_hist, _) = smc_procedure(
-    #             sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-    #             log_true_final_twist, output_len, n_twist,
-    #             smc_procedure_type=smc_procedure_type,
-    #             get_intermediate_sample_history_based_on_learned_twists=True,
-    #             prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-    #             token_of_interest_as_int=token_of_interest_as_int,
-    #             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-    #             resample=True, no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop
-    #         )
-    #         samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
-    #         print(samples_to_evaluate_over.shape)
-    #
-    #     elif evaluate_over_samples_from == "sigma":
-    #         # Approximate sigma samples
-    #         (log_w_t, _, _), samples_to_evaluate_over = smc_procedure(
-    #             sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-    #             log_true_final_twist, output_len, n_twist,
-    #             smc_procedure_type=smc_procedure_type,
-    #             prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-    #             token_of_interest_as_int=token_of_interest_as_int,
-    #             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-    #             resample=resample_for_sigma_samples, no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop
-    #         )
-    #     elif evaluate_over_samples_from == "mixed_p_q":
-    #         assert n_twist % 2 == 0
-    #         # Mix of 50% p samples and 50% q (twist proposal) samples
-    #         samples_to_evaluate_over_p = stochastic_transformer_sample(sk1, cfg_p,
-    #                                                                  params_p,
-    #                                                                  prompt,
-    #                                                                  output_len,
-    #                                                                  n_twist // 2,
-    #                                                                  huggingface_model=huggingface_model)
-    #
-    #         condition_twist_on_tokens_to_use_for_q_samples = None
-    #         if condition_twist_on_tokens is not None:
-    #             condition_twist_on_tokens_to_use_for_q_samples = condition_twist_on_tokens[n_twist // 2:, :]
-    #
-    #         (_, _, _), _, (intermediate_twist_samples_hist,
-    #                        intermediate_log_w_t_hist, _) = smc_procedure(
-    #             sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-    #             log_true_final_twist, output_len, n_twist // 2,
-    #             smc_procedure_type=smc_procedure_type,
-    #             get_intermediate_sample_history_based_on_learned_twists=True,
-    #             prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_to_use_for_q_samples,
-    #             token_of_interest_as_int=token_of_interest_as_int,
-    #             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-    #             resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop
-    #         )
-    #         samples_to_evaluate_over_q = intermediate_twist_samples_hist[-1]
-    #
-    #         samples_to_evaluate_over = jnp.concatenate((samples_to_evaluate_over_p, samples_to_evaluate_over_q), axis=0)
-    #
-    #         log_w_t = jnp.zeros((samples_to_evaluate_over.shape[0])) # actually 1 or 0 doesn't matter since I softmax afterwards...
-    #     else:
-    #         raise NotImplementedError
-    #
-        # p_logits, log_psi =\
-        #     get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p, params_twist,
-        #                                    cfg_p, cfg_twist,
-        #                                    prepend_tokens_for_twists, condition_twist_on_tokens,
-        #                                    token_of_interest_as_int,
-        #                                    huggingface_model=huggingface_model)
-
     samples_to_evaluate_over = true_sigma_samples
-
-    # p_logits, log_psi = \
-    #     get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p,
-    #                                        params_twist,
-    #                                        cfg_p, cfg_twist,
-    #                                        prepend_tokens_for_twists,
-    #                                        condition_twist_on_tokens,
-    #                                        token_of_interest_as_int,
-    #                                        huggingface_model=huggingface_model)
-
 
     log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
         samples_to_evaluate_over, prompt.shape[-1], cfg_twist,
@@ -968,7 +847,7 @@ def get_l_bce(
 
     class_prob = jnp.exp(log_prob_class)
 
-    class_prob_broadcasted = jnp.full((log_psi_on_p_samples.shape), class_prob[:, None])
+    class_prob_broadcasted = jnp.full((log_psi_on_p_samples.shape), class_prob[:, None]) # broadcast along the time dimension
 
     loss = optax.sigmoid_binary_cross_entropy(log_psi_on_p_samples, class_prob_broadcasted)
 

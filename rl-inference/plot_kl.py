@@ -18,13 +18,45 @@ load_prefixes_tox = [
     "f_q_g_q_logZbestmidpoint_info_2023-12-21_06-51_seed1_nsamples11_tox_rl" #318
 ]
 
-load_prefixes_sent = [
+load_prefixes_sent5 = [
     "f_q_g_q_logZbestmidpoint_info_2023-12-21_03-57_seed1_nsamples10_sent_ebm", # 308
     "f_q_g_q_logZbestmidpoint_info_2023-12-22_04-52_seed1_nsamples10_sent_bce", # 309
     "f_q_g_q_logZbestmidpoint_info_2023-12-21_04-09_seed1_nsamples10_sent_rob", # 313
     # "f_q_g_q_logZbestmidpoint_info_2023-12-21_04-34_seed1_nsamples10_sent_sixo_00003",
     "f_q_g_q_logZbestmidpoint_info_2023-12-21_04-31_seed1_nsamples10_sent_sixo", # 310
     "f_q_g_q_logZbestmidpoint_info_2023-12-21_07-21_seed1_nsamples10_sent_rl" # 322
+]
+
+load_prefixes_sent1 = [
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_06-37_seed1_nsamples11_sent1_ebm", # 354
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_06-03_seed1_nsamples11_sent1_bce", # 353
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_07-14_seed1_nsamples11_sent1_rob", # 356
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_08-08_seed1_nsamples11_sent1_sixo", # 357
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_08-07_seed1_nsamples11_sent1_rlq" # 355
+]
+
+load_prefixes_sent2 = [
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_06-38_seed1_nsamples11_sent2_ebm", # 364
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_06-06_seed1_nsamples11_sent2_bce", # 363
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_07-15_seed1_nsamples11_sent2_rob", # 366
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_07-47_seed1_nsamples11_sent2_sixo", # 367
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_08-07_seed1_nsamples11_sent2_rlq" # 365
+]
+
+load_prefixes_tox_nonn = [
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_05-10_seed1_nsamples11_toxnonn_ebm", # 373
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_04-23_seed1_nsamples11_toxnonn_bce", # 372
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_04-51_seed1_nsamples11_toxnonn_rob", # 374
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_04-56_seed1_nsamples11_toxnonn_sixo", # 376
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_05-16_seed1_nsamples11_toxnonn_rlq" #375
+]
+
+load_prefixes_sent5_nn = [
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_05-28_seed1_nsamples10_sent5nn_ebm", # 384
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_04-55_seed1_nsamples10_sent5nn_bce", # 383
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_05-43_seed1_nsamples10_sent5nn_rob", # 386
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_05-52_seed1_nsamples10_sent5nn_sixo", # 387
+    "f_q_g_q_logZbestmidpoint_info_2023-12-23_06-01_seed1_nsamples10_sent5nn_rlq" # 385
 ]
 
 twist_learn_method_names = [
@@ -98,6 +130,13 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
     plt.savefig(f"./fig_kl_{fig_name_modifier}_{f_q_estimates.shape[-1]}.pdf")
 
 
-make_combined_plot(load_prefixes_tox, "tox")
+# make_combined_plot(load_prefixes_tox, "tox")
 
-make_combined_plot(load_prefixes_sent, "sent")
+# make_combined_plot(load_prefixes_sent5, "sent5")
+
+# make_combined_plot(load_prefixes_sent1, "sent1")
+# make_combined_plot(load_prefixes_sent2, "sent2")
+
+# make_combined_plot(load_prefixes_tox_nonn, "tox_nonn")
+
+make_combined_plot(load_prefixes_sent5_nn, "sent5_nn")

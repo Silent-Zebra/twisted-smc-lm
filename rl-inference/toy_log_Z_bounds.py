@@ -232,10 +232,6 @@ class ExperimentConfig:
             condition_twist_on_tokens = None
 
             if "bce" in self.twist_learn_type:
-                assert self.rm_type in [
-                    "exp_beta_toxicity_class_logprob",
-                    "exp_beta_sentiment_class_logprob"
-                ]
                 assert self.beta_temp == 1. # because otherwise the Bayesian formulation doesn't work does it? TODO confirm
                 sk, sk2 = jax.random.split(sk)
                 p_samples = stochastic_transformer_sample(sk2, cfg_p,
@@ -245,58 +241,23 @@ class ExperimentConfig:
                                                           huggingface_model=huggingface_model)
 
                 samples_to_evaluate_over = p_samples
-                # log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
-                #     samples_to_evaluate_over, prompt.shape[-1], cfg_twist,
-                #     params_twist,
-                #     prepend_tokens_for_twists, condition_twist_on_tokens,
-                #     token_of_interest_as_int, huggingface_model)
 
-                # p_logits, log_psi = \
-                #     get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over,
-                #                                        params_p,
-                #                                        params_twist,
-                #                                        cfg_p, cfg_twist,
-                #                                        prepend_tokens_for_twists,
-                #                                        condition_twist_on_tokens,
-                #                                        token_of_interest_as_int,
-                #                                        huggingface_model=huggingface_model)
+                if self.rm_type in [
+                    "p_last_tokens",
+                ]:
+                    true_sigma_samples = p_samples[:,:-self.num_last_tokens_to_condition_on]
+                    condition_twist_on_tokens = p_samples[:,-self.num_last_tokens_to_condition_on:]
 
-                log_prob_class = log_true_final_twist(
-                    samples_to_evaluate_over) / self.beta_temp  # because log e ^ beta r is just beta r, then divide by beta returns r = log p(c|s)
+                    log_prob_class = log_true_final_twist(
+                        true_sigma_samples, condition_twist_on_tokens)
 
-                # class1_prob = jax.nn.sigmoid(score)
-                # class0_prob = 1 - class1_prob
-                # classification_logits = jnp.log(jnp.concatenate(
-                #     (class0_prob[:, None], class1_prob[:, None]), axis=-1))
-                # # print(classification_logits.shape)
-                #
-                # # classes = jax.random.categorical(subkey, classification_logits,
-                # #                              shape=(classification_logits.shape[0],))
+                else:
 
-                # print(log_psi_on_p_samples)
-                # print(log_psi_on_p_samples.shape)
-                # # print(classification_logits)
-                # # print(classification_logits.shape)
-                # print(score.shape)
-                # print(jnp.full((log_psi_on_p_samples.shape), score[:, None]))
-                # print(jnp.full((log_psi_on_p_samples.shape), score[:, None]).shape)
-                #
-                # loss = optax.sigmoid_binary_cross_entropy(log_psi_on_p_samples,
-                #                                           jnp.full((log_psi_on_p_samples.shape), score[:, None]))
-                #
-                # print(loss)
-                # print(loss.shape)
-                #
-                # log_p = jax.nn.log_sigmoid(log_psi_on_p_samples)
-                # log_not_p  = jax.nn.log_sigmoid(-log_psi_on_p_samples)
-                # loss2 = -jnp.full((log_psi_on_p_samples.shape), score[:, None]) * log_p - (1. - jnp.full((log_psi_on_p_samples.shape), score[:, None])) * log_not_p
-                # print(loss2)
-                # print(loss2.shape)
-                # print((loss - loss2).sum())
+                    log_prob_class = log_true_final_twist(
+                        samples_to_evaluate_over)  # This also works for something like toxicity threshold: the class then has either 0 or 1 (+ eps) probability
 
-                # 1 / 0
+                    true_sigma_samples = p_samples
 
-                true_sigma_samples = p_samples
 
                 grad_params_twist = self.dre_grad_fn(
                     sk, prompt, cfg_p, params_p, cfg_twist,
