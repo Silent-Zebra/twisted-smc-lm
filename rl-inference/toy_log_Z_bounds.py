@@ -2922,10 +2922,10 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         rng_key, sk = jax.random.split(rng_key, 2)
 
         softmax_twist = False
-        if twist_learn_type in ["one_total_kl", "one_total_kl_mixed_p_q",
-                                "one_total_kl_sample", "one_total_kl_sample_mixed_p_q"]:
-            print("Using softmax twists")
-            softmax_twist = True
+        # if twist_learn_type in ["one_total_kl", "one_total_kl_mixed_p_q",
+        #                         "one_total_kl_sample", "one_total_kl_sample_mixed_p_q"]:
+        #     print("Using softmax twists")
+        #     softmax_twist = True
 
         if hface_nn_twist:
             print("Using NN for huggingface model twist head", flush=True)
