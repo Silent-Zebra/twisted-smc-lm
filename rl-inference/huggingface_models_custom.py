@@ -88,6 +88,7 @@ class CustomLMWithTwistHead:
                 x = linear(params_twist_head['linear_layers'][i], x)
                 if i != self.n_layers_twist - 1:
                     x = jax.nn.relu(x)
+
             # x = linear(params_twist_head['linear1'], embeddings)
             # x = jax.nn.relu(x)
             # x = linear(params_twist_head['linear2'], x)
