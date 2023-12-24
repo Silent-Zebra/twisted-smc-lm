@@ -234,17 +234,17 @@ class ExperimentConfig:
             if "bce" in self.twist_learn_type:
                 assert self.beta_temp == 1. # because otherwise the Bayesian formulation doesn't work does it? TODO confirm
                 sk, sk2 = jax.random.split(sk)
-                p_samples = stochastic_transformer_sample(sk2, cfg_p,
-                                                          params_p, prompt,
-                                                          output_len,
-                                                          n_twist,
-                                                          huggingface_model=huggingface_model)
 
-                samples_to_evaluate_over = p_samples
 
                 if self.rm_type in [
                     "p_last_tokens",
                 ]:
+                    p_samples = stochastic_transformer_sample(sk2, cfg_p,
+                                                              params_p, prompt,
+                                                              output_len + self.num_last_tokens_to_condition_on,
+                                                              n_twist,
+                                                              huggingface_model=huggingface_model)
+
                     true_sigma_samples = p_samples[:,:-self.num_last_tokens_to_condition_on]
                     condition_twist_on_tokens = p_samples[:,-self.num_last_tokens_to_condition_on:]
 
@@ -252,6 +252,13 @@ class ExperimentConfig:
                         true_sigma_samples, condition_twist_on_tokens)
 
                 else:
+                    p_samples = stochastic_transformer_sample(sk2, cfg_p,
+                                                              params_p, prompt,
+                                                              output_len,
+                                                              n_twist,
+                                                              huggingface_model=huggingface_model)
+
+                    samples_to_evaluate_over = p_samples
 
                     log_prob_class = log_true_final_twist(
                         samples_to_evaluate_over)  # This also works for something like toxicity threshold: the class then has either 0 or 1 (+ eps) probability

@@ -59,6 +59,33 @@ load_prefixes_sent5_nn = [
     "f_q_g_q_logZbestmidpoint_info_2023-12-23_06-01_seed1_nsamples10_sent5nn_rlq" # 385
 ]
 
+
+load_prefixes_plasttokens_2_1 = [
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-16_seed1_nsamples14_plasttokens2_1_ebm", # 399 sbatch_12-23-2023_plasttokens_len2_1_TinyStories_separatetwist_nn3_ebm_100_0001
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_02-45_seed1_nsamples14_plasttokens2_1_bce", # 402
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-02_seed1_nsamples14_plasttokens2_1_rob", # 398
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-02_seed1_nsamples14_plasttokens2_1_sixo", # 401
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_02-32_seed1_nsamples14_plasttokens2_1_rlsigma" # 400
+]
+
+load_prefixes_plasttokens_5_5 = [
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_08-04_seed1_nsamples15_plasttokens5_5_ebm", # 389 sbatch_12-23-2023_plasttokens_len5_5_TinyStories_separatetwist_nn3_ebm_100_0001
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_04-11_seed1_nsamples15_plasttokens5_5_bce", # 392
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_06-02_seed1_nsamples15_plasttokens5_5_rob", # 388
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_05-51_seed1_nsamples15_plasttokens5_5_sixo", # 391
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_05-07_seed1_nsamples15_plasttokens5_5_rlsigma" # 390
+]
+
+load_prefixes_tt_3 = [
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_06-25_seed1_nsamples13_tt_ebm", # 393 sbatch_12-23-2023_toxicity_threshold_-3_neg_outputlen10_tinystories_ebm
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_04-54_seed1_nsamples13_tt_bce", # 397
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_07-47_seed1_nsamples13_tt_rob", # 394
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_06-06_seed1_nsamples13_tt_sixo", # 396
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_13-33_seed1_nsamples13_tt_rlq" # 395
+]
+
+
+
 twist_learn_method_names = [
     "EBM",
     "BCE",
@@ -95,7 +122,8 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
     if fig_name_modifier == "tox":
         plt.ylim([0, 5])
-
+    if fig_name_modifier == "tt_3":
+        plt.ylim([-1, 100])
 
     for i in range(len(load_prefixes)):
 
@@ -139,4 +167,11 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
 # make_combined_plot(load_prefixes_tox_nonn, "tox_nonn")
 
-make_combined_plot(load_prefixes_sent5_nn, "sent5_nn")
+# make_combined_plot(load_prefixes_sent5_nn, "sent5_nn")
+
+# make_combined_plot(load_prefixes_plasttokens_2_1, "plasttokens_2_1")
+
+# make_combined_plot(load_prefixes_plasttokens_5_5, "plasttokens_5_5")
+
+make_combined_plot(load_prefixes_tt_3, "tt_3")
+
