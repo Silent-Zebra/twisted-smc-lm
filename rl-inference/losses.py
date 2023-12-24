@@ -20,28 +20,32 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
                    output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
                    proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
                    replay_buffer=None, replay_buffer_log_w_ts=None):
-    if true_sigma_samples is not None:
-        raise NotImplementedError
+
 
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
-    if mixed_p_q_sample:
-        rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _  = \
-            get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                        output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
-                       proposal_is_p, huggingface_model, tempered_twist, beta_prop)
+    if true_sigma_samples is not None:
+        prompt_w_sigma_sample_s_1_to_t = true_sigma_samples
+        normalized_w_t_sigma_samples = jnp.ones(
+            (true_sigma_samples.shape[0])) / true_sigma_samples.shape[0]
     else:
-        (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
-            sk1, prompt, cfg_p, params_p, cfg_twist,
-            params_twist, log_true_final_twist, output_len, n_twist,
-            smc_procedure_type=smc_procedure_type,
-            prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-            token_of_interest_as_int=token_of_interest_as_int,
-            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-            no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop)
-        normalized_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
+        if mixed_p_q_sample:
+            rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _  = \
+                get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                            output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
+                           proposal_is_p, huggingface_model, tempered_twist, beta_prop)
+        else:
+            (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
+                sk1, prompt, cfg_p, params_p, cfg_twist,
+                params_twist, log_true_final_twist, output_len, n_twist,
+                smc_procedure_type=smc_procedure_type,
+                prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+                token_of_interest_as_int=token_of_interest_as_int,
+                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+                no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop)
+            normalized_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
 
     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
     # l_dre_old = 0.
