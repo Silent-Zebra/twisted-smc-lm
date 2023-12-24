@@ -181,6 +181,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_mc":
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=5)
+        elif self.twist_learn_type == "rl_mc_partial_jit":
+            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=5)
         elif self.twist_learn_type == "sixo":
             dre_grad_fn = jax.grad(get_l_dre_sixo_jit, argnums=5)
         elif self.twist_learn_type == "sixo_mixed_p_q":
@@ -2261,7 +2263,7 @@ class TestClass:
                         elif use_replay_buffer and experiment_cfg.twist_learn_type in  [
                             "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                             "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "bce"]:
+                            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "rl_mc_partial_jit", "bce"]:
                             rng_key, params_twist, optim_twist_state = \
                                 experiment_cfg.update_twist(
                                     rng_key, indices_of_tokens_chosen, prompt,
@@ -4126,7 +4128,7 @@ def main():
                         )
                 elif experiment_cfg.twist_learn_type in ["rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                                  "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "bce"]:
+                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "rl_mc_partial_jit", "bce"]:
 
                     rng_key, params_twist, optim_twist_state = \
                         experiment_cfg.update_twist(
@@ -4281,7 +4283,7 @@ if __name__ == "__main__":
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
             "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_q_lsq_partial_jit", "rl_qrsmp_lsq",
-            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mixed_p_q_lsq_partial_jit", "rl_mc",
+            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mixed_p_q_lsq_partial_jit", "rl_mc", "rl_mc_partial_jit",
             "sixo", "sixo_mixed_p_q", "sixo_mixed_p_q_partial_jit", "sixo_partial_jit",
             "bce"
         ]

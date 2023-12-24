@@ -609,10 +609,16 @@ def get_l_rl_based_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, para
 
     log_phi_final_eval = None
 
-    if true_sigma_samples is not None and evaluate_over_samples_from == "sigma":
-        # if we have true posteriors (e.g. one true posterior, every example is from the
-        samples_to_evaluate_over = true_sigma_samples
-        log_w_t = jnp.zeros((true_sigma_samples.shape[0]))
+    if true_sigma_samples is not None:
+        if evaluate_over_samples_from == "sigma":
+            # if we have true posteriors (e.g. one true posterior, every example is from the
+            samples_to_evaluate_over = true_sigma_samples
+            log_w_t = jnp.zeros((true_sigma_samples.shape[0]))
+        elif loss_type == "monte_carlo":
+            samples_to_evaluate_over = true_sigma_samples
+        else:
+            raise NotImplementedError
+
 
     elif replay_buffer is not None:
         replay_buffer_log_w_ts, replay_buffer_log_phi_final_eval = replay_buffer_log_w_ts
@@ -720,16 +726,20 @@ def get_l_rl_based_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, para
         else:
             raise NotImplementedError
 
-        if loss_type == "monte_carlo":
-            phi_vals = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist, condition_twist_on_tokens)
-            twist_vals = jnp.exp(evaluate_log_psi_selected_tokens(
-                samples_to_evaluate_over, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-                token_of_interest_as_int, huggingface_model))
-            # print(phi_vals[:, None].shape)
-            # print(twist_vals.shape)
-            loss = ((twist_vals - phi_vals[:, None]) ** 2).mean()
-            # print(((twist_vals - phi_vals[:, None]) ** 2).shape)
-            return loss
+
+    if loss_type == "monte_carlo":
+        phi_vals = evaluate_log_phi_final(samples_to_evaluate_over,
+                                          log_true_final_twist,
+                                          condition_twist_on_tokens)
+        twist_vals = jnp.exp(evaluate_log_psi_selected_tokens(
+            samples_to_evaluate_over, prompt_len, cfg_twist, params_twist,
+            prepend_tokens_for_twists, condition_twist_on_tokens,
+            token_of_interest_as_int, huggingface_model))
+        # print(phi_vals[:, None].shape)
+        # print(twist_vals.shape)
+        loss = ((twist_vals - phi_vals[:, None]) ** 2).mean()
+        # print(((twist_vals - phi_vals[:, None]) ** 2).shape)
+        return loss
 
     p_logits, log_psi =\
         get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p, params_twist,
