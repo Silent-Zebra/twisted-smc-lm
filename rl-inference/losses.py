@@ -75,19 +75,10 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 
     l_dre = jnp.dot(jax.nn.log_sigmoid(log_psi_on_truncated_sigma_samples).mean(axis=1), normalized_w_t_sigma_samples) \
             + jnp.log(1 - jax.nn.sigmoid(log_psi_on_p_samples)).mean()
-
-    # print(jax.lax.stop_gradient(l_dre))
-    # print(jax.lax.stop_gradient((jax.nn.log_sigmoid(log_psi_on_truncated_sigma_samples)
-    #                                                + jnp.log(1 - jax.nn.sigmoid(log_psi_on_p_samples))).mean()))
-
-    # l_dre = l_dre.mean()
-
-    # print(l_dre_old)
-    # print(l_dre)
+    l_dre = -l_dre # negative because now we have a loss
 
 
-
-    return -l_dre # negative because now we have a loss
+    return l_dre
 
 
 
@@ -582,14 +573,10 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
     # print(l_kl_first_term.shape)
 
     l_kl = jnp.dot((l_kl_first_term - l_kl_second_term).mean(axis=1), normalized_w_t_sigma_samples) # This dot with the sigma weighting gives us the expectation over sigma (s_1:t-1)
-
-    # print(l_kl.shape)
-
-    # print(jax.lax.stop_gradient(l_kl))
-    # print(jax.lax.stop_gradient((l_kl_first_term - l_kl_second_term).mean()))
+    l_kl = -l_kl  # negative because now we have a loss
 
 
-    return -l_kl  # negative because now we have a loss
+    return l_kl
 
 get_l_one_total_kl_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type",
@@ -901,6 +888,7 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     # l_kl_first_term = log_psi_on_truncated_sigma_samples.mean(axis=1).mean(axis=0)
 
     l_kl = jnp.dot((l_kl_first_term - l_kl_second_term).mean(axis=1), normalized_w_t_sigma_samples) # This dot with the sigma weighting gives us the expectation over sigma (s_1:t-1)
+    l_kl = -l_kl  # negative because now we have a loss
 
     samples_to_evaluate_over = prompt_w_sigma_sample_s_1_to_t
     p_logits, log_psi = \
@@ -1041,6 +1029,7 @@ def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, param
     # l_kl_first_term = log_psi_on_truncated_sigma_samples.mean(axis=1).mean(axis=0)
 
     l_kl = jnp.dot((l_kl_first_term - l_kl_second_term).mean(axis=1), normalized_w_t_sigma_samples) # This dot with the sigma weighting gives us the expectation over sigma (s_1:t-1)
+    l_kl = -l_kl  # negative because now we have a loss
 
     prompt_len = prompt.shape[-1]
 
@@ -1059,6 +1048,7 @@ def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, param
 
     l_dre = jnp.dot(jax.nn.log_sigmoid(log_psi_on_truncated_sigma_samples).mean(axis=1), normalized_w_t_sigma_samples) \
             + jnp.log(1 - jax.nn.sigmoid(log_psi_on_p_samples)).mean()
+    l_dre = -l_dre
 
     return l_dre + l_kl
 
