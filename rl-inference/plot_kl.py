@@ -54,7 +54,8 @@ load_prefixes_tox_nonn = [
 load_prefixes_sent5_nn = [
     "f_q_g_q_logZbestmidpoint_info_2023-12-23_05-28_seed1_nsamples10_sent5nn_ebm", # 384
     "f_q_g_q_logZbestmidpoint_info_2023-12-23_04-55_seed1_nsamples10_sent5nn_bce", # 383
-    "f_q_g_q_logZbestmidpoint_info_2023-12-23_05-43_seed1_nsamples10_sent5nn_rob", # 386
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_22-47_seed1_nsamples10_sent5nn_rob", # 419
+    # "f_q_g_q_logZbestmidpoint_info_2023-12-23_05-43_seed1_nsamples10_sent5nn_rob", # 386
     "f_q_g_q_logZbestmidpoint_info_2023-12-23_05-52_seed1_nsamples10_sent5nn_sixo", # 387
     "f_q_g_q_logZbestmidpoint_info_2023-12-23_06-01_seed1_nsamples10_sent5nn_rlq" # 385
 ]
@@ -62,8 +63,9 @@ load_prefixes_sent5_nn = [
 
 load_prefixes_plasttokens_2_1 = [
     "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-16_seed1_nsamples14_plasttokens2_1_ebm", # 399 sbatch_12-23-2023_plasttokens_len2_1_TinyStories_separatetwist_nn3_ebm_100_0001
-    "f_q_g_q_logZbestmidpoint_info_2023-12-24_02-45_seed1_nsamples14_plasttokens2_1_bce", # 402
-    "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-02_seed1_nsamples14_plasttokens2_1_rob", # 398
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_16-57_seed1_nsamples14_plasttokens2_1_bce", # 402
+    # "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-02_seed1_nsamples14_plasttokens2_1_rob", # 398
+    "f_q_g_q_logZbestmidpoint_info_2023-12-24_22-09_seed1_nsamples14_plasttokens2_1_rob", # 415
     "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-02_seed1_nsamples14_plasttokens2_1_sixo", # 401
     "f_q_g_q_logZbestmidpoint_info_2023-12-24_02-32_seed1_nsamples14_plasttokens2_1_rlsigma" # 400
 ]
@@ -167,11 +169,11 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
 # make_combined_plot(load_prefixes_tox_nonn, "tox_nonn")
 
-# make_combined_plot(load_prefixes_sent5_nn, "sent5_nn")
+make_combined_plot(load_prefixes_sent5_nn, "sent5_nn_new")
 
-# make_combined_plot(load_prefixes_plasttokens_2_1, "plasttokens_2_1")
+# make_combined_plot(load_prefixes_plasttokens_2_1, "plasttokens_2_1_new")
 
 # make_combined_plot(load_prefixes_plasttokens_5_5, "plasttokens_5_5")
 
-make_combined_plot(load_prefixes_tt_3, "tt_3")
+# make_combined_plot(load_prefixes_tt_3, "tt_3")
 
