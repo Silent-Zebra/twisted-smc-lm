@@ -799,7 +799,8 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
                         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
                          prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, resample=True,
                         true_posterior_sample=None, proposal_is_p=False, huggingface_model=None,
-                        resample_for_log_psi_t_eval_list=False, tempered_twist=False, beta_prop=None):
+                        resample_for_log_psi_t_eval_list=False, tempered_twist=False, beta_prop=None,
+                        use_log_true_final_twist_for_final_weight_calc=True):
 
     log_w_t_minus_1 = log_w_t
 
@@ -846,9 +847,10 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
     log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + log_p_theta_t_eval
 
-    # if use_log_true_final_twist_for_final_weight_calc:
-    log_phi_t_eval = evaluate_log_phi_final(full_seq, log_true_final_twist, condition_twist_on_tokens)
-    # else:
+    if use_log_true_final_twist_for_final_weight_calc:
+        log_phi_t_eval = evaluate_log_phi_final(full_seq, log_true_final_twist, condition_twist_on_tokens)
+    else:
+        log_phi_t_eval = log_psi_eval_of_new_seqs
 
     # print(log_phi_t_eval)
     # log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_phi_t_eval
@@ -882,7 +884,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
             prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-                    no_final_resample=False, tempered_twist=False, beta_prop=None):
+                    no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True):
     # print("SMC TIME")
     # start = time.time()
 
@@ -946,7 +948,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
         prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, resample_for_final, true_posterior_sample, proposal_is_p,
         huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-        tempered_twist=tempered_twist, beta_prop=beta_prop)
+        tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc)
 
     # print(time.time() - start)
     # start = time.time()
@@ -1017,7 +1019,7 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
             prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-                    no_final_resample=False, tempered_twist=False, beta_prop=None):
+                    no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True):
     # print("SMC TIME")
     # start = time.time()
 
@@ -1046,7 +1048,7 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
         prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, resample_for_final, true_posterior_sample, proposal_is_p,
         huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-        tempered_twist=tempered_twist, beta_prop=beta_prop)
+        tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc)
 
     # print(time.time() - start)
     # start = time.time()
@@ -1076,7 +1078,7 @@ smc_jit = partial(jax.jit,
                                    "get_intermediate_sample_history_based_on_learned_twists",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p",
                                    "huggingface_model", "resample_for_log_psi_t_eval_list", "no_final_resample",
-                                   "tempered_twist", "beta_prop"])(smc_partial_jit)
+                                   "tempered_twist", "beta_prop", "use_log_true_final_twist_for_final_weight_calc"])(smc_partial_jit)
 
 # def log_weights_based_on_proposal(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
 #                                   output_len, n_smc_samples, n_vocab,
@@ -1393,7 +1395,7 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                   prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None, resample=True,
                   posterior_sample=None, proposal_is_p=False, huggingface_model=None,
                   resample_for_log_psi_t_eval_list=False, no_final_resample=False,
-                  tempered_twist=False, beta_prop=None):
+                  tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True):
     if smc_procedure_type == "analytic_sigma_sample":
         assert n_vocab > 0
         prompt_len = prompt.shape[-1]
@@ -1401,28 +1403,37 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                                      output_len, cfg_p, params_p, log_true_final_twist,
                                      n_smc_samples)
     elif smc_procedure_type == "jit":
-        return smc_jit(rng_key, prompt, cfg_p, params_p, cfg_twist,
-                       params_twist, log_true_final_twist,
-                       output_len, n_smc_samples,
-                       get_intermediate_sample_history_based_on_learned_twists,
-                       prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
-                       resample, posterior_sample, proposal_is_p,
-                       huggingface_model=huggingface_model,
-                       resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-                       no_final_resample=no_final_resample,
-                       tempered_twist=tempered_twist, beta_prop=beta_prop)
+        return smc_jit(
+            rng_key, prompt, cfg_p, params_p, cfg_twist,
+            params_twist, log_true_final_twist,
+            output_len, n_smc_samples,
+            get_intermediate_sample_history_based_on_learned_twists,
+            prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
+            resample, posterior_sample, proposal_is_p,
+            huggingface_model=huggingface_model,
+            resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
+            no_final_resample=no_final_resample,
+            tempered_twist=tempered_twist, beta_prop=beta_prop,
+            use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc
+        )
     elif smc_procedure_type == "partial_jit":
-        return smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                       output_len, n_smc_samples, get_intermediate_sample_history_based_on_learned_twists,
-                       prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, resample, posterior_sample, proposal_is_p,
-                       huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-                               no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop)
+        return smc_partial_jit(
+            rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+            output_len, n_smc_samples, get_intermediate_sample_history_based_on_learned_twists,
+            prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, resample, posterior_sample, proposal_is_p,
+            huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
+            no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop,
+            use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc
+        )
     elif smc_procedure_type == "debug":
-        return smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                       output_len, n_smc_samples, get_intermediate_sample_history_based_on_learned_twists,
-                       prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, resample, posterior_sample, proposal_is_p,
-                       huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-                               no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop)
+        return smc_debug(
+            rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+            output_len, n_smc_samples, get_intermediate_sample_history_based_on_learned_twists,
+            prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, resample, posterior_sample, proposal_is_p,
+            huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
+            no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop,
+            use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc
+        )
     else:
         raise NotImplementedError
 
