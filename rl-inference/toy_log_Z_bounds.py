@@ -92,7 +92,7 @@ def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twis
 
 
 class ExperimentConfig:
-    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0, sentiment_class=1):
+    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0, sentiment_class=1, n_twist_ebm_vmap=0):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
         self.beta_temp = beta_temp
@@ -100,6 +100,8 @@ class ExperimentConfig:
         self.rm_type = rm_type.lower()
         self.rm_fn = self._get_rm_fn()
         self.batch_rm = self._get_batch_rm()
+
+        self.n_twist_ebm_vmap = n_twist_ebm_vmap
 
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
             or self.rm_type == "contains_token" or self.rm_type == "contains_token_eps":
@@ -145,6 +147,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_ebm_fn, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "ebm_mixed_p_q_reweight":
             dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=5)
+        elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
+            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl_jit, argnums=5)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
@@ -294,7 +298,21 @@ class ExperimentConfig:
                 if self.beta_temp != 1.:
                     assert "ebm" in self.twist_learn_type
 
-                if "ebm" in self.twist_learn_type:
+                if self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
+                    assert self.beta_temp == 1
+                    sk, sk2 = jax.random.split(sk)
+                    p_samples = stochastic_transformer_sample(sk2, cfg_p,
+                                                              params_p, prompt,
+                                                              output_len + self.num_last_tokens_to_condition_on,
+                                                              n_twist,
+                                                              huggingface_model=huggingface_model)
+
+                    true_sigma_samples = p_samples[:,:-self.num_last_tokens_to_condition_on] # will be used to generate more samples
+                    condition_twist_on_tokens = p_samples[:,
+                                                -self.num_last_tokens_to_condition_on:]
+
+
+                elif "ebm" in self.twist_learn_type:
                     # Do one conditioning token set at a time
                     sk, sk2 = jax.random.split(sk)
                     p_samples = stochastic_transformer_sample(sk2, cfg_p,
@@ -2249,8 +2267,7 @@ class TestClass:
                                 replay_buffer_log_w_ts_by_prompt[prompt_num] = replay_buffer_log_w_ts
                                 replay_buffer_log_prob_eval_by_prompt[prompt_num] = replay_buffer_log_prob_eval
 
-                        if use_replay_buffer and experiment_cfg.twist_learn_type in [
-                            "ebm_old", "ebm_partial_jit", "ebm_one_sample", "ebm_reweight"]:
+                        if use_replay_buffer and "ebm" in experiment_cfg.twist_learn_type:
                             rng_key, params_twist, optim_twist_state = \
                                 experiment_cfg.update_twist(
                                     rng_key, indices_of_tokens_chosen, prompt,
@@ -2886,13 +2903,14 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
               num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
               num_samples_if_only_collect_true_posterior_samples=100,
               load_posterior_samples=False, load_prefix_posterior_samples=None,
-              sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1., softmax_twist=False):
+              sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1., softmax_twist=False, n_twist_ebm_vmap=0):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
                                       beta_temp=beta_temp,
                                       num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
-                                      sentiment_class=sentiment_class)
+                                      sentiment_class=sentiment_class,
+                                      n_twist_ebm_vmap=n_twist_ebm_vmap)
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
 
@@ -3461,7 +3479,7 @@ def sample_for_replay_buffer(
         for _ in range(n_times_to_sample_for_buffer):
             log_phi_final_eval = None
 
-            if experiment_cfg.twist_learn_type in ["ebm_old", "ebm_partial_jit", "ebm_reweight", "ebm_one_sample"]:
+            if "ebm" in experiment_cfg.twist_learn_type:
                 # do a q-based sample (Ebm no mixed p_q). Right now, do the one sample version.
                 rng_key, sk2 = jax.random.split(rng_key)
                 # (log_w_t_sigma_samples, _, _), q_samples = smc_procedure(
@@ -3561,7 +3579,7 @@ def sample_for_replay_buffer(
 
         for _ in range(n_times_to_sample_for_buffer):
             log_phi_final_eval = None
-            if experiment_cfg.twist_learn_type in ["ebm_old", "ebm_partial_jit", "ebm_reweight", "ebm_one_sample"]:
+            if "ebm" in experiment_cfg.twist_learn_type:
                 # do a q-based sample (Ebm no mixed p_q)
                 rng_key, sk2 = jax.random.split(rng_key)
                 (log_w_t_sigma_samples, _, _), q_samples = smc_procedure(
@@ -3714,7 +3732,7 @@ def main():
         args.load_prefix_ckpt, args.hface_nn_twist, args.separate_hface_twist_model,
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
         args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora, lora_rank=args.lora_rank,
-        hidden_units_multiplier=args.hidden_units_multiplier
+        hidden_units_multiplier=args.hidden_units_multiplier, n_twist_ebm_vmap=args.n_twist_ebm_vmap
     )
 
 
@@ -3766,7 +3784,7 @@ def main():
             n_vocab=args.n_vocab,
             twist_learn_type="pretrain_final_twist_lsq",
             rm_type=args.rm_type, beta_temp=args.beta_temp,
-            sentiment_class=args.sentiment_class
+            sentiment_class=args.sentiment_class, n_twist_ebm_vmap=args.n_twist_ebm_vmap
         )
 
         for epoch in range(args.pretrain_twist_epochs):
@@ -4119,7 +4137,7 @@ def main():
                     print(f"TIME: {time.time() - start}", flush=True)
                     # jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory{twist_update}.prof")
 
-                if experiment_cfg.twist_learn_type in ["ebm_old", "ebm_partial_jit", "ebm_reweight", "ebm_one_sample"]:
+                if "ebm" in experiment_cfg.twist_learn_type:
                     rng_key, params_twist, optim_twist_state = \
                         experiment_cfg.update_twist(
                             rng_key, indices_of_tokens_chosen, prompt,
@@ -4270,6 +4288,8 @@ if __name__ == "__main__":
     parser.add_argument("--n_test_smc_samples", type=int, default=20,
                         help="Only used for testing SMC, not used elsewhere")
     parser.add_argument("--n_twist", type=int, default=100)
+    parser.add_argument("--n_twist_ebm_vmap", type=int, default=4, help="only for ebm_ml_jit_vmapped_over_condition_tokens (which is only for plasttokens), is the inner batch")
+
     parser.add_argument("--n_policy_samples", type=int, default=100,
                         help="Batch size to use when updating policy (p) and baseline")
 
@@ -4285,7 +4305,7 @@ if __name__ == "__main__":
             "ebm_old", "ebm_partial_jit", "ebm_mixed_p_q", # partial jit only for testing
             "ebm_one_sample",
             # "ebm_q_rsmp",
-            "ebm_reweight", "ebm_mixed_p_q_reweight",
+            "ebm_reweight", "ebm_mixed_p_q_reweight", "ebm_ml_jit_vmapped_over_condition_tokens",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "one_total_kl_with_rl", "one_total_kl_with_sixo",
@@ -4416,5 +4436,8 @@ if __name__ == "__main__":
     #     n_samples_for_plots = [32, 100]
 
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
+
+    if args.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
+        assert args.rm_type == "p_last_tokens"
 
     main()

@@ -95,8 +95,17 @@ def get_l_ebm_ml_partial_jit(
     output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
     token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
     tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
-    replay_buffer=None, replay_buffer_log_w_ts=None, reweight_for_second_term=False, only_one_sample=False
+    replay_buffer=None, replay_buffer_log_w_ts=None, reweight_for_second_term=False, only_one_sample=False,
+    posterior_sample=None
 ):
+
+    if condition_twist_on_tokens is not None and len(condition_twist_on_tokens.shape) == 1:
+        # print(condition_twist_on_tokens.shape)
+        condition_twist_on_tokens = jnp.full(
+            (n_twist, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens
+        )
+        # print(condition_twist_on_tokens)
+        # print(condition_twist_on_tokens.shape)
 
     # print("STARTING GET L EBM UPDATE")
     # new_start = time.time()
@@ -107,6 +116,7 @@ def get_l_ebm_ml_partial_jit(
     if only_one_sample:
         assert true_sigma_samples is None
         assert replay_buffer is None
+        assert posterior_sample is None
         (log_w_t_sigma_samples, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
             intermediate_twist_samples_hist,
             intermediate_log_w_t_hist, _) = smc_procedure(
@@ -151,6 +161,7 @@ def get_l_ebm_ml_partial_jit(
         prompt_w_sigma_sample_s_1_to_t = true_sigma_samples
         normalized_w_t_sigma_samples = jnp.ones((true_sigma_samples.shape[0])) / true_sigma_samples.shape[0]
     elif replay_buffer is not None:
+        assert posterior_sample is None
         assert replay_buffer_log_w_ts is not None
         replay_buffer_log_w_ts, replay_buffer_log_prob_eval = replay_buffer_log_w_ts
 
@@ -236,17 +247,42 @@ def get_l_ebm_ml_partial_jit(
                             output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int,
                            proposal_is_p, huggingface_model, tempered_twist, beta_prop)
         else:
-            (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
-                sk1, prompt, cfg_p, params_p, cfg_twist,
-                params_twist, log_true_final_twist, output_len, n_twist,
-                smc_procedure_type=smc_procedure_type,
-                prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-                token_of_interest_as_int=token_of_interest_as_int,
-                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                resample=resample_for_sigma_samples, no_final_resample=no_final_resample,
-                tempered_twist=tempered_twist, beta_prop=beta_prop)
+            if posterior_sample is not None:
+                # print("hihi")
+                # print(posterior_sample.shape)
+                # print(posterior_sample)
+                (log_w_t_sigma_samples, _,
+                 _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
+                    sk1, prompt, cfg_p, params_p, cfg_twist,
+                    params_twist, log_true_final_twist, output_len, n_twist,
+                    smc_procedure_type=smc_procedure_type,
+                    prepend_tokens_for_twists=prepend_tokens_for_twists,
+                    condition_twist_on_tokens=condition_twist_on_tokens,
+                    token_of_interest_as_int=token_of_interest_as_int,
+                    proposal_is_p=proposal_is_p,
+                    huggingface_model=huggingface_model,
+                    resample=True,
+                    no_final_resample=no_final_resample,
+                    tempered_twist=tempered_twist, beta_prop=beta_prop,
+                    posterior_sample=posterior_sample
+                )
+                # print(prompt_w_sigma_sample_s_1_to_t.shape)
+                # print(prompt_w_sigma_sample_s_1_to_t)
+            else:
+                (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
+                    sk1, prompt, cfg_p, params_p, cfg_twist,
+                    params_twist, log_true_final_twist, output_len, n_twist,
+                    smc_procedure_type=smc_procedure_type,
+                    prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+                    token_of_interest_as_int=token_of_interest_as_int,
+                    proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+                    resample=resample_for_sigma_samples, no_final_resample=no_final_resample,
+                    tempered_twist=tempered_twist, beta_prop=beta_prop, posterior_sample=posterior_sample
+                )
 
             normalized_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
+            # print(normalized_w_t_sigma_samples)
+            # print(normalized_w_t_sigma_samples.shape)
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
         prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
@@ -271,6 +307,9 @@ def get_l_ebm_ml_partial_jit(
             tempered_twist=False
             # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
         )
+
+        # print(proposal_samples)
+        # print(proposal_samples.shape)
 
         ebm_second_term = 0.
 
@@ -317,6 +356,68 @@ get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
     "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
     "reweight_for_second_term", "only_one_sample"])(get_l_ebm_ml_partial_jit)
+
+
+@partial(jax.jit, static_argnames=[
+    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
+    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
+    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap"])
+def get_l_ebm_ml_jit_vmapped_over_condition_tokens(
+    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    log_true_final_twist,
+    output_len, n_twist, prepend_tokens_for_twists,
+    condition_twist_on_tokens, smc_procedure_type,
+    token_of_interest_as_int=None, proposal_is_p=False,
+    huggingface_model=None,
+    tempered_twist=False, beta_prop=None, mixed_p_q_sample=False,
+    true_sigma_samples=None,
+    replay_buffer=None, replay_buffer_log_w_ts=None,
+    reweight_for_second_term=False, only_one_sample=False, n_twist_ebm_vmap=0
+):
+    assert condition_twist_on_tokens is not None
+    # print(condition_twist_on_tokens)
+    # print(condition_twist_on_tokens.shape)
+
+    assert n_twist_ebm_vmap > 0
+
+
+    # TODO later replace with jit instead of partial jit (well it's ok, outside jit makes this fine)
+    vmapped_loss = jax.vmap(get_l_ebm_ml_partial_jit, in_axes=(
+        None, None, None, None, None, None,
+        None,
+        None, None, None,
+        0, None,
+        None, None,
+        None,
+        None, None, None,
+        None,
+        None, None,
+        None, None,
+        0
+    ))
+
+
+    loss = vmapped_loss(
+        rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        log_true_final_twist,
+        output_len, n_twist_ebm_vmap, prepend_tokens_for_twists,
+        condition_twist_on_tokens, smc_procedure_type,
+        token_of_interest_as_int, proposal_is_p,
+        huggingface_model,
+        tempered_twist, beta_prop, mixed_p_q_sample,
+        None, # IMPORTANT - do not pass in true sigma samples here
+        replay_buffer, replay_buffer_log_w_ts,
+        reweight_for_second_term, only_one_sample,
+        true_sigma_samples # instead pass in here, then we have one posterior which the ebm function uses to generate more posteriors from
+    )
+
+    # print(loss)
+    # print(loss.shape)
+
+    return loss.mean()
+
+
 
 
 # # This is the EBM Maximum Likelihood approach, but with resampling on the proposal distribution.
@@ -814,7 +915,7 @@ get_l_rl_based_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "lo
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-                                   "evaluate_over_samples_from", "huggingface_model", "tempered_twist", "beta_prop"])
+                                   "huggingface_model", "tempered_twist", "beta_prop"])
 def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None,
@@ -955,7 +1056,7 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-                                   "evaluate_over_samples_from", "huggingface_model", "tempered_twist", "beta_prop"])
+                                   "huggingface_model", "tempered_twist", "beta_prop"])
 def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None,

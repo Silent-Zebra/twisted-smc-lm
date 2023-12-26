@@ -60,6 +60,21 @@ load_prefixes_sent5_nn = [
     "f_q_g_q_logZbestmidpoint_info_2023-12-23_06-01_seed1_nsamples10_sent5nn_rlq" # 385
 ]
 
+load_prefixes_sent1_nn = [
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_04-11_seed1_nsamples10_sent1nn_ebm", # 431
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_03-49_seed1_nsamples10_sent1nn_bce", # 432
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_04-30_seed1_nsamples10_sent1nn_rob", # 430
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_04-38_seed1_nsamples10_sent1nn_sixo", # 434
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_04-48_seed1_nsamples10_sent1nn_rlq" # 433
+]
+
+load_prefixes_sent2_nn = [
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_04-18_seed1_nsamples10_sent2nn_ebm", # 441
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_03-54_seed1_nsamples10_sent2nn_bce", # 442
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_04-27_seed1_nsamples10_sent2nn_rob", # 440
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_04-47_seed1_nsamples10_sent2nn_sixo", # 444
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_04-50_seed1_nsamples10_sent2nn_rlq" # 443
+]
 
 load_prefixes_plasttokens_2_1 = [
     "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-16_seed1_nsamples14_plasttokens2_1_ebm", # 399 sbatch_12-23-2023_plasttokens_len2_1_TinyStories_separatetwist_nn3_ebm_100_0001
@@ -79,11 +94,12 @@ load_prefixes_plasttokens_5_5 = [
 ]
 
 load_prefixes_tt_3 = [
-    "f_q_g_q_logZbestmidpoint_info_2023-12-24_06-25_seed1_nsamples13_tt_ebm", # 393 sbatch_12-23-2023_toxicity_threshold_-3_neg_outputlen10_tinystories_ebm
-    "f_q_g_q_logZbestmidpoint_info_2023-12-24_04-54_seed1_nsamples13_tt_bce", # 397
-    "f_q_g_q_logZbestmidpoint_info_2023-12-24_07-47_seed1_nsamples13_tt_rob", # 394
-    "f_q_g_q_logZbestmidpoint_info_2023-12-24_06-06_seed1_nsamples13_tt_sixo", # 396
-    "f_q_g_q_logZbestmidpoint_info_2023-12-24_13-33_seed1_nsamples13_tt_rlq" # 395
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_05-42_seed1_nsamples12_tt3_ebm", # 393 sbatch_12-24-2023_toxicity_threshold_-3_neg_outputlen10_tinystories_ebm sbatch_12-23-2023_toxicity_threshold_-3_neg_outputlen10_tinystories_ebm
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_04-15_seed1_nsamples12_tt3_bce", # 397
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_06-36_seed1_nsamples12_tt3_rob", # 422
+    # "f_q_g_q_logZbestmidpoint_info_2023-12-24_07-47_seed1_nsamples13_tt_rob", # 394
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_05-33_seed1_nsamples12_tt3_sixo", # 396
+    "f_q_g_q_logZbestmidpoint_info_2023-12-25_06-55_seed1_nsamples12_tt3_rlq" # 395
 ]
 
 
@@ -124,7 +140,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
     if fig_name_modifier == "tox":
         plt.ylim([0, 5])
-    if fig_name_modifier == "tt_3":
+    if "tt_3" in fig_name_modifier:
         plt.ylim([-1, 100])
 
     for i in range(len(load_prefixes)):
@@ -169,11 +185,13 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
 # make_combined_plot(load_prefixes_tox_nonn, "tox_nonn")
 
-make_combined_plot(load_prefixes_sent5_nn, "sent5_nn_new")
+# make_combined_plot(load_prefixes_sent5_nn, "sent5_nn_new")
+# make_combined_plot(load_prefixes_sent1_nn, "sent1_nn")
+# make_combined_plot(load_prefixes_sent2_nn, "sent2_nn")
 
 # make_combined_plot(load_prefixes_plasttokens_2_1, "plasttokens_2_1_new")
 
 # make_combined_plot(load_prefixes_plasttokens_5_5, "plasttokens_5_5")
 
-# make_combined_plot(load_prefixes_tt_3, "tt_3")
+make_combined_plot(load_prefixes_tt_3, "tt_3_new")
 
