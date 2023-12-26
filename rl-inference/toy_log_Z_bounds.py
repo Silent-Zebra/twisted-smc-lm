@@ -2886,7 +2886,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
               num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
               num_samples_if_only_collect_true_posterior_samples=100,
               load_posterior_samples=False, load_prefix_posterior_samples=None,
-              sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.):
+              sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1., softmax_twist=False):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
@@ -2925,7 +2925,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         tokenizer = get_tokenizer(model_config)
         rng_key, sk = jax.random.split(rng_key, 2)
 
-        softmax_twist = False
+
         # if twist_learn_type in ["one_total_kl", "one_total_kl_mixed_p_q",
         #                         "one_total_kl_sample", "one_total_kl_sample_mixed_p_q"]:
         #     print("Using softmax twists")
