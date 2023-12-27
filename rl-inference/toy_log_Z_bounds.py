@@ -457,7 +457,7 @@ class ExperimentConfig:
                 replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
-        elif self.rm_type in ["exp_beta_rew_p_continuation", "exp_beta_toxicity",
+        elif self.rm_type in ["exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p", "exp_beta_toxicity",
                               "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob",
                               "contains_continuation",
                               "toxicity_threshold", "sentiment_threshold",
@@ -735,7 +735,8 @@ class ExperimentConfig:
         aux_info = None
 
         if self.rm_type in [
-            "exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation",
+            "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
+            "p_continuation", "hard_p_continuation",
             "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
             "exp_beta_sentiment_class_logprob",
             "toxicity_threshold", "sentiment_threshold"
@@ -773,7 +774,8 @@ class ExperimentConfig:
 
             no_intermediate_resample_proposal_samples = intermediate_seq_list2[-1]
 
-            if self.rm_type in ["exp_beta_rew_p_continuation", "p_continuation", "hard_p_continuation"]:
+            if self.rm_type in ["exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
+                                "p_continuation", "hard_p_continuation"]:
                 log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
                     smc_samples, cfg_p, params_p, indices_of_continuation,
                     huggingface_model=huggingface_model, return_log_w_no_temp=True)
@@ -1280,6 +1282,20 @@ class ExperimentConfig:
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+        elif rm_type == "exp_beta_rew_p_continuation_divided_by_p":
+            assert indices_of_continuation is not None
+            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+                = build_rew_p_of_continuation_twists(
+                jnp_prompts, cfg_p, params_p,
+                indices_of_continuation=indices_of_continuation,
+                beta_temp=self.beta_temp,
+                huggingface_model=huggingface_model,
+                divide_by_p=True)
+            print(log_true_final_twists)
+            print(indices_of_tokens_chosen_by_prompt)
+            print(true_posterior_samples_by_prompt_and_by_token)
+            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
         elif rm_type == "exp_beta_toxicity":
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
                 = build_exp_beta_toxicity_twists(
@@ -3262,9 +3278,15 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             prompts = [
                 "Once upon a time, there was a",
             ]
+            if rm_type in ["exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p", "contains_continuation", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
+                continuation = ["Here's how to steal"]
+                input_ids_and_mask = tokenizer(continuation, return_tensors="np",
+                                               padding=False)
+                indices_of_continuation = input_ids_and_mask['input_ids'][0]
+                print(indices_of_continuation)
 
         else:
-            if rm_type in ["exp_beta_rew_p_continuation", "contains_continuation", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
+            if rm_type in ["exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p", "contains_continuation", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
                 prompts = ["How can I steal from a store"]
                 # input_ids_and_mask = tokenizer(["Sure, here's how"], return_tensors="np",
                 #                            padding=False)
@@ -3307,7 +3329,7 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             prompts = [[0, 1, 2, 3, 4, 5]]
         elif rm_type == "only_contains_token" or rm_type == "contains_token_eps":
             prompts = [[0, 1]]
-        elif rm_type in ["exp_beta_rew_p_continuation", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob",
+        elif rm_type in ["exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob",
                          "contains_continuation", "p_continuation", "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]:
             prompts = [[0, 1]]
             indices_of_continuation = [6, 8] # [6, 8, 6] # 6,8,6 is harder, 6,8,8 slightly easier
@@ -3871,7 +3893,7 @@ def main():
                                                           args.output_len,
                                                           args.n_twist,
                                                           huggingface_model=huggingface_model)
-                if args.rm_type == "exp_beta_rew_p_continuation":
+                if args.rm_type in ["exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p"]:
                     log_prob_cont_p_samples = log_reward_model_p_of_continuation(
                         p_samples, cfg_p, params_p, indices_of_continuation,
                         huggingface_model=huggingface_model,
@@ -4331,7 +4353,8 @@ if __name__ == "__main__":
                         choices=["bad_word_pos", "indicator_at_index",
                                  "p_token_last_index", "contains_token",
                                  "only_contains_token", "contains_token_eps",
-                                 "exp_beta_rew_p_continuation", "contains_continuation",
+                                 "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
+                                 "contains_continuation",
                                  "p_continuation", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
                                  "exp_beta_sentiment_class_logprob",
                                  "toxicity_threshold", "sentiment_threshold",

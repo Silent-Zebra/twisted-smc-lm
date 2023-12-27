@@ -77,7 +77,8 @@ load_prefixes_sent2_nn = [
 ]
 
 load_prefixes_plasttokens_2_1 = [
-    "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-16_seed1_nsamples14_plasttokens2_1_ebm", # 399 sbatch_12-23-2023_plasttokens_len2_1_TinyStories_separatetwist_nn3_ebm_100_0001
+    "f_q_g_q_logZbestmidpoint_info_2023-12-26_22-41_seed1_nsamples14_plasttokens2_1_ebm", # 463 sbatch_12-26-2023_plasttokens_len2_1_TinyStories_separatetwist_nn3_ebmvmap_10_10_0001
+    # "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-16_seed1_nsamples14_plasttokens2_1_ebm", # 399 sbatch_12-23-2023_plasttokens_len2_1_TinyStories_separatetwist_nn3_ebm_100_0001
     "f_q_g_q_logZbestmidpoint_info_2023-12-24_16-57_seed1_nsamples14_plasttokens2_1_bce", # 402
     # "f_q_g_q_logZbestmidpoint_info_2023-12-24_03-02_seed1_nsamples14_plasttokens2_1_rob", # 398
     "f_q_g_q_logZbestmidpoint_info_2023-12-24_22-09_seed1_nsamples14_plasttokens2_1_rob", # 415
@@ -86,7 +87,8 @@ load_prefixes_plasttokens_2_1 = [
 ]
 
 load_prefixes_plasttokens_5_5 = [
-    "f_q_g_q_logZbestmidpoint_info_2023-12-24_08-04_seed1_nsamples15_plasttokens5_5_ebm", # 389 sbatch_12-23-2023_plasttokens_len5_5_TinyStories_separatetwist_nn3_ebm_100_0001
+    "", # 477 sbatch_12-26-2023_plasttokens_len5_5_TinyStories_separatetwist_nn3_ebmvmap_10_10_0001
+    # "f_q_g_q_logZbestmidpoint_info_2023-12-24_08-04_seed1_nsamples15_plasttokens5_5_ebm", # 389 sbatch_12-23-2023_plasttokens_len5_5_TinyStories_separatetwist_nn3_ebm_100_0001
     "f_q_g_q_logZbestmidpoint_info_2023-12-24_04-11_seed1_nsamples15_plasttokens5_5_bce", # 392
     "f_q_g_q_logZbestmidpoint_info_2023-12-24_06-02_seed1_nsamples15_plasttokens5_5_rob", # 388
     "f_q_g_q_logZbestmidpoint_info_2023-12-24_05-51_seed1_nsamples15_plasttokens5_5_sixo", # 391
@@ -126,7 +128,9 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
         prefix = load_prefixes[i]
         x = checkpoints.restore_checkpoint(ckpt_dir=f"./{prefix}", target=None,
-                                           prefix="checkpoint")
+                                           prefix="checkpoint"
+                                           )
+
         logZ_midpoint_estimate = x[2]
         print(logZ_midpoint_estimate)
         logZ_midpoint_estimates.append(logZ_midpoint_estimate)
@@ -189,9 +193,9 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 # make_combined_plot(load_prefixes_sent1_nn, "sent1_nn")
 # make_combined_plot(load_prefixes_sent2_nn, "sent2_nn")
 
-# make_combined_plot(load_prefixes_plasttokens_2_1, "plasttokens_2_1_new")
+make_combined_plot(load_prefixes_plasttokens_2_1, "plasttokens_2_1_new")
 
 # make_combined_plot(load_prefixes_plasttokens_5_5, "plasttokens_5_5")
 
-make_combined_plot(load_prefixes_tt_3, "tt_3_new")
+# make_combined_plot(load_prefixes_tt_3, "tt_3_new")
 

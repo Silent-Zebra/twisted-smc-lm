@@ -245,10 +245,10 @@ def log_curried_reward_seq_contains_token_eps(index_of_fixed_token, prompt_len):
 
 
 
-@partial(jax.jit, static_argnames=["cfg_p", "beta_temp", "huggingface_model", "return_log_w_no_temp"])
+@partial(jax.jit, static_argnames=["cfg_p", "beta_temp", "huggingface_model", "return_log_w_no_temp", "divide_by_p", "prompt_len"])
 def log_reward_model_p_of_continuation(
     seq, cfg_p, params_p, indices_of_continuation, beta_temp=None,
-    huggingface_model=None, return_log_w_no_temp=False):
+    huggingface_model=None, return_log_w_no_temp=False, divide_by_p=False, prompt_len=None):
 
     do_reshape = False
     if len(seq.shape) == 3:
@@ -265,18 +265,33 @@ def log_reward_model_p_of_continuation(
     seq = jnp.concatenate((seq, batch_continuation), axis=1)
     # print(seq.shape)
 
-    # Use original_seq_len_incl_prompt for prompt_len because we only want to evaluate the continuation probability
-    log_prob_of_continuation = evaluate_log_p_selected_tokens(seq, original_seq_len_incl_prompt, cfg_p, params_p, huggingface_model=huggingface_model)
-    if return_log_w_no_temp:
-        return log_prob_of_continuation.sum(axis=-1)
-    else:
+    if divide_by_p:
+        assert prompt_len is not None
+        assert not return_log_w_no_temp
         assert beta_temp is not None
-        return jnp.exp(log_prob_of_continuation.sum(axis=-1)) * beta_temp # in the phi = e^(beta r) formulation, the log phi is going to be just beta * r
+        log_p = evaluate_log_p_selected_tokens(
+            seq, prompt_len, cfg_p, params_p, huggingface_model=huggingface_model)
+        log_prob_of_continuation = log_p[:, -jnp_continuation.shape[-1]:]
+        log_p_output_tokens = log_p[:, :-jnp_continuation.shape[-1]]
+
+        # print(log_p.shape)
+        # print(log_prob_of_continuation.shape)
+
+        return beta_temp * log_prob_of_continuation.sum(axis=-1) - log_p_output_tokens.sum(axis=-1) # e^(beta r) / p. Log of that is just beta r - log p where r = log p(continuation). Then when you do sigma = p phi, you get sigma = p e^(beta r) / p = e^(beta r)
+
+    else:
+        # Use original_seq_len_incl_prompt for prompt_len because we only want to evaluate the continuation probability
+        log_prob_of_continuation = evaluate_log_p_selected_tokens(seq, original_seq_len_incl_prompt, cfg_p, params_p, huggingface_model=huggingface_model)
+        if return_log_w_no_temp:
+            return log_prob_of_continuation.sum(axis=-1)
+        else:
+            assert beta_temp is not None
+            return jnp.exp(log_prob_of_continuation.sum(axis=-1)) * beta_temp # in the phi = e^(beta r) formulation, the log phi is going to be just beta * r
 
 
-def curried_log_reward_model_p_of_continuation(cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None):
+def curried_log_reward_model_p_of_continuation(cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None, divide_by_p=False, prompt_len=None):
     def new_rm(seq):
-        return log_reward_model_p_of_continuation(seq, cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=huggingface_model)
+        return log_reward_model_p_of_continuation(seq, cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=huggingface_model, divide_by_p=divide_by_p, prompt_len=prompt_len)
     return new_rm
 
 
@@ -859,15 +874,15 @@ def build_indicator_twists_all_tokens_at_position(rng_key, jnp_prompts, zero_ind
 
 
 
-def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None):
+def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None, divide_by_p=False):
     # This here is a reward model in the framework phi = e^(beta r) where r = probability of continuation | prompt, s_{1:T} (r = p(continuation | s_{1:T}, prompt))
     # No posterior samples here
     log_true_final_twists = []
     for jnp_prompt in jnp_prompts:
-        # prompt_len = jnp_prompt.shape[-1]
+        prompt_len = jnp_prompt.shape[-1]
         log_true_final_twist = curried_log_reward_model_p_of_continuation(
             cfg_p, params_p, indices_of_continuation,
-            beta_temp, huggingface_model=huggingface_model)
+            beta_temp, huggingface_model=huggingface_model, divide_by_p=divide_by_p, prompt_len=prompt_len)
 
         log_true_final_twists.append(log_true_final_twist)
 
