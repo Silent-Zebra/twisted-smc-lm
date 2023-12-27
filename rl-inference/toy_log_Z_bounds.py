@@ -149,6 +149,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
+        elif self.twist_learn_type == "ebm_ml_vmap_with_one_total_kl":
+            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl_jit, argnums=5)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
@@ -298,7 +300,7 @@ class ExperimentConfig:
                 if self.beta_temp != 1.:
                     assert "ebm" in self.twist_learn_type
 
-                if self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
+                if self.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_vmap_with_one_total_kl"]:
                     assert self.beta_temp == 1
                     sk, sk2 = jax.random.split(sk)
                     p_samples = stochastic_transformer_sample(sk2, cfg_p,
@@ -4288,7 +4290,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_test_smc_samples", type=int, default=20,
                         help="Only used for testing SMC, not used elsewhere")
     parser.add_argument("--n_twist", type=int, default=100)
-    parser.add_argument("--n_twist_ebm_vmap", type=int, default=4, help="only for ebm_ml_jit_vmapped_over_condition_tokens (which is only for plasttokens), is the inner batch")
+    parser.add_argument("--n_twist_ebm_vmap", type=int, default=4, help="only for ebm_ml_jit_vmapped_over_condition_tokens or ebm_ml_vmap_with_one_total_kl (which is only for plasttokens), is the inner batch")
 
     parser.add_argument("--n_policy_samples", type=int, default=100,
                         help="Batch size to use when updating policy (p) and baseline")
@@ -4306,6 +4308,7 @@ if __name__ == "__main__":
             "ebm_one_sample",
             # "ebm_q_rsmp",
             "ebm_reweight", "ebm_mixed_p_q_reweight", "ebm_ml_jit_vmapped_over_condition_tokens",
+            "ebm_ml_vmap_with_one_total_kl",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "one_total_kl_with_rl", "one_total_kl_with_sixo",
@@ -4437,7 +4440,7 @@ if __name__ == "__main__":
 
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
 
-    if args.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
+    if args.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_vmap_with_one_total_kl"]:
         assert args.rm_type == "p_last_tokens"
 
     main()

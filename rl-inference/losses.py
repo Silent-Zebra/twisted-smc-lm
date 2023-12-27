@@ -1195,3 +1195,51 @@ def get_l_bce(
     loss = optax.sigmoid_binary_cross_entropy(log_psi_on_p_samples, class_prob_broadcasted)
 
     return loss.mean()
+
+
+
+
+
+@partial(jax.jit, static_argnames=[
+    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
+    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
+    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap"])
+def get_l_ebm_ml_vmap_with_one_total_kl(
+    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    log_true_final_twist,
+    output_len, n_twist, prepend_tokens_for_twists,
+    condition_twist_on_tokens, smc_procedure_type,
+    token_of_interest_as_int=None, proposal_is_p=False,
+    huggingface_model=None,
+    tempered_twist=False, beta_prop=None, mixed_p_q_sample=False,
+    true_sigma_samples=None,
+    replay_buffer=None, replay_buffer_log_w_ts=None,
+    reweight_for_second_term=False, only_one_sample=False, n_twist_ebm_vmap=0
+):
+    ebm_ml_loss = get_l_ebm_ml_jit_vmapped_over_condition_tokens(
+        rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        log_true_final_twist,
+        output_len, n_twist, prepend_tokens_for_twists,
+        condition_twist_on_tokens, smc_procedure_type,
+        token_of_interest_as_int, proposal_is_p,
+        huggingface_model,
+        tempered_twist, beta_prop, mixed_p_q_sample,
+        true_sigma_samples,
+        replay_buffer, replay_buffer_log_w_ts,
+        reweight_for_second_term, only_one_sample, n_twist_ebm_vmap
+    )
+
+    one_total_kl_loss = get_l_one_total_kl_jit(rng_key, prompt, cfg_p, params_p, cfg_twist,
+                       params_twist, log_true_final_twist,
+                       output_len, n_twist, prepend_tokens_for_twists,
+                       condition_twist_on_tokens, smc_procedure_type,
+                       token_of_interest_as_int,
+                       proposal_is_p, huggingface_model,
+                       tempered_twist, beta_prop,
+                       mixed_p_q_sample, True,
+                       true_sigma_samples, replay_buffer,
+                       replay_buffer_log_w_ts)
+
+    return ebm_ml_loss + one_total_kl_loss
+
