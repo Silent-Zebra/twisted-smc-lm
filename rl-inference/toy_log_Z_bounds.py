@@ -3903,11 +3903,20 @@ def main():
                         highest_log_prob = max_log_prob
                         max_log_prob_samples = p_samples[(log_prob_cont_p_samples - max_log_prob) == 0]
                         highest_log_prob_sample = max_log_prob_samples[0]
+                        print("New best sample found")
+                        text_outputs = tokenizer.decode(max_log_prob_samples[0],
+                                                        skip_special_tokens=True)
+                        print(text_outputs)
+                        text_outputs = tokenizer.decode(highest_log_prob_sample,
+                                                        skip_special_tokens=True)
+                        print(text_outputs)
+
                     # print(max_log_prob_samples)
                     # print(max_log_prob_samples[0])
                     print(max_log_prob)
                     print(highest_log_prob)
-                    print(highest_log_prob_sample)
+                    # print(highest_log_prob_sample)
+
                     continue
                 elif args.rm_type in ["exp_beta_toxicity", "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"]:
                     score = log_true_final_twist(p_samples) / args.beta_temp # because log e ^ beta r is just beta r, then divide by beta returns r
