@@ -203,7 +203,9 @@ def main():
         # gen_probs = torch.gather(probs, 2, sequences[:, prompt_len:, None]).squeeze(-1)
         logits = model(sequences)[0]
         probs = logits.softmax(dim=-1)
-        gen_probs = torch.gather(probs, 2, sequences[:, prompt_len:, None]).squeeze(-1)
+        gen_probs = torch.gather(probs[:, prompt_len:, :], 2, sequences[:, prompt_len:, None]).squeeze(-1)
+        # print(probs[:, prompt_len:, :].shape)
+        # print(sequences[:, prompt_len:, None].shape)
         return gen_probs
 
     def get_logprob_of_generated_tokens(model, sequences):
