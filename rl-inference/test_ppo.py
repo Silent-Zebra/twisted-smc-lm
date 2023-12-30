@@ -289,13 +289,13 @@ def main():
         # # scoresa = x.scores
         # # probs = torch.stack(x.scores, dim=1).softmax(dim=-1)
         # # gen_probs = torch.gather(probs, 2, x.sequences[:, :, None]).squeeze(-1)
-        torch.manual_seed(0)
+        # torch.manual_seed(0)
         x = model.generate(batch_prompt_pt, return_dict_in_generate=True,
                            output_scores=True,
                            max_length=prompt_len + args.output_len,
                            **gen_kwargs)
         full_seqb = x.sequences
-        torch.manual_seed(0)
+        # torch.manual_seed(0)
         x = ref_model.generate(batch_prompt_pt, return_dict_in_generate=True,
                                output_scores=True,
                                max_length=prompt_len + args.output_len,
