@@ -283,6 +283,7 @@ def main():
         print("F_q Estimates Learned Model")
         f_qs = f_q_estimate(model, ref_model, batch_prompt_pt)
         print(f_qs)
+        print("Avg F_q Estimate (Learned Model)")
         print(f_qs.mean())
 
         f_q_estimates_list.append(f_qs.detach().cpu().numpy())
@@ -290,18 +291,21 @@ def main():
         print("F_q Estimates Base Model")
         f_qs = f_q_estimate(ref_model, ref_model, batch_prompt_pt)
         print(f_qs)
+        print("Avg F_q Estimate (Base Model)")
         print(f_qs.mean())
 
         if true_posterior_samples is not None:
             print("G_q Estimates Learned Model")
             g_qs = g_q_estimate(model, ref_model, true_posterior_samples)
             print(g_qs)
+            print("Avg G_q Estimate (Learned Model)")
             print(g_qs.mean())
             g_q_estimates_list.append(g_qs.detach().cpu().numpy())
 
             print("G_q Estimates Base Model")
             g_qs = g_q_estimate(ref_model, ref_model, true_posterior_samples)
             print(g_qs)
+            print("Avg G_q Estimate (Base Model)")
             print(g_qs.mean())
 
 
