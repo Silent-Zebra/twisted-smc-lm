@@ -318,25 +318,36 @@ def main():
 
         f_q_estimates_list.append(f_qs.detach().cpu().numpy())
 
-        print("F_q Estimates Base Model")
-        f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
-        print(f_qs)
-        print("Avg F_q Estimate (Base Model)")
-        print(f_qs.mean())
+        # print("F_q Estimates Base Model")
+        # f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
+        # print(f_qs)
+        # print("Avg F_q Estimate (Base Model)")
+        # print(f_qs.mean())
+        total_g_qs = None
 
         if true_posterior_samples is not None:
-            print("G_q Estimates Learned Model")
-            g_qs = g_q_estimate(model, ref_model, true_posterior_samples)
-            print(g_qs)
-            print("Avg G_q Estimate (Learned Model)")
-            print(g_qs.mean())
-            g_q_estimates_list.append(g_qs.detach().cpu().numpy())
+            for i in range(true_posterior_samples.shape[0] // n_samples_f_q + 1):
+                samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
 
-            print("G_q Estimates Base Model")
-            g_qs = g_q_estimate(ref_model, ref_model, true_posterior_samples)
-            print(g_qs)
-            print("Avg G_q Estimate (Base Model)")
-            print(g_qs.mean())
+                print("G_q Estimates Learned Model")
+                g_qs = g_q_estimate(model, ref_model, samples)
+                print(g_qs)
+                print("Avg G_q Estimate (Learned Model)")
+                print(g_qs.mean())
+                if total_g_qs is None:
+                    total_g_qs = g_qs
+                else:
+                    total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
+                    print(total_g_qs.shape)
+
+
+            g_q_estimates_list.append(total_g_qs.cpu().numpy())
+
+            # print("G_q Estimates Base Model")
+            # g_qs = g_q_estimate(ref_model, ref_model, true_posterior_samples)
+            # print(g_qs)
+            # print("Avg G_q Estimate (Base Model)")
+            # print(g_qs.mean())
 
 
         for x in [full_seqb, full_seqc]:
