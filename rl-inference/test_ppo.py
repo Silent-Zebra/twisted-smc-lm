@@ -96,6 +96,8 @@ def toy_test_rm(
 
 
 def main():
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     if args.rm_type == "exp_beta_sentiment_class_logprob":
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
             "LiYuan/amazon-review-sentiment-analysis")
@@ -159,7 +161,7 @@ def main():
 
     batch_prompt = np.full((batch_size, np_prompts.shape[-1]), np_prompts)
 
-    batch_prompt_pt = torch.tensor(batch_prompt, dtype=torch.int64)
+    batch_prompt_pt = torch.tensor(batch_prompt, dtype=torch.int64, device=device)
 
     prompt_len = batch_prompt_pt.shape[-1]
 
@@ -186,7 +188,7 @@ def main():
         print(len(set(text_outputs)))
 
         true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[0]
-        true_posterior_samples = torch.tensor(true_posterior_samples, dtype=torch.int64)
+        true_posterior_samples = torch.tensor(true_posterior_samples, dtype=torch.int64, device=device)
 
 
     def get_prob_of_generated_tokens(model, sequences):
