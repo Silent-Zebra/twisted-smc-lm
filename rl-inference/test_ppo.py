@@ -11,6 +11,7 @@ from flax.training import checkpoints
 from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
 import numpy as np
 
+import time
 
 from transformers import AutoModelForSequenceClassification
 
@@ -226,9 +227,11 @@ def main():
         return log_tilde_sigma - log_q
 
     # NEXT TODOS are to load the posteriors I got from elsewhere, and then use those in the G_q evaluation (use the same loading code from my other file)
+    new_start = time.time()
 
     for epoch in range(args.epochs):
         print(f"Epoch: {epoch + 1}", flush=True)
+        print(f"TIME: {time.time() - new_start}", flush=True)
 
         print("TEST INFO")
         # num_last_tokens_to_condition_on = 1
@@ -292,7 +295,7 @@ def main():
             print("Avg reward")
             print(final_reward.mean())
 
-        print("Starting twist updates:")
+        print("Starting twist updates:", flush=True)
 
         num_twist_updates_to_do = args.twist_updates_per_epoch
 
@@ -303,6 +306,9 @@ def main():
                 num_twist_updates_to_do = 2 ** epoch
 
         for twist_update in range(num_twist_updates_to_do):
+
+            print(f"Twist update: {twist_update}")
+            print(f"TIME: {time.time() - new_start}", flush=True)
 
             query_tensors = batch_prompt_pt
 
