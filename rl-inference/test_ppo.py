@@ -113,6 +113,10 @@ def main():
         model_config = 'gpt2-medium'
         rm_function = reward_model_sentiment_class_logprob
         class_num = args.sentiment_class - 1
+        prompts = [
+            "I bought this"
+            # "This product is"
+        ]
 
     elif args.rm_type in ["exp_beta_toxicity_class_logprob"]:
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
@@ -124,6 +128,8 @@ def main():
         if args.pos_threshold:
             class_num = 1
         rm_function = toxicity_class_logprob
+        prompts = ["Once upon a time, there was a", ]
+
     elif args.rm_type in ["toy_test"]:
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
             "nicholasKluge/ToxicityModel")
@@ -132,6 +138,8 @@ def main():
         model_config = "roneneldan/TinyStories-33M"
         class_num = 0
         rm_function = toy_test_rm
+        prompts = ["Once upon a time, there was a", ]
+
     else:
         raise NotImplementedError
 
@@ -161,7 +169,6 @@ def main():
                              # optimizer=torch.optim.AdamW(params=model.parameters(), lr=config.learning_rate,  betas=(args.beta1, args.beta2), weight_decay=args.weight_decay) # Cannot use custom optimizer here, not sure why...
                              )
 
-    prompts = ["Once upon a time, there was a",]
     input_ids_and_mask = tokenizer(prompts, return_tensors="np", padding=False)
 
     np_prompts = input_ids_and_mask['input_ids'][0]
