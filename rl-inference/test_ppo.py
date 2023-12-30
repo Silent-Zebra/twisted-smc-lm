@@ -12,6 +12,7 @@ from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
 import numpy as np
 
 import time
+import datetime
 
 from transformers import AutoModelForSequenceClassification
 
@@ -227,7 +228,13 @@ def main():
         return log_tilde_sigma - log_q
 
     # NEXT TODOS are to load the posteriors I got from elsewhere, and then use those in the G_q evaluation (use the same loading code from my other file)
+
+    f_q_estimates_list = []
+    g_q_estimates_list = []
+
+
     new_start = time.time()
+
 
     for epoch in range(args.epochs):
         print(f"Epoch: {epoch + 1}", flush=True)
@@ -267,6 +274,8 @@ def main():
         print(f_qs)
         print(f_qs.mean())
 
+        f_q_estimates_list.append(f_qs.numpy())
+
         print("F_q Estimates Base Model")
         f_qs = f_q_estimate(ref_model, ref_model, batch_prompt_pt)
         print(f_qs)
@@ -277,6 +286,7 @@ def main():
             g_qs = g_q_estimate(model, ref_model, true_posterior_samples)
             print(g_qs)
             print(g_qs.mean())
+            g_q_estimates_list.append(g_qs.numpy())
 
             print("G_q Estimates Base Model")
             g_qs = g_q_estimate(ref_model, ref_model, true_posterior_samples)
@@ -294,6 +304,13 @@ def main():
             print(final_reward)
             print("Avg reward")
             print(final_reward.mean())
+
+        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                    target=(np.stack(g_q_estimates_list),
+                                            np.stack(f_q_estimates_list)
+                                            ),
+                                    step=len(g_q_estimates_list),
+                                    prefix=f"g_q_f_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
         print("Starting twist updates:", flush=True)
 
