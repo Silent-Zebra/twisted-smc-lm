@@ -204,8 +204,9 @@ def main():
         logits = model(sequences)[0]
         probs = logits.softmax(dim=-1)
         gen_probs = torch.gather(probs[:, prompt_len:, :], 2, sequences[:, prompt_len:, None]).squeeze(-1)
-        # print(probs[:, prompt_len:, :].shape)
-        # print(sequences[:, prompt_len:, None].shape)
+        print(probs[:, prompt_len:, :].shape)
+        print(sequences[:, prompt_len:, None].shape)
+
         return gen_probs
 
     def get_logprob_of_generated_tokens(model, sequences):
@@ -221,6 +222,12 @@ def main():
         log_p = get_logprob_of_generated_tokens(ref_model, full_seqs)
         log_phi_eval = rm_function(full_seqs, rewardModel, tokenizer_RM,
                                    tokenizer, class_num)
+        print("Log p and phi")
+        print(log_p)
+        print(log_p.mean())
+        print(log_phi_eval)
+        print(log_phi_eval.mean())
+
         # log_phi_eval.to(device)
 
         log_tilde_sigma = log_p + args.beta_temp * log_phi_eval # p eval + phi eval
@@ -233,11 +240,19 @@ def main():
         # log_p = get_logprob_of_generated_tokens(p_result.scores, q_result.sequences)
         # log_tilde_sigma = log_p + rm_function(q_result.sequences) # p eval + phi eval
         log_tilde_sigma = eval_log_p_plus_log_phi(q_result.sequences, ref_model)
+        print("Log q")
+        print(log_q)
+        print(log_q.mean())
+
         return log_tilde_sigma - log_q
 
     def g_q_estimate(model, ref_model, true_sigma_samples):
         log_q = get_logprob_of_generated_tokens(model, true_sigma_samples) # q is just whatever our model has learned
         log_tilde_sigma = eval_log_p_plus_log_phi(true_sigma_samples, ref_model)
+        print("Log q")
+        print(log_q)
+        print(log_q.mean())
+
         return log_tilde_sigma - log_q
 
     # NEXT TODOS are to load the posteriors I got from elsewhere, and then use those in the G_q evaluation (use the same loading code from my other file)
@@ -322,9 +337,14 @@ def main():
             print("Avg reward")
             print(final_reward.mean())
 
+        g_q_np = []
+        if len(g_q_estimates_list) > 0:
+            g_q_np = np.stack(g_q_estimates_list)
+        f_q_np = np.stack(f_q_estimates_list)
+
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                    target=(np.stack(g_q_estimates_list),
-                                            np.stack(f_q_estimates_list)
+                                    target=(g_q_np,
+                                            f_q_np
                                             ),
                                     step=len(g_q_estimates_list),
                                     prefix=f"g_q_f_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
