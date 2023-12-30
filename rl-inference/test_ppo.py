@@ -241,24 +241,26 @@ def main():
         return log_tilde_sigma
 
     def f_q_estimate(model, ref_model, batch_prompt_pt):
-        q_result = model.generate(batch_prompt_pt, return_dict_in_generate=True, output_scores=True, max_length=prompt_len+args.output_len, **gen_kwargs)
-        log_q = get_logprob_of_generated_tokens(model, q_result.sequences) # q is just whatever our model has learned
-        # p_result = ref_model.generate(batch_prompt_pt, return_dict_in_generate=True, output_scores=True, max_length=prompt_len+args.output_len, **gen_kwargs)
-        # log_p = get_logprob_of_generated_tokens(p_result.scores, q_result.sequences)
-        # log_tilde_sigma = log_p + rm_function(q_result.sequences) # p eval + phi eval
-        log_tilde_sigma = eval_log_p_plus_log_phi(q_result.sequences, ref_model)
-        print("Log q")
-        print(log_q)
-        print(log_q.mean())
+        with torch.no_grad():
+            q_result = model.generate(batch_prompt_pt, return_dict_in_generate=True, output_scores=True, max_length=prompt_len+args.output_len, **gen_kwargs)
+            log_q = get_logprob_of_generated_tokens(model, q_result.sequences) # q is just whatever our model has learned
+            # p_result = ref_model.generate(batch_prompt_pt, return_dict_in_generate=True, output_scores=True, max_length=prompt_len+args.output_len, **gen_kwargs)
+            # log_p = get_logprob_of_generated_tokens(p_result.scores, q_result.sequences)
+            # log_tilde_sigma = log_p + rm_function(q_result.sequences) # p eval + phi eval
+            log_tilde_sigma = eval_log_p_plus_log_phi(q_result.sequences, ref_model)
+            print("Log q")
+            print(log_q)
+            print(log_q.mean())
 
         return log_tilde_sigma - log_q
 
     def g_q_estimate(model, ref_model, true_sigma_samples):
-        log_q = get_logprob_of_generated_tokens(model, true_sigma_samples) # q is just whatever our model has learned
-        log_tilde_sigma = eval_log_p_plus_log_phi(true_sigma_samples, ref_model)
-        print("Log q")
-        print(log_q)
-        print(log_q.mean())
+        with torch.no_grad():
+            log_q = get_logprob_of_generated_tokens(model, true_sigma_samples) # q is just whatever our model has learned
+            log_tilde_sigma = eval_log_p_plus_log_phi(true_sigma_samples, ref_model)
+            print("Log q")
+            print(log_q)
+            print(log_q.mean())
 
         return log_tilde_sigma - log_q
 
