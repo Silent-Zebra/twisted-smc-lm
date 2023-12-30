@@ -31,26 +31,6 @@ def get_sentiment_class_prob(tokens, sentimentClassifier, class_num):
     # score = score.squeeze(-1)
     return class_prob
 
-def reward_model_sentiment_class_logprob(seq, sentimentClassifier, tokenizer_RM, tokenizer, class_num):
-    if len(seq.shape) == 3:
-        raise NotImplementedError
-
-    text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
-    tokens = tokenizer_RM(text_outputs,
-                          truncation=True,
-                          padding=True,
-                          max_length=512,
-                          return_token_type_ids=False,
-                          return_tensors="pt",
-                          return_attention_mask=True)
-
-    class_prob = get_sentiment_class_prob(tokens, sentimentClassifier, class_num)
-
-    log_prob = torch.log(class_prob)
-
-    return log_prob
-
-
 
 def get_toxicity_score(tokens, rewardModel):
     score = rewardModel(**tokens).logits
@@ -75,34 +55,55 @@ def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
 
     return score
 
-def toxicity_class_logprob(
-    seq, rewardModel, tokenizer_RM, tokenizer, class_num
-):
-
-    score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer)
-    nontoxic_class_prob = torch.nn.functional.sigmoid(score)
-
-    if class_num == 1:
-        log_prob_of_class = torch.log(nontoxic_class_prob)
-    else:
-        assert class_num == 0
-        toxic_class_prob = 1 - nontoxic_class_prob
-        log_prob_of_class = torch.log(toxic_class_prob)
-
-    return log_prob_of_class
-
-
-
-def toy_test_rm(
-    seq, rewardModel, tokenizer_RM, tokenizer, class_num
-):
-    score = (seq[:, -1] == 1263) * 1. - 2
-    return score
 
 
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    def reward_model_sentiment_class_logprob(seq, sentimentClassifier,
+                                             tokenizer_RM, tokenizer,
+                                             class_num):
+        if len(seq.shape) == 3:
+            raise NotImplementedError
+
+        text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
+        tokens = tokenizer_RM(text_outputs,
+                              truncation=True,
+                              padding=True,
+                              max_length=512,
+                              return_token_type_ids=False,
+                              return_tensors="pt",
+                              return_attention_mask=True)
+
+        class_prob = get_sentiment_class_prob(tokens, sentimentClassifier,
+                                              class_num)
+
+        log_prob = torch.log(class_prob)
+
+        return log_prob.to(device)
+
+    def toxicity_class_logprob(
+        seq, rewardModel, tokenizer_RM, tokenizer, class_num
+    ):
+
+        score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer)
+        nontoxic_class_prob = torch.nn.functional.sigmoid(score)
+
+        if class_num == 1:
+            log_prob_of_class = torch.log(nontoxic_class_prob)
+        else:
+            assert class_num == 0
+            toxic_class_prob = 1 - nontoxic_class_prob
+            log_prob_of_class = torch.log(toxic_class_prob)
+
+        return log_prob_of_class.to(device)
+
+    def toy_test_rm(
+        seq, rewardModel, tokenizer_RM, tokenizer, class_num
+    ):
+        score = (seq[:, -1] == 1263) * 1. - 2
+        return score.to(device)
 
     if args.rm_type == "exp_beta_sentiment_class_logprob":
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
@@ -216,9 +217,11 @@ def main():
         # to have just r, and the beta is done through the KL penalty
         # But here, since I need to evaluate phi = e^beta r, I need log phi = beta r, not r!
         log_p = get_logprob_of_generated_tokens(ref_model, full_seqs)
-        log_tilde_sigma = log_p + args.beta_temp * rm_function(full_seqs, rewardModel,
-                                                    tokenizer_RM, tokenizer,
-                                                    class_num)  # p eval + phi eval
+        log_phi_eval = rm_function(full_seqs, rewardModel, tokenizer_RM,
+                                   tokenizer, class_num)
+        # log_phi_eval.to(device)
+
+        log_tilde_sigma = log_p + args.beta_temp * log_phi_eval # p eval + phi eval
         return log_tilde_sigma
 
     def f_q_estimate(model, ref_model, batch_prompt_pt):
