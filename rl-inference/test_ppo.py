@@ -285,7 +285,7 @@ def main():
         print(f_qs)
         print(f_qs.mean())
 
-        f_q_estimates_list.append(f_qs.detach().numpy())
+        f_q_estimates_list.append(f_qs.detach().cpu().numpy())
 
         print("F_q Estimates Base Model")
         f_qs = f_q_estimate(ref_model, ref_model, batch_prompt_pt)
@@ -297,7 +297,7 @@ def main():
             g_qs = g_q_estimate(model, ref_model, true_posterior_samples)
             print(g_qs)
             print(g_qs.mean())
-            g_q_estimates_list.append(g_qs.detach().numpy())
+            g_q_estimates_list.append(g_qs.detach().cpu().numpy())
 
             print("G_q Estimates Base Model")
             g_qs = g_q_estimate(ref_model, ref_model, true_posterior_samples)
