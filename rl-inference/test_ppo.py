@@ -240,9 +240,13 @@ def main():
         log_tilde_sigma = log_p + args.beta_temp * log_phi_eval # p eval + phi eval
         return log_tilde_sigma
 
-    def f_q_estimate(model, ref_model, batch_prompt_pt):
+    def f_q_estimate(model, ref_model, n_samples):
         with torch.no_grad():
-            q_result = model.generate(batch_prompt_pt, return_dict_in_generate=True, output_scores=True, max_length=prompt_len+args.output_len, **gen_kwargs)
+            batch_prompt_for_f_q = np.full((n_samples, np_prompts.shape[-1]),
+                                   np_prompts)
+            batch_prompt_for_f_q_pt = torch.tensor(batch_prompt_for_f_q, dtype=torch.int64,
+                                           device=device)
+            q_result = model.generate(batch_prompt_for_f_q_pt, return_dict_in_generate=True, max_length=prompt_len+args.output_len, **gen_kwargs)
             log_q = get_logprob_of_generated_tokens(model, q_result.sequences) # q is just whatever our model has learned
             # p_result = ref_model.generate(batch_prompt_pt, return_dict_in_generate=True, output_scores=True, max_length=prompt_len+args.output_len, **gen_kwargs)
             # log_p = get_logprob_of_generated_tokens(p_result.scores, q_result.sequences)
@@ -304,10 +308,10 @@ def main():
         # print((full_seqa - full_seqb).sum())
         # print((full_seqc - full_seqb).sum())
 
-
+        n_samples_f_q = 500
 
         print("F_q Estimates Learned Model")
-        f_qs = f_q_estimate(model, ref_model, batch_prompt_pt)
+        f_qs = f_q_estimate(model, ref_model, n_samples_f_q)
         print(f_qs)
         print("Avg F_q Estimate (Learned Model)")
         print(f_qs.mean())
@@ -315,7 +319,7 @@ def main():
         f_q_estimates_list.append(f_qs.detach().cpu().numpy())
 
         print("F_q Estimates Base Model")
-        f_qs = f_q_estimate(ref_model, ref_model, batch_prompt_pt)
+        f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
         print(f_qs)
         print("Avg F_q Estimate (Base Model)")
         print(f_qs.mean())
