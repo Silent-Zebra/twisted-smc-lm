@@ -229,11 +229,11 @@ def main():
         log_p = get_logprob_of_generated_tokens(ref_model, full_seqs)
         log_phi_eval = rm_function(full_seqs, rewardModel, tokenizer_RM,
                                    tokenizer, class_num)
-        print("Log p and phi")
-        print(log_p)
-        print(log_p.mean())
-        print(log_phi_eval)
-        print(log_phi_eval.mean())
+        # print("Log p and phi")
+        # print(log_p)
+        # print(log_p.mean())
+        # print(log_phi_eval)
+        # print(log_phi_eval.mean())
 
         # log_phi_eval.to(device)
 
@@ -252,16 +252,18 @@ def main():
             # log_p = get_logprob_of_generated_tokens(p_result.scores, q_result.sequences)
             # log_tilde_sigma = log_p + rm_function(q_result.sequences) # p eval + phi eval
             log_tilde_sigma = eval_log_p_plus_log_phi(q_result.sequences, ref_model)
-            print("Log q")
-            print(log_q)
-            print(log_q.mean())
 
             final_reward = rm_function(q_result.sequences, rewardModel, tokenizer_RM, tokenizer,
                                        class_num)
             print("sequences")
             # print(x)
-            text_outputs = tokenizer.batch_decode(x, skip_special_tokens=True)
+            text_outputs = tokenizer.batch_decode(q_result.sequences, skip_special_tokens=True)
             print(text_outputs)
+            # print("Log q")
+            # print(log_q)
+            # print(log_q.mean())
+
+            print("Reward")
             print(final_reward)
             print("Avg reward")
             print(final_reward.mean())
@@ -272,9 +274,9 @@ def main():
         with torch.no_grad():
             log_q = get_logprob_of_generated_tokens(model, true_sigma_samples) # q is just whatever our model has learned
             log_tilde_sigma = eval_log_p_plus_log_phi(true_sigma_samples, ref_model)
-            print("Log q")
-            print(log_q)
-            print(log_q.mean())
+            # print("Log q")
+            # print(log_q)
+            # print(log_q.mean())
 
         return log_tilde_sigma - log_q
 
