@@ -60,6 +60,7 @@ def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
 
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    torch.manual_seed(args.seed)
 
     def reward_model_sentiment_class_logprob(seq, sentimentClassifier,
                                              tokenizer_RM, tokenizer,
@@ -179,7 +180,6 @@ def main():
 
     prompt_len = batch_prompt_pt.shape[-1]
 
-    torch.manual_seed(args.seed)
 
     # full_seq = model.generate(batch_prompt_pt, do_sample=True, num_beams=1, max_length=prompt_len+output_len, min_length=-1,
     #                           top_k=0.0, top_p=1.0, pad_token_id=tokenizer.eos_token_id,
