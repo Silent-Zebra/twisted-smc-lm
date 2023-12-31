@@ -72,7 +72,7 @@ records_labels_list = ["True Log Z",
                        ] # TODO Sep 16 make dynamic later
 
 
-n_seeds = 10
+n_seeds = 5
 
 
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
@@ -2536,18 +2536,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                      true_log_z, plot_over_time_list, smc_procedure_type, proposal_is_p=False,
                      prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None, proposal_scores_list=None):
 
-    # for x in range(10):
-    #     rng_key, sk = jax.random.split(rng_key)
-    #     compare_iwae_vs_smc(sk, prompt, prompt_len, cfg_p,
-    #                         params_p, cfg_twist,
-    #                         params_twist, args.n_vocab,
-    #                         args.output_len,
-    #                         log_true_final_twist[i],
-    #                         args.n_test_smc_samples,
-    #                         token_of_interest_as_int,
-    #                         true_posterior_samples,
-    #                         proposal_is_p=args.proposal_is_p, huggingface_model=huggingface_model)
-    # 1/0
+
     if token_of_interest_as_int is not None:
         print("TOKEN OF INTEREST")
         print(token_of_interest_as_int)
@@ -4013,7 +4002,7 @@ def main():
                     rng_key, prompt, cfg_p, params_p, cfg_twist,
                     params_twist, log_true_final_twist,
                     args.output_len,
-                    args.n_test_smc_samples,
+                    args.n_samples_for_plots_larger,
                     indices_of_continuation, tokenizer,
                     prepend_tokens_for_twists=False,
                     token_of_interest_as_int=None,
@@ -4328,8 +4317,8 @@ if __name__ == "__main__":
     parser.add_argument("--output_len", type=int, default=5,
                         help="Length of the strings we output")
 
-    parser.add_argument("--n_test_smc_samples", type=int, default=20,
-                        help="Only used for testing SMC, not used elsewhere")
+    # parser.add_argument("--n_test_smc_samples", type=int, default=20,
+    #                     help="Only used for testing SMC, not used elsewhere")
     parser.add_argument("--n_twist", type=int, default=100)
     parser.add_argument("--n_twist_ebm_vmap", type=int, default=4, help="only for ebm_ml_jit_vmapped_over_condition_tokens or ebm_ml_vmap_with_one_total_kl (which is only for plasttokens), is the inner batch")
 
@@ -4463,12 +4452,9 @@ if __name__ == "__main__":
     if args.huggingface:
         assert args.n_vocab == 50257
 
-    args.n_test_smc_samples = args.n_twist # Save one set of compilations for SMC procedures...
 
     if args.rm_type in ["p_last_tokens", "p_continuation_one_post"]:
         assert args.num_last_tokens_to_condition_on > 0
-
-    print(args.n_test_smc_samples)
 
     if args.rm_type == "p_last_tokens":
         # n_samples_for_plots = [1, 32]

@@ -308,7 +308,7 @@ def main():
 
 
         n_samples_f_q = 500
-        n_seeds_f_q = 10
+        n_seeds_f_q = 5
 
         total_f_qs = None
         for i in range(n_seeds_f_q):
