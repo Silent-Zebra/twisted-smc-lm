@@ -240,7 +240,7 @@ def main():
         log_tilde_sigma = log_p + args.beta_temp * log_phi_eval # p eval + phi eval
         return log_tilde_sigma
 
-    def f_q_estimate(model, ref_model, n_samples):
+    def f_q_estimate_and_reward(model, ref_model, n_samples):
         with torch.no_grad():
             batch_prompt_for_f_q = np.full((n_samples, np_prompts.shape[-1]),
                                    np_prompts)
@@ -256,7 +256,17 @@ def main():
             print(log_q)
             print(log_q.mean())
 
-        return log_tilde_sigma - log_q
+            final_reward = rm_function(q_result.sequences, rewardModel, tokenizer_RM, tokenizer,
+                                       class_num)
+            print("sequences")
+            # print(x)
+            text_outputs = tokenizer.batch_decode(x, skip_special_tokens=True)
+            print(text_outputs)
+            print(final_reward)
+            print("Avg reward")
+            print(final_reward.mean())
+
+        return log_tilde_sigma - log_q, final_reward
 
     def g_q_estimate(model, ref_model, true_sigma_samples):
         with torch.no_grad():
@@ -272,7 +282,7 @@ def main():
 
     f_q_estimates_list = []
     g_q_estimates_list = []
-
+    rewards_list = []
 
     new_start = time.time()
 
@@ -282,41 +292,37 @@ def main():
         print(f"TIME: {time.time() - new_start}", flush=True)
 
         print("TEST INFO")
-        # num_last_tokens_to_condition_on = 1
-        # torch.manual_seed(0)
-        # x = ppo_trainer.model.generate(batch_prompt_pt,
-        #                                return_dict_in_generate=True,
-        #                                output_scores=True,
-        #                                max_length=prompt_len + args.output_len,
-        #                                **gen_kwargs)
-        # full_seqa = x.sequences
-        # # scoresa = x.scores
-        # # probs = torch.stack(x.scores, dim=1).softmax(dim=-1)
-        # # gen_probs = torch.gather(probs, 2, x.sequences[:, :, None]).squeeze(-1)
-        # torch.manual_seed(0)
-        x = model.generate(batch_prompt_pt, return_dict_in_generate=True,
-                           output_scores=True,
-                           max_length=prompt_len + args.output_len,
-                           **gen_kwargs)
-        full_seqb = x.sequences
-        # torch.manual_seed(0)
-        x = ref_model.generate(batch_prompt_pt, return_dict_in_generate=True,
-                               output_scores=True,
-                               max_length=prompt_len + args.output_len,
-                               **gen_kwargs)
-        full_seqc = x.sequences
-        # print((full_seqa - full_seqb).sum())
-        # print((full_seqc - full_seqb).sum())
+
+        # x = model.generate(batch_prompt_pt, return_dict_in_generate=True,
+        #                    output_scores=True,
+        #                    max_length=prompt_len + args.output_len,
+        #                    **gen_kwargs)
+        # full_seqb = x.sequences
+        # x = ref_model.generate(batch_prompt_pt, return_dict_in_generate=True,
+        #                        output_scores=True,
+        #                        max_length=prompt_len + args.output_len,
+        #                        **gen_kwargs)
+        # full_seqc = x.sequences
+
 
         n_samples_f_q = 500
+        n_seeds_f_q = 10
 
-        print("F_q Estimates Learned Model")
-        f_qs = f_q_estimate(model, ref_model, n_samples_f_q)
-        print(f_qs)
-        print("Avg F_q Estimate (Learned Model)")
-        print(f_qs.mean())
+        total_f_qs = None
+        for i in range(n_seeds_f_q):
+            print("F_q Estimates Learned Model")
+            f_qs, rewards = f_q_estimate_and_reward(model, ref_model, n_samples_f_q)
+            print(f_qs)
+            print("Avg F_q Estimate (Learned Model)")
+            print(f_qs.mean())
+            if total_f_qs is None:
+                total_f_qs = f_qs
+            else:
+                total_f_qs = torch.cat((total_f_qs, f_qs), axis=0)
+                print(total_f_qs.shape)
 
-        f_q_estimates_list.append(f_qs.detach().cpu().numpy())
+        f_q_estimates_list.append(total_f_qs.cpu().numpy())
+        rewards_list.append(rewards.cpu().numpy())
 
         # print("F_q Estimates Base Model")
         # f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
@@ -350,28 +356,28 @@ def main():
             # print(g_qs.mean())
 
 
-        for x in [full_seqb, full_seqc]:
-            final_reward = rm_function(x, rewardModel, tokenizer_RM, tokenizer,
-                                       class_num)
-            print("sequences")
-            # print(x)
-            text_outputs = tokenizer.batch_decode(x, skip_special_tokens=True)
-            print(text_outputs)
-            print(final_reward)
-            print("Avg reward")
-            print(final_reward.mean())
+        # for x in [full_seqb, full_seqc]:
+        #     final_reward = rm_function(x, rewardModel, tokenizer_RM, tokenizer,
+        #                                class_num)
+        #     print("sequences")
+        #     # print(x)
+        #     text_outputs = tokenizer.batch_decode(x, skip_special_tokens=True)
+        #     print(text_outputs)
+        #     print(final_reward)
+        #     print("Avg reward")
+        #     print(final_reward.mean())
 
         g_q_np = []
         if len(g_q_estimates_list) > 0:
-            g_q_np = np.stack(g_q_estimates_list)
-        f_q_np = np.stack(f_q_estimates_list)
+            g_q_np = np.transpose(np.stack(g_q_estimates_list))
+        f_q_np = np.transpose(np.stack(f_q_estimates_list))
 
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                    target=(g_q_np,
-                                            f_q_np
+                                    target=(f_q_np, g_q_np,
+                                            np.transpose(np.stack(rewards_list))
                                             ),
                                     step=len(g_q_estimates_list),
-                                    prefix=f"g_q_f_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+                                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
         print("Starting twist updates:", flush=True)
 
