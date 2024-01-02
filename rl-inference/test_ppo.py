@@ -147,8 +147,7 @@ def main():
     if args.hface_nn_twist:
         from custom_trl_model import CustomAutoModelForCausalLMWithValueHead
         model = CustomAutoModelForCausalLMWithValueHead.from_pretrained(model_config)
-        ref_model = CustomAutoModelForCausalLMWithValueHead.from_pretrained(
-            model_config)
+        ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
         from custom_ppo_trainer import PPOTrainer
     else:
         model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
