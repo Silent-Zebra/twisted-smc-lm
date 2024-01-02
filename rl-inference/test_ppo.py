@@ -315,8 +315,8 @@ def main():
         # full_seqc = x.sequences
 
 
-        n_samples_f_q = 100 #500
-        n_seeds_f_q = 1 #5
+        n_samples_f_q = 500
+        n_seeds_f_q = 5
 
         if not args.no_test_info:
             total_f_qs = None
