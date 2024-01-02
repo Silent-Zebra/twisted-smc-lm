@@ -132,10 +132,10 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             self.v_head.summary.weight.data.normal_(mean=0.0, std=initializer_range)
             self.v_head.summary.bias.data.zero_()
 
-            for linear_layer in self.nn_head.linear_layers:
-                in_plus_out_for_sd = linear_layer.in_features + linear_layer.out_features
-                linear_layer.weight.data.normal_(mean=0.0, std=(2. / (in_plus_out_for_sd)) ** 0.5)
-                linear_layer.bias.data.zero_()
+        for linear_layer in self.nn_head.linear_layers:
+            in_plus_out_for_sd = linear_layer.in_features + linear_layer.out_features
+            linear_layer.weight.data.normal_(mean=0.0, std=(2. / (in_plus_out_for_sd)) ** 0.5)
+            linear_layer.bias.data.zero_()
 
 
 
