@@ -144,8 +144,16 @@ def main():
     else:
         raise NotImplementedError
 
-    model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
-    ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
+    if args.hface_nn_twist:
+        from custom_trl_model import CustomAutoModelForCausalLMWithValueHead
+        model = CustomAutoModelForCausalLMWithValueHead.from_pretrained(model_config)
+        ref_model = CustomAutoModelForCausalLMWithValueHead.from_pretrained(
+            model_config)
+        from custom_ppo_trainer import PPOTrainer
+    else:
+        model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
+        ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
+        from trl import PPOTrainer
     tokenizer = AutoTokenizer.from_pretrained(model_config)
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -246,18 +254,18 @@ def main():
                                    np_prompts)
             batch_prompt_for_f_q_pt = torch.tensor(batch_prompt_for_f_q, dtype=torch.int64,
                                            device=device)
-            q_result = model.generate(batch_prompt_for_f_q_pt, return_dict_in_generate=True, max_length=prompt_len+args.output_len, **gen_kwargs)
-            log_q = get_logprob_of_generated_tokens(model, q_result.sequences) # q is just whatever our model has learned
+            q_result = model.generate(batch_prompt_for_f_q_pt, return_dict_in_generate=False, max_length=prompt_len+args.output_len, **gen_kwargs)
+            log_q = get_logprob_of_generated_tokens(model, q_result) # q is just whatever our model has learned
             # p_result = ref_model.generate(batch_prompt_pt, return_dict_in_generate=True, output_scores=True, max_length=prompt_len+args.output_len, **gen_kwargs)
             # log_p = get_logprob_of_generated_tokens(p_result.scores, q_result.sequences)
             # log_tilde_sigma = log_p + rm_function(q_result.sequences) # p eval + phi eval
-            log_tilde_sigma = eval_log_p_plus_log_phi(q_result.sequences, ref_model)
+            log_tilde_sigma = eval_log_p_plus_log_phi(q_result, ref_model)
 
-            final_reward = rm_function(q_result.sequences, rewardModel, tokenizer_RM, tokenizer,
+            final_reward = rm_function(q_result, rewardModel, tokenizer_RM, tokenizer,
                                        class_num)
             print("sequences")
             # print(x)
-            text_outputs = tokenizer.batch_decode(q_result.sequences, skip_special_tokens=True)
+            text_outputs = tokenizer.batch_decode(q_result, skip_special_tokens=True)
             print(text_outputs)
             # print("Log q")
             # print(log_q)
@@ -307,79 +315,80 @@ def main():
         # full_seqc = x.sequences
 
 
-        n_samples_f_q = 500
-        n_seeds_f_q = 5
+        n_samples_f_q = 100 #500
+        n_seeds_f_q = 1 #5
 
-        total_f_qs = None
-        for i in range(n_seeds_f_q):
-            print("F_q Estimates Learned Model")
-            f_qs, rewards = f_q_estimate_and_reward(model, ref_model, n_samples_f_q)
-            print(f_qs)
-            print("Avg F_q Estimate (Learned Model)")
-            print(f_qs.mean())
-            if total_f_qs is None:
-                total_f_qs = f_qs
-            else:
-                total_f_qs = torch.cat((total_f_qs, f_qs), axis=0)
-                print(total_f_qs.shape)
-
-        f_q_estimates_list.append(total_f_qs.cpu().numpy())
-        rewards_list.append(rewards.cpu().numpy())
-
-        # print("F_q Estimates Base Model")
-        # f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
-        # print(f_qs)
-        # print("Avg F_q Estimate (Base Model)")
-        # print(f_qs.mean())
-        total_g_qs = None
-
-        if true_posterior_samples is not None:
-            for i in range(true_posterior_samples.shape[0] // n_samples_f_q + 1):
-                samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
-
-                print("G_q Estimates Learned Model")
-                g_qs = g_q_estimate(model, ref_model, samples)
-                print(g_qs)
-                print("Avg G_q Estimate (Learned Model)")
-                print(g_qs.mean())
-                if total_g_qs is None:
-                    total_g_qs = g_qs
+        if not args.no_test_info:
+            total_f_qs = None
+            for i in range(n_seeds_f_q):
+                print("F_q Estimates Learned Model")
+                f_qs, rewards = f_q_estimate_and_reward(model, ref_model, n_samples_f_q)
+                print(f_qs)
+                print("Avg F_q Estimate (Learned Model)")
+                print(f_qs.mean())
+                if total_f_qs is None:
+                    total_f_qs = f_qs
                 else:
-                    total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
-                    print(total_g_qs.shape)
+                    total_f_qs = torch.cat((total_f_qs, f_qs), axis=0)
+                    print(total_f_qs.shape)
+
+            f_q_estimates_list.append(total_f_qs.cpu().numpy())
+            rewards_list.append(rewards.cpu().numpy())
+
+            # print("F_q Estimates Base Model")
+            # f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
+            # print(f_qs)
+            # print("Avg F_q Estimate (Base Model)")
+            # print(f_qs.mean())
+            total_g_qs = None
+
+            if true_posterior_samples is not None:
+                for i in range(true_posterior_samples.shape[0] // n_samples_f_q + 1):
+                    samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
+
+                    print("G_q Estimates Learned Model")
+                    g_qs = g_q_estimate(model, ref_model, samples)
+                    print(g_qs)
+                    print("Avg G_q Estimate (Learned Model)")
+                    print(g_qs.mean())
+                    if total_g_qs is None:
+                        total_g_qs = g_qs
+                    else:
+                        total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
+                        print(total_g_qs.shape)
 
 
-            g_q_estimates_list.append(total_g_qs.cpu().numpy())
+                g_q_estimates_list.append(total_g_qs.cpu().numpy())
 
-            # print("G_q Estimates Base Model")
-            # g_qs = g_q_estimate(ref_model, ref_model, true_posterior_samples)
-            # print(g_qs)
-            # print("Avg G_q Estimate (Base Model)")
-            # print(g_qs.mean())
+                # print("G_q Estimates Base Model")
+                # g_qs = g_q_estimate(ref_model, ref_model, true_posterior_samples)
+                # print(g_qs)
+                # print("Avg G_q Estimate (Base Model)")
+                # print(g_qs.mean())
 
 
-        # for x in [full_seqb, full_seqc]:
-        #     final_reward = rm_function(x, rewardModel, tokenizer_RM, tokenizer,
-        #                                class_num)
-        #     print("sequences")
-        #     # print(x)
-        #     text_outputs = tokenizer.batch_decode(x, skip_special_tokens=True)
-        #     print(text_outputs)
-        #     print(final_reward)
-        #     print("Avg reward")
-        #     print(final_reward.mean())
+            # for x in [full_seqb, full_seqc]:
+            #     final_reward = rm_function(x, rewardModel, tokenizer_RM, tokenizer,
+            #                                class_num)
+            #     print("sequences")
+            #     # print(x)
+            #     text_outputs = tokenizer.batch_decode(x, skip_special_tokens=True)
+            #     print(text_outputs)
+            #     print(final_reward)
+            #     print("Avg reward")
+            #     print(final_reward.mean())
 
-        g_q_np = []
-        if len(g_q_estimates_list) > 0:
-            g_q_np = np.transpose(np.stack(g_q_estimates_list))
-        f_q_np = np.transpose(np.stack(f_q_estimates_list))
+            g_q_np = []
+            if len(g_q_estimates_list) > 0:
+                g_q_np = np.transpose(np.stack(g_q_estimates_list))
+            f_q_np = np.transpose(np.stack(f_q_estimates_list))
 
-        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                    target=(f_q_np, g_q_np,
-                                            np.transpose(np.stack(rewards_list))
-                                            ),
-                                    step=len(g_q_estimates_list),
-                                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+            checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                        target=(f_q_np, g_q_np,
+                                                np.transpose(np.stack(rewards_list))
+                                                ),
+                                        step=len(g_q_estimates_list),
+                                        prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
 
         print("Starting twist updates:", flush=True)
 
@@ -476,6 +485,8 @@ if __name__ == "__main__":
     parser.add_argument("--load_posterior_samples", action="store_true", help="load posterior samples from saved checkpoint instead of creating new ones")
     parser.add_argument("--load_dir_posterior_samples", type=str, default='.', help="Where to load from for posterior samples")
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='')
+    parser.add_argument("--hface_nn_twist", action="store_true", help="Use an NN instead of a single linear layer for the twist head for the hface model")
+    parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. Basically only for debug/testing. In general, don't use this flag.")
 
     args = parser.parse_args()
 
