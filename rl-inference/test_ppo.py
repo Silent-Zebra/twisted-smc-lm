@@ -106,6 +106,9 @@ def main():
         score = (seq[:, -1] == 1263) * 1. - 2
         return score.to(device)
 
+
+    n_samples_f_q = 500
+
     if args.rm_type == "exp_beta_sentiment_class_logprob":
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
             "LiYuan/amazon-review-sentiment-analysis")
@@ -118,6 +121,7 @@ def main():
             "I bought this"
             # "This product is"
         ]
+
 
     elif args.rm_type in ["exp_beta_toxicity_class_logprob"]:
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
@@ -314,16 +318,18 @@ def main():
         # full_seqc = x.sequences
 
 
-        n_samples_f_q = 500
-        n_seeds_f_q = 5
+        n_seeds_f_q = 1 #5 reduce time spent on this
+
 
         if not args.no_test_info:
             total_f_qs = None
             for i in range(n_seeds_f_q):
-                print("F_q Estimates Learned Model")
+                print("F_q Estimates Learned Model", flush=True)
+                print(f"TIME: {time.time() - new_start}", flush=True)
                 f_qs, rewards = f_q_estimate_and_reward(model, ref_model, n_samples_f_q)
                 print(f_qs)
                 print("Avg F_q Estimate (Learned Model)")
+                print(f"TIME: {time.time() - new_start}", flush=True)
                 print(f_qs.mean())
                 if total_f_qs is None:
                     total_f_qs = f_qs
