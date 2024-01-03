@@ -279,7 +279,7 @@ def main():
             print("Avg reward")
             print(final_reward.mean())
 
-        return log_tilde_sigma - log_q, final_reward
+        return log_tilde_sigma - log_q, final_reward, q_result
 
     def g_q_estimate(model, ref_model, true_sigma_samples):
         with torch.no_grad():
@@ -295,6 +295,8 @@ def main():
 
     f_q_estimates_list = []
     g_q_estimates_list = []
+
+
     rewards_list = []
 
     new_start = time.time()
@@ -323,23 +325,37 @@ def main():
 
 
         if not args.no_test_info:
+            iwae_lbs_list = []
+            iwae_ubs_list = []
+
             total_f_qs = None
             for i in range(n_seeds_f_q):
-                print("F_q Estimates Learned Model", flush=True)
                 print(f"TIME: {time.time() - new_start}", flush=True)
-                f_qs, rewards = f_q_estimate_and_reward(model, ref_model, n_samples_f_q)
+                print("F_q Estimates Learned Model", flush=True)
+                f_qs, rewards, q_result = f_q_estimate_and_reward(model, ref_model, n_samples_f_q)
                 print(f_qs)
                 print("Avg F_q Estimate (Learned Model)")
-                print(f"TIME: {time.time() - new_start}", flush=True)
                 print(f_qs.mean())
                 print("IWAE Lower Bound Estimate (Learned Model)")
                 iwae_lower_bound_estimate = torch.logsumexp(f_qs, dim=0) - np.log(f_qs.shape[0])
                 print(iwae_lower_bound_estimate)
+                iwae_lbs_list.append(iwae_lower_bound_estimate)
                 if total_f_qs is None:
                     total_f_qs = f_qs
                 else:
                     total_f_qs = torch.cat((total_f_qs, f_qs), axis=0)
                     print(total_f_qs.shape)
+
+
+                if true_posterior_samples is not None:
+                    iwae_mixture_with_one_post = q_result.detach().clone()
+                    iwae_mixture_with_one_post[0] = true_posterior_samples[i]
+                    iwae_ub_weights = g_q_estimate(model, ref_model, iwae_mixture_with_one_post) # All this does is evaluate log (tilde sigma / q). I just do it on the iwae mixture here
+                    print("IWAE Upper Bound Estimate (Learned Model)")
+                    iwae_upper_bound_estimate = torch.logsumexp(
+                        iwae_ub_weights, dim=0) - np.log(iwae_ub_weights.shape[0])
+                    print(iwae_upper_bound_estimate)
+                    iwae_ubs_list.append(iwae_upper_bound_estimate)
 
             f_q_estimates_list.append(total_f_qs.cpu().numpy())
             rewards_list.append(rewards.cpu().numpy())
@@ -354,23 +370,27 @@ def main():
             if true_posterior_samples is not None:
                 for i in range(true_posterior_samples.shape[0] // n_samples_f_q + 1):
                     samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
-
+                    print(f"TIME: {time.time() - new_start}", flush=True)
                     print("G_q Estimates Learned Model")
                     g_qs = g_q_estimate(model, ref_model, samples)
                     print(g_qs)
                     print("Avg G_q Estimate (Learned Model)")
                     print(g_qs.mean())
-                    print("IWAE Upper Bound Estimate (Learned Model)")
-                    iwae_upper_bound_estimate = torch.logsumexp(
-                        g_qs, dim=0) - np.log(g_qs.shape[0])
-                    print(iwae_upper_bound_estimate)
+
                     if total_g_qs is None:
                         total_g_qs = g_qs
                     else:
                         total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
                         print(total_g_qs.shape)
 
-                logZ_midpoint_estimate = (iwae_upper_bound_estimate + iwae_lower_bound_estimate) / 2.
+                avg_iwae_ub_estimate = torch.stack(iwae_ubs_list).mean()
+                avg_iwae_lb_estimate = torch.stack(iwae_lbs_list).mean()
+
+                print(f"Avg IWAE UB Estimate: {avg_iwae_ub_estimate}")
+                print(f"Avg IWAE LB Estimate: {avg_iwae_lb_estimate}")
+
+                logZ_midpoint_estimate = (avg_iwae_ub_estimate + avg_iwae_lb_estimate) / 2.
+                print(f"TIME: {time.time() - new_start}", flush=True)
                 print(f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
                 g_q_estimates_list.append(total_g_qs.cpu().numpy())
 

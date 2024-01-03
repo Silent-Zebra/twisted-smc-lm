@@ -137,6 +137,8 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             linear_layer.weight.data.normal_(mean=0.0, std=(2. / (in_plus_out_for_sd)) ** 0.5)
             linear_layer.bias.data.zero_()
 
+    def get_lm_logits(self, base_model_output, last_hidden_state):
+        return base_model_output.logits + self.nn_head(last_hidden_state) # Do this so that the text probs are close to the initial model at the beginning
 
 
     def forward(
@@ -144,6 +146,7 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         input_ids=None,
         past_key_values=None,
         attention_mask=None,
+        do_value_calc=True,
         **kwargs,
     ):
         r"""
@@ -182,20 +185,23 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         # lm_logits = base_model_output.logits
         loss = base_model_output.loss
 
+
         if last_hidden_state.device != self.v_head.summary.weight.device:
             last_hidden_state = last_hidden_state.to(self.v_head.summary.weight.device)
 
-        value = self.v_head(last_hidden_state).squeeze(-1)
+        if do_value_calc:
+            value = self.v_head(last_hidden_state).squeeze(-1)
+        else:
+            value = None
 
-        lm_logits = base_model_output.logits + self.nn_head(last_hidden_state) # Do this so that the text probs are close to the initial model at the beginning
-
+        lm_logits = self.get_lm_logits(base_model_output, last_hidden_state)
         # force upcast in fp32 if logits are in half-precision
         if lm_logits.dtype != torch.float32:
             lm_logits = lm_logits.float()
 
         return (lm_logits, loss, value)
 
-    def generate(self, inputs, max_length, *args, **kwargs):
+    def generate(self, inputs, max_length, *args, attention_mask=None, **kwargs):
         r"""
         CUSTOM. Only sample available right now.
         """
@@ -211,17 +217,21 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
 
         while input_ids.shape[-1] < max_length:
 
-            # forward pass to get next token
-            base_model_output = self.pretrained_model(
-                input_ids=input_ids,
-                return_dict=True,
-                output_hidden_states=True,
-            )
+            lm_logits, _, _ = self.forward(input_ids, do_value_calc=False, attention_mask=attention_mask, **kwargs)
 
-            last_hidden_state = base_model_output.hidden_states[-1]
-            if last_hidden_state.device != self.v_head.summary.weight.device:
-                last_hidden_state = last_hidden_state.to(self.v_head.summary.weight.device)
-            lm_logits = self.nn_head(last_hidden_state)
+            # forward pass to get next token
+            # base_model_output = self.pretrained_model(
+            #     input_ids=input_ids,
+            #     attention_mask=attention_mask,
+            #     return_dict=True,
+            #     output_hidden_states=True,
+            #     **kwargs
+            # )
+            #
+            # last_hidden_state = base_model_output.hidden_states[-1]
+            # if last_hidden_state.device != self.v_head.summary.weight.device:
+            #     last_hidden_state = last_hidden_state.to(self.v_head.summary.weight.device)
+            # lm_logits = base_model_output.logits + self.nn_head(last_hidden_state)
 
             next_token_logits = lm_logits[:, -1, :]
 
