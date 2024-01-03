@@ -187,7 +187,7 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
 
         value = self.v_head(last_hidden_state).squeeze(-1)
 
-        lm_logits = self.nn_head(last_hidden_state)
+        lm_logits = base_model_output.logits + self.nn_head(last_hidden_state) # Do this so that the text probs are close to the initial model at the beginning
 
         # force upcast in fp32 if logits are in half-precision
         if lm_logits.dtype != torch.float32:
