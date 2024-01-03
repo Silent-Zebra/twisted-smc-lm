@@ -333,7 +333,7 @@ def main():
                 print(f"TIME: {time.time() - new_start}", flush=True)
                 print(f_qs.mean())
                 print("IWAE Lower Bound Estimate (Learned Model)")
-                iwae_lower_bound_estimate = torch.logsumexp(f_qs, dim=0) - torch.log(f_qs.shape[0])
+                iwae_lower_bound_estimate = torch.logsumexp(f_qs, dim=0) - np.log(f_qs.shape[0])
                 print(iwae_lower_bound_estimate)
                 if total_f_qs is None:
                     total_f_qs = f_qs
@@ -362,7 +362,7 @@ def main():
                     print(g_qs.mean())
                     print("IWAE Upper Bound Estimate (Learned Model)")
                     iwae_upper_bound_estimate = torch.logsumexp(
-                        g_qs, dim=0) - torch.log(g_qs.shape[0])
+                        g_qs, dim=0) - np.log(g_qs.shape[0])
                     print(iwae_upper_bound_estimate)
                     if total_g_qs is None:
                         total_g_qs = g_qs
