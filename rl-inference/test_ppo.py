@@ -299,6 +299,7 @@ def main():
 
     new_start = time.time()
 
+    logZ_midpoint_estimate = None
 
     for epoch in range(args.epochs):
         print(f"Epoch: {epoch + 1}", flush=True)
@@ -328,9 +329,12 @@ def main():
                 print(f"TIME: {time.time() - new_start}", flush=True)
                 f_qs, rewards = f_q_estimate_and_reward(model, ref_model, n_samples_f_q)
                 print(f_qs)
+                iwae_lower_bound_estimate = torch.logsumexp(f_qs) - torch.log(f_qs.shape[0])
                 print("Avg F_q Estimate (Learned Model)")
                 print(f"TIME: {time.time() - new_start}", flush=True)
                 print(f_qs.mean())
+                print("IWAE Lower Bound Estimate (Learned Model)")
+                print(iwae_lower_bound_estimate)
                 if total_f_qs is None:
                     total_f_qs = f_qs
                 else:
@@ -356,13 +360,18 @@ def main():
                     print(g_qs)
                     print("Avg G_q Estimate (Learned Model)")
                     print(g_qs.mean())
+                    iwae_upper_bound_estimate = torch.logsumexp(
+                        g_qs) - torch.log(g_qs.shape[0])
+                    print("IWAE Upper Bound Estimate (Learned Model)")
+                    print(iwae_upper_bound_estimate)
                     if total_g_qs is None:
                         total_g_qs = g_qs
                     else:
                         total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
                         print(total_g_qs.shape)
 
-
+                logZ_midpoint_estimate = (iwae_upper_bound_estimate + iwae_lower_bound_estimate) / 2.
+                print(f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
                 g_q_estimates_list.append(total_g_qs.cpu().numpy())
 
                 # print("G_q Estimates Base Model")
@@ -388,12 +397,22 @@ def main():
                 g_q_np = np.transpose(np.stack(g_q_estimates_list))
             f_q_np = np.transpose(np.stack(f_q_estimates_list))
 
-            checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                        target=(f_q_np, g_q_np,
-                                                np.transpose(np.stack(rewards_list))
-                                                ),
-                                        step=len(g_q_estimates_list),
-                                        prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+            if logZ_midpoint_estimate is not None:
+                checkpoints.save_checkpoint(
+                    ckpt_dir=args.save_dir,
+                    target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list)), logZ_midpoint_estimate
+                            ),
+                    step=len(g_q_estimates_list),
+                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples"
+                )
+            else:
+                checkpoints.save_checkpoint(
+                    ckpt_dir=args.save_dir,
+                    target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list))
+                                                    ),
+                    step=len(g_q_estimates_list),
+                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples"
+                )
 
         print("Starting twist updates:", flush=True)
 
