@@ -181,6 +181,11 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_q_lsq_partial_jit":
             dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_q_lsq_no_grad":
+            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, no_grad=True, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_q_lsq_partial_jit_no_grad":
+            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, no_grad=True, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
+
         elif self.twist_learn_type == "rl_qrsmp_lsq":
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_sigma_lsq":
@@ -4343,7 +4348,7 @@ if __name__ == "__main__":
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "one_total_kl_with_rl", "one_total_kl_with_sixo",
             "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
-            "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_q_lsq_partial_jit", "rl_qrsmp_lsq",
+            "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_q_lsq_partial_jit", "rl_q_lsq_no_grad", "rl_q_lsq_partial_jit_no_grad", "rl_qrsmp_lsq",
             "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mixed_p_q_lsq_partial_jit", "rl_mc", "rl_mc_partial_jit",
             "sixo", "sixo_mixed_p_q", "sixo_mixed_p_q_partial_jit", "sixo_partial_jit",
             "bce"

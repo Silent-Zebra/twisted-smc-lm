@@ -152,6 +152,10 @@ def main():
         from custom_trl_model import CustomAutoModelForCausalLMWithValueHead
         model = CustomAutoModelForCausalLMWithValueHead.from_pretrained(model_config)
         ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
+
+        if args.only_train_nn_head:
+            model.remove_requires_grad_base_model()
+
         from custom_ppo_trainer import PPOTrainer
     else:
         model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
@@ -531,7 +535,11 @@ if __name__ == "__main__":
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='')
     parser.add_argument("--hface_nn_twist", action="store_true", help="Use an NN instead of a single linear layer for the twist head for the hface model")
     parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. Basically only for debug/testing. In general, don't use this flag.")
+    parser.add_argument("--only_train_nn_head", action="store_true", help="Only train twist head modifier for PPO")
 
     args = parser.parse_args()
+
+    if args.only_train_nn_head:
+        assert args.hface_nn_twist
 
     main()

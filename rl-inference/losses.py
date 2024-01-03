@@ -679,20 +679,24 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 
     return l_kl
 
-get_l_one_total_kl_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type",
-                                   "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop",
-                                   "mixed_p_q_sample", "exact_expectation"])(get_l_one_total_kl)
 
 
+get_l_one_total_kl_jit = partial(
+    jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type",
+    "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop",
+    "mixed_p_q_sample", "exact_expectation", "stop_grad"]
+)(get_l_one_total_kl)
 
 
-
-def get_l_rl_based_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                   output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-                   smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
-                   evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error_in_log_space", tempered_twist=False, beta_prop=None,
-                   train_final_twist_only=False, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None):
+def get_l_rl_based_partial_jit(
+    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+    output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+    smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
+    evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error_in_log_space", tempered_twist=False, beta_prop=None,
+    train_final_twist_only=False, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None,
+    stop_grad=True
+):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -854,7 +858,8 @@ def get_l_rl_based_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, para
         log_phi_final_eval = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist, condition_twist_on_tokens)
 
     target_term = target_term.at[:, -1].set(log_phi_final_eval)
-    target_term = jax.lax.stop_gradient(target_term)
+    if stop_grad:
+        target_term = jax.lax.stop_gradient(target_term)
 
     values = evaluate_log_psi_selected_tokens(
         samples_to_evaluate_over, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
@@ -865,22 +870,7 @@ def get_l_rl_based_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, para
         # print(target_term.shape)
         values = values[:, -1][:, None]
         target_term = target_term[:, -1][:, None] # Just so the mean doesn't smush the wrong axis
-        # print(values.shape)
-        # print(target_term.shape)
-        # print(((jnp.exp(values) - jnp.exp(target_term)) ** 2).mean(axis=-1).shape)
-        # normalized_log_w_t_on_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t))
-        # print(normalized_log_w_t_on_samples.shape)
 
-    # carry = (samples_to_evaluate_over, prompt_len, params_twist)
-    # scan_over = jnp.arange(output_len) # The last item is a dummy value, since we aren't resampling the prompt with twist sample anyway, so we don't need it
-    # _, values = jax.lax.scan(partial(evaluate_log_psi_t_for_scan,
-    #                                 cfg_twist=cfg_twist,
-    #                                 prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-    #                                 token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model),
-    #                         carry, scan_over,
-    #                         output_len)
-    #
-    # values = jnp.transpose(values)
 
     # print(values.shape) # shape is [batch, output_len]
     # print(target_term.shape) # shape is [batch, output_len]

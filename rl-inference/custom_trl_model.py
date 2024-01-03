@@ -141,6 +141,12 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         return base_model_output.logits + self.nn_head(last_hidden_state) # Do this so that the text probs are close to the initial model at the beginning
 
 
+    def remove_requires_grad_base_model(self):
+        for x in filter(lambda p: p[1].requires_grad, self.named_parameters()):
+            name = x[0]
+            if 'nn_head' not in name:
+                x[1].requires_grad = False
+
     def forward(
         self,
         input_ids=None,
