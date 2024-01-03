@@ -217,7 +217,8 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
 
         while input_ids.shape[-1] < max_length:
 
-            lm_logits, _, _ = self.forward(input_ids, do_value_calc=False, attention_mask=attention_mask, **kwargs)
+            lm_logits, _, _ = self.forward(input_ids, return_dict=True,
+                 output_hidden_states=True, do_value_calc=False, attention_mask=attention_mask)
 
             # forward pass to get next token
             # base_model_output = self.pretrained_model(
