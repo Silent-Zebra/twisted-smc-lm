@@ -999,6 +999,9 @@ class ExperimentConfig:
                 print(log_prob_cont_sigma_samples.mean())
                 print(log_prob_cont_proposal_samples.mean())
 
+                proposal_scores = log_prob_cont_proposal_samples
+
+
                 if huggingface_model:
                     text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
 
@@ -1099,6 +1102,8 @@ class ExperimentConfig:
                 print(log_prob_cont_p_samples.mean())
                 print(log_prob_cont_proposal_samples.mean())
 
+                proposal_scores = log_prob_cont_proposal_samples
+
                 if huggingface_model:
                     text_outputs = tokenizer.batch_decode(p_samples,
                                                           skip_special_tokens=True)
@@ -1126,73 +1131,6 @@ class ExperimentConfig:
 
         elif self.rm_type == "contains_continuation":
             raise NotImplementedError
-
-            # _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(
-            #     sk1, prompt, cfg_p, params_p, cfg_twist, params_twist,
-            #     log_true_final_twist, output_len, n_samples,
-            #     smc_procedure_type=self.smc_procedure_type,
-            #     n_vocab=self.n_vocab,
-            #     get_intermediate_sample_history_based_on_learned_twists=True,
-            #     prepend_tokens_for_twists=prepend_tokens_for_twists,
-            #     token_of_interest_as_int=token_of_interest_as_int,
-            #     proposal_is_p=proposal_is_p,
-            #     huggingface_model=huggingface_model)
-            #
-            # # print(intermediate_seq_list)
-            # print("Log indicator (+ eps) on whether sequence contains (0 means contains)")
-            # print(log_true_final_twist(smc_samples))
-            # log_p = evaluate_log_p_selected_tokens(smc_samples, prompt_len, cfg_p, params_p, huggingface_model)
-            # print(log_p)
-            # # smc_samples = smc_samples[:, prompt_len:]
-            # # log_p = log_p[:, prompt_len:]
-            # log_p_cont_all_places = jnp.zeros((smc_samples.shape[0]))
-            # for i in range(output_len - indices_of_continuation.shape[-1] + 1):
-            #     # print(indices_of_continuation.shape)
-            #     # print(smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]].shape)
-            #     # print((smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]] - indices_of_continuation).shape)
-            #     log_p_continuation = jnp.where((
-            #         jnp.abs(smc_samples[:, prompt_len + i : prompt_len + i + indices_of_continuation.shape[-1]] - indices_of_continuation).sum(axis=-1) == 0),
-            #         log_p[:, i:i + indices_of_continuation.shape[-1]].sum(axis=-1),
-            #         jnp.zeros(smc_samples.shape[0]))
-            #     log_p_cont_all_places += log_p_continuation
-            #
-            # print("Log prob of continuation, if it appears (0 if doesn't appear)")
-            # print(log_p_cont_all_places)
-            #
-            # print("Breakdown by each sample:")
-            # for i in range(smc_samples.shape[0]):
-            #     print(smc_samples[i, prompt_len:])
-            #     if huggingface_model:
-            #         print(text_outputs[i])
-            #     print(log_p[i])
-            #     print(log_p_cont_all_places[i])
-            # # print(f"Max log prob of continuation: {-(-log_p_cont_all_places).max()}")
-
-        # elif args.rm_type in ["toxicity_threshold",
-        #                       "sentiment_threshold"]:
-        #     rng_key, sk = jax.random.split(rng_key)
-        #     _, smc_samples, (
-        #         _, _, log_w_t_before_resample_list) = smc_procedure(
-        #         sk, prompt, cfg_p, params_p, cfg_twist, params_twist,
-        #         log_true_final_twist, output_len, n_samples,
-        #         smc_procedure_type="partial_jit",
-        #         n_vocab=self.n_vocab,
-        #         proposal_is_p=proposal_is_p,
-        #         huggingface_model=huggingface_model,
-        #         get_intermediate_sample_history_based_on_learned_twists=True
-        #     )
-        #     print(smc_samples)
-        #     text_outputs = tokenizer.batch_decode(
-        #         smc_samples,
-        #         skip_special_tokens=True)
-        #     print(text_outputs)
-        #     print(log_true_final_twist(smc_samples))
-        #
-        #     # for log_w_t in log_w_t_before_resample_list:
-        #     #     print("Log importance weights variance")
-        #     #     print(log_w_t)
-        #     #     print(jnp.var(log_w_t))
-
 
         else:
             raise NotImplementedError
@@ -2868,6 +2806,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.pdf")
 
         if do_checkpoint_of_plot_info:
+
+            assert proposal_scores_list[0] is not None
 
             checkpoints.save_checkpoint(
                 ckpt_dir=args.save_dir,
