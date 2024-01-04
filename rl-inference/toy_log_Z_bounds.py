@@ -206,7 +206,7 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         elif self.twist_learn_type == "sixo_mixed_p_q_partial_jit":
             dre_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=5)
-        elif self.twist_learn_type == "bce":
+        elif self.twist_learn_type in ["bce", "bce_q"]:
             dre_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=5)
         elif self.twist_learn_type == "analytic_mse_rel":
             dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
@@ -256,6 +256,7 @@ class ExperimentConfig:
                 if self.rm_type in [
                     "p_last_tokens",
                 ]:
+                    assert self.twist_learn_type == "bce" # bce_q not supported here...
                     p_samples = stochastic_transformer_sample(sk2, cfg_p,
                                                               params_p, prompt,
                                                               output_len + self.num_last_tokens_to_condition_on,
@@ -269,18 +270,37 @@ class ExperimentConfig:
                         true_sigma_samples, condition_twist_on_tokens)
 
                 else:
-                    p_samples = stochastic_transformer_sample(sk2, cfg_p,
-                                                              params_p, prompt,
-                                                              output_len,
-                                                              n_twist,
-                                                              huggingface_model=huggingface_model)
+                    if self.twist_learn_type == "bce":
+                        p_samples = stochastic_transformer_sample(sk2, cfg_p,
+                                                                  params_p, prompt,
+                                                                  output_len,
+                                                                  n_twist,
+                                                                  huggingface_model=huggingface_model)
 
-                    samples_to_evaluate_over = p_samples
+                        samples_to_evaluate_over = p_samples
+
+                    elif self.twist_learn_type == "bce_q":
+
+                        (_, _, _), q_samples = smc_procedure(
+                                sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                                log_true_final_twist, output_len,
+                                n_twist,
+                                smc_procedure_type=self.smc_procedure_type,
+                                get_intermediate_sample_history_based_on_learned_twists=False,
+                                proposal_is_p=proposal_is_p,
+                                huggingface_model=huggingface_model,
+                                resample=False,
+                                tempered_twist=tempered_twist, beta_prop=beta_prop
+                            )
+
+                        samples_to_evaluate_over = q_samples
+                    else:
+                        raise NotImplementedError
 
                     log_prob_class = log_true_final_twist(
                         samples_to_evaluate_over)  # This also works for something like toxicity threshold: the class then has either 0 or 1 (+ eps) probability
 
-                    true_sigma_samples = p_samples
+                    true_sigma_samples = p_samples # Yeah I know these are not true sigma samples, I just didn't rename. Check the BCE loss, it just needs a set of samples passed in. Kind of like the set of samples we evaluate RL loss over
 
 
                 grad_params_twist = self.dre_grad_fn(
@@ -2313,7 +2333,7 @@ class TestClass:
                         elif use_replay_buffer and experiment_cfg.twist_learn_type in  [
                             "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                             "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "rl_mc_partial_jit", "bce"]:
+                            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "rl_mc_partial_jit", "bce", "bce_q"]:
                             rng_key, params_twist, optim_twist_state = \
                                 experiment_cfg.update_twist(
                                     rng_key, indices_of_tokens_chosen, prompt,
@@ -2854,7 +2874,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
                         np.transpose(np.stack(proposal_scores_list)), logZ_midpoint_estimate),
                 step=len(kl_ubs_iwae),
-                prefix=f"f_q_g_q_logZbestmidpoint_info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+                prefix=f"f_q_g_q_logZbestmidpoint_info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_nsamples")
 
     plt.clf()
     # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
@@ -2908,7 +2928,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                                         target=(logZ_ubs_iwae_across_samples_time_seeds, logZ_lbs_iwae_across_samples_time_seeds,
                                                 logZ_ubs_smc_across_samples_time_seeds, logZ_lbs_smc_across_samples_time_seeds),
                                         step=len(kl_ubs_iwae),
-                                        prefix=f"logZ_bounds_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples")
+                                        prefix=f"logZ_bounds_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_nsamples")
 
     return plot_over_time_list
 
@@ -3739,7 +3759,7 @@ def main():
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                     target=(true_posterior_samples_by_prompt,),
                                     step=true_posterior_samples_by_prompt[0].shape[0],
-                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_nsamples")
+                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_{args.twist_learn_type}_nsamples")
         1 / 0
 
     experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
@@ -4190,7 +4210,7 @@ def main():
                         )
                 elif experiment_cfg.twist_learn_type in ["rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
                                  "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "rl_mc_partial_jit", "bce"]:
+                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "rl_mc_partial_jit", "bce", "bce_q"]:
 
                     rng_key, params_twist, optim_twist_state = \
                         experiment_cfg.update_twist(
@@ -4223,7 +4243,7 @@ def main():
                                             target=(params_twist,
                                                     optim_twist_state),
                                             step=epoch + 1,
-                                            prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
+                                            prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_epoch")
                 if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
                     or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
 
@@ -4237,7 +4257,7 @@ def main():
                         # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                         #                             target=records_list_by_twist,
                         #                             step=epoch + 1,
-                        #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
+                        #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_prompt{prompt_num}_epoch")
                 last_ckpt_epoch = epoch
 
 
@@ -4249,7 +4269,7 @@ def main():
                                         target=(params_twist,
                                                 optim_twist_state),
                                         step=epoch + 1,
-                                        prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
+                                        prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_epoch")
 
             if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
                 or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
@@ -4351,7 +4371,7 @@ if __name__ == "__main__":
             "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_q_lsq_partial_jit", "rl_q_lsq_no_grad", "rl_q_lsq_partial_jit_no_grad", "rl_qrsmp_lsq",
             "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mixed_p_q_lsq_partial_jit", "rl_mc", "rl_mc_partial_jit",
             "sixo", "sixo_mixed_p_q", "sixo_mixed_p_q_partial_jit", "sixo_partial_jit",
-            "bce"
+            "bce", "bce_q"
         ]
     )
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
