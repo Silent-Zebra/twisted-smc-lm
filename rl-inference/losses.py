@@ -685,7 +685,7 @@ get_l_one_total_kl_jit = partial(
     jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type",
     "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop",
-    "mixed_p_q_sample", "exact_expectation", "stop_grad"]
+    "mixed_p_q_sample", "exact_expectation"]
 )(get_l_one_total_kl)
 
 
@@ -898,9 +898,10 @@ def get_l_rl_based_partial_jit(
     return loss
 
 
-get_l_rl_based_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-                                   "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop", "train_final_twist_only"])(get_l_rl_based_partial_jit)
+get_l_rl_based_jit = partial(jax.jit, static_argnames=[
+    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
+    "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop", "train_final_twist_only", "stop_grad"])(get_l_rl_based_partial_jit)
 
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",

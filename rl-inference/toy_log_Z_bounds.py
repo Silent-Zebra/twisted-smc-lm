@@ -300,7 +300,7 @@ class ExperimentConfig:
                     log_prob_class = log_true_final_twist(
                         samples_to_evaluate_over)  # This also works for something like toxicity threshold: the class then has either 0 or 1 (+ eps) probability
 
-                    true_sigma_samples = p_samples # Yeah I know these are not true sigma samples, I just didn't rename. Check the BCE loss, it just needs a set of samples passed in. Kind of like the set of samples we evaluate RL loss over
+                    true_sigma_samples = samples_to_evaluate_over # Yeah I know these are not true sigma samples, I just didn't rename. Check the BCE loss, it just needs a set of samples passed in. Kind of like the set of samples we evaluate RL loss over
 
 
                 grad_params_twist = self.dre_grad_fn(
