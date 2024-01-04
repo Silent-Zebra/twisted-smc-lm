@@ -244,11 +244,12 @@ def main():
         log_p = get_logprob_of_generated_tokens(ref_model, full_seqs)
         log_phi_eval = rm_function(full_seqs, rewardModel, tokenizer_RM,
                                    tokenizer, class_num)
-        # print("Log p and phi")
-        # print(log_p)
-        # print(log_p.mean())
-        # print(log_phi_eval)
-        # print(log_phi_eval.mean())
+        print("Log p and phi")
+        print(log_p)
+        print(log_p.mean())
+        print("Log phi")
+        print(log_phi_eval)
+        print(log_phi_eval.mean())
 
         # log_phi_eval.to(device)
 
@@ -274,9 +275,9 @@ def main():
             # print(x)
             text_outputs = tokenizer.batch_decode(q_result, skip_special_tokens=True)
             print(text_outputs)
-            # print("Log q")
-            # print(log_q)
-            # print(log_q.mean())
+            print("Log q")
+            print(log_q)
+            print(log_q.mean())
 
             print("Reward")
             print(final_reward)
@@ -335,8 +336,8 @@ def main():
             total_f_qs = None
             for i in range(n_seeds_f_q):
                 print(f"TIME: {time.time() - new_start}", flush=True)
-                print("F_q Estimates Learned Model", flush=True)
                 f_qs, rewards, q_result = f_q_estimate_and_reward(model, ref_model, n_samples_f_q)
+                print("F_q Estimates Learned Model", flush=True)
                 print(f_qs)
                 print("Avg F_q Estimate (Learned Model)")
                 print(f_qs.mean())
