@@ -181,10 +181,10 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_q_lsq_partial_jit":
             dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
-        elif self.twist_learn_type == "rl_q_lsq_no_grad":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, no_grad=True, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
-        elif self.twist_learn_type == "rl_q_lsq_partial_jit_no_grad":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, no_grad=True, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_q_lsq_nostopgrad":
+            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_q_lsq_partial_jit_nostopgrad":
+            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
 
         elif self.twist_learn_type == "rl_qrsmp_lsq":
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=5)
