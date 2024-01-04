@@ -8,10 +8,8 @@ import torch
 
 import argparse
 
-from transformers import pipeline, AutoTokenizer
 
 from trl import PPOTrainer, PPOConfig, AutoModelForCausalLMWithValueHead
-from trl.core import LengthSampler
 
 from flax.training import checkpoints
 from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
@@ -161,6 +159,7 @@ def main():
         model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
         ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
         from trl import PPOTrainer
+    ref_model.eval()
     tokenizer = AutoTokenizer.from_pretrained(model_config)
     tokenizer.pad_token = tokenizer.eos_token
 
@@ -257,6 +256,7 @@ def main():
         return log_tilde_sigma
 
     def f_q_estimate_and_reward(model, ref_model, n_samples):
+        model.eval()
         with torch.no_grad():
             batch_prompt_for_f_q = np.full((n_samples, np_prompts.shape[-1]),
                                    np_prompts)
@@ -283,17 +283,19 @@ def main():
             print(final_reward)
             print("Avg reward")
             print(final_reward.mean())
+        model.train()
 
         return log_tilde_sigma - log_q, final_reward, q_result
 
     def g_q_estimate(model, ref_model, true_sigma_samples):
+        model.eval()
         with torch.no_grad():
             log_q = get_logprob_of_generated_tokens(model, true_sigma_samples) # q is just whatever our model has learned
             log_tilde_sigma = eval_log_p_plus_log_phi(true_sigma_samples, ref_model)
             # print("Log q")
             # print(log_q)
             # print(log_q.mean())
-
+        model.train()
         return log_tilde_sigma - log_q
 
     # NEXT TODOS are to load the posteriors I got from elsewhere, and then use those in the G_q evaluation (use the same loading code from my other file)
