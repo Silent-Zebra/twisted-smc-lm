@@ -890,6 +890,9 @@ def get_l_rl_based_partial_jit(
         loss = jnp.dot(((jnp.exp(values) - jnp.exp(target_term)) ** 2).mean(axis=-1), normalized_log_w_t_on_samples)  # Use mean to be consistent with the scale of the DRE/EBM updates. Dot with the normalized weights is a weighted average as well.
     elif loss_type == "squared_error_in_log_space":
         loss = jnp.dot(((values - target_term) ** 2).mean(axis=-1), normalized_log_w_t_on_samples) # Use mean to be consistent with the scale of the DRE/EBM updates. Dot with the normalized weights is a weighted average as well.
+    elif loss_type == "multistep":
+        loss = jnp.dot(((values[:, :-1] - target_term[:, :-1]) ** 2).sum(axis=-1), normalized_log_w_t_on_samples) # Normalization consistency loss except for the final twists.
+        loss += jnp.dot((((target_term - values).sum(axis=-1))**2), normalized_log_w_t_on_samples) # Since I'm doing this sum now, probably need lower learning rates
     else:
         raise NotImplementedError
 
