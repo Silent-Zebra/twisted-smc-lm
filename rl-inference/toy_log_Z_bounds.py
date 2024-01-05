@@ -185,6 +185,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_q_lsq_partial_jit_nostopgrad":
             dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
+        elif self.twist_learn_type == "rl_q_multistep":
+            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="multistep"), argnums=5)
 
         elif self.twist_learn_type == "rl_qrsmp_lsq":
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=5)
@@ -2268,10 +2270,7 @@ class TestClass:
                                     tempered_twist, beta_prop, replay_buffer,
                                     (replay_buffer_log_w_ts, replay_buffer_log_prob_eval)
                                 )
-                        elif use_replay_buffer and experiment_cfg.twist_learn_type in  [
-                            "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
-                            "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                            "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "rl_mc_partial_jit", "bce", "bce_q"]:
+                        elif use_replay_buffer and ("bce" in experiment_cfg.twist_learn_type or experiment_cfg.twist_learn_type[:2] == "rl"):
                             rng_key, params_twist, optim_twist_state = \
                                 experiment_cfg.update_twist(
                                     rng_key, indices_of_tokens_chosen, prompt,
@@ -2458,19 +2457,21 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96, **kwargs):
 
     avg = record.mean(axis=0)
 
-    print(x_range.shape)
-    print(avg.shape)
+    # print(x_range.shape)
+    # print(avg.shape)
 
     stdev = jnp.std(record, axis=0)
 
-    upper_conf_bound = avg + z_score * stdev / np.sqrt(
-        record.shape[0])
-    lower_conf_bound = avg - z_score * stdev / np.sqrt(
-        record.shape[0])
+    conf_bound = z_score * stdev / np.sqrt(record.shape[0])
+
+    upper_conf_bound = avg + conf_bound
+    lower_conf_bound = avg - conf_bound
 
     plt.plot(x_range, avg, label=label, **kwargs)
     plt.fill_between(x_range, lower_conf_bound,
                      upper_conf_bound, alpha=0.3, **kwargs)
+
+    return avg[-1], conf_bound[-1]
 
 
 # TODO NOV 17 REVERT LATER (test with more settings)
@@ -4148,9 +4149,7 @@ def main():
                             args.tempered_twist, args.beta_prop, replay_buffer,
                             (replay_buffer_log_w_ts, replay_buffer_log_prob_eval)
                         )
-                elif experiment_cfg.twist_learn_type in ["rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
-                                 "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_qrsmp_lsq",
-                                 "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mc", "rl_mc_partial_jit", "bce", "bce_q"]:
+                elif ("bce" in experiment_cfg.twist_learn_type or experiment_cfg.twist_learn_type[:2] == "rl"):
 
                     rng_key, params_twist, optim_twist_state = \
                         experiment_cfg.update_twist(
@@ -4308,7 +4307,8 @@ if __name__ == "__main__":
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "one_total_kl_with_rl", "one_total_kl_with_sixo",
             "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq",
-            "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_q_lsq_partial_jit", "rl_q_lsq_nostopgrad", "rl_q_lsq_partial_jit_nostopgrad", "rl_qrsmp_lsq",
+            "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_q_lsq_partial_jit",
+            "rl_q_lsq_nostopgrad", "rl_q_lsq_partial_jit_nostopgrad", "rl_qrsmp_lsq", "rl_q_multistep",
             "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mixed_p_q_lsq_partial_jit", "rl_mc", "rl_mc_partial_jit",
             "sixo", "sixo_mixed_p_q", "sixo_mixed_p_q_partial_jit", "sixo_partial_jit",
             "bce", "bce_q"
