@@ -1278,95 +1278,13 @@ def upper_bound_log_Z_sigma_estimate(posterior_samples, log_true_final_twist, cf
     return log_w_k.mean()
 
 
-# # @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "use_log_true_final_twist_for_final_weight_calc", 'output_len', 'n_smc_samples']) # works but takes forever to recompile and recompiles several times
-# def smc_non_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len, n_smc_samples, use_log_true_final_twist_for_final_weight_calc=True):
-#     # prompt_len = prompt.shape[-1]
-#
-#     log_z_hat_t = 0.
-#     log_w_t = 0.
-#     log_gamma_1_to_t_eval = 0.
-#     log_p_theta_1_to_t_eval = 0.
-#
-#     prompt_w_s_1_to_t = jnp.full((n_smc_samples, prompt.shape[0]), prompt)
-#     # for t in range(prompt_len + 1, prompt_len + 1 + output_len - 1): # This is not needed since t is not used here, except just to count the number of iterations
-#     for t in range(output_len):
-#         log_w_t_minus_1 = log_w_t
-#
-#
-#         if (t == output_len - 1) and use_log_true_final_twist_for_final_weight_calc:
-#             rng_key, prompt_w_s_1_to_t_plus_1, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample_final(rng_key, prompt_w_s_1_to_t, cfg_p,
-#                                                         params_p, log_true_final_twist)
-#
-#         else:
-#             rng_key, prompt_w_s_1_to_t_plus_1, log_Z_s_1_to_t_minus_1 = get_proposal_q_sample(rng_key, prompt_w_s_1_to_t, cfg_p,
-#                                                         params_p,
-#                                                         cfg_twist, params_twist)
-#         prompt_w_s_1_to_t = prompt_w_s_1_to_t_plus_1
-#
-#         if (t == output_len - 1) and use_log_true_final_twist_for_final_weight_calc:
-#             log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1_final(
-#                 prompt_w_s_1_to_t, cfg_p, params_p, log_true_final_twist)
-#         else:
-#             log_q_t_eval = evaluate_unnormalized_log_q_t_given_1_to_t_minus_1(prompt_w_s_1_to_t, cfg_p,
-#                                                              params_p,
-#                                                              cfg_twist,
-#                                                              params_twist)
-#
-#         log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
-#
-#         log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval + evaluate_log_p_theta_t(prompt_w_s_1_to_t, cfg_p, params_p)
-#
-#         if (t == output_len - 1) and use_log_true_final_twist_for_final_weight_calc:
-#             log_r_psi_t_eval = evaluate_log_phi_final(prompt_w_s_1_to_t, log_true_final_twist)
-#         else:
-#             log_r_psi_t_eval = evaluate_log_psi_t(prompt_w_s_1_to_t, cfg_twist, params_twist)
-#
-#         log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
-#
-#         # The normalization constant is crucial; q has to be a normalized probability (for the weights;
-#         # for sampling it doesn't matter, but since sampling auto-normalizes, then the weights need to be normalized otherwise you get weird issues)
-#
-#         # alpha is the factor multiplied (added in log space) to the previous weight
-#         log_alpha_t = log_gamma_1_to_t_eval - log_gamma_1_to_t_minus_1_eval - log_q_t_eval + log_Z_s_1_to_t_minus_1 # This z is needed for normalizing our proposal (making the weights work properly, since the q_t eval is unnormalized)
-#         # It may be less confusing to include the Z directly in the log q eval - but the reason I've left it like this
-#         # is because if I follow the TODO where I cancel the numerator and denominator, I'll want the Z term to exist separately.
-#
-#         log_w_t = log_w_t_minus_1 + log_alpha_t
-#
-#         if t == 0:
-#             log_z_over_z = jax.nn.logsumexp(log_w_t)
-#         else:
-#             log_z_over_z = jax.nn.logsumexp(log_w_t) - jax.nn.logsumexp(
-#                 log_w_t_minus_1)
-#
-#         log_z_hat_t = log_z_hat_t + log_z_over_z
-#
-#
-#         # TODO maybe don't resample on the first iteration??
-#         # if t == 0:
-#         #     resample_condition = False
-#         # else:
-#         #     resample_condition = True
-#         resample_condition = True
-#         # resample_condition = False
-#         if resample_condition:
-#             # Do resampling
-#             rng_key, subkey = jax.random.split(rng_key)
-#
-#             a_t = jax.random.categorical(subkey, log_w_t, shape=log_w_t.shape)
-#
-#             prompt_w_s_1_to_t = prompt_w_s_1_to_t[a_t]
-#
-#             # Make sure the gamma values also track the correct trajectories
-#             log_gamma_1_to_t_eval = log_gamma_1_to_t_eval[a_t]
-#
-#             # Same for the p values:
-#             log_p_theta_1_to_t_eval = log_p_theta_1_to_t_eval[a_t]
-#
-#             log_w_t = jnp.zeros_like(log_w_t)
-#
-#     return log_z_hat_t, prompt_w_s_1_to_t
-#
+def get_kl_vals(q_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len,
+                prepend_tokens_for_twists, condition_twist_on_tokens, huggingface_model):
+    log_q = evaluate_normalized_log_q_1_to_t(
+        q_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len, prepend_tokens_for_twists, condition_twist_on_tokens, huggingface_model=huggingface_model)
+    log_p = evaluate_log_p_theta_1_to_t(q_seqs, cfg_p, params_p, prompt_len, output_len)
+    kl_vals = log_q - log_p
+    return kl_vals
 
 
 # This, in expectation with p_seqs drawn from the model p, will give you the KL divergence D_KL(p || p_0)

@@ -42,12 +42,7 @@ import copy
 
 from custom_transformer import transformer_init_params
 
-from custom_transformer_prob_utils import calc_analytic_kl, smc_scan_iter_non_final, smc_scan_iter_final, \
-    smc_procedure, calc_analytic_sigma_vals, \
-    get_analytic_sigma_sample, upper_bound_log_Z_sigma_estimate, \
-    iwae_forward_and_backward, iwae_backward, smc_backward, stochastic_transformer_sample, \
-    evaluate_log_p_selected_tokens, get_f_q_estimate, \
-    evaluate_normalized_log_q_1_to_t
+from custom_transformer_prob_utils import *
 from toy_reward_models import *
 from losses import *
 
@@ -622,7 +617,7 @@ class ExperimentConfig:
         prompt, output_len, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, start, hist_token_index, epoch, huggingface_model, proposal_is_p,
         true_posterior_samples_by_prompt_and_by_token, prompt_num, true_log_z, plot_over_time_list, tokenizer=None,
-        proposal_scores_list=None
+        proposal_scores_list=None, kl_to_prior_list=None
     ):
         prompt_len = prompt.shape[-1]
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
@@ -642,7 +637,7 @@ class ExperimentConfig:
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                              huggingface_model=huggingface_model,
-                                                   proposal_is_p=proposal_is_p, tokenizer=tokenizer, proposal_scores_list=proposal_scores_list
+                                                   proposal_is_p=proposal_is_p, tokenizer=tokenizer, proposal_scores_list=proposal_scores_list, kl_to_prior_list=kl_to_prior_list
                                                    )
         elif args.rm_type == "only_contains_token":
             token_of_interest_as_int = \
@@ -660,7 +655,7 @@ class ExperimentConfig:
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                              huggingface_model=huggingface_model,
-                                                   proposal_is_p=proposal_is_p, tokenizer=tokenizer, proposal_scores_list=proposal_scores_list
+                                                   proposal_is_p=proposal_is_p, tokenizer=tokenizer, proposal_scores_list=proposal_scores_list, kl_to_prior_list=kl_to_prior_list
                                                    )
         elif args.rm_type in ["contains_continuation", "toxicity_threshold", "sentiment_threshold",
                               "p_continuation", "hard_p_continuation", "p_continuation_one_post",
@@ -677,7 +672,7 @@ class ExperimentConfig:
                              smc_procedure_type=self.smc_procedure_type,
                              prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens=None,
                              huggingface_model=huggingface_model,
-                                                   proposal_is_p=proposal_is_p, tokenizer=tokenizer, proposal_scores_list=proposal_scores_list
+                                                   proposal_is_p=proposal_is_p, tokenizer=tokenizer, proposal_scores_list=proposal_scores_list, kl_to_prior_list=kl_to_prior_list
                                                    )
         elif args.rm_type == "p_last_tokens":
             # TODO OCT 29 - later what I can do is pick a particular continuation of interest, e.g. "Sure, here's", and then condition the twist model on that
@@ -711,7 +706,7 @@ class ExperimentConfig:
                                                    condition_twist_on_tokens=condition_twist_on_tokens,
                                                    huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
-                                                   tokenizer=tokenizer, proposal_scores_list=proposal_scores_list
+                                                   tokenizer=tokenizer, proposal_scores_list=proposal_scores_list, kl_to_prior_list=kl_to_prior_list
                                                    )
         else:
             raise NotImplementedError
@@ -764,6 +759,7 @@ class ExperimentConfig:
         aux_info = None
 
         proposal_scores = None
+        kl_vals = None
 
         if self.rm_type in [
             "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
@@ -852,6 +848,16 @@ class ExperimentConfig:
 
                 proposal_scores = log_prob_cont_proposal_samples
 
+                kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples, cfg_p, params_p, cfg_twist, params_twist,
+                            prompt_len, output_len,
+                            prepend_tokens_for_twists,
+                            condition_twist_on_tokens=None, huggingface_model=huggingface_model)
+                print(f"KL to prior estimate: {kl_vals.mean()}")
+
+
+                # TODO Jan 05 - should redo all the plot code to be consistent with the test_ppo plot code... that one is cleaner and simpler. Instead of averaging all the fqs, let's just concat all the fqs over all the seeds and use those...
+
+
 
             else:
                 score_smc_samples = log_true_final_twist(smc_samples) / args.beta_temp
@@ -883,6 +889,13 @@ class ExperimentConfig:
                 print(score_proposal_samples.mean())
 
                 proposal_scores = score_proposal_samples
+                kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
+                                      cfg_p, params_p, cfg_twist, params_twist,
+                                      prompt_len, output_len,
+                                      prepend_tokens_for_twists,
+                                      condition_twist_on_tokens=None,
+                                      huggingface_model=huggingface_model)
+                print(f"KL to prior estimate: {kl_vals.mean()}")
 
             if huggingface_model:
                 text_outputs_smc = tokenizer.batch_decode(smc_samples,
@@ -1001,9 +1014,16 @@ class ExperimentConfig:
                     "Averages of the above for SMC samples, proposal samples, p samples")
                 print(log_prob_cont_sigma_samples.mean())
                 print(log_prob_cont_proposal_samples.mean())
+                no_intermediate_resample_proposal_samples = intermediate_seq_list[-1]
 
                 proposal_scores = log_prob_cont_proposal_samples
-
+                kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
+                                      cfg_p, params_p, cfg_twist, params_twist,
+                                      prompt_len, output_len,
+                                      prepend_tokens_for_twists,
+                                      condition_twist_on_tokens=None,
+                                      huggingface_model=huggingface_model)
+                print(f"KL to prior estimate: {kl_vals.mean()}")
 
                 if huggingface_model:
                     text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
@@ -1106,7 +1126,13 @@ class ExperimentConfig:
                 print(log_prob_cont_proposal_samples.mean())
 
                 proposal_scores = log_prob_cont_proposal_samples
-
+                no_intermediate_resample_proposal_samples = intermediate_seq_list[-1]
+                kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
+                                      cfg_p, params_p, cfg_twist, params_twist,
+                                      prompt_len, output_len,
+                                      prepend_tokens_for_twists,
+                                      condition_twist_on_tokens=None,
+                                      huggingface_model=huggingface_model)
                 if huggingface_model:
                     text_outputs = tokenizer.batch_decode(p_samples,
                                                           skip_special_tokens=True)
@@ -1138,7 +1164,7 @@ class ExperimentConfig:
         else:
             raise NotImplementedError
 
-        return rng_key, aux_info, proposal_scores
+        return rng_key, aux_info, proposal_scores, kl_vals
 
 
 
@@ -2499,7 +2525,8 @@ linestyle_list_for_smc_lb_plots = ['solid', 'solid']
 def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, prompt, prompt_len, output_len, cfg_p,
                      params_p, cfg_twist, params_twist, log_true_final_twist, start, hist_token_index, epoch,
                      true_log_z, plot_over_time_list, smc_procedure_type, proposal_is_p=False,
-                     prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None, proposal_scores_list=None):
+                     prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
+                     proposal_scores_list=None, kl_to_prior_list=None):
 
 
     if token_of_interest_as_int is not None:
@@ -2810,11 +2837,12 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         if do_checkpoint_of_plot_info:
 
             assert proposal_scores_list[0] is not None
+            assert kl_to_prior_list[0] is not None
 
             checkpoints.save_checkpoint(
                 ckpt_dir=args.save_dir,
                 target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
-                        np.transpose(np.stack(proposal_scores_list)), logZ_midpoint_estimate),
+                        np.transpose(np.stack(proposal_scores_list)), logZ_midpoint_estimate, np.transpose(np.stack(kl_to_prior_list))),
                 step=len(kl_ubs_iwae),
                 prefix=f"f_q_g_q_logZbestmidpoint_info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_nsamples")
 
@@ -3837,6 +3865,7 @@ def main():
     g_q_estimates_list = []
     f_q_estimates_list = []
     proposal_scores_list = []
+    kl_to_prior_list = []
 
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
@@ -3965,7 +3994,7 @@ def main():
                 print(f"TIME: {time.time() - start}", flush=True)
 
                 # DO inspect samples regardless of whether we plot logZ bounds or not
-                rng_key, aux_info, proposal_scores = experiment_cfg.inspect_results(
+                rng_key, aux_info, proposal_scores, kl_vals = experiment_cfg.inspect_results(
                     rng_key, prompt, cfg_p, params_p, cfg_twist,
                     params_twist, log_true_final_twist,
                     args.output_len,
@@ -3976,6 +4005,7 @@ def main():
                     proposal_is_p=args.proposal_is_p,
                     huggingface_model=huggingface_model)
                 proposal_scores_list.append(proposal_scores)
+                kl_to_prior_list.append(kl_vals)
 
                 if (not huggingface_model) and (true_log_z is None):
                     if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index" \
@@ -4026,7 +4056,8 @@ def main():
                         "true_log_z": true_log_z,
                         "plot_over_time_list": plot_over_time_list,
                         "tokenizer": tokenizer,
-                        "proposal_scores_list": proposal_scores_list
+                        "proposal_scores_list": proposal_scores_list,
+                        "kl_to_prior_list": kl_to_prior_list
                     }
 
                     if args.proposal_is_p_for_plots and args.hface_model_type in ["gpt2medium", "gpt2large"]:
