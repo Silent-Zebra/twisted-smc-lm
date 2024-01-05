@@ -255,7 +255,7 @@ def main():
         log_tilde_sigma = log_p + args.beta_temp * log_phi_eval # p eval + phi eval
         return log_tilde_sigma
 
-    def f_q_estimate_and_reward(model, ref_model, n_samples):
+    def f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples):
         model.eval()
         with torch.no_grad():
             batch_prompt_for_f_q = np.full((n_samples, np_prompts.shape[-1]),
@@ -279,13 +279,19 @@ def main():
             print(log_q)
             print(log_q.mean())
 
-            print("Reward")
-            print(final_reward)
-            print("Avg reward")
-            print(final_reward.mean())
+            kl_vals = kl_vals_before_mean(model, ref_model, q_result)
         model.train()
 
-        return log_tilde_sigma - log_q, final_reward, q_result
+        return log_tilde_sigma - log_q, final_reward, q_result, kl_vals
+
+    def kl_vals_before_mean(model, ref_model, q_samples):
+        log_q = get_logprob_of_generated_tokens(model,
+                                                q_samples)
+        log_p = get_logprob_of_generated_tokens(ref_model, q_samples)
+
+        kl_vals = (log_q - log_p)
+        return kl_vals
+
 
     def g_q_estimate(model, ref_model, true_sigma_samples):
         model.eval()
@@ -303,8 +309,8 @@ def main():
     f_q_estimates_list = []
     g_q_estimates_list = []
 
-
     rewards_list = []
+    kl_vals_list = []
 
     new_start = time.time()
 
@@ -336,9 +342,18 @@ def main():
             iwae_ubs_list = []
 
             total_f_qs = None
+            total_rewards = None
+            total_kl_vals = None
+
             for i in range(n_seeds_f_q):
                 print(f"TIME: {time.time() - new_start}", flush=True)
-                f_qs, rewards, q_result = f_q_estimate_and_reward(model, ref_model, n_samples_f_q)
+
+                f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples_f_q)
+                print("Reward")
+                print(rewards)
+                print("Avg reward")
+                print(rewards.mean())
+                print(f"KL to prior estimate: {kl_vals.mean()}")
                 print("F_q Estimates Learned Model", flush=True)
                 print(f_qs)
                 print("Avg F_q Estimate (Learned Model)")
@@ -349,9 +364,15 @@ def main():
                 iwae_lbs_list.append(iwae_lower_bound_estimate)
                 if total_f_qs is None:
                     total_f_qs = f_qs
+                    total_rewards = rewards
+                    total_kl_vals = kl_vals
                 else:
                     total_f_qs = torch.cat((total_f_qs, f_qs), axis=0)
                     print(total_f_qs.shape)
+                    total_rewards = torch.cat((total_rewards, rewards), axis=0)
+                    print(total_rewards.shape)
+                    total_kl_vals = torch.cat((total_kl_vals, kl_vals), axis=0)
+                    print(total_kl_vals.shape)
 
 
                 if true_posterior_samples is not None:
@@ -365,7 +386,8 @@ def main():
                     iwae_ubs_list.append(iwae_upper_bound_estimate)
 
             f_q_estimates_list.append(total_f_qs.cpu().numpy())
-            rewards_list.append(rewards.cpu().numpy())
+            rewards_list.append(total_rewards.cpu().numpy())
+            kl_vals_list.append(total_kl_vals.cpu().numpy())
 
             # print("F_q Estimates Base Model")
             # f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
@@ -427,7 +449,7 @@ def main():
             if logZ_midpoint_estimate is not None:
                 checkpoints.save_checkpoint(
                     ckpt_dir=args.save_dir,
-                    target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list)), logZ_midpoint_estimate
+                    target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list)), logZ_midpoint_estimate, np.transpose(np.stack(kl_vals_list))
                             ),
                     step=len(g_q_estimates_list),
                     prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples"
@@ -435,7 +457,7 @@ def main():
             else:
                 checkpoints.save_checkpoint(
                     ckpt_dir=args.save_dir,
-                    target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list))
+                    target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list)), np.transpose(np.stack(kl_vals_list))
                                                     ),
                     step=len(g_q_estimates_list),
                     prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples"
