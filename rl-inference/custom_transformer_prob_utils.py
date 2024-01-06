@@ -1282,7 +1282,7 @@ def get_kl_vals(q_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len, ou
                 prepend_tokens_for_twists, condition_twist_on_tokens, huggingface_model):
     log_q = evaluate_normalized_log_q_1_to_t(
         q_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len, prepend_tokens_for_twists, condition_twist_on_tokens, huggingface_model=huggingface_model)
-    log_p = evaluate_log_p_theta_1_to_t(q_seqs, cfg_p, params_p, prompt_len, output_len)
+    log_p = evaluate_log_p_selected_tokens(q_seqs, prompt_len, cfg_p, params_p, output_len)
     kl_vals = log_q - log_p
     return kl_vals
 

@@ -848,10 +848,11 @@ class ExperimentConfig:
 
                 proposal_scores = log_prob_cont_proposal_samples
 
-                kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples, cfg_p, params_p, cfg_twist, params_twist,
-                            prompt_len, output_len,
-                            prepend_tokens_for_twists,
-                            condition_twist_on_tokens=None, huggingface_model=huggingface_model)
+                kl_vals = get_kl_vals(
+                    no_intermediate_resample_proposal_samples, cfg_p, params_p, cfg_twist, params_twist,
+                    prompt_len, output_len,
+                    prepend_tokens_for_twists,
+                    condition_twist_on_tokens=None, huggingface_model=huggingface_model)
                 print(f"KL to prior estimate: {kl_vals.mean()}")
 
 
@@ -1021,7 +1022,7 @@ class ExperimentConfig:
                                       cfg_p, params_p, cfg_twist, params_twist,
                                       prompt_len, output_len,
                                       prepend_tokens_for_twists,
-                                      condition_twist_on_tokens=None,
+                                      condition_twist_on_tokens=condition_twist_on_tokens,
                                       huggingface_model=huggingface_model)
                 print(f"KL to prior estimate: {kl_vals.mean()}")
 
@@ -1131,7 +1132,7 @@ class ExperimentConfig:
                                       cfg_p, params_p, cfg_twist, params_twist,
                                       prompt_len, output_len,
                                       prepend_tokens_for_twists,
-                                      condition_twist_on_tokens=None,
+                                      condition_twist_on_tokens=condition_twist_on_tokens,
                                       huggingface_model=huggingface_model)
                 if huggingface_model:
                     text_outputs = tokenizer.batch_decode(p_samples,
