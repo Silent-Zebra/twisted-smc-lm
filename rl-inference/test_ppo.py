@@ -288,9 +288,10 @@ def main():
             # print(x)
             text_outputs = tokenizer.batch_decode(q_result, skip_special_tokens=True)
             print(text_outputs)
-            print("continuations")
-            text_outputs = tokenizer.batch_decode(condition_twist_on_tokens, skip_special_tokens=True)
-            print(text_outputs)
+            if condition_twist_on_tokens is not None:
+                print("continuations")
+                text_outputs = tokenizer.batch_decode(condition_twist_on_tokens, skip_special_tokens=True)
+                print(text_outputs)
 
             print("Log q")
             print(log_q)
