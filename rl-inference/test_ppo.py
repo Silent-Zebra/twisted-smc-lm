@@ -613,5 +613,6 @@ if __name__ == "__main__":
 
     if args.rm_type == "p_last_tokens":
         assert args.num_last_tokens_to_condition_on > 0
+        assert args.beta_temp == 1 # Others not yet implemented...
 
     main()
