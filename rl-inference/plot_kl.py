@@ -64,7 +64,6 @@ load_prefixes_tox = [
     "f_q_g_q_logZbestmidpoint_info_2023-12-31_02-32_seed1_nsamples12_rob_0001", # 503 !!
     "f_q_g_q_logZbestmidpoint_info_2023-12-31_05-49_seed1_nsamples12_sixo_00003", # 544 !! Best for SIXO
     "f_q_g_q_logZbestmidpoint_info_2024-01-05_02-09_seed1_bce_q_nsamples12_toxc_00005",
-    # "f_q_g_q_estimates_2023-12-31_04-04_seed0_nsamples12_ppo_000001", #509 !!
     "f_q_g_q_estimates_2024-01-05_08-24_seed0_nsamples12_toxc_ppo_000001",
     # "f_q_g_q_estimates_2024-01-05_07-57_seed0_nsamples12_toxc_ppo_000003",
 ]

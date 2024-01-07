@@ -62,7 +62,7 @@ def main():
 
     def reward_model_sentiment_class_logprob(seq, sentimentClassifier,
                                              tokenizer_RM, tokenizer,
-                                             class_num):
+                                             class_num, ref_model, condition_twist_on_tokens=None):
         if len(seq.shape) == 3:
             raise NotImplementedError
 
@@ -83,7 +83,7 @@ def main():
         return log_prob.to(device)
 
     def toxicity_class_logprob(
-        seq, rewardModel, tokenizer_RM, tokenizer, class_num
+        seq, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model, condition_twist_on_tokens=None
     ):
 
         score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer)
@@ -98,8 +98,14 @@ def main():
 
         return log_prob_of_class.to(device)
 
+    def p_last_tokens(seqs, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model, condition_twist_on_tokens):
+        full_seqs = torch.cat((seqs, condition_twist_on_tokens), dim=-1)
+        log_p_last_tokens = get_logprob_of_generated_tokens(ref_model, full_seqs, prompt_len + args.output_len)
+        return log_p_last_tokens
+
+
     def toy_test_rm(
-        seq, rewardModel, tokenizer_RM, tokenizer, class_num
+        seq, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model, condition_twist_on_tokens=None
     ):
         score = (seq[:, -1] == 1263) * 1. - 2
         return score.to(device)
@@ -119,8 +125,6 @@ def main():
             "I bought this"
             # "This product is"
         ]
-
-
     elif args.rm_type in ["exp_beta_toxicity_class_logprob"]:
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
             "nicholasKluge/ToxicityModel")
@@ -132,7 +136,13 @@ def main():
             class_num = 1
         rm_function = toxicity_class_logprob
         prompts = ["Once upon a time, there was a", ]
-
+    elif args.rm_type in ["p_last_tokens"]:
+        rewardModel = None
+        tokenizer_RM = None
+        model_config = "roneneldan/TinyStories-33M"
+        class_num = None
+        rm_function = p_last_tokens
+        prompts = ["Once upon a time, there was a", ]
     elif args.rm_type in ["toy_test"]:
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
             "nicholasKluge/ToxicityModel")
@@ -147,8 +157,12 @@ def main():
         raise NotImplementedError
 
     if args.hface_nn_twist:
-        from custom_trl_model import CustomAutoModelForCausalLMWithValueHead
-        model = CustomAutoModelForCausalLMWithValueHead.from_pretrained(model_config)
+        from custom_trl_model import CustomAutoModelForCausalLMWithValueHead, CustomAutoModelForCausalLMWithValueHeadandConditionalTwist
+        if args.rm_type == "p_last_tokens":
+            model = CustomAutoModelForCausalLMWithValueHeadandConditionalTwist.from_pretrained(model_config)
+        else:
+            model = CustomAutoModelForCausalLMWithValueHead.from_pretrained(model_config)
+
         ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
 
         if args.only_train_nn_head:
@@ -195,8 +209,6 @@ def main():
     prompt_len = batch_prompt_pt.shape[-1]
 
 
-    # full_seq = model.generate(batch_prompt_pt, do_sample=True, num_beams=1, max_length=prompt_len+output_len, min_length=-1,
-    #                           top_k=0.0, top_p=1.0, pad_token_id=tokenizer.eos_token_id,
     gen_kwargs = {"min_length": -1, "top_k": 0.0, "top_p": 1.0,
                   "do_sample": True, "pad_token_id": tokenizer.eos_token_id, "num_beams": 1,
                   }
@@ -219,10 +231,13 @@ def main():
         true_posterior_samples = torch.tensor(true_posterior_samples, dtype=torch.int64, device=device)
 
 
-    def get_prob_of_generated_tokens(model, sequences):
+    def get_prob_of_generated_tokens(model, sequences, prompt_len, condition_twist_on_tokens=None):
         # probs = torch.stack(scores, dim=1).softmax(dim=-1)
         # gen_probs = torch.gather(probs, 2, sequences[:, prompt_len:, None]).squeeze(-1)
-        logits = model(sequences)[0]
+        if condition_twist_on_tokens is None:
+            logits = model(sequences)[0]
+        else:
+            logits = model(sequences, condition_twist_on_tokens=condition_twist_on_tokens)[0]
         probs = logits.softmax(dim=-1)
         gen_probs = torch.gather(probs[:, prompt_len - 1:-1, :], 2, sequences[:, prompt_len:, None]).squeeze(-1)
         # print(probs[:, prompt_len:, :].shape)
@@ -230,19 +245,19 @@ def main():
 
         return gen_probs
 
-    def get_logprob_of_generated_tokens(model, sequences):
-        gen_probs = get_prob_of_generated_tokens(model, sequences)
+    def get_logprob_of_generated_tokens(model, sequences, prompt_len, condition_twist_on_tokens=None):
+        gen_probs = get_prob_of_generated_tokens(model, sequences, prompt_len, condition_twist_on_tokens=condition_twist_on_tokens)
         return torch.log(gen_probs).sum(dim=-1)
 
-    def eval_log_p_plus_log_phi(full_seqs, ref_model):
+    def eval_log_p_plus_log_phi(full_seqs, ref_model, condition_twist_on_tokens=None):
         # NOTE THAT
         # sigma tilde = p e^(beta r)
         # Importantly, I have defined the rm function as just r! This is important because in the PPO (RL w KL penalty) formulation you need
         # to have just r, and the beta is done through the KL penalty
         # But here, since I need to evaluate phi = e^beta r, I need log phi = beta r, not r!
-        log_p = get_logprob_of_generated_tokens(ref_model, full_seqs)
+        log_p = get_logprob_of_generated_tokens(ref_model, full_seqs, prompt_len)
         log_phi_eval = rm_function(full_seqs, rewardModel, tokenizer_RM,
-                                   tokenizer, class_num)
+                                   tokenizer, class_num, ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
         print("Log p and phi")
         print(log_p)
         print(log_p.mean())
@@ -255,56 +270,56 @@ def main():
         log_tilde_sigma = log_p + args.beta_temp * log_phi_eval # p eval + phi eval
         return log_tilde_sigma
 
-    def f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples):
+    def f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples, condition_twist_on_tokens=None):
         model.eval()
         with torch.no_grad():
             batch_prompt_for_f_q = np.full((n_samples, np_prompts.shape[-1]),
                                    np_prompts)
             batch_prompt_for_f_q_pt = torch.tensor(batch_prompt_for_f_q, dtype=torch.int64,
                                            device=device)
-            q_result = model.generate(batch_prompt_for_f_q_pt, return_dict_in_generate=False, max_length=prompt_len+args.output_len, **gen_kwargs)
-            log_q = get_logprob_of_generated_tokens(model, q_result) # q is just whatever our model has learned
-            # p_result = ref_model.generate(batch_prompt_pt, return_dict_in_generate=True, output_scores=True, max_length=prompt_len+args.output_len, **gen_kwargs)
-            # log_p = get_logprob_of_generated_tokens(p_result.scores, q_result.sequences)
-            # log_tilde_sigma = log_p + rm_function(q_result.sequences) # p eval + phi eval
-            log_tilde_sigma = eval_log_p_plus_log_phi(q_result, ref_model)
+            q_result = model.generate(batch_prompt_for_f_q_pt, return_dict_in_generate=False, max_length=prompt_len+args.output_len, condition_twist_on_tokens=condition_twist_on_tokens, **gen_kwargs)
+            log_q = get_logprob_of_generated_tokens(model, q_result, prompt_len, condition_twist_on_tokens=condition_twist_on_tokens) # q is just whatever our model has learned
+
+            log_tilde_sigma = eval_log_p_plus_log_phi(q_result, ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
 
             final_reward = rm_function(q_result, rewardModel, tokenizer_RM, tokenizer,
-                                       class_num)
+                                       class_num, ref_model, condition_twist_on_tokens)
             print("sequences")
             # print(x)
             text_outputs = tokenizer.batch_decode(q_result, skip_special_tokens=True)
             print(text_outputs)
+            print("continuations")
+            text_outputs = tokenizer.batch_decode(condition_twist_on_tokens, skip_special_tokens=True)
+            print(text_outputs)
+
             print("Log q")
             print(log_q)
             print(log_q.mean())
 
-            kl_vals = kl_vals_before_mean(model, ref_model, q_result)
+            kl_vals = kl_vals_before_mean(model, ref_model, q_result, condition_twist_on_tokens=condition_twist_on_tokens)
         model.train()
 
         return log_tilde_sigma - log_q, final_reward, q_result, kl_vals
 
-    def kl_vals_before_mean(model, ref_model, q_samples):
-        log_q = get_logprob_of_generated_tokens(model,
-                                                q_samples)
-        log_p = get_logprob_of_generated_tokens(ref_model, q_samples)
+    def kl_vals_before_mean(model, ref_model, q_samples, condition_twist_on_tokens=None):
+        log_q = get_logprob_of_generated_tokens(model, q_samples, prompt_len, condition_twist_on_tokens=condition_twist_on_tokens)
+        log_p = get_logprob_of_generated_tokens(ref_model, q_samples, prompt_len, condition_twist_on_tokens=None)
 
         kl_vals = (log_q - log_p)
         return kl_vals
 
 
-    def g_q_estimate(model, ref_model, true_sigma_samples):
+    def g_q_estimate(model, ref_model, true_sigma_samples, condition_twist_on_tokens=None):
         model.eval()
         with torch.no_grad():
-            log_q = get_logprob_of_generated_tokens(model, true_sigma_samples) # q is just whatever our model has learned
-            log_tilde_sigma = eval_log_p_plus_log_phi(true_sigma_samples, ref_model)
+            log_q = get_logprob_of_generated_tokens(model, true_sigma_samples, prompt_len, condition_twist_on_tokens=condition_twist_on_tokens) # q is just whatever our model has learned
+            log_tilde_sigma = eval_log_p_plus_log_phi(true_sigma_samples, ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
             # print("Log q")
             # print(log_q)
             # print(log_q.mean())
         model.train()
         return log_tilde_sigma - log_q
 
-    # NEXT TODOS are to load the posteriors I got from elsewhere, and then use those in the G_q evaluation (use the same loading code from my other file)
 
     f_q_estimates_list = []
     g_q_estimates_list = []
@@ -322,20 +337,12 @@ def main():
 
         print("TEST INFO")
 
-        # x = model.generate(batch_prompt_pt, return_dict_in_generate=True,
-        #                    output_scores=True,
-        #                    max_length=prompt_len + args.output_len,
-        #                    **gen_kwargs)
-        # full_seqb = x.sequences
-        # x = ref_model.generate(batch_prompt_pt, return_dict_in_generate=True,
-        #                        output_scores=True,
-        #                        max_length=prompt_len + args.output_len,
-        #                        **gen_kwargs)
-        # full_seqc = x.sequences
-
-
         n_seeds_f_q = 1 #5 reduce time spent on this
-
+        batch_prompt_for_f_q = np.full((n_samples_f_q, np_prompts.shape[-1]),
+                                       np_prompts)
+        batch_prompt_for_f_q_pt = torch.tensor(batch_prompt_for_f_q,
+                                               dtype=torch.int64,
+                                               device=device)
 
         if not args.no_test_info:
             iwae_lbs_list = []
@@ -348,7 +355,33 @@ def main():
             for i in range(n_seeds_f_q):
                 print(f"TIME: {time.time() - new_start}", flush=True)
 
-                f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples_f_q)
+                if args.rm_type == "p_last_tokens":
+                    base_model_seqs = ref_model.generate(batch_prompt_for_f_q_pt,
+                                                         max_length=prompt_len + args.output_len + args.num_last_tokens_to_condition_on,
+                                                         **gen_kwargs)
+
+                    condition_twist_on_tokens = base_model_seqs[:,
+                                                prompt_len + args.output_len:]
+
+                    true_posterior_samples = base_model_seqs[:, :prompt_len + args.output_len]
+
+                    # q_tokens = model.generate(batch_prompt_for_f_q_pt,
+                    #                           max_length=prompt_len + args.output_len,
+                    #                           condition_twist_on_tokens=condition_twist_on_tokens
+                    #                                                     **gen_kwargs)
+
+
+                    # full_seq = torch.cat((q_tokens, condition_twist_on_tokens),
+                    #                      dim=-1)
+
+                    # print(full_seq.shape)
+
+                    f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples_f_q, condition_twist_on_tokens=condition_twist_on_tokens)
+
+                else:
+                    f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples_f_q)
+                    condition_twist_on_tokens = None
+
                 print("Reward")
                 print(rewards)
                 print("Avg reward")
@@ -377,69 +410,56 @@ def main():
 
                 if true_posterior_samples is not None:
                     iwae_mixture_with_one_post = q_result.detach().clone()
-                    iwae_mixture_with_one_post[0] = true_posterior_samples[i]
-                    iwae_ub_weights = g_q_estimate(model, ref_model, iwae_mixture_with_one_post) # All this does is evaluate log (tilde sigma / q). I just do it on the iwae mixture here
+                    iwae_mixture_with_one_post[i] = true_posterior_samples[i] # To keep the conditioning tokens constant
+                    iwae_ub_weights = g_q_estimate(model, ref_model, iwae_mixture_with_one_post, condition_twist_on_tokens=condition_twist_on_tokens) # All this does is evaluate log (tilde sigma / q). I just do it on the iwae mixture here
                     print("IWAE Upper Bound Estimate (Learned Model)")
                     iwae_upper_bound_estimate = torch.logsumexp(
                         iwae_ub_weights, dim=0) - np.log(iwae_ub_weights.shape[0])
                     print(iwae_upper_bound_estimate)
                     iwae_ubs_list.append(iwae_upper_bound_estimate)
 
-            f_q_estimates_list.append(total_f_qs.cpu().numpy())
-            rewards_list.append(total_rewards.cpu().numpy())
-            kl_vals_list.append(total_kl_vals.cpu().numpy())
+                f_q_estimates_list.append(total_f_qs.cpu().numpy())
+                rewards_list.append(total_rewards.cpu().numpy())
+                kl_vals_list.append(total_kl_vals.cpu().numpy())
 
-            # print("F_q Estimates Base Model")
-            # f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
-            # print(f_qs)
-            # print("Avg F_q Estimate (Base Model)")
-            # print(f_qs.mean())
-            total_g_qs = None
+                # print("F_q Estimates Base Model")
+                # f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
+                # print(f_qs)
+                # print("Avg F_q Estimate (Base Model)")
+                # print(f_qs.mean())
+                total_g_qs = None
 
-            if true_posterior_samples is not None:
-                for i in range(true_posterior_samples.shape[0] // n_samples_f_q + 1):
-                    samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
+                if true_posterior_samples is not None:
+                    for i in range(true_posterior_samples.shape[0] // n_samples_f_q + 1):
+                        samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
+                        print(f"TIME: {time.time() - new_start}", flush=True)
+                        print("G_q Estimates Learned Model")
+                        # print(samples.shape)
+                        # print(condition_twist_on_tokens.shape)
+                        # print(condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q].shape)
+                        g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q])
+                        print(g_qs)
+                        print("Avg G_q Estimate (Learned Model)")
+                        print(g_qs.mean())
+
+                        if total_g_qs is None:
+                            total_g_qs = g_qs
+                        else:
+                            total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
+                            print(total_g_qs.shape)
+
+                    avg_iwae_ub_estimate = torch.stack(iwae_ubs_list).mean()
+                    avg_iwae_lb_estimate = torch.stack(iwae_lbs_list).mean()
+
+                    print(f"Avg IWAE UB Estimate: {avg_iwae_ub_estimate}")
+                    print(f"Avg IWAE LB Estimate: {avg_iwae_lb_estimate}")
+
+                    logZ_midpoint_estimate = (avg_iwae_ub_estimate + avg_iwae_lb_estimate) / 2.
                     print(f"TIME: {time.time() - new_start}", flush=True)
-                    print("G_q Estimates Learned Model")
-                    g_qs = g_q_estimate(model, ref_model, samples)
-                    print(g_qs)
-                    print("Avg G_q Estimate (Learned Model)")
-                    print(g_qs.mean())
-
-                    if total_g_qs is None:
-                        total_g_qs = g_qs
-                    else:
-                        total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
-                        print(total_g_qs.shape)
-
-                avg_iwae_ub_estimate = torch.stack(iwae_ubs_list).mean()
-                avg_iwae_lb_estimate = torch.stack(iwae_lbs_list).mean()
-
-                print(f"Avg IWAE UB Estimate: {avg_iwae_ub_estimate}")
-                print(f"Avg IWAE LB Estimate: {avg_iwae_lb_estimate}")
-
-                logZ_midpoint_estimate = (avg_iwae_ub_estimate + avg_iwae_lb_estimate) / 2.
-                print(f"TIME: {time.time() - new_start}", flush=True)
-                print(f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
-                g_q_estimates_list.append(total_g_qs.cpu().numpy())
-
-                # print("G_q Estimates Base Model")
-                # g_qs = g_q_estimate(ref_model, ref_model, true_posterior_samples)
-                # print(g_qs)
-                # print("Avg G_q Estimate (Base Model)")
-                # print(g_qs.mean())
+                    print(f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
+                    g_q_estimates_list.append(total_g_qs.cpu().numpy())
 
 
-            # for x in [full_seqb, full_seqc]:
-            #     final_reward = rm_function(x, rewardModel, tokenizer_RM, tokenizer,
-            #                                class_num)
-            #     print("sequences")
-            #     # print(x)
-            #     text_outputs = tokenizer.batch_decode(x, skip_special_tokens=True)
-            #     print(text_outputs)
-            #     print(final_reward)
-            #     print("Avg reward")
-            #     print(final_reward.mean())
 
             g_q_np = []
             if len(g_q_estimates_list) > 0:
@@ -473,6 +493,7 @@ def main():
             else:
                 num_twist_updates_to_do = 2 ** epoch
 
+        condition_twist_on_tokens = None
         for twist_update in range(num_twist_updates_to_do):
 
             print(f"Twist update: {twist_update}")
@@ -480,23 +501,46 @@ def main():
 
             query_tensors = batch_prompt_pt
 
-            # full_seq = model.generate(batch_prompt_pt, do_sample=True, num_beams=1, max_length=prompt_len+args.output_len, min_length=-1,
-            #                       top_k=0.0, top_p=1.0, pad_token_id=tokenizer.eos_token_id,
-            # )
-            full_seq = model.generate(batch_prompt_pt, max_length=prompt_len+args.output_len, **gen_kwargs)
+
+            if args.rm_type == "p_last_tokens":
+                # TODO Modify anywhere there is model.generate, if using plasttokens (add the conditioning tokens)
+                base_model_seqs = ref_model.generate(batch_prompt_pt,
+                                          max_length=prompt_len + args.output_len + args.num_last_tokens_to_condition_on,
+                                          **gen_kwargs)
+
+                condition_twist_on_tokens = base_model_seqs[:, prompt_len+args.output_len:]
+
+                q_tokens = model.generate(batch_prompt_pt,
+                                          max_length=prompt_len + args.output_len,
+                                          condition_twist_on_tokens=condition_twist_on_tokens,
+                                          **gen_kwargs)
+
+                full_seq = q_tokens
+
+
+                # full_seq = torch.cat((q_tokens, condition_twist_on_tokens), dim=-1)
+
+
+                # print("hihi")
+                # print(q_tokens.shape)
+                # print(condition_twist_on_tokens.shape)
+                # print(full_seq.shape)
+
+
+            else:
+                full_seq = model.generate(batch_prompt_pt, max_length=prompt_len+args.output_len, **gen_kwargs)
+
             response_tensors = full_seq[:, prompt_len:]
 
-            # rewards = torch.zeros_like(response_tensors)
-            final_reward = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, class_num)
-            # print(rewards)
+            rewards = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model, condition_twist_on_tokens)
 
-            # print(final_reward)
-            # rewards = torch.cat((rewards[:, :-1], final_reward[:, None]), dim=-1)
-
-            rewards = final_reward
-            # print(rewards)
-
-            stats = ppo_trainer.step(list(query_tensors), list(response_tensors), list(rewards))
+            if condition_twist_on_tokens is not None:
+                stats = ppo_trainer.step(list(query_tensors),
+                                         list(response_tensors),
+                                         list(rewards),
+                                         condition_twist_on_tokens=condition_twist_on_tokens)
+            else:
+                stats = ppo_trainer.step(list(query_tensors), list(response_tensors), list(rewards), )
             # print(stats)
 
 
@@ -534,7 +578,7 @@ if __name__ == "__main__":
                                  "p_last_tokens", "toy_test"])
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
-                        help="Number of last tokens to condition on (only for the rm_type == p_last_tokens or rm_type == )")
+                        help="Number of last tokens to condition on (only for the rm_type == p_last_tokens)")
 
 
     parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
@@ -566,5 +610,8 @@ if __name__ == "__main__":
 
     if args.only_train_nn_head:
         assert args.hface_nn_twist
+
+    if args.rm_type == "p_last_tokens":
+        assert args.num_last_tokens_to_condition_on > 0
 
     main()

@@ -34,7 +34,6 @@ class NNHead(nn.Module):
 
 
 
-
 class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
     r"""
     An autoregressive model with a value head in addition to the language model head.
@@ -70,7 +69,7 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         "v_head_init_strategy",
     )
 
-    def __init__(self, pretrained_model, **kwargs):
+    def __init__(self, pretrained_model, conditional_twist=False, **kwargs):
         r"""
         Initializes the model.
 
@@ -84,10 +83,13 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         super().__init__(pretrained_model, **kwargs)
         v_head_kwargs, _, _ = self._split_kwargs(kwargs)
 
+        self.conditional_twist = conditional_twist
+
         if not any(hasattr(self.pretrained_model, attribute) for attribute in self.lm_head_namings):
             raise ValueError("The model does not have a language model head, please use a model that has one.")
 
         self.v_head = ValueHead(self.pretrained_model.config, **v_head_kwargs)
+
 
         for x in self.pretrained_model.named_parameters():
             if 'wte' in x[0]:
@@ -95,17 +97,13 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
                 output_size = x[1].shape[0]
                 break
 
+        if conditional_twist:
+            hidden_size = d_model * 2
+            self.v_head.summary = nn.Linear(hidden_size, 1)
+        else:
+            hidden_size = d_model
         # Add a custom NN after the model embedding (increases capacity)
-        hidden_size = d_model
         self.nn_head = NNHead(hidden_size, output_size)
-        # self.linear1 = nn.Linear(hidden_size, hidden_size)
-        # self.relu1 = nn.ReLU()
-        # self.linear2 = nn.Linear(hidden_size, hidden_size)
-        # self.relu2 = nn.ReLU()
-        # self.linear3 = nn.Linear(hidden_size, output_size)
-        #
-        # self.linear_layers = [self.linear1, self.linear2, self.linear3]
-        # self.layers = [self.linear1, self.relu1, self.linear2, self.relu2, self.linear3]
 
         self._init_weights(**v_head_kwargs)
 
@@ -153,6 +151,7 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         past_key_values=None,
         attention_mask=None,
         do_value_calc=True,
+        condition_twist_on_tokens=None,
         **kwargs,
     ):
         r"""
@@ -172,6 +171,9 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             kwargs (`dict`, `optional`):
                 Additional keyword arguments, that are passed to the wrapped model.
         """
+        if self.conditional_twist:
+            assert condition_twist_on_tokens is not None
+
         kwargs["output_hidden_states"] = True  # this had already been set in the LORA / PEFT examples
         kwargs["past_key_values"] = past_key_values
 
@@ -184,13 +186,33 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             **kwargs,
         )
 
-        last_hidden_state = base_model_output.hidden_states[-1]
+        if condition_twist_on_tokens is not None:
 
+            if attention_mask is not None:
+                print(attention_mask.shape)
+                # FORCES attention on all conditioning tokens
+                attention_mask = torch.ones_like(condition_twist_on_tokens)
+
+            condition_tokens_base_model_output = self.pretrained_model(
+                input_ids=condition_twist_on_tokens,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+            # print(input_ids.shape)
+            # print(condition_twist_on_tokens.shape)
+            # print(base_model_output.hidden_states[-1].shape)
+            # print(condition_tokens_base_model_output.hidden_states[-1].shape)
+
+            last_hidden_state = torch.cat((base_model_output.hidden_states[-1], condition_tokens_base_model_output.hidden_states[-1].expand(base_model_output.hidden_states[-1].shape)), dim=-1)
+            # print(condition_tokens_base_model_output.hidden_states[-1].expand(base_model_output.hidden_states[-1].shape).shape)
+            # print(last_hidden_state.shape)
+            # 1/0
+        else:
+            last_hidden_state = base_model_output.hidden_states[-1]
 
 
         # lm_logits = base_model_output.logits
         loss = base_model_output.loss
-
 
         if last_hidden_state.device != self.v_head.summary.weight.device:
             last_hidden_state = last_hidden_state.to(self.v_head.summary.weight.device)
@@ -207,38 +229,21 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
 
         return (lm_logits, loss, value)
 
-    def generate(self, inputs, max_length, *args, attention_mask=None, **kwargs):
+    def generate(self, inputs, max_length, *args, attention_mask=None, condition_twist_on_tokens=None, **kwargs):
         r"""
         CUSTOM. Only sample available right now.
         """
 
         input_ids = inputs
 
-        # pad_token_id = self.pretrained_model.generation_config.pad_token_id
-        # eos_token_id = self.pretrained_model.generation_config.eos_token_id
-        # eos_token_id_tensor = torch.tensor(eos_token_id).to(
-        #     input_ids.device) if eos_token_id is not None else None
-        # unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
-
+        # cum_logp = None
 
         while input_ids.shape[-1] < max_length:
 
-            lm_logits, _, _ = self.forward(input_ids, return_dict=True,
-                 output_hidden_states=True, do_value_calc=False, attention_mask=attention_mask)
-
-            # forward pass to get next token
-            # base_model_output = self.pretrained_model(
-            #     input_ids=input_ids,
-            #     attention_mask=attention_mask,
-            #     return_dict=True,
-            #     output_hidden_states=True,
-            #     **kwargs
-            # )
-            #
-            # last_hidden_state = base_model_output.hidden_states[-1]
-            # if last_hidden_state.device != self.v_head.summary.weight.device:
-            #     last_hidden_state = last_hidden_state.to(self.v_head.summary.weight.device)
-            # lm_logits = base_model_output.logits + self.nn_head(last_hidden_state)
+            lm_logits, _, _ = self.forward(
+                input_ids, return_dict=True,
+                output_hidden_states=True, do_value_calc=False, attention_mask=attention_mask,
+                condition_twist_on_tokens=condition_twist_on_tokens)
 
             next_token_logits = lm_logits[:, -1, :]
 
@@ -246,25 +251,24 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             probs = nn.functional.softmax(next_token_logits, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
-            # next_tokens = next_tokens * unfinished_sequences + pad_token_id * (
-            #         1 - unfinished_sequences)
+            # print("Probs")
+            # probs_selected = torch.gather(probs, 1, next_tokens[:, None])
+            # print(probs_selected)
+            # # print(probs.max(dim=-1))
+            # # print(next_tokens)
+            # i = 0
+            # for x in next_tokens:
+            #     print(probs[i, x])
+            #     i += 1
+            # if cum_logp is None:
+            #     cum_logp = probs_selected.log()
+            # else:
+            #     cum_logp += probs_selected.log()
+            # print("cum_logp")
+            # print(cum_logp)
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-
-            # # if eos_token was found in one sentence, set sentence to finished
-            # unfinished_sequences = unfinished_sequences.mul(
-            #     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(
-            #         eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
-            # )
-
-            # stop when each sentence is finished
-            # if unfinished_sequences.max() == 0:
-            #     this_peer_finished = True
-            #
-            # if this_peer_finished:
-            #     break
-
         return input_ids
 
     def state_dict(self, *args, **kwargs):
@@ -332,3 +336,9 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             self.register_forward_hook(set_device_hook)
 
             self.is_sequential_parallel = True
+
+
+class CustomAutoModelForCausalLMWithValueHeadandConditionalTwist(CustomAutoModelForCausalLMWithValueHead):
+    def __init__(self, pretrained_model, **kwargs):
+        super().__init__(pretrained_model, conditional_twist=True, **kwargs)
+

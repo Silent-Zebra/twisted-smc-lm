@@ -630,6 +630,7 @@ class PPOTrainer(BaseTrainer):
         responses: List[torch.LongTensor],
         scores: List[torch.FloatTensor],
         response_masks: Optional[List[torch.LongTensor]] = None,
+        condition_twist_on_tokens=None
     ):
         """
         Run a PPO optimisation step given a list of queries, model responses, and rewards.
@@ -724,15 +725,27 @@ class PPOTrainer(BaseTrainer):
                 model_inputs,
                 response_masks=response_masks,
                 return_logits=full_kl_penalty,
+                condition_twist_on_tokens=condition_twist_on_tokens
             )
             with self.optional_peft_ctx():
-                ref_logprobs, ref_logits_or_none, _, _ = self.batched_forward_pass(
-                    self.model if self.is_peft_model else self.ref_model,
-                    queries,
-                    responses,
-                    model_inputs,
-                    return_logits=full_kl_penalty,
-                )
+                if self.is_peft_model:
+                    ref_logprobs, ref_logits_or_none, _, _ = self.batched_forward_pass(
+                        self.model,
+                        queries,
+                        responses,
+                        model_inputs,
+                        return_logits=full_kl_penalty,
+                        condition_twist_on_tokens=condition_twist_on_tokens
+                    )
+                else:
+                    ref_logprobs, ref_logits_or_none, _, _ = self.batched_forward_pass(
+                        self.ref_model,
+                        queries,
+                        responses,
+                        model_inputs,
+                        return_logits=full_kl_penalty,
+                        condition_twist_on_tokens=None
+                    )
 
         timing["time/ppo/forward_pass"] = time.time() - t
 
@@ -800,6 +813,7 @@ class PPOTrainer(BaseTrainer):
                             mini_batch_dict["responses"],
                             model_inputs,
                             return_logits=True,
+                            condition_twist_on_tokens=condition_twist_on_tokens
                         )
                         train_stats = self.train_minibatch(
                             mini_batch_dict["logprobs"],
@@ -955,6 +969,7 @@ class PPOTrainer(BaseTrainer):
         model_inputs: dict,
         return_logits: bool = False,
         response_masks: Optional[torch.Tensor] = None,
+        condition_twist_on_tokens=None,
     ):
         """
         Calculate model outputs in multiple batches.
@@ -989,7 +1004,11 @@ class PPOTrainer(BaseTrainer):
             response_batch = responses[i * fbs : (i + 1) * fbs]
             if response_masks is not None:
                 response_masks_batch = response_masks[i * fbs : (i + 1) * fbs]
-            logits, _, values = model(**input_kwargs)
+
+            if condition_twist_on_tokens is None:
+                logits, _, values = model(**input_kwargs)
+            else:
+                logits, _, values = model(condition_twist_on_tokens=condition_twist_on_tokens, **input_kwargs)
 
             if self.is_encoder_decoder:
                 input_ids = input_kwargs["decoder_input_ids"]
