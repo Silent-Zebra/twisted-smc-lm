@@ -2625,9 +2625,13 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     f_q_list_by_seed, kl_ub_iwae_across_seeds, kl_lb_iwae_across_seeds, kl_ub_smc_across_seeds, kl_lb_smc_across_seeds, \
     iwae_upper_bound_across_seeds, iwae_lower_bound_across_seeds, smc_upper_bound_across_seeds, smc_lower_bound_across_seeds \
         = list_of_stuff_across_seeds_only_largest_n_samples
+    print(f_q_list_by_seed)
     f_q_list_by_seed = jnp.stack(f_q_list_by_seed)
     print("f_q_list_shape")
     print(f_q_list_by_seed.shape)
+    f_q_list_by_seed = f_q_list_by_seed.reshape(f_q_list_by_seed.shape[0] * f_q_list_by_seed.shape[1],)
+    print(f_q_list_by_seed.shape)
+
     avg_f_q_estimate = f_q_list_by_seed.mean()
 
 
