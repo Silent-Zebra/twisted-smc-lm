@@ -457,7 +457,7 @@ def main():
                         else:
                             range_val = true_posterior_samples.shape[0] // n_samples_f_q + 1
                         for j in range(range_val):
-                            samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
+                            samples = true_posterior_samples[j * n_samples_f_q: (j+1) * n_samples_f_q]
                             if samples.shape[0] != 0:
                                 print(f"TIME: {time.time() - new_start}", flush=True)
                                 print("G_q Estimates Learned Model")
