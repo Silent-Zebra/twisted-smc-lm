@@ -203,7 +203,7 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             # print(base_model_output.hidden_states[-1].shape)
             # print(condition_tokens_base_model_output.hidden_states[-1].shape)
 
-            last_hidden_state = torch.cat((base_model_output.hidden_states[-1], condition_tokens_base_model_output.hidden_states[-1].expand(base_model_output.hidden_states[-1].shape)), dim=-1)
+            last_hidden_state = torch.cat((base_model_output.hidden_states[-1], condition_tokens_base_model_output.hidden_states[-1][:, -1, :].expand(base_model_output.hidden_states[-1].shape)), dim=-1)
             # print(condition_tokens_base_model_output.hidden_states[-1].expand(base_model_output.hidden_states[-1].shape).shape)
             # print(last_hidden_state.shape)
             # 1/0
