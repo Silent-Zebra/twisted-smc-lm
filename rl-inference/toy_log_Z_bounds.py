@@ -68,7 +68,7 @@ records_labels_list = ["True Log Z",
 
 
 n_seeds = 4
-
+n_seeds_f_q_rew_and_kl = 4
 
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
 def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist):
@@ -617,7 +617,7 @@ class ExperimentConfig:
         prompt, output_len, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, start, hist_token_index, epoch, huggingface_model, proposal_is_p,
         true_posterior_samples_by_prompt_and_by_token, prompt_num, true_log_z, plot_over_time_list, tokenizer=None,
-        proposal_scores_list=None, kl_to_prior_list=None
+        proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None
     ):
         prompt_len = prompt.shape[-1]
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
@@ -706,7 +706,9 @@ class ExperimentConfig:
                                                    condition_twist_on_tokens=condition_twist_on_tokens,
                                                    huggingface_model=huggingface_model,
                                                    proposal_is_p=proposal_is_p,
-                                                   tokenizer=tokenizer, proposal_scores_list=proposal_scores_list, kl_to_prior_list=kl_to_prior_list
+                                                   tokenizer=tokenizer, proposal_scores_list=proposal_scores_list,
+                                                   kl_to_prior_list=kl_to_prior_list,
+                                                   f_q_estimates_list=f_q_estimates_list
                                                    )
         else:
             raise NotImplementedError
@@ -937,25 +939,25 @@ class ExperimentConfig:
                 print(jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples)))
 
 
-            avg_f_q_estimate = 0.
-            for i in range(n_seeds):
-                rng_key, sk_i = jax.random.split(rng_key)
-                f_q_estimate = get_f_q_estimate(
-                    sk_i, prompt, cfg_p,
-                    params_p, cfg_twist,
-                    params_twist, log_true_final_twist,
-                    output_len, n_samples,
-                    self.n_vocab, smc_procedure_type=self.smc_procedure_type,
-                    prepend_tokens_for_twists=prepend_tokens_for_twists,
-                    condition_twist_on_tokens=None,
-                    # TODO later may need to set up the conditional beta...
-                    token_of_interest_as_int=token_of_interest_as_int,
-                    proposal_is_p=proposal_is_p,
-                    huggingface_model=huggingface_model)
-                avg_f_q_estimate += f_q_estimate
-            avg_f_q_estimate /= n_seeds
-
-            print(f"Avg F_q Estimate: {avg_f_q_estimate}")
+            # avg_f_q_estimate = 0.
+            # for i in range(n_seeds):
+            #     rng_key, sk_i = jax.random.split(rng_key)
+            #     f_q_estimate = get_f_q_estimate(
+            #         sk_i, prompt, cfg_p,
+            #         params_p, cfg_twist,
+            #         params_twist, log_true_final_twist,
+            #         output_len, n_samples,
+            #         self.n_vocab, smc_procedure_type=self.smc_procedure_type,
+            #         prepend_tokens_for_twists=prepend_tokens_for_twists,
+            #         condition_twist_on_tokens=None,
+            #         # TODO later may need to set up the conditional beta...
+            #         token_of_interest_as_int=token_of_interest_as_int,
+            #         proposal_is_p=proposal_is_p,
+            #         huggingface_model=huggingface_model)
+            #     avg_f_q_estimate += f_q_estimate
+            # avg_f_q_estimate /= n_seeds
+            #
+            # print(f"Avg F_q Estimate: {avg_f_q_estimate}")
 
         elif self.rm_type == "p_last_tokens":
             p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p,
@@ -1169,65 +1171,6 @@ class ExperimentConfig:
 
 
 
-
-
-    # def test_info(self, rng_key, start, indices_of_tokens_chosen,
-    #               true_posterior_samples_by_token, prompt, prompt_len,
-    #               cfg_p, params_p, cfg_twist, params_twist, output_len,
-    #               log_true_final_twist, n_test_smc_samples,
-    #               hist_token_index, records_list_by_twist, proposal_is_p,
-    #               prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model):
-    #     rng_key, sk, sk2, sk3 = jax.random.split(rng_key, 4)
-    #
-    #     if self.rm_type == "bad_word_pos":
-    #         raise NotImplementedError  # TODO reimplement/fix if you want to use this
-    #
-    #     elif self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index":
-    #         rng_key, sk = jax.random.split(rng_key)
-    #         print("Inspecting STUFF")
-    #         print(f"TIME: {time.time() - start}", flush=True)
-    #         inspect_and_record_evidence_setting(sk,
-    #                                             indices_of_tokens_chosen,
-    #                                             true_posterior_samples_by_token,
-    #                                             prompt, prompt_len,
-    #                                             cfg_p, params_p,
-    #                                             cfg_twist,
-    #                                             params_twist,
-    #                                             self.n_vocab, output_len,
-    #                                             log_true_final_twist,
-    #                                             n_test_smc_samples,
-    #                                             hist_token_index,
-    #                                             records_list_by_twist,
-    #                                             proposal_is_p,
-    #                                             prepend_tokens_for_twists=True)
-    #
-    #         print("--- COMPARING VS OPTIMAL TWISTS ---")
-    #         print(f"TIME: {time.time() - start}", flush=True)
-    #         for i in range(len(indices_of_tokens_chosen)):
-    #             avg_rel_diff = compare_learned_twist_vs_optimal(
-    #                 prompt,
-    #                 self.n_vocab,
-    #                 output_len,
-    #                 cfg_p,
-    #                 params_p,
-    #                 log_true_final_twist[i],
-    #                 cfg_twist,
-    #                 params_twist,
-    #                 rm_type=self.rm_type,
-    #                 prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-    #                 token_of_interest_as_int=token_of_interest_as_int,
-    #                 huggingface_model=huggingface_model,
-    #                 verbose=True,
-    #                 relative_diff_loss=True,
-    #                 stop_grad=True
-    #             )
-    #             print(
-    #                 f"AVG REL DIFF (averaged with equal weight per time step (averaged within a time step)): {avg_rel_diff}")
-    #         print(f"TIME: {time.time() - start}", flush=True)
-    #     else:
-    #         raise NotImplementedError
-    #
-    #     return rng_key
 
     def get_log_true_final_twists(self, rng_key, jnp_prompts, cfg_p,
                                   params_p,
@@ -1512,10 +1455,6 @@ class ExperimentConfig:
 
 
 
-# @partial(jax.jit, static_argnames=[
-#     "log_true_final_twist", 'output_len', 'n_test_smc_samples', "prompt_len",
-#     "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",
-#     "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type"])
 def inspect_and_record_evidence_setting_for_index(
     rng_key, prompt, cfg_p, params_p, cfg_twist,
     params_twist, n_vocab, output_len, log_true_final_twist,
@@ -2423,8 +2362,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                      params_p, cfg_twist, params_twist, log_true_final_twist, start, hist_token_index, epoch,
                      true_log_z, plot_over_time_list, smc_procedure_type, proposal_is_p=False,
                      prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
-                     proposal_scores_list=None, kl_to_prior_list=None):
-
+                     proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None):
 
     if token_of_interest_as_int is not None:
         print("TOKEN OF INTEREST")
@@ -2743,6 +2681,9 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
 
             assert proposal_scores_list[0] is not None
             assert kl_to_prior_list[0] is not None
+
+            if args.rm_type == "p_last_tokens":
+                f_q_estimates_list_of_arrays = f_q_estimates_list
 
             checkpoints.save_checkpoint(
                 ckpt_dir=args.save_dir,
@@ -3898,19 +3839,53 @@ def main():
                 print(f"TEST INFO STARTING", flush=True)
                 print(f"TIME: {time.time() - start}", flush=True)
 
-                # DO inspect samples regardless of whether we plot logZ bounds or not
-                rng_key, aux_info, proposal_scores, kl_vals = experiment_cfg.inspect_results(
-                    rng_key, prompt, cfg_p, params_p, cfg_twist,
-                    params_twist, log_true_final_twist,
-                    args.output_len,
-                    args.n_samples_for_plots_larger,
-                    indices_of_continuation, tokenizer,
-                    prepend_tokens_for_twists=False,
-                    token_of_interest_as_int=None,
-                    proposal_is_p=args.proposal_is_p,
-                    huggingface_model=huggingface_model)
+                proposal_scores = None
+                kl_vals = None
+                f_qs = None
+                for seed in range(n_seeds_f_q_rew_and_kl):
+                    # DO inspect samples regardless of whether we plot logZ bounds or not
+                    rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
+                        rng_key, prompt, cfg_p, params_p, cfg_twist,
+                        params_twist, log_true_final_twist,
+                        args.output_len,
+                        args.n_samples_for_plots_larger,
+                        indices_of_continuation, tokenizer,
+                        prepend_tokens_for_twists=False,
+                        token_of_interest_as_int=None,
+                        proposal_is_p=args.proposal_is_p,
+                        huggingface_model=huggingface_model)
+                    if proposal_scores is None:
+                        proposal_scores = proposal_scores_for_seed
+                        kl_vals = kl_vals_for_seed
+                    else:
+                        proposal_scores = jnp.concatenate((proposal_scores, proposal_scores_for_seed), axis=0)
+                        kl_vals = jnp.concatenate((kl_vals, kl_vals_for_seed), axis=0)
+
+                    if args.rm_type == "p_last_tokens" and args.beta_temp == 1.:
+                        g_q_estimates, f_q_estimates = aux_info
+                        # g_q_estimates_list.append(g_q_estimates)
+                        # f_q_estimates_list.append(f_q_estimates)
+                        # experiment_cfg.plot_plasttokens(g_q_estimates_list,
+                        #                                 f_q_estimates_list)
+                        if f_qs is None:
+                            f_qs = f_q_estimates
+                        else:
+                            f_qs = jnp.concatenate((f_qs, f_q_estimates), axis=0)
+
+                print("shapes of f_q, scores, kl")
+                if args.rm_type == "p_last_tokens" and args.beta_temp == 1.:
+                    print(f_qs.shape)
+                    f_q_estimates_list.append(f_qs)
+                print(proposal_scores.shape)
+                print(kl_vals.shape)
+
                 proposal_scores_list.append(proposal_scores)
                 kl_to_prior_list.append(kl_vals)
+                # TODO DEC: should clean this up by having various config flags for each experiment setting:
+                # E.g. has_true_posterior_samples, then whenever that's true, you do the bunch of code related to that
+                # And then do_inspect_results, for which you do the below
+                # use_partial_jit
+                # etc.
 
                 if (not huggingface_model) and (true_log_z is None):
                     if experiment_cfg.rm_type == "indicator_at_index" or experiment_cfg.rm_type == "p_token_last_index" \
@@ -3962,7 +3937,8 @@ def main():
                         "plot_over_time_list": plot_over_time_list,
                         "tokenizer": tokenizer,
                         "proposal_scores_list": proposal_scores_list,
-                        "kl_to_prior_list": kl_to_prior_list
+                        "kl_to_prior_list": kl_to_prior_list,
+                        "f_q_estimates_list": f_q_estimates_list
                     }
 
                     if args.proposal_is_p_for_plots and args.hface_model_type in ["gpt2medium", "gpt2large"]:
@@ -3976,40 +3952,7 @@ def main():
                         plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
                         rng_key, plot_over_time_list_p_proposal = experiment_cfg.plot_logZ_bounds_based_on_cfg(**plot_args) # Use the same unchanged rng_key
 
-                    # rng_key, plot_over_time_list = experiment_cfg.plot_logZ_bounds_based_on_cfg(
-                    #     rng_key, indices_of_tokens_chosen,
-                    #     true_posterior_samples_by_token,
-                    #     prompt, args.output_len, cfg_p,
-                    #     params_p, cfg_twist, params_twist,
-                    #     log_true_final_twist, start, hist_token_index,
-                    #     epoch, huggingface_model, args.proposal_is_p_for_plots,
-                    #     true_posterior_samples_by_prompt_and_by_token,
-                    #     prompt_num, true_log_z, plot_over_time_list, tokenizer
-                    # )
 
-                # # DO inspect samples regardless of whether we plot logZ bounds or not
-                # rng_key, aux_info = experiment_cfg.inspect_results(
-                #     rng_key, prompt, cfg_p, params_p, cfg_twist,
-                #     params_twist, log_true_final_twist,
-                #     args.output_len,
-                #     args.n_test_smc_samples,
-                #     indices_of_continuation, tokenizer,
-                #     prepend_tokens_for_twists=False,
-                #     token_of_interest_as_int=None,
-                #     proposal_is_p=args.proposal_is_p,
-                #     huggingface_model=huggingface_model)
-
-                if args.rm_type == "p_last_tokens" and args.beta_temp == 1.:
-                    g_q_estimates, f_q_estimates = aux_info
-                    g_q_estimates_list.append(g_q_estimates)
-                    f_q_estimates_list.append(f_q_estimates)
-                    experiment_cfg.plot_plasttokens(g_q_estimates_list,
-                                                    f_q_estimates_list)
-                # TODO DEC: should clean this up by having various config flags for each experiment setting:
-                # E.g. has_true_posterior_samples, then whenever that's true, you do the bunch of code related to that
-                # And then do_inspect_results, for which you do the below
-                # use_partial_jit
-                # etc.
 
 
 
@@ -4361,10 +4304,13 @@ if __name__ == "__main__":
     if args.rm_type == "p_last_tokens":
         # n_samples_for_plots = [1, 32]
         n_seeds = 30
+        assert args.n_true_posterior_samples == 2000
 
     if args.hface_model_type == "gpt2large":
         # n_samples_for_plots = [32, 100]
         n_seeds = 4
+
+
     # elif args.hface_model_type == "gpt2medium":
     #     n_samples_for_plots = [32, 100]
 
@@ -4372,5 +4318,6 @@ if __name__ == "__main__":
 
     if args.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_vmap_with_one_total_kl"]:
         assert args.rm_type == "p_last_tokens"
+
 
     main()
