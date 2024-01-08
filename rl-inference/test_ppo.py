@@ -339,6 +339,9 @@ def main():
         print("TEST INFO")
 
         n_seeds_f_q = 4 #5 reduce time spent on this
+        if args.rm_type == "p_last_tokens":
+            n_seeds_f_q = 30
+
         batch_prompt_for_f_q = np.full((n_samples_f_q, np_prompts.shape[-1]),
                                        np_prompts)
         batch_prompt_for_f_q_pt = torch.tensor(batch_prompt_for_f_q,
