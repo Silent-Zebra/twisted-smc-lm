@@ -349,7 +349,7 @@ def main():
 
     elif args.rm_type == "p_last_tokens":
         true_posterior_samples = None
-        condition_twist_on_tokens = None
+        condition_twist_on_tokens_all = None
         for i in range(n_seeds_f_q):
             base_model_seqs = ref_model.generate(batch_prompt_for_f_q_pt,
                                                  max_length=prompt_len + args.output_len + args.num_last_tokens_to_condition_on,
@@ -361,11 +361,11 @@ def main():
             true_posts = base_model_seqs[:,
                                      :prompt_len + args.output_len]
 
-            if condition_twist_on_tokens is None:
-                condition_twist_on_tokens = condition_tokens
+            if condition_twist_on_tokens_all is None:
+                condition_twist_on_tokens_all = condition_tokens
                 true_posterior_samples = true_posts
             else:
-                condition_twist_on_tokens = torch.cat((condition_twist_on_tokens, condition_tokens), axis=0)
+                condition_twist_on_tokens_all = torch.cat((condition_twist_on_tokens_all, condition_tokens), axis=0)
                 true_posterior_samples = torch.cat((true_posterior_samples, true_posts), axis=0)
 
 
@@ -392,9 +392,12 @@ def main():
                 print(f"TIME: {time.time() - new_start}", flush=True)
 
                 if args.rm_type == "p_last_tokens":
+                    condition_twist_on_tokens = condition_twist_on_tokens_all[
+                                                i * n_samples_f_q: (i + 1) * n_samples_f_q]
+
                     f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(
                         model, ref_model, n_samples_f_q,
-                        condition_twist_on_tokens=condition_twist_on_tokens[i * n_samples_f_q: (i + 1) * n_samples_f_q])
+                        condition_twist_on_tokens=condition_twist_on_tokens)
 
                 else:
                     f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples_f_q)
@@ -462,7 +465,7 @@ def main():
                                 # print(condition_twist_on_tokens.shape)
                                 # print(condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q].shape)
                                 if condition_twist_on_tokens is not None:
-                                    g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens[j * n_samples_f_q: (j + 1) * n_samples_f_q])
+                                    g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens_all[j * n_samples_f_q: (j + 1) * n_samples_f_q])
                                 else:
                                     g_qs = g_q_estimate(model, ref_model, samples)
 
