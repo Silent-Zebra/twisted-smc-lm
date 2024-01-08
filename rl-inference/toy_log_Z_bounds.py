@@ -67,7 +67,7 @@ records_labels_list = ["True Log Z",
                        ] # TODO Sep 16 make dynamic later
 
 
-n_seeds = 5
+n_seeds = 4
 
 
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
@@ -1563,6 +1563,8 @@ def inspect_and_record_evidence_setting_for_index(
         iwae_log_w_upper) - jnp.log(
         iwae_log_w_upper.shape[0])
 
+    f_qs = iwae_log_w_lower
+
     # true_all_post_upper_bound_estimate = upper_bound_log_Z_sigma_estimate(
     #     true_posterior_samples, log_true_final_twist, cfg_p,
     #     params_p, cfg_twist, params_twist, prompt_len,
@@ -1626,7 +1628,7 @@ def inspect_and_record_evidence_setting_for_index(
          true_all_post_upper_bound_estimate,
          iwae_upper_bound_estimate, iwae_lower_bound_estimate,
          smc_upper_bound_estimate, smc_lower_bound_estimate,
-         f_q_estimate, analytic_kl_q_sigma,
+         f_qs, analytic_kl_q_sigma,
          kl_q_sigma_iwae_upper_bound_estimate,
          kl_q_sigma_iwae_lower_bound_estimate,
          kl_q_sigma_smc_upper_bound_estimate,
@@ -1641,112 +1643,6 @@ inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argn
 ])(inspect_and_record_evidence_setting_for_index)
 
 
-
-# def inspect_and_record_evidence_setting(rng_key, indices_of_tokens_chosen, true_posterior_samples_by_token, prompt, prompt_len, cfg_p, params_p, cfg_twist,
-#                              params_twist, n_vocab, output_len, log_true_final_twist_not_yet_indexed, n_test_smc_samples, hist_token_index,
-#                                         records_list_by_twist, proposal_is_p=False, prepend_tokens_for_twists=True, huggingface_model=None):
-#
-#     # Note: mutuates records_list_by_twist
-#
-#     for i in range(len(indices_of_tokens_chosen)):
-#         rng_key, sk = jax.random.split(rng_key)
-#
-#         log_true_final_twist = log_true_final_twist_not_yet_indexed[i]
-#
-#         token_of_interest_as_int = indices_of_tokens_chosen[i]
-#         # token_of_interest = ordered_token_list[token_of_interest_as_int]
-#         true_posterior_samples = true_posterior_samples_by_token[i]
-#
-#         print(f"Currently investigating token: {token_of_interest_as_int}", flush=True)
-#
-#         if not huggingface_model:
-#             _, _, true_log_z = \
-#                 calc_analytic_sigma_vals(prompt, prompt_len, n_vocab,
-#                                          output_len, cfg_p, params_p,
-#                                          log_true_final_twist, return_log=True)
-#             analytic_kl_q_sigma = calc_analytic_kl(prompt, prompt_len, n_vocab,
-#                                                    output_len,
-#                                                    cfg_p, params_p, cfg_twist,
-#                                                    params_twist,
-#                                                    log_true_final_twist,
-#                                                    prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-#                                                    token_of_interest_as_int=token_of_interest_as_int)
-#         else:
-#             true_log_z = -jnp.inf
-#             analytic_kl_q_sigma = -jnp.inf
-#
-#         list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_for_index(
-#             sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist, n_vocab,
-#             output_len, log_true_final_twist, n_test_smc_samples,
-#             token_of_interest_as_int, true_posterior_samples,
-#             true_log_z, analytic_kl_q_sigma, smc_procedure_type, proposal_is_p,
-#             prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-#         huggingface_model=huggingface_model)
-#
-#         # if i == 0: # only check a single set of twists for now
-#         for j in range(len(list_of_things_to_append_for_record_list)):
-#             records_list_by_twist[i][j].append(
-#                 np.array(list_of_things_to_append_for_record_list[j]))
-#             # records_list_by_twist[i][j].append(list_of_things_to_append_for_record_list[j])
-#
-#         true_log_z, true_one_post_upper_bound_estimate, \
-#         true_all_post_upper_bound_estimate, \
-#         iwae_upper_bound_estimate, iwae_lower_bound_estimate, \
-#         smc_upper_bound_estimate, smc_lower_bound_estimate, \
-#         f_q_estimate, analytic_kl_q_sigma, \
-#         kl_q_sigma_iwae_upper_bound_estimate, \
-#         kl_q_sigma_iwae_lower_bound_estimate, \
-#         kl_q_sigma_smc_upper_bound_estimate, \
-#         kl_q_sigma_smc_lower_bound_estimate = (*list_of_things_to_append_for_record_list,)
-#
-#         print(f"True log Z value: {true_log_z}")
-#         print(f"IWAE Lower Bound estimate: {iwae_lower_bound_estimate}")
-#         print(f"IWAE Upper Bound Estimate: {iwae_upper_bound_estimate}")
-#         print(f"Num of true posterior samples for token {token_of_interest_as_int}: {true_posterior_samples.shape[0]}")
-#         print(f"True upper bound estimate (avg over all posterior): {true_all_post_upper_bound_estimate}")
-#         print(f"True upper bound estimate (only one posterior): {true_one_post_upper_bound_estimate}")
-#         print(f"F(q) (= E[log w]) estimate: {f_q_estimate}")
-#         print(f"Analytic KL(q||sigma): {analytic_kl_q_sigma}")
-#         print(f"KL(q||sigma) estimate using true log Z: {true_log_z - f_q_estimate}")
-#         print(f"KL(q||sigma) upper bound (using all true posterior bound on log Z): {true_all_post_upper_bound_estimate - f_q_estimate}")
-#         print(f"KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_q_sigma_iwae_upper_bound_estimate}")
-#         print(f"KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_q_sigma_iwae_lower_bound_estimate}")
-#         kl_estimate_smc = smc_upper_bound_estimate - smc_lower_bound_estimate
-#         kl_estimate_iwae = iwae_upper_bound_estimate - iwae_lower_bound_estimate
-#         print(f"SMC lower bound estimate: {smc_lower_bound_estimate}")
-#         print(f"SMC upper bound estimate: {smc_upper_bound_estimate}")
-#         print(f"KL(q||sigma) upper bound (using SMC bound on log Z): {kl_q_sigma_smc_upper_bound_estimate}")
-#         print(f"KL(q||sigma) lower bound (using SMC bound on log Z): {kl_q_sigma_smc_lower_bound_estimate}")
-#
-#         print(f"Gap in bounds (KL(prop_iwae||target_iwae) + KL(target_iwae||prop_iwae) estimate): {kl_estimate_iwae}")
-#         print(f"Gap in bounds (KL(prop_smc||target_smc) + KL(target_smc||prop_smc) estimate): {kl_estimate_smc}")
-#
-#         make_hists(true_posterior_samples, smc_samples, prompt_len,
-#                    token_of_interest_as_int, hist_token_index)
-#
-#         # true_posterior_samples_hist = hist_by_token_index(
-#         #     true_posterior_samples, token_index=hist_token_index)
-#         # print("Extracted samples proportion by last token")
-#         # print(true_posterior_samples_hist)
-#         #
-#         # if args.rm_type == "indicator_at_index":
-#         #     print("SMC SAMPLES (extracted):")
-#         #     extracted_smc_samples = smc_samples[smc_samples[:,
-#         #                                         prompt_len + args.indicator_pos_zero_index] == token_of_interest_as_int]
-#         #     print(f"Num extracted Samples: {extracted_smc_samples.shape[0]}")
-#         #     print(f"Num total Samples: {smc_samples.shape[0]}")
-#         #     # print(smc_samples) # TODO AUG 27 check that these approximately match the true posterior. Devise a counting test over marginal probabilities to make sure this is the case (print it first, then turn it into a test case)
-#         #     smc_samples_hist = hist_by_token_index(
-#         #         extracted_smc_samples, token_index=hist_token_index)
-#         #     print(
-#         #         "SMC samples (extracted) proportion by marginal of last token (or second last, if last is the chosen token)")
-#         #     print(smc_samples_hist)
-#         # elif args.rm_type == "p_token_last_index" or args.rm_type == "contains_token":
-#         #     smc_samples_hist = hist_by_token_index(
-#         #         smc_samples,
-#         #         token_index=hist_token_index)
-#         #     print("SMC samples proportion by marginal of last token")
-#         #     print(smc_samples_hist)
 
 def make_hists(true_posterior_samples, smc_samples, prompt_len, token_of_interest_as_int, n_vocab, hist_token_index):
     true_posterior_samples_hist = hist_by_token_index(
@@ -2619,7 +2515,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
              true_all_post_upper_bound_estimate,
              iwae_upper_bound_estimate, iwae_lower_bound_estimate,
              smc_upper_bound_estimate, smc_lower_bound_estimate,
-             f_q_estimate, _,
+             f_qs, _,
              kl_q_sigma_iwae_upper_bound_estimate,
              kl_q_sigma_iwae_lower_bound_estimate,
              kl_q_sigma_smc_upper_bound_estimate,
@@ -2628,7 +2524,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
 
 
             list_of_things_to_add_across_seeds_for_largest_n_samples = [
-                f_q_estimate, kl_q_sigma_iwae_upper_bound_estimate,
+                f_qs, kl_q_sigma_iwae_upper_bound_estimate,
                 kl_q_sigma_iwae_lower_bound_estimate, kl_q_sigma_smc_upper_bound_estimate,
                 kl_q_sigma_smc_lower_bound_estimate,
                 iwae_upper_bound_estimate, iwae_lower_bound_estimate,
@@ -2637,7 +2533,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
 
 
 
-            print(f"F_q Estimate: {f_q_estimate}")
+            print(f"F_q Estimate: {f_qs.mean()}")
 
             # print(f"True log Z value: {true_log_z}")
             print(
@@ -2666,7 +2562,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 print(
                     f"KL(q||sigma) lower bound (using SMC bound on log Z): {kl_q_sigma_smc_lower_bound_estimate}")
 
-                list_of_stuff_across_seeds_only_largest_n_samples[0].append(list_of_things_to_add_across_seeds_for_largest_n_samples[0])
+                list_of_stuff_across_seeds_only_largest_n_samples[0].append(f_qs)
                 for i in range(1, len(list_of_stuff_across_seeds_only_largest_n_samples)):
                     list_of_stuff_across_seeds_only_largest_n_samples[i] += list_of_things_to_add_across_seeds_for_largest_n_samples[i]
 
@@ -2730,6 +2626,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     iwae_upper_bound_across_seeds, iwae_lower_bound_across_seeds, smc_upper_bound_across_seeds, smc_lower_bound_across_seeds \
         = list_of_stuff_across_seeds_only_largest_n_samples
     f_q_list_by_seed = jnp.stack(f_q_list_by_seed)
+    print("f_q_list_shape")
+    print(f_q_list_by_seed.shape)
     avg_f_q_estimate = f_q_list_by_seed.mean()
 
 
@@ -2807,6 +2705,8 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     kl_ubs_iwae, kl_lbs_iwae, kl_ubs_smc, kl_lbs_smc = plot_over_time_list[2], plot_over_time_list[3], plot_over_time_list[4], plot_over_time_list[5]
     kl_sigma_q_ubs_iwae, kl_sigma_q_lbs_iwae, kl_sigma_q_ubs_smc, kl_sigma_q_lbs_smc = plot_over_time_list[6], plot_over_time_list[7], plot_over_time_list[8], plot_over_time_list[9]
 
+    print("F_q_for_plots shape")
+    print(np.transpose(np.stack(f_q_estimates_list_of_arrays)).shape)
 
     numpost = np.stack(g_q_estimates_list_of_arrays).shape[-1]
     # print("G_q estimates shape")
@@ -4460,7 +4360,7 @@ if __name__ == "__main__":
 
     if args.hface_model_type == "gpt2large":
         # n_samples_for_plots = [32, 100]
-        n_seeds = 5
+        n_seeds = 4
     # elif args.hface_model_type == "gpt2medium":
     #     n_samples_for_plots = [32, 100]
 

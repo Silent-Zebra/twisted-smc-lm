@@ -1216,6 +1216,7 @@ def iwae_forward_and_backward(rng_key, posterior_sample, prompt, cfg_p, params_p
     f_q_estimate = log_w_t.mean() # Get the F_q estimate here, without resampling, because sampling truly from the proposal distribution
     # involves just sampling one step at a time based on the twist values. Resampling changes the distribution to be based on sigma/true posterior.
     proposal_dist_weights = log_w_t
+    # Proposal dist weights, log_w_t, and f_qs are all the same thing here...
 
     full_seq = full_seq_from_twist_since_no_resample
 

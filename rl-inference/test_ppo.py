@@ -338,7 +338,7 @@ def main():
 
         print("TEST INFO")
 
-        n_seeds_f_q = 1 #5 reduce time spent on this
+        n_seeds_f_q = 4 #5 reduce time spent on this
         batch_prompt_for_f_q = np.full((n_samples_f_q, np_prompts.shape[-1]),
                                        np_prompts)
         batch_prompt_for_f_q_pt = torch.tensor(batch_prompt_for_f_q,
@@ -456,6 +456,8 @@ def main():
                     avg_iwae_ub_estimate = torch.stack(iwae_ubs_list).mean()
                     avg_iwae_lb_estimate = torch.stack(iwae_lbs_list).mean()
 
+                    if args.rm_type == "p_last_tokens":
+                        print("IWAE bounds not accurate for plasttokens. This is because you cannot just logsumexp over different conditioning tokens. Need to pick a set of conditioning tokens and go from there. The F_q and G_q are still fine though")
                     print(f"Avg IWAE UB Estimate: {avg_iwae_ub_estimate}")
                     print(f"Avg IWAE LB Estimate: {avg_iwae_lb_estimate}")
 
