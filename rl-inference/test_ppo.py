@@ -442,7 +442,11 @@ def main():
                         # print(samples.shape)
                         # print(condition_twist_on_tokens.shape)
                         # print(condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q].shape)
-                        g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q])
+                        if condition_twist_on_tokens is not None:
+                            g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens[i * n_samples_f_q: (i + 1) * n_samples_f_q])
+                        else:
+                            g_qs = g_q_estimate(model, ref_model, samples)
+
                         print(g_qs)
                         print("Avg G_q Estimate (Learned Model)")
                         print(g_qs.mean())
