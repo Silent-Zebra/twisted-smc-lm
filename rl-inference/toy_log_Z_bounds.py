@@ -3876,8 +3876,14 @@ def main():
                 if args.rm_type == "p_last_tokens" and args.beta_temp == 1.:
                     print(f_qs.shape)
                     f_q_estimates_list.append(f_qs)
+                    print("Avg F_q")
+                    print(f_qs.mean())
                 print(proposal_scores.shape)
                 print(kl_vals.shape)
+                print("Avg reward")
+                print(proposal_scores.mean())
+                print("Avg KL to prior")
+                print(kl_vals.mean())
 
                 proposal_scores_list.append(proposal_scores)
                 kl_to_prior_list.append(kl_vals)
