@@ -213,22 +213,6 @@ def main():
                   "do_sample": True, "pad_token_id": tokenizer.eos_token_id, "num_beams": 1,
                   }
 
-    true_posterior_samples = None
-    if args.load_posterior_samples:
-        print("Loading true posterior samples")
-        x = checkpoints.restore_checkpoint(ckpt_dir=args.load_dir_posterior_samples, target=None, prefix=args.load_prefix_posterior_samples)
-        print(x['0']['0'].shape)
-        print(list(x['0'].values()))
-        true_posterior_samples_by_prompt_and_by_token = list(x['0'].values())
-        print(true_posterior_samples_by_prompt_and_by_token[0])
-        text_outputs = tokenizer.batch_decode(true_posterior_samples_by_prompt_and_by_token[0],
-                                        skip_special_tokens=True)
-        for x in set(text_outputs):
-            print(x)
-        print(len(set(text_outputs)))
-
-        true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[0]
-        true_posterior_samples = torch.tensor(true_posterior_samples, dtype=torch.int64, device=device)
 
 
     def get_prob_of_generated_tokens(model, sequences, prompt_len, condition_twist_on_tokens=None):
@@ -332,21 +316,68 @@ def main():
 
     logZ_midpoint_estimate = None
 
+    true_posterior_samples = None
+
+    batch_prompt_for_f_q = np.full((n_samples_f_q, np_prompts.shape[-1]),
+                                   np_prompts)
+    batch_prompt_for_f_q_pt = torch.tensor(batch_prompt_for_f_q,
+                                           dtype=torch.int64,
+                                           device=device)
+    n_seeds_f_q = 4  # 5 reduce time spent on this
+
+    if args.load_posterior_samples:
+
+        print("Loading true posterior samples")
+        x = checkpoints.restore_checkpoint(
+            ckpt_dir=args.load_dir_posterior_samples, target=None,
+            prefix=args.load_prefix_posterior_samples)
+        print(x['0']['0'].shape)
+        print(list(x['0'].values()))
+        true_posterior_samples_by_prompt_and_by_token = list(x['0'].values())
+        print(true_posterior_samples_by_prompt_and_by_token[0])
+        text_outputs = tokenizer.batch_decode(
+            true_posterior_samples_by_prompt_and_by_token[0],
+            skip_special_tokens=True)
+        for x in set(text_outputs):
+            print(x)
+        print(len(set(text_outputs)))
+
+        true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
+            0]
+        true_posterior_samples = torch.tensor(true_posterior_samples,
+                                              dtype=torch.int64, device=device)
+
+    elif args.rm_type == "p_last_tokens":
+        true_posterior_samples = None
+        condition_twist_on_tokens = None
+        for i in range(n_seeds_f_q):
+            base_model_seqs = ref_model.generate(batch_prompt_for_f_q_pt,
+                                                 max_length=prompt_len + args.output_len + args.num_last_tokens_to_condition_on,
+                                                 **gen_kwargs)
+
+            condition_tokens = base_model_seqs[:,
+                                        prompt_len + args.output_len:]
+
+            true_posts = base_model_seqs[:,
+                                     :prompt_len + args.output_len]
+
+            if condition_twist_on_tokens is None:
+                condition_twist_on_tokens = condition_tokens
+                true_posterior_samples = true_posts
+            else:
+                condition_twist_on_tokens = torch.cat((condition_twist_on_tokens, condition_tokens), axis=0)
+                true_posterior_samples = torch.cat((true_posterior_samples, true_posts), axis=0)
+
+
     for epoch in range(args.epochs):
         print(f"Epoch: {epoch + 1}", flush=True)
         print(f"TIME: {time.time() - new_start}", flush=True)
 
         print("TEST INFO")
 
-        n_seeds_f_q = 4 #5 reduce time spent on this
-        if args.rm_type == "p_last_tokens":
-            n_seeds_f_q = 30
 
-        batch_prompt_for_f_q = np.full((n_samples_f_q, np_prompts.shape[-1]),
-                                       np_prompts)
-        batch_prompt_for_f_q_pt = torch.tensor(batch_prompt_for_f_q,
-                                               dtype=torch.int64,
-                                               device=device)
+
+
 
         if not args.no_test_info:
             iwae_lbs_list = []
@@ -361,27 +392,9 @@ def main():
                 print(f"TIME: {time.time() - new_start}", flush=True)
 
                 if args.rm_type == "p_last_tokens":
-                    base_model_seqs = ref_model.generate(batch_prompt_for_f_q_pt,
-                                                         max_length=prompt_len + args.output_len + args.num_last_tokens_to_condition_on,
-                                                         **gen_kwargs)
-
-                    condition_twist_on_tokens = base_model_seqs[:,
-                                                prompt_len + args.output_len:]
-
-                    true_posterior_samples = base_model_seqs[:, :prompt_len + args.output_len]
-
-                    # q_tokens = model.generate(batch_prompt_for_f_q_pt,
-                    #                           max_length=prompt_len + args.output_len,
-                    #                           condition_twist_on_tokens=condition_twist_on_tokens
-                    #                                                     **gen_kwargs)
-
-
-                    # full_seq = torch.cat((q_tokens, condition_twist_on_tokens),
-                    #                      dim=-1)
-
-                    # print(full_seq.shape)
-
-                    f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples_f_q, condition_twist_on_tokens=condition_twist_on_tokens)
+                    f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(
+                        model, ref_model, n_samples_f_q,
+                        condition_twist_on_tokens=condition_twist_on_tokens[i * n_samples_f_q: (i + 1) * n_samples_f_q])
 
                 else:
                     f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples_f_q)
@@ -396,10 +409,11 @@ def main():
                 print(f_qs)
                 print("Avg F_q Estimate (Learned Model)")
                 print(f_qs.mean())
-                print("IWAE Lower Bound Estimate (Learned Model)")
-                iwae_lower_bound_estimate = torch.logsumexp(f_qs, dim=0) - np.log(f_qs.shape[0])
-                print(iwae_lower_bound_estimate)
-                iwae_lbs_list.append(iwae_lower_bound_estimate)
+                if args.rm_type != "p_last_tokens":
+                    print("IWAE Lower Bound Estimate (Learned Model)")
+                    iwae_lower_bound_estimate = torch.logsumexp(f_qs, dim=0) - np.log(f_qs.shape[0])
+                    print(iwae_lower_bound_estimate)
+                    iwae_lbs_list.append(iwae_lower_bound_estimate)
                 if total_f_qs is None:
                     total_f_qs = f_qs
                     total_rewards = rewards
@@ -431,8 +445,7 @@ def main():
                 # print("Avg F_q Estimate (Base Model)")
                 # print(f_qs.mean())
 
-                if args.rm_type == "p_last_tokens" or i == 0:
-                    # For P last tokens, every time doing an F_q estimate, also do a G_q one. Otherwise,
+                if i == 0:
                     # we have a fixed set of true posterior samples, so only need to do the G_q once.
 
                     if true_posterior_samples is not None:
@@ -440,28 +453,29 @@ def main():
                             range_val = 1
                         else:
                             range_val = true_posterior_samples.shape[0] // n_samples_f_q + 1
-                        for i in range(range_val):
+                        for j in range(range_val):
                             samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
-                            print(f"TIME: {time.time() - new_start}", flush=True)
-                            print("G_q Estimates Learned Model")
-                            # print(samples.shape)
-                            # print(condition_twist_on_tokens.shape)
-                            # print(condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q].shape)
-                            if condition_twist_on_tokens is not None:
-                                g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens[i * n_samples_f_q: (i + 1) * n_samples_f_q])
-                            else:
-                                g_qs = g_q_estimate(model, ref_model, samples)
+                            if samples.shape[0] != 0:
+                                print(f"TIME: {time.time() - new_start}", flush=True)
+                                print("G_q Estimates Learned Model")
+                                # print(samples.shape)
+                                # print(condition_twist_on_tokens.shape)
+                                # print(condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q].shape)
+                                if condition_twist_on_tokens is not None:
+                                    g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens[j * n_samples_f_q: (j + 1) * n_samples_f_q])
+                                else:
+                                    g_qs = g_q_estimate(model, ref_model, samples)
 
-                            print(g_qs)
-                            print("Avg G_q Estimate (Learned Model)")
-                            print(g_qs.mean())
+                                print(g_qs)
+                                print("Avg G_q Estimate (Learned Model)")
+                                print(g_qs.mean())
 
-                            if total_g_qs is None:
-                                total_g_qs = g_qs
-                            else:
-                                total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
-                                print("Total G_qs shape")
-                                print(total_g_qs.shape)
+                                if total_g_qs is None:
+                                    total_g_qs = g_qs
+                                else:
+                                    total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
+                                    print("Total G_qs shape")
+                                    print(total_g_qs.shape)
 
                         if args.rm_type == "p_last_tokens":
                             print("IWAE bounds not accurate for plasttokens. This is because you cannot just logsumexp over different conditioning tokens. Need to pick a set of conditioning tokens and go from there. The F_q and G_q are still fine though")
