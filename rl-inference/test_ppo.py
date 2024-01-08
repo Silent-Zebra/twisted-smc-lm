@@ -353,6 +353,7 @@ def main():
             iwae_ubs_list = []
 
             total_f_qs = None
+            total_g_qs = None
             total_rewards = None
             total_kl_vals = None
 
@@ -429,49 +430,51 @@ def main():
                 # print(f_qs)
                 # print("Avg F_q Estimate (Base Model)")
                 # print(f_qs.mean())
-            total_g_qs = None
 
-            if true_posterior_samples is not None:
-                # RIght now just use the last set of true samples from the runs above, and just do 1 set of estimates on g_q
-                if true_posterior_samples.shape[0] == n_samples_f_q:
-                    range_val = 1
-                else:
-                    range_val = true_posterior_samples.shape[0] // n_samples_f_q + 1
-                for i in range(range_val):
-                    samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
-                    print(f"TIME: {time.time() - new_start}", flush=True)
-                    print("G_q Estimates Learned Model")
-                    # print(samples.shape)
-                    # print(condition_twist_on_tokens.shape)
-                    # print(condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q].shape)
-                    if condition_twist_on_tokens is not None:
-                        g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens[i * n_samples_f_q: (i + 1) * n_samples_f_q])
-                    else:
-                        g_qs = g_q_estimate(model, ref_model, samples)
+                if args.rm_type == "p_last_tokens" or i == 0:
+                    # For P last tokens, every time doing an F_q estimate, also do a G_q one. Otherwise,
+                    # we have a fixed set of true posterior samples, so only need to do the G_q once.
 
-                    print(g_qs)
-                    print("Avg G_q Estimate (Learned Model)")
-                    print(g_qs.mean())
+                    if true_posterior_samples is not None:
+                        if true_posterior_samples.shape[0] == n_samples_f_q:
+                            range_val = 1
+                        else:
+                            range_val = true_posterior_samples.shape[0] // n_samples_f_q + 1
+                        for i in range(range_val):
+                            samples = true_posterior_samples[i * n_samples_f_q: (i+1) * n_samples_f_q]
+                            print(f"TIME: {time.time() - new_start}", flush=True)
+                            print("G_q Estimates Learned Model")
+                            # print(samples.shape)
+                            # print(condition_twist_on_tokens.shape)
+                            # print(condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q].shape)
+                            if condition_twist_on_tokens is not None:
+                                g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens[i * n_samples_f_q: (i + 1) * n_samples_f_q])
+                            else:
+                                g_qs = g_q_estimate(model, ref_model, samples)
 
-                    if total_g_qs is None:
-                        total_g_qs = g_qs
-                    else:
-                        total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
-                        print("Total G_qs shape")
-                        print(total_g_qs.shape)
+                            print(g_qs)
+                            print("Avg G_q Estimate (Learned Model)")
+                            print(g_qs.mean())
 
-                if args.rm_type == "p_last_tokens":
-                    print("IWAE bounds not accurate for plasttokens. This is because you cannot just logsumexp over different conditioning tokens. Need to pick a set of conditioning tokens and go from there. The F_q and G_q are still fine though")
-                else:
-                    avg_iwae_ub_estimate = torch.stack(iwae_ubs_list).mean()
-                    avg_iwae_lb_estimate = torch.stack(iwae_lbs_list).mean()
+                            if total_g_qs is None:
+                                total_g_qs = g_qs
+                            else:
+                                total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
+                                print("Total G_qs shape")
+                                print(total_g_qs.shape)
 
-                    print(f"Avg IWAE UB Estimate: {avg_iwae_ub_estimate}")
-                    print(f"Avg IWAE LB Estimate: {avg_iwae_lb_estimate}")
+                        if args.rm_type == "p_last_tokens":
+                            print("IWAE bounds not accurate for plasttokens. This is because you cannot just logsumexp over different conditioning tokens. Need to pick a set of conditioning tokens and go from there. The F_q and G_q are still fine though")
+                        else:
+                            avg_iwae_ub_estimate = torch.stack(iwae_ubs_list).mean()
+                            avg_iwae_lb_estimate = torch.stack(iwae_lbs_list).mean()
 
-                    logZ_midpoint_estimate = (avg_iwae_ub_estimate + avg_iwae_lb_estimate) / 2.
-                    print(f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
-                print(f"TIME: {time.time() - new_start}", flush=True)
+                            print(f"Avg IWAE UB Estimate: {avg_iwae_ub_estimate}")
+                            print(f"Avg IWAE LB Estimate: {avg_iwae_lb_estimate}")
+
+                            logZ_midpoint_estimate = (avg_iwae_ub_estimate + avg_iwae_lb_estimate) / 2.
+                            print(f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
+                        print(f"TIME: {time.time() - new_start}", flush=True)
 
 
             print("Shapes")
