@@ -16,16 +16,16 @@ load_prefixes_sent1_nnonly = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-26_seed1_bce_nsamples12_sent_0001", # Try 00005 also
-    "f_q_g_q_estimates_2024-01-05_06-24_seed0_nsamples12_sent1_nnonly_ppo_00003",
-    # "f_q_g_q_estimates_2024-01-05_06-16_seed0_nsamples12_sent1_nnonly_ppo_000003",
-    # "f_q_g_q_estimates_2024-01-05_09-58_seed0_nsamples11_sent1_nnonly_ppo_00001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-26_seed1_bce_nsamples12_sent_0001",
+    # "f_q_g_q_estimates_2024-01-09_00-49_seed0_nsamples12_sent1_ppo_00001",
+    "f_q_g_q_estimates_2024-01-09_01-21_seed0_nsamples12_sent1_ppo_000003",
+    # "f_q_g_q_estimates_2024-01-09_00-37_seed0_nsamples12_sent1_ppo_000001"
 ]
 
 
 load_prefixes_tox = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003", # See the 00001 results for rlq and rob (and sixo?)
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-22_seed1_sixo_partial_jit_nsamples12_toxc_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",

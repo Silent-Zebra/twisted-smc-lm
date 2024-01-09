@@ -188,10 +188,11 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
 
         if condition_twist_on_tokens is not None:
 
-            if attention_mask is not None:
-                print(attention_mask.shape)
-                # FORCES attention on all conditioning tokens
-                attention_mask = torch.ones_like(condition_twist_on_tokens)
+            # if attention_mask is not None:
+            #     print(attention_mask.shape)
+
+            # FORCES attention on all conditioning tokens
+            attention_mask = torch.ones_like(condition_twist_on_tokens)
 
             condition_tokens_base_model_output = self.pretrained_model(
                 input_ids=condition_twist_on_tokens,

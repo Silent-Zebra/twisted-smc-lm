@@ -20,6 +20,8 @@ import datetime
 
 from transformers import AutoModelForSequenceClassification
 
+import math
+
 
 def get_sentiment_class_prob(tokens, sentimentClassifier, class_num):
     classification_logits = sentimentClassifier(**tokens).logits
@@ -452,10 +454,12 @@ def main():
                     # we have a fixed set of true posterior samples, so only need to do the G_q once.
 
                     if true_posterior_samples is not None:
-                        if true_posterior_samples.shape[0] == n_samples_f_q:
-                            range_val = 1
-                        else:
-                            range_val = true_posterior_samples.shape[0] // n_samples_f_q + 1
+                        # if true_posterior_samples.shape[0] == n_samples_f_q:
+                        #     range_val = 1
+                        # else:
+                        #     range_val = true_posterior_samples.shape[0] // n_samples_f_q + 1
+                        range_val = (math.ceil(true_posterior_samples.shape[0] / n_samples_f_q))
+                        print(range_val)
                         for j in range(range_val):
                             samples = true_posterior_samples[j * n_samples_f_q: (j+1) * n_samples_f_q]
                             if samples.shape[0] != 0:

@@ -784,14 +784,28 @@ class PPOTrainer(BaseTrainer):
         for _ in range(self.config.ppo_epochs):
             if early_stop:
                 break
+            # print(bs)
             b_inds = np.random.permutation(bs)
+            # print(b_inds)
             for backward_batch_start in range(0, bs, self.config.backward_batch_size):
                 backward_batch_end = backward_batch_start + self.config.backward_batch_size
                 backward_batch_inds = b_inds[backward_batch_start:backward_batch_end]
+                # print(backward_batch_inds)
 
                 for mini_batch_start in range(0, self.config.backward_batch_size, self.config.mini_batch_size):
                     mini_batch_end = mini_batch_start + self.config.mini_batch_size
                     mini_batch_inds = backward_batch_inds[mini_batch_start:mini_batch_end]
+
+                    # print(mini_batch_inds)
+                    # print("queries")
+                    # print([batch_dict["queries"][i] for i in mini_batch_inds])
+                    # print('responses')
+                    # print([batch_dict["responses"][i] for i in mini_batch_inds])
+                    condition_twist_on_tokens_shuffled = [condition_twist_on_tokens[i] for i in mini_batch_inds]
+                    condition_twist_on_tokens_shuffled = torch.stack(condition_twist_on_tokens_shuffled)
+                    # print(condition_twist_on_tokens_shuffled)
+                    # print(condition_twist_on_tokens_shuffled.shape)
+
                     mini_batch_dict = {
                         "logprobs": batch_dict["logprobs"][mini_batch_inds],
                         "values": batch_dict["values"][mini_batch_inds],
@@ -813,7 +827,7 @@ class PPOTrainer(BaseTrainer):
                             mini_batch_dict["responses"],
                             model_inputs,
                             return_logits=True,
-                            condition_twist_on_tokens=condition_twist_on_tokens
+                            condition_twist_on_tokens=condition_twist_on_tokens_shuffled
                         )
                         train_stats = self.train_minibatch(
                             mini_batch_dict["logprobs"],
@@ -1005,10 +1019,13 @@ class PPOTrainer(BaseTrainer):
             if response_masks is not None:
                 response_masks_batch = response_masks[i * fbs : (i + 1) * fbs]
 
+            # print(condition_twist_on_tokens.shape)
+            # print(condition_twist_on_tokens[i * fbs : (i + 1) * fbs].shape)
+
             if condition_twist_on_tokens is None:
                 logits, _, values = model(**input_kwargs)
             else:
-                logits, _, values = model(condition_twist_on_tokens=condition_twist_on_tokens, **input_kwargs)
+                logits, _, values = model(condition_twist_on_tokens=condition_twist_on_tokens[i * fbs : (i + 1) * fbs], **input_kwargs)
 
             if self.is_encoder_decoder:
                 input_ids = input_kwargs["decoder_input_ids"]
