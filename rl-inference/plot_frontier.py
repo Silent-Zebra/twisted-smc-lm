@@ -51,7 +51,7 @@ toxc_beta10_ebm = Record(-1.3055958, 6.8097310066223145, "result_01-05-2024_toxi
 toxc_ebm = [toxc_beta_3_ebm, toxc_beta1_ebm, toxc_beta3_ebm, toxc_beta10_ebm]
 
 toxc_beta_3_ppo = Record(-6.6116, 0.49803319573402405, "result_01-05-2024_toxicityclass_separatetwist_neg_beta_3_outputlen20_tinystories_ppo_100_000003.txt")
-toxc_beta1_ppo = Record(-3.1881, 2.5519111156463623, "result_01-05-2024_toxicityclass_separatetwist_neg_beta1_outputlen20_tinystories_ppo_100_000001.txt") # REDO THIS
+toxc_beta1_ppo = Record(-3.1881, 2.5519111156463623, "result_01-05-2024_toxicityclass_separatetwist_neg_beta1_outputlen20_tinystories_ppo_100_000001.txt")
 toxc_beta3_ppo = Record(-0.5667, 6.508511543273926, "result_01-05-2024_toxicityclass_separatetwist_neg_beta3_outputlen20_tinystories_ppo_100_000001.txt")
 toxc_beta10_ppo = Record(-0.1700, 10.577406883239746, "result_01-05-2024_toxicityclass_separatetwist_neg_beta10_outputlen20_tinystories_ppo_100_000003v2.txt")
 

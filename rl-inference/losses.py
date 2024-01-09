@@ -846,6 +846,7 @@ def get_l_rl_based_partial_jit(
     log_p = jax.nn.log_softmax(p_logits, axis=-1) # gives you the normalized p values, since the regular output is the unnormalized log p values
     log_p = log_p[:, prompt_len:]
 
+
     target_term = jax.nn.logsumexp((log_p + log_psi), axis=-1) # first we get log(p psi), then we do exp, so we have p psi (psi = e^V), then we sum all the (p psi), then we log again. Therefore logsumexp. We use axis = -1 because we want to preserve the different values across different time steps. Essentially doing all the different time steps in one go
     # Note that both log p and log psi are over the set of next tokens. E.g. at the very last time step T they are both over T+1
     # This is in contrast to the evaluation (the "values" below which are evaluating the token at time step T using the twist T-1.
@@ -856,6 +857,8 @@ def get_l_rl_based_partial_jit(
 
     if log_phi_final_eval is None:
         log_phi_final_eval = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist, condition_twist_on_tokens)
+
+
 
     target_term = target_term.at[:, -1].set(log_phi_final_eval)
     if stop_grad:
@@ -893,6 +896,12 @@ def get_l_rl_based_partial_jit(
     elif loss_type == "multistep":
         loss = jnp.dot(((values[:, :-1] - target_term[:, :-1]) ** 2).sum(axis=-1), normalized_log_w_t_on_samples) # Normalization consistency loss except for the final twists.
         loss += jnp.dot((((target_term - values).sum(axis=-1))**2), normalized_log_w_t_on_samples) # Since I'm doing this sum now, probably need lower learning rates
+    elif loss_type == "googleCD":
+        # Do exp version of squared error, EXCEPT THE FINAL TERM NEEDS TO BE THE LOG, INSTEAD OF THE EXP VERSION (as per the Google paper); note according to our understanding, this is the wrong target (esp. for the Bayesian interpretation); you could justify this as arbitrarily adding a log to the reward function, and then doing the squared error in non-log space, but this screws up probabilistic interpretations like p(c|s)p(s) = p(s,c) propto p(s|c)
+        modified_target = target_term
+        modified_target.at[:, :-1].set(jnp.exp(target_term[:, :-1]))
+        loss = jnp.dot(((jnp.exp(values) - modified_target) ** 2).mean(axis=-1), normalized_log_w_t_on_samples)
+
     else:
         raise NotImplementedError
 

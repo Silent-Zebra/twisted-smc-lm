@@ -10,72 +10,37 @@ import matplotlib.pyplot as plt
 
 from toy_log_Z_bounds import plot_with_conf_bounds
 
-# load_prefixes_sent1 = [
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_03-29_seed1_nsamples11_sent1_ebm_0001",
-#     # "f_q_g_q_logZbestmidpoint_info_2024-01-01_03-30_seed1_nsamples11_sent1_ebm_00003",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_04-43_seed1_nsamples11_sent1_rlq_00003",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_03-29_seed1_nsamples10_sent1_rob_0001",
-#     # "f_q_g_q_logZbestmidpoint_info_2024-01-01_03-27_seed1_nsamples10_sent1_rob_00003",
-#     # "f_q_g_q_logZbestmidpoint_info_2024-01-01_03-33_seed1_nsamples11_sent1_sixo_0001",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_03-24_seed1_nsamples11_sent1_sixo_00003",
-#     # "f_q_g_q_logZbestmidpoint_info_2024-01-01_02-48_seed1_nsamples11_sent1_bce_0001",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_02-46_seed1_nsamples11_sent1_bce_00003",
-#     "f_q_g_q_estimates_2024-01-01_02-43_seed0_nsamples11_sent1_ppo_000003",
-#     # "f_q_g_q_estimates_2024-01-01_02-32_seed0_nsamples11_sent1_ppo_000001",
-#     # "f_q_g_q_estimates_2024-01-01_02-22_seed0_nsamples11_sent1_ppo_0000003"
-# ]
 
 load_prefixes_sent1_nnonly = [
-    "f_q_g_q_logZbestmidpoint_info_2024-01-03_03-41_seed1_nsamples12_sent1_nnonly_ebm_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-03_05-27_seed1_nsamples12_sent1_nnonly_rlq_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-03_04-44_seed1_nsamples12_sent1_nnonly_rob_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-03_03-57_seed1_nsamples12_sent1_nnonly_sixo_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-04_04-44_seed1_bce_q_nsamples12_sent1_nnonly_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-26_seed1_bce_nsamples12_sent_0001", # Try 00005 also
     "f_q_g_q_estimates_2024-01-05_06-24_seed0_nsamples12_sent1_nnonly_ppo_00003",
     # "f_q_g_q_estimates_2024-01-05_06-16_seed0_nsamples12_sent1_nnonly_ppo_000003",
     # "f_q_g_q_estimates_2024-01-05_09-58_seed0_nsamples11_sent1_nnonly_ppo_00001",
 ]
 
-# load_prefixes_sent1_arch_comparison = [
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-03_03-41_seed1_nsamples12_sent1_nnonly_ebm_0001",
-#     "f_q_g_q_estimates_2024-01-03_05-09_seed0_nsamples12_sent1_nnonly_ppo_000003",
-#     "f_q_g_q_estimates_2024-01-01_02-43_seed0_nsamples11_sent1_ppo_000003"
-# ]
-
-# load_prefixes_sent2 = [
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_03-50_seed1_nsamples11_sent2_ebm_0001",
-#     # "f_q_g_q_logZbestmidpoint_info_2024-01-01_03-50_seed1_nsamples11_sent2_ebm_00003",
-#     # "f_q_g_q_logZbestmidpoint_info_2024-01-01_05-05_seed1_nsamples11_sent2_rlq_0001",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_05-00_seed1_nsamples11_sent2_rlq_00003",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_07-19_seed1_nsamples10_sent2_rob_0001",
-#     # "f_q_g_q_logZbestmidpoint_info_2024-01-01_07-17_seed1_nsamples10_sent2_rob_00003",
-#     # "f_q_g_q_logZbestmidpoint_info_2024-01-01_07-21_seed1_nsamples11_sent2_sixo_0001",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_07-21_seed1_nsamples11_sent2_sixo_00003",
-#     # "f_q_g_q_logZbestmidpoint_info_2024-01-01_03-21_seed1_nsamples11_sent2_bce_0001",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-01_02-53_seed1_nsamples11_sent2_bce_00003",
-#     "f_q_g_q_estimates_2024-01-01_02-47_seed0_nsamples11_sent2_ppo_000003",
-#     # "f_q_g_q_estimates_2024-01-01_03-29_seed0_nsamples11_sent2_ppo_000001",
-#     # "f_q_g_q_estimates_2024-01-01_02-36_seed0_nsamples11_sent2_ppo_0000003"
-# ]
 
 load_prefixes_tox = [
-    "f_q_g_q_logZbestmidpoint_info_2023-12-31_01-56_seed1_nsamples12_ebm_0001", # 501 !!
-    "f_q_g_q_logZbestmidpoint_info_2024-01-01_01-48_seed1_nsamples12_tox_rlq_0001", # 502 !! BUT UPDATE THIS
-    "f_q_g_q_logZbestmidpoint_info_2023-12-31_02-32_seed1_nsamples12_rob_0001", # 503 !!
-    "f_q_g_q_logZbestmidpoint_info_2023-12-31_05-49_seed1_nsamples12_sixo_00003", # 544 !! Best for SIXO
-    "f_q_g_q_logZbestmidpoint_info_2024-01-05_02-09_seed1_bce_q_nsamples12_toxc_00005",
-    "f_q_g_q_estimates_2024-01-05_08-24_seed0_nsamples12_toxc_ppo_000001",
-    # "f_q_g_q_estimates_2024-01-05_07-57_seed0_nsamples12_toxc_ppo_000003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003", # See the 00001 results for rlq and rob (and sixo?)
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-22_seed1_sixo_partial_jit_nsamples12_toxc_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-54_seed1_bce_q_nsamples12_toxc_00005",
+    "f_q_g_q_estimates_2024-01-08_06-40_seed0_nsamples12_toxc_ppo_000001",
 ]
 
-# load_prefixes_toxc_nnonly = [
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-03_04-33_seed1_nsamples11_tox_nnonly_ebm_0001",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-03_04-40_seed1_nsamples11_tox_nnonly_rlq_00003",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-03_08-08_seed1_nsamples11_tox_nnonly_rob_0001",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-03_08-13_seed1_nsamples11_tox_nnonly_sixo_0001",
-#     "f_q_g_q_logZbestmidpoint_info_2024-01-03_03-35_seed1_nsamples11_tox_nnonly_bce_00003",
-#     "f_q_g_q_estimates_2024-01-03_06-36_seed0_nsamples10_tox_nnonly_ppo_00001",
-# ]
+
+load_prefixes_plasttok2_1 = [
+
+]
+
+load_prefixes_plasttok15_10 = [
+
+]
 
 twist_learn_method_names = [
     "EBM",
@@ -89,11 +54,11 @@ twist_learn_method_names = [
 
 # twist_learn_method_names = [
 #     "EBM",
-#     "RL (Twist)",
-#     "EBM-One-KL",
-#     "BCE",
+#     # "RL (Twist)",
+#     # "EBM-One-KL",
+#     "SIXO",
+#     "SIXO2",
 #     "PPO",
-#     "PPO2",
 # ]
 
 # twist_learn_method_names = [
@@ -192,8 +157,8 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
         x_range = np.arange(f_q_estimates.shape[-1])
 
-        print(f_q_estimates.shape[0])
-        print(g_q_estimates.shape[0])
+        # print(f_q_estimates.shape[0])
+        # print(g_q_estimates.shape[0])
 
         twist_learn_method_name = twist_learn_method_names[i]
 
@@ -238,12 +203,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
     for x in output_latex:
         print(x)
 
-# make_combined_plot(load_prefixes_sent1, "sent1_12-31")
-# make_combined_plot(load_prefixes_sent2, "sent2_12-31")
+make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-08")
 
-# make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-05")
-# make_combined_plot(load_prefixes_sent1_arch_comparison, "sent1_arch_01-03")
+# make_combined_plot(load_prefixes_tox, "tox_01-08")
 
-make_combined_plot(load_prefixes_tox, "tox_01-05")
-
-# make_combined_plot(load_prefixes_toxc_nnonly, "toxc_nnonly_01-03")
