@@ -1476,7 +1476,6 @@ def inspect_and_record_evidence_setting_for_index(
 
     condition_twist_on_tokens_broadcasted = None
     if condition_twist_on_tokens is not None:
-        print("BE CAREFUL: results here are going to use one true posterior and one conditioning continuation at a time, but the results in the plot_logZ for the g_q estimate may use all the posterior estimates. This means the f_q estimate may average over fewer samples than the g_q estimate")
         # What I'm doing here is: if we want to do n>1, essentially I take the conditioning tokens associated with the true posterior sample
         # and then I'm broacasting it to however many n samples we want, so that we can do SMC or whatever we want with everything conditioned on the same set of tokens
         condition_twist_on_tokens_for_chosen_posterior_sample = condition_twist_on_tokens[index_of_true_posterior_sample]

@@ -268,14 +268,14 @@ def main():
 
             final_reward = rm_function(q_result, rewardModel, tokenizer_RM, tokenizer,
                                        class_num, ref_model, condition_twist_on_tokens)
-            print("sequences")
-            # print(x)
-            text_outputs = tokenizer.batch_decode(q_result, skip_special_tokens=True)
-            print(text_outputs)
             if condition_twist_on_tokens is not None:
-                print("continuations")
-                text_outputs = tokenizer.batch_decode(condition_twist_on_tokens, skip_special_tokens=True)
-                print(text_outputs)
+                print("sequences with continuations")
+                text_outputs = tokenizer.batch_decode(torch.cat((q_result, condition_twist_on_tokens), dim=-1), skip_special_tokens=True)
+                # print(x)
+            else:
+                print("sequences")
+                text_outputs = tokenizer.batch_decode(q_result, skip_special_tokens=True)
+            print(text_outputs)
 
             print("Log q")
             print(log_q)
