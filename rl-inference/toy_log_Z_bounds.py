@@ -4333,5 +4333,7 @@ if __name__ == "__main__":
     if args.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_vmap_with_one_total_kl"]:
         assert args.rm_type == "p_last_tokens"
 
+    if 'gcd' in args.twist_learn_type:
+        assert args.beta_temp == 1 # because of the weird way that paper defines the KL regularized objective and the weird sampling, we only can directly plug it into our framework when our beta=1, corresponding to their beta = 0.5
 
     main()
