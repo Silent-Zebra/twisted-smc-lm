@@ -695,7 +695,7 @@ def get_l_rl_based_partial_jit(
     smc_procedure_type, token_of_interest_as_int=None, proposal_is_p=False,
     evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error_in_log_space", tempered_twist=False, beta_prop=None,
     train_final_twist_only=False, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None,
-    stop_grad=True
+    stop_grad=True, append_sigma_samples=False
 ):
     prompt_len = prompt.shape[-1]
 
@@ -822,6 +822,15 @@ def get_l_rl_based_partial_jit(
         else:
             raise NotImplementedError
 
+    if append_sigma_samples: # Add the sigma samples to our data/batch we're training on
+        assert true_sigma_samples is not None
+        samples_to_evaluate_over = jnp.concatenate(
+            (samples_to_evaluate_over, true_sigma_samples), axis=0)
+        if condition_twist_on_tokens is not None:
+            condition_twist_on_tokens = jnp.concatenate((condition_twist_on_tokens, condition_twist_on_tokens), axis=0)
+        print("Appending sigma samples")
+        print(samples_to_evaluate_over.shape)
+        print(condition_twist_on_tokens.shape)
 
     if loss_type == "monte_carlo":
         phi_vals = evaluate_log_phi_final(samples_to_evaluate_over,
@@ -915,7 +924,8 @@ def get_l_rl_based_partial_jit(
 get_l_rl_based_jit = partial(jax.jit, static_argnames=[
     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-    "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop", "train_final_twist_only", "stop_grad"])(get_l_rl_based_partial_jit)
+    "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop",
+    "train_final_twist_only", "stop_grad", "append_sigma_samples"])(get_l_rl_based_partial_jit)
 
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",

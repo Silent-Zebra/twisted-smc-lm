@@ -16,7 +16,7 @@ load_prefixes_sent1_nnonly = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-26_seed1_bce_nsamples12_sent_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples12_sent1_00003",
     # "f_q_g_q_estimates_2024-01-09_00-49_seed0_nsamples12_sent1_ppo_00001",
     "f_q_g_q_estimates_2024-01-09_01-21_seed0_nsamples12_sent1_ppo_000003",
     # "f_q_g_q_estimates_2024-01-09_00-37_seed0_nsamples12_sent1_ppo_000001"
@@ -36,30 +36,16 @@ load_prefixes_tox = [
 
 load_prefixes_tox_rl_comparison = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_04-49_seed1_rl_q_gcd_partial_jit_nsamples12_tox_0001", # Use either this one or 00003...
-    "f_q_g_q_logZbestmidpoint_info_2024-01-09_05-41_seed1_rl_q_gcd_partial_jit_nsamples12_tox_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_05-43_seed1_rl_q_gcd_partial_jit_nsamples12_tox_00001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_06-14_seed1_rl_q_gcd_partial_jit_nsamples12_tox_0003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_06-09_seed1_rl_q_gcd_partial_jit_nsamples12_tox_001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_10-04_seed1_rl_q_sq_partial_jit_nsamples12_tox_001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_09-49_seed1_rl_q_sq_partial_jit_nsamples12_tox_0003",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-09_06-10_seed1_rl_q_sq_partial_jit_nsamples12_tox_00001", # This one or 0001, doesn't really matter, they all don't really work
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_07-34_seed1_rl_q_sq_partial_jit_nsamples12_tox_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_04-43_seed1_rl_q_sq_partial_jit_nsamples12_tox_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-23_seed1_rl_q_gcd_partial_jit_nsamples12_tox_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-17_seed1_rl_q_gcd_partial_jit_nsamples12_tox_00003",
+
 ]
 
 load_prefixes_sent_rl_comparison = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_03-34_seed1_rl_q_gcd_partial_jit_nsamples11_sent_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_03-51_seed1_rl_q_gcd_partial_jit_nsamples11_sent_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_05-15_seed1_rl_q_gcd_partial_jit_nsamples12_sent_00001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-09_05-17_seed1_rl_q_gcd_partial_jit_nsamples12_sent_0003", # Either take this one or 00001.
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_05-17_seed1_rl_q_gcd_partial_jit_nsamples12_sent_001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-09_04-02_seed1_rl_q_sq_partial_jit_nsamples12_sent_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_04-56_seed1_rl_q_sq_partial_jit_nsamples12_sent_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_04-54_seed1_rl_q_sq_partial_jit_nsamples12_sent_00001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_04-55_seed1_rl_q_sq_partial_jit_nsamples12_sent_0003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-09_05-04_seed1_rl_q_sq_partial_jit_nsamples12_sent_001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_02-30_seed1_rl_q_gcd_partial_jit_nsamples12_sent1_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_01-57_seed1_rl_q_gcd_partial_jit_nsamples11_sent1_00003",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-02_seed1_rl_q_gcd_partial_jit_nsamples12_sent1_00001",
 ]
 
 
@@ -80,11 +66,10 @@ twist_learn_method_names = [
     "PPO",
 ]
 
-twist_learn_method_names = [
-    "RL-Twist (Ours)",
-    "RL-Twist (Google CD)",
-    "RL-Twist (Google CD with correct target)",
-]
+# twist_learn_method_names = [
+#     "RL-Twist (Ours)",
+#     "RL-Twist (Google CD)",
+# ]
 
 
 # twist_learn_method_names = [
@@ -138,6 +123,9 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
     median_logZ_midpoint = np.median(np.stack(logZ_midpoint_estimates))
     print(f"MEDIAN: {median_logZ_midpoint}")
+    if "sent_rl_comp" in fig_name_modifier:
+        median_logZ_midpoint = logZ_midpoint_estimates[0] # Needed when you have a bunch of unstable estimates.
+        print(f"USING ONE LOG Z MIDPOINT ESTIMATE: {median_logZ_midpoint}")
 
     f_q_estimates_list = []
     g_q_estimates_list = []
@@ -231,9 +219,9 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
     for x in output_latex:
         print(x)
 
-# make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-08")
+make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-10")
 
 # make_combined_plot(load_prefixes_tox, "tox_01-08")
 
-# make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-09")
-make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-09")
+# make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-10")
+# make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-10")
