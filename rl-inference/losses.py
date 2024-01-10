@@ -703,7 +703,9 @@ def get_l_rl_based_partial_jit(
 
     log_phi_final_eval = None
 
-    if true_sigma_samples is not None:
+    if true_sigma_samples is not None and (evaluate_over_samples_from == "sigma" or loss_type == "monte_carlo"):
+        # For example, if you evaluate over q samples, then the true sigma samples don't mean anything - you don't use them in the update
+        # You just generate q samples anyway, and then just use those.
         if evaluate_over_samples_from == "sigma":
             # if we have true posteriors (e.g. one true posterior, every example is from the
             samples_to_evaluate_over = true_sigma_samples
