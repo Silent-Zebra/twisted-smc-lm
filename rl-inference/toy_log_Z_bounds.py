@@ -2445,15 +2445,16 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         for n in range(len(n_samples_for_plots)):
             lst.append([])
 
+    iwae_lbs = []
+    iwae_ubs = []
+    smc_lbs = []
+    smc_ubs = []
     # TODO swap order of seeds and n_samples for loops?
     for seed in range(n_seeds):
         print(f"Sampling seed {seed}", flush=True)
         print(f"TIME: {time.time() - start}", flush=True)
 
-        iwae_lbs = []
-        iwae_ubs = []
-        smc_lbs = []
-        smc_ubs = []
+
         for n in range(len(n_samples_for_plots)):
             n_test_smc_samples = n_samples_for_plots[n]
             if seed == 0:
@@ -2542,17 +2543,19 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 # kl_lb_smc_across_seeds += kl_q_sigma_smc_lower_bound_estimate
                 # f_q_across_seeds += f_q_estimate
 
-            iwae_lbs.append(iwae_lower_bound_estimate)
-            iwae_ubs.append(iwae_upper_bound_estimate)
-            smc_lbs.append(smc_lower_bound_estimate)
-            smc_ubs.append(smc_upper_bound_estimate)
-            print("IWAE AND SMC Log Z BOUND ESTIMATES")
-            print("IWAE LB AND UB")
-            print(np.stack(iwae_lbs).mean())
-            print(np.stack(iwae_ubs).mean())
-            print("SMC LB AND UB")
-            print(np.stack(smc_lbs).mean())
-            print(np.stack(smc_ubs).mean())
+                iwae_lbs.append(iwae_lower_bound_estimate)
+                iwae_ubs.append(iwae_upper_bound_estimate)
+                smc_lbs.append(smc_lower_bound_estimate)
+                smc_ubs.append(smc_upper_bound_estimate)
+                print("IWAE AND SMC Log Z BOUND ESTIMATES")
+                print("IWAE LB AND UB")
+                print(np.stack(iwae_lbs).mean())
+                print(np.stack(iwae_ubs).mean())
+                print(np.stack(iwae_lbs).shape)
+                print(np.stack(iwae_ubs).shape)
+                print("SMC LB AND UB")
+                print(np.stack(smc_lbs).mean())
+                print(np.stack(smc_ubs).mean())
 
             if seed == 0:
                 # VIEW These things just once to get a better understanding of what's happening

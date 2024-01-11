@@ -137,6 +137,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
     f_q_estimates_list = []
     g_q_estimates_list = []
     reward_list = []
+    midpoint_of_last_f_q_g_q_list = []
 
     for i in range(len(load_prefixes)):
 
@@ -155,16 +156,24 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
         print(g_q_estimates.mean(axis=0))
         print("Rewards")
         print(reward.mean(axis=0))
+        print("Midpoint of F_q and G_q at last time step:")
+        midpoint_of_last_f_q_g_q = (f_q_estimates.mean(axis=0)[-1] + g_q_estimates.mean(axis=0)[-1]) / 2
+        print(midpoint_of_last_f_q_g_q)
 
         f_q_estimates_list.append(f_q_estimates)
         g_q_estimates_list.append(g_q_estimates)
         reward_list.append(reward)
+        midpoint_of_last_f_q_g_q_list.append(midpoint_of_last_f_q_g_q)
 
         # if i == len(load_prefixes) - 1:
         #     f_q_estimates = np.transpose(x[1])
         #     g_q_estimates = np.transpose(x[0])
         #     # TODO REMOVE LATER
-    1/0
+    print(midpoint_of_last_f_q_g_q_list)
+    print(np.median(np.stack(midpoint_of_last_f_q_g_q_list)))
+    if "plast2_1_01" in fig_name_modifier: # Only if there aren't enough samples (e.g. 30 conditioning token samples isn't really enough) to get a good idea of the average log partition function over conditioning tokens
+        median_logZ_midpoint = np.median(np.stack(midpoint_of_last_f_q_g_q_list))
+
     plt.clf()
     plt.xlabel(f"2^ of Number of Twist Updates")
     plt.ylabel(f"KL Divergence")
