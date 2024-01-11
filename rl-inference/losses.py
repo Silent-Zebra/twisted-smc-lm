@@ -822,6 +822,8 @@ def get_l_rl_based_partial_jit(
         else:
             raise NotImplementedError
 
+    normalized_log_w_t_on_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t))
+
     if append_sigma_samples: # Add the sigma samples to our data/batch we're training on
         assert true_sigma_samples is not None
         samples_to_evaluate_over = jnp.concatenate(
@@ -831,6 +833,13 @@ def get_l_rl_based_partial_jit(
         print("Appending sigma samples")
         print(samples_to_evaluate_over.shape)
         print(condition_twist_on_tokens.shape)
+
+        log_w_t_sigma_samples = jnp.zeros((true_sigma_samples.shape[0]))
+        normalized_log_w_t_on_sigma_samples = jax.nn.softmax(
+            jax.lax.stop_gradient(log_w_t_sigma_samples))
+        normalized_log_w_t_on_samples = jnp.concatenate((normalized_log_w_t_on_samples, normalized_log_w_t_on_sigma_samples), axis=0)
+        # The above is basically summing up the gradient on both sets of samples. If we want an average... once crude way is just halve the learning rate.
+
 
     if loss_type == "monte_carlo":
         phi_vals = evaluate_log_phi_final(samples_to_evaluate_over,
@@ -894,7 +903,6 @@ def get_l_rl_based_partial_jit(
     # print(log_w_t.shape) # shape is [batch, ]
     # print(jax.lax.stop_gradient(log_w_t))
 
-    normalized_log_w_t_on_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t))
     # print(normalized_log_w_t_on_samples)
     # loss = jnp.dot(((values - target_term) ** 2).mean(axis=-1), normalized_log_w_t_on_samples)
     # print(jax.lax.stop_gradient(loss))
