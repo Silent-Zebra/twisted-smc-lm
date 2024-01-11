@@ -2546,6 +2546,13 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
             iwae_ubs.append(iwae_upper_bound_estimate)
             smc_lbs.append(smc_lower_bound_estimate)
             smc_ubs.append(smc_upper_bound_estimate)
+            print("IWAE AND SMC Log Z BOUND ESTIMATES")
+            print("IWAE LB AND UB")
+            print(np.stack(iwae_lbs).mean())
+            print(np.stack(iwae_ubs).mean())
+            print("SMC LB AND UB")
+            print(np.stack(smc_lbs).mean())
+            print(np.stack(smc_ubs).mean())
 
             if seed == 0:
                 # VIEW These things just once to get a better understanding of what's happening
@@ -4320,6 +4327,8 @@ if __name__ == "__main__":
     parser.add_argument("--n_samples_for_plots_smaller", type=int, default=32)
     parser.add_argument("--n_samples_for_plots_larger", type=int, default=500)
 
+    parser.add_argument("--overwrite_n_plot_seeds", action="store_true", help="Use custom # of plot seeds")
+    parser.add_argument("--n_plot_seeds", type=int, default=4, help="Only used in conjunction with --overwrite_n_plot_seeds")
 
     args = parser.parse_args()
 
@@ -4345,9 +4354,6 @@ if __name__ == "__main__":
         n_seeds = 30
         assert args.n_true_posterior_samples == 2000
 
-    if args.hface_model_type == "gpt2large":
-        # n_samples_for_plots = [32, 100]
-        n_seeds = 4
 
 
     # elif args.hface_model_type == "gpt2medium":
@@ -4360,5 +4366,9 @@ if __name__ == "__main__":
 
     if 'gcd' in args.twist_learn_type:
         assert args.beta_temp == 1 # because of the weird way that paper defines the KL regularized objective and the weird sampling, we only can directly plug it into our framework when our beta=1, corresponding to their beta = 0.5
+
+    if args.overwrite_n_plot_seeds:
+        n_seeds = args.n_plot_seeds
+        print(f"Overwriting n plot seeds: {n_seeds}")
 
     main()

@@ -522,7 +522,7 @@ def main():
                     target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list)), logZ_midpoint_estimate, np.transpose(np.stack(kl_vals_list))
                             ),
                     step=len(g_q_estimates_list),
-                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples"
+                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_ppo_seed{args.seed}_nsamples"
                 )
             else:
                 checkpoints.save_checkpoint(
@@ -530,7 +530,7 @@ def main():
                     target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list)), np.transpose(np.stack(kl_vals_list))
                                                     ),
                     step=len(g_q_estimates_list),
-                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_nsamples"
+                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_ppo_seed{args.seed}_nsamples"
                 )
 
         print("Starting twist updates:", flush=True)

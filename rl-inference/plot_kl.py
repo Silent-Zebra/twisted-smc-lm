@@ -50,7 +50,13 @@ load_prefixes_sent_rl_comparison = [
 
 
 load_prefixes_plasttok2_1 = [
-
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_07-12_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples14_10_10_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_18-33_seed1_rl_q_lsq_nsamples14_00001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_05-46_seed1_one_total_kl_nsamples14_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-29_seed1_sixo_nsamples14_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples14_0001",
+    # "f_q_g_q_estimates_2024-01-09_20-11_seed0_nsamples14_00003",
+    "f_q_g_q_estimates_2024-01-09_20-04_seed0_nsamples14_00001",
 ]
 
 load_prefixes_plasttok15_10 = [
@@ -115,12 +121,13 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
                                            prefix="checkpoint"
                                            )
 
-        if len(x) > 3:
+        if len(x) > 4:
             if x[3] is not None:
                 logZ_midpoint_estimate = x[3]
                 print(logZ_midpoint_estimate)
                 logZ_midpoint_estimates.append(logZ_midpoint_estimate)
 
+    # print(logZ_midpoint_estimates)
     median_logZ_midpoint = np.median(np.stack(logZ_midpoint_estimates))
     print(f"MEDIAN: {median_logZ_midpoint}")
     if "sent_rl_comp" in fig_name_modifier:
@@ -142,6 +149,13 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
         g_q_estimates = x[1]
         reward = x[2]
 
+        print("F_qs")
+        print(f_q_estimates.mean(axis=0))
+        print("G_qs")
+        print(g_q_estimates.mean(axis=0))
+        print("Rewards")
+        print(reward.mean(axis=0))
+
         f_q_estimates_list.append(f_q_estimates)
         g_q_estimates_list.append(g_q_estimates)
         reward_list.append(reward)
@@ -150,7 +164,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
         #     f_q_estimates = np.transpose(x[1])
         #     g_q_estimates = np.transpose(x[0])
         #     # TODO REMOVE LATER
-
+    1/0
     plt.clf()
     plt.xlabel(f"2^ of Number of Twist Updates")
     plt.ylabel(f"KL Divergence")
@@ -219,9 +233,11 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
     for x in output_latex:
         print(x)
 
-make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-10")
+# make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-10")
 
 # make_combined_plot(load_prefixes_tox, "tox_01-08")
 
 # make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-10")
 # make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-10")
+
+make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_01-10")
