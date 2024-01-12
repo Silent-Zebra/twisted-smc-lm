@@ -51,7 +51,8 @@ load_prefixes_sent_rl_comparison = [
 
 load_prefixes_plasttok2_1 = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_07-12_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples14_10_10_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-10_18-33_seed1_rl_q_lsq_nsamples14_00001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_22-45_seed1_rl_qsigma_lsq_nsamples14_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_18-33_seed1_rl_q_lsq_nsamples14_00001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_05-46_seed1_one_total_kl_nsamples14_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-29_seed1_sixo_nsamples14_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples14_0001",
@@ -60,7 +61,14 @@ load_prefixes_plasttok2_1 = [
 ]
 
 load_prefixes_plasttok15_10 = [
-
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_08-36_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples12_plast15_10_25_4_000003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-11_01-27_seed1_rl_qsigma_lsq_nsamples12_plast15_10_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_05-11_seed1_one_total_kl_nsamples12_plast15_10_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_00003",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_08-54_seed1_bce_q_nsamples12_plast15_10_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_07-14_seed1_bce_q_nsamples12_plast15_10_00003",
+    "f_q_g_q_estimates_2024-01-09_21-38_seed0_nsamples12_ppo_plast15_10_000001",
 ]
 
 twist_learn_method_names = [
@@ -170,12 +178,22 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
         #     g_q_estimates = np.transpose(x[0])
         #     # TODO REMOVE LATER
     print(midpoint_of_last_f_q_g_q_list)
+    print("Median")
     print(np.median(np.stack(midpoint_of_last_f_q_g_q_list)))
     if "plast2_1_01" in fig_name_modifier: # Only if there aren't enough samples (e.g. 30 conditioning token samples isn't really enough) to get a good idea of the average log partition function over conditioning tokens
-        median_logZ_midpoint = np.median(np.stack(midpoint_of_last_f_q_g_q_list))
+        # median_logZ_midpoint = np.median(np.stack(midpoint_of_last_f_q_g_q_list))
+        median_logZ_midpoint = -2.753 # Estimate from thousands of IWAE bounds. Should be pretty accurate.
+
+
 
     plt.clf()
-    plt.xlabel(f"2^ of Number of Twist Updates")
+    if "15_10" in fig_name_modifier:
+        median_logZ_midpoint = -20.735 # Estimate from thousands of IWAE bounds on the best model (EBM One-KL). Should be pretty accurate.
+
+
+        plt.xlabel(f"Number of Twist Updates")
+    else:
+        plt.xlabel(f"2^ of Number of Twist Updates")
     plt.ylabel(f"KL Divergence")
 
     # if fig_name_modifier == "tox":
@@ -184,6 +202,8 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
         plt.ylim([0, 8])
     if "sent_rl_comp" in fig_name_modifier:
         plt.ylim([0, 20])
+    if "15_10" in fig_name_modifier:
+        plt.ylim([0, 50])
 
     output_latex = []
 
@@ -195,6 +215,8 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
         g_q_estimates = g_q_estimates_list[i]
 
         x_range = np.arange(f_q_estimates.shape[-1])
+        if "15_10" in fig_name_modifier:
+            x_range = x_range * 500
 
         # print(f_q_estimates.shape[0])
         # print(g_q_estimates.shape[0])
@@ -249,4 +271,5 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 # make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-10")
 # make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-10")
 
-make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_01-10")
+# make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_01-10")
+make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_01-10")

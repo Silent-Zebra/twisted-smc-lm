@@ -87,10 +87,11 @@ def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twis
 
 
 class ExperimentConfig:
-    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0, sentiment_class=1, n_twist_ebm_vmap=0):
+    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0, sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
         self.beta_temp = beta_temp
+        self.alpha = alpha
 
         self.rm_type = rm_type.lower()
         self.rm_fn = self._get_rm_fn()
@@ -146,6 +147,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
         elif self.twist_learn_type == "ebm_ml_vmap_with_one_total_kl":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
+        elif self.twist_learn_type == "ebm_combined":
+            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_combined_objective_partial_jit, alpha=self.alpha), argnums=5)
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl_jit, argnums=5)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
@@ -2800,14 +2803,15 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
               num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
               num_samples_if_only_collect_true_posterior_samples=100,
               load_posterior_samples=False, load_prefix_posterior_samples=None,
-              sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1., softmax_twist=False, n_twist_ebm_vmap=0):
+              sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
+              softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5):
     experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
                                       twist_learn_type=twist_learn_type,
                                       rm_type=rm_type,
                                       beta_temp=beta_temp,
                                       num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
                                       sentiment_class=sentiment_class,
-                                      n_twist_ebm_vmap=n_twist_ebm_vmap)
+                                      n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha)
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
 
@@ -3635,7 +3639,8 @@ def main():
         args.load_prefix_ckpt, args.hface_nn_twist, args.separate_hface_twist_model,
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
         args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora, lora_rank=args.lora_rank,
-        hidden_units_multiplier=args.hidden_units_multiplier, n_twist_ebm_vmap=args.n_twist_ebm_vmap
+        hidden_units_multiplier=args.hidden_units_multiplier, n_twist_ebm_vmap=args.n_twist_ebm_vmap,
+        ebm_combined_alpha=args.ebm_combined_alpha
     )
 
 
@@ -3687,7 +3692,8 @@ def main():
             n_vocab=args.n_vocab,
             twist_learn_type="pretrain_final_twist_lsq",
             rm_type=args.rm_type, beta_temp=args.beta_temp,
-            sentiment_class=args.sentiment_class, n_twist_ebm_vmap=args.n_twist_ebm_vmap
+            sentiment_class=args.sentiment_class, n_twist_ebm_vmap=args.n_twist_ebm_vmap,
+            alpha=args.ebm_combined_alpha
         )
 
         for epoch in range(args.pretrain_twist_epochs):
@@ -4230,6 +4236,7 @@ if __name__ == "__main__":
             "ebm_one_sample",
             # "ebm_q_rsmp",
             "ebm_reweight", "ebm_mixed_p_q_reweight", "ebm_ml_jit_vmapped_over_condition_tokens",
+            "ebm_combined",
             "ebm_ml_vmap_with_one_total_kl",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
@@ -4332,6 +4339,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--overwrite_n_plot_seeds", action="store_true", help="Use custom # of plot seeds")
     parser.add_argument("--n_plot_seeds", type=int, default=4, help="Only used in conjunction with --overwrite_n_plot_seeds")
+
+    parser.add_argument("--ebm_combined_alpha", type=float, help="Weight to place on Roger's EBM update; 1-alpha goes on Rob's update",
+                        default=0.5)
 
     args = parser.parse_args()
 

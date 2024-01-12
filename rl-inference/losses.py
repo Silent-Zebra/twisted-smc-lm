@@ -1266,3 +1266,110 @@ def get_l_ebm_ml_vmap_with_one_total_kl(
 
     return ebm_ml_loss + one_total_kl_loss
 
+
+
+def get_l_ebm_ml_combined_objective_partial_jit(
+    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+    output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
+    token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
+    tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
+    replay_buffer=None, replay_buffer_log_w_ts=None, reweight_for_second_term=False, only_one_sample=True,
+    posterior_sample=None, exact_expectation=True, alpha=0.5
+):
+
+    if condition_twist_on_tokens is not None:
+        raise NotImplementedError  # Use the vmap version of ebm if using conditioning tokens
+
+    # if condition_twist_on_tokens is not None and len(condition_twist_on_tokens.shape) == 1:
+    #     # print(condition_twist_on_tokens.shape)
+    #     condition_twist_on_tokens = jnp.full(
+    #         (n_twist, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens
+    #     )
+
+    prompt_len = prompt.shape[-1]
+
+    rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
+
+    assert only_one_sample
+    assert true_sigma_samples is None
+    assert replay_buffer is None
+    assert posterior_sample is None
+    (log_w_t_sigma_samples, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
+        intermediate_twist_samples_hist,
+        intermediate_log_w_t_hist, _) = smc_procedure(
+        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        log_true_final_twist, output_len, n_twist,
+        smc_procedure_type=smc_procedure_type,
+        get_intermediate_sample_history_based_on_learned_twists=True,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        condition_twist_on_tokens=condition_twist_on_tokens,
+        token_of_interest_as_int=token_of_interest_as_int,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+        resample=False,
+        # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
+        # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
+        resample_for_log_psi_t_eval_list=False,  # NOTE THE FALSE HERE
+        tempered_twist=False
+        # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
+    )
+    normalized_w_t_sigma_samples = jax.nn.softmax(
+        jax.lax.stop_gradient(log_w_t_sigma_samples))
+
+    log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(
+        proposal_samples, prompt_len, cfg_twist, params_twist,
+        prepend_tokens_for_twists, condition_twist_on_tokens,
+        token_of_interest_as_int, huggingface_model)
+
+    ebm_second_term = 0.
+
+    for i in range(intermediate_log_w_t_hist.shape[0]):
+        ebm_second_term += jnp.dot(
+            jax.nn.softmax(jax.lax.stop_gradient(intermediate_log_w_t_hist[i])), # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
+            log_psi_t_eval_list_proposal_samples[i])
+
+    ebm_second_term /= intermediate_log_w_t_hist.shape[0]
+
+    l_ebm_new = -(jnp.dot(log_psi_on_truncated_proposal_samples.mean(axis=-1),
+                          normalized_w_t_sigma_samples) - ebm_second_term)
+
+
+
+
+    prompt_w_sigma_sample_s_1_to_t = proposal_samples
+
+    log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+        prepend_tokens_for_twists, condition_twist_on_tokens,
+        token_of_interest_as_int, huggingface_model)
+
+    assert exact_expectation
+
+    p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
+        prompt_w_sigma_sample_s_1_to_t, params_p, params_twist, cfg_p,
+        cfg_twist,
+        prepend_tokens_for_twists, condition_twist_on_tokens,
+        token_of_interest_as_int, huggingface_model)
+
+    log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
+    log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+    log_p_plus_log_psi_all_vocab_for_expectation = jax.lax.stop_gradient(
+        log_p + log_psi)  # stop gradient, no gradient on this
+    # p_psi_all_vocab_for_expectation = jnp.exp(log_p_plus_log_psi_all_vocab_for_expectation)
+    normalized_p_psi_all_vocab_for_expectation = jax.nn.softmax(
+        log_p_plus_log_psi_all_vocab_for_expectation, axis=-1)
+
+    l_kl_second_term = (
+            normalized_p_psi_all_vocab_for_expectation * log_psi).sum(
+        axis=-1)  # The log psi is where we'll get the gradient (grad Q), and then the sum does the expectation over q(s_t | s_1:t-1)
+    # Mean along the time dimension, again we can debate if we want to use sum. Just be consistent, that's the most important.
+
+    l_kl_first_term = log_psi_on_truncated_sigma_samples  # mean along the time dimension; we can debate if we want to use sum. Ultimately doesn't really matter because of the learning rate, is just a question of what's more convenient to avoid scaling lr with output_len. Mean means that the earlier twists get constant-ish scale of signal, but sum means the later twists get constant-ish scale of signal
+
+    l_kl = jnp.dot((l_kl_first_term - l_kl_second_term).mean(axis=1),
+                   normalized_w_t_sigma_samples)  # This dot with the sigma weighting gives us the expectation over sigma (s_1:t-1)
+    l_kl = -l_kl  # negative because now we have a loss
+
+    return (alpha * l_ebm_new) + (1 - alpha) * l_kl
+
+
+
