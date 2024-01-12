@@ -188,7 +188,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
     plt.clf()
     if "15_10" in fig_name_modifier:
-        median_logZ_midpoint = -20.735 # Estimate from thousands of IWAE bounds on the best model (EBM One-KL). Should be pretty accurate.
+        median_logZ_midpoint = -20.708 # Estimate from thousands of IWAE bounds on the best model (EBM One-KL). Should be pretty accurate.
 
 
         plt.xlabel(f"Number of Twist Updates")

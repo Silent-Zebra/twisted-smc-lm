@@ -146,7 +146,7 @@ class ExperimentConfig:
         elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
         elif self.twist_learn_type == "ebm_ml_vmap_with_one_total_kl":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap, alpha=self.alpha), argnums=5)
         elif self.twist_learn_type == "ebm_combined":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_combined_objective_partial_jit, alpha=self.alpha), argnums=5)
         elif self.twist_learn_type == "one_total_kl":
@@ -160,7 +160,7 @@ class ExperimentConfig:
         elif self.twist_learn_type == "one_total_kl_partial_jit":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
         elif self.twist_learn_type == "one_total_kl_with_rl":
-            dre_grad_fn = jax.grad(get_l_combined_rl_onekl, argnums=5)
+            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha), argnums=5)
         elif self.twist_learn_type == "one_total_kl_with_sixo":
             dre_grad_fn = jax.grad(get_l_combined_sixo_onekl, argnums=5)
         elif self.twist_learn_type == "rl_p_sq":
@@ -3621,7 +3621,7 @@ def main():
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                     target=(true_posterior_samples_by_prompt,),
                                     step=true_posterior_samples_by_prompt[0].shape[0],
-                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_{args.twist_learn_type}_nsamples")
+                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_nsamples")
         1 / 0
 
     experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
@@ -4340,7 +4340,7 @@ if __name__ == "__main__":
     parser.add_argument("--overwrite_n_plot_seeds", action="store_true", help="Use custom # of plot seeds")
     parser.add_argument("--n_plot_seeds", type=int, default=4, help="Only used in conjunction with --overwrite_n_plot_seeds")
 
-    parser.add_argument("--ebm_combined_alpha", type=float, help="Weight to place on Roger's EBM update; 1-alpha goes on Rob's update",
+    parser.add_argument("--ebm_combined_alpha", type=float, help="Weight to place on Roger's EBM update; 1-alpha goes on Rob's update (now also allows for alpha * RL + (1-alpha) * Rob for the rl-onekl update)",
                         default=0.5)
 
     args = parser.parse_args()
@@ -4374,7 +4374,7 @@ if __name__ == "__main__":
 
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
 
-    if args.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_vmap_with_one_total_kl"]:
+    if args.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_vmap_with_one_total_kl", "one_total_kl_with_rl", "ebm_ml_vmap_with_one_total_kl"]:
         assert args.rm_type == "p_last_tokens"
 
     if 'gcd' in args.twist_learn_type:

@@ -938,11 +938,12 @@ get_l_rl_based_jit = partial(jax.jit, static_argnames=[
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-                                   "huggingface_model", "tempered_twist", "beta_prop"])
+                                   "huggingface_model", "tempered_twist", "beta_prop", "append_sigma_samples", "alpha"])
 def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None,
-                       mixed_p_q_sample=False, exact_expectation=True, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None):
+                       mixed_p_q_sample=False, exact_expectation=True, true_sigma_samples=None, replay_buffer=None,
+                            replay_buffer_log_w_ts=None, append_sigma_samples=True, alpha=0.5):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -1014,7 +1015,47 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     l_kl = jnp.dot((l_kl_first_term - l_kl_second_term).mean(axis=1), normalized_w_t_sigma_samples) # This dot with the sigma weighting gives us the expectation over sigma (s_1:t-1)
     l_kl = -l_kl  # negative because now we have a loss
 
-    samples_to_evaluate_over = prompt_w_sigma_sample_s_1_to_t
+    # Use Q samples and sigma samples for RL
+    # Get q samples with no resampling anywhere
+    (_, _, _), _, (intermediate_twist_samples_hist,
+                   intermediate_log_w_t_hist, _) = smc_procedure(
+        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        log_true_final_twist, output_len, n_twist,
+        smc_procedure_type=smc_procedure_type,
+        get_intermediate_sample_history_based_on_learned_twists=True,
+        prepend_tokens_for_twists=prepend_tokens_for_twists,
+        condition_twist_on_tokens=condition_twist_on_tokens,
+        token_of_interest_as_int=token_of_interest_as_int,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+        resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop
+    )
+    samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
+    print(samples_to_evaluate_over.shape)
+    log_w_t = jnp.zeros((samples_to_evaluate_over.shape[
+        0]))  # Do this because with the no resample case, we already have samples from the q distribution, reweighting again would do nothing, just increase variance/redundancy in samples
+
+    normalized_log_w_t_on_samples = jax.nn.softmax(
+        jax.lax.stop_gradient(log_w_t))
+
+
+    assert append_sigma_samples # Add the sigma samples to our data/batch we're training on
+    assert true_sigma_samples is not None
+    samples_to_evaluate_over = jnp.concatenate(
+        (samples_to_evaluate_over, true_sigma_samples), axis=0)
+    if condition_twist_on_tokens is not None:
+        condition_twist_on_tokens = jnp.concatenate((condition_twist_on_tokens, condition_twist_on_tokens), axis=0)
+    print("Appending sigma samples")
+    print(samples_to_evaluate_over.shape)
+    print(condition_twist_on_tokens.shape)
+
+    log_w_t_sigma_samples = jnp.zeros((true_sigma_samples.shape[0]))
+    normalized_log_w_t_on_sigma_samples = jax.nn.softmax(
+        jax.lax.stop_gradient(log_w_t_sigma_samples))
+
+    normalized_log_w_t_on_samples = jnp.concatenate((normalized_log_w_t_on_samples, normalized_log_w_t_on_sigma_samples), axis=0)
+    # The above is basically summing up the gradient on both sets of samples. If we want an average... once crude way is just halve the learning rate.
+
+
     p_logits, log_psi = \
         get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p,
                                            params_twist,
@@ -1051,14 +1092,6 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
         prepend_tokens_for_twists, condition_twist_on_tokens,
         token_of_interest_as_int, huggingface_model)
 
-
-    normalized_log_w_t_on_samples = normalized_w_t_sigma_samples
-    # print(normalized_log_w_t_on_samples)
-    # loss = jnp.dot(((values - target_term) ** 2).mean(axis=-1), normalized_log_w_t_on_samples)
-    # print(jax.lax.stop_gradient(loss))
-    # print(jax.lax.stop_gradient(((values - target_term) ** 2).mean()))
-    # 1/0
-
     loss_type = "squared_error_in_log_space"
 
     if loss_type == "squared_error":
@@ -1073,7 +1106,7 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
         raise NotImplementedError
 
 
-    return rl_loss + l_kl
+    return alpha * rl_loss + (1 - alpha) * l_kl
 
 
 
@@ -1227,7 +1260,7 @@ def get_l_bce(
     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
     "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
-    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap"])
+    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap", "alpha"])
 def get_l_ebm_ml_vmap_with_one_total_kl(
     rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
     log_true_final_twist,
@@ -1238,7 +1271,7 @@ def get_l_ebm_ml_vmap_with_one_total_kl(
     tempered_twist=False, beta_prop=None, mixed_p_q_sample=False,
     true_sigma_samples=None,
     replay_buffer=None, replay_buffer_log_w_ts=None,
-    reweight_for_second_term=False, only_one_sample=False, n_twist_ebm_vmap=0
+    reweight_for_second_term=False, only_one_sample=False, n_twist_ebm_vmap=0, alpha=0.5
 ):
     ebm_ml_loss = get_l_ebm_ml_jit_vmapped_over_condition_tokens(
         rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -1264,7 +1297,7 @@ def get_l_ebm_ml_vmap_with_one_total_kl(
                        true_sigma_samples, replay_buffer,
                        replay_buffer_log_w_ts)
 
-    return ebm_ml_loss + one_total_kl_loss
+    return alpha * ebm_ml_loss + (1 - alpha) * one_total_kl_loss
 
 
 
