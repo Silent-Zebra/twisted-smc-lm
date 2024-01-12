@@ -179,6 +179,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=5)
         elif self.twist_learn_type == "rl_qsigma_lsq":
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space", append_sigma_samples=True), argnums=5)
+        elif self.twist_learn_type == "rl_qsigma_gcd":
+            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="googleCD", append_sigma_samples=True), argnums=5)
         elif self.twist_learn_type == "rl_q_gcd":
             dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="googleCD"), argnums=5)
         elif self.twist_learn_type == "rl_q_sq_partial_jit":
