@@ -87,7 +87,9 @@ def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twis
 
 
 class ExperimentConfig:
-    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0, sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5):
+    def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
+                 sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False
+    ):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
         self.beta_temp = beta_temp
@@ -98,6 +100,9 @@ class ExperimentConfig:
         self.batch_rm = self._get_batch_rm()
 
         self.n_twist_ebm_vmap = n_twist_ebm_vmap
+
+        self.train_on_true_posterior_samples = train_on_true_posterior_samples
+
 
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
             or self.rm_type == "contains_token" or self.rm_type == "contains_token_eps":
@@ -355,9 +360,25 @@ class ExperimentConfig:
                 )
                 return grad_params_twist
 
+            if self.train_on_true_posterior_samples:
+                assert self.rm_type in ["exp_beta_toxicity_class_logprob",
+                                        "exp_beta_sentiment_class_logprob"]  # others not yet tested
+                sk, combined_true_posterior_samples = collect_true_posterior_samples(
+                    sk, self, [prompt], cfg_p, params_p,
+                    self.rm_type,
+                    None,
+                    output_len, n_twist, huggingface_model,
+                    None, None, self.rewardModel, self.tokenizer_RM, self.tokenizer, None, None,
+                    n_twist
+                )
+                true_sigma_samples = combined_true_posterior_samples[0]
+
+                print("True posts for training")
+                print(true_sigma_samples)
+                print(true_sigma_samples.shape)
 
 
-            if self.rm_type == "p_last_tokens":
+            elif self.rm_type == "p_last_tokens":
                 if self.beta_temp != 1.:
                     assert "ebm" in self.twist_learn_type
 
@@ -484,6 +505,7 @@ class ExperimentConfig:
                      optimizer_twist, optim_twist_state, index_of_token_contained,
                      tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts
                      ):
+
 
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index":
             for i in range(len(indices_of_tokens_chosen)):
@@ -2796,6 +2818,51 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     return plot_over_time_list
 
 
+def collect_true_posterior_samples(
+    rng_key, experiment_cfg, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
+    output_len, n_true_posterior_samples, huggingface_model,
+    index_of_token_contained, indices_of_continuation, rewardModel,
+    tokenizer_RM, tokenizer, threshold, pos_threshold, num_samples_if_only_collect_true_posterior_samples
+):
+    new_start = time.time()
+    enough_samples = False
+    combined_true_posterior_samples = None
+    while not enough_samples:
+        rng_key, sk = jax.random.split(rng_key)
+        log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+            = experiment_cfg.get_log_true_final_twists(
+            sk, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
+            output_len, n_true_posterior_samples, huggingface_model,
+            index_of_token_contained, indices_of_continuation, rewardModel,
+            tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples=True
+        )
+        if combined_true_posterior_samples is None:
+            combined_true_posterior_samples = true_posterior_samples_by_prompt_and_by_token
+        else:
+            for i in range(len(combined_true_posterior_samples)):
+                print("----")
+                print(combined_true_posterior_samples[i].shape)
+                print(true_posterior_samples_by_prompt_and_by_token[i].shape)
+                combined_true_posterior_samples[i] = jnp.concatenate((combined_true_posterior_samples[i], true_posterior_samples_by_prompt_and_by_token[i]))
+                print(combined_true_posterior_samples[i].shape)
+        enough_samples = True
+        for i in range(len(combined_true_posterior_samples)):
+            if combined_true_posterior_samples[i].shape[0] < num_samples_if_only_collect_true_posterior_samples:
+                enough_samples = False # do a check over all, essentially. Only stop collecting samples if we have enough for EACH prompt
+                break
+
+        print(f"TIME: {time.time() - new_start}", flush=True)
+
+    for i in range(len(combined_true_posterior_samples)):
+        print(combined_true_posterior_samples[i].shape)
+        if combined_true_posterior_samples[i].shape[0] > num_samples_if_only_collect_true_posterior_samples:
+            combined_true_posterior_samples[i] = combined_true_posterior_samples[i][:num_samples_if_only_collect_true_posterior_samples]
+            print("reduce to n true post samples size")
+            print(combined_true_posterior_samples[i].shape)
+
+    return rng_key, combined_true_posterior_samples
+
+
 def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model_type, lr_twist,
           beta1, beta2, weight_decay, d_model, d_k, d_v, n_layers, n_heads, d_fc,
           d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist, d_fc_twist,
@@ -2806,14 +2873,17 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
               num_samples_if_only_collect_true_posterior_samples=100,
               load_posterior_samples=False, load_prefix_posterior_samples=None,
               sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
-              softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5):
-    experiment_cfg = ExperimentConfig(n_vocab=n_vocab,
-                                      twist_learn_type=twist_learn_type,
-                                      rm_type=rm_type,
-                                      beta_temp=beta_temp,
-                                      num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
-                                      sentiment_class=sentiment_class,
-                                      n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha)
+              softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False):
+    experiment_cfg = ExperimentConfig(
+        n_vocab=n_vocab,
+        twist_learn_type=twist_learn_type,
+        rm_type=rm_type,
+        beta_temp=beta_temp,
+        num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
+        sentiment_class=sentiment_class,
+        n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
+        train_on_true_posterior_samples=train_on_true_posterior_samples
+    )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
 
@@ -3229,6 +3299,10 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         jnp_prompts = get_jnp_prompts_from_prompts(prompts, token_based_prompt)
 
 
+    experiment_cfg.rewardModel = rewardModel
+    experiment_cfg.tokenizer_RM = tokenizer_RM
+    experiment_cfg.tokenizer = tokenizer
+
 
     # rng_key, sk = jax.random.split(rng_key)
     # p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
@@ -3252,34 +3326,42 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
 
 
     if only_collect_true_posterior_samples:
-        new_start = time.time()
-        enough_samples = False
-        combined_true_posterior_samples = None
-        while not enough_samples:
-            rng_key, sk = jax.random.split(rng_key)
-            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = experiment_cfg.get_log_true_final_twists(
-                sk, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
-                output_len, n_true_posterior_samples, huggingface_model,
-                index_of_token_contained, indices_of_continuation, rewardModel,
-                tokenizer_RM, tokenizer,threshold, pos_threshold, get_true_posterior_samples=True
-            )
-            if combined_true_posterior_samples is None:
-                combined_true_posterior_samples = true_posterior_samples_by_prompt_and_by_token
-            else:
-                for i in range(len(combined_true_posterior_samples)):
-                    print("----")
-                    print(combined_true_posterior_samples[i].shape)
-                    print(true_posterior_samples_by_prompt_and_by_token[i].shape)
-                    combined_true_posterior_samples[i] = jnp.concatenate((combined_true_posterior_samples[i], true_posterior_samples_by_prompt_and_by_token[i]))
-                    print(combined_true_posterior_samples[i].shape)
-            enough_samples = True
-            for i in range(len(combined_true_posterior_samples)):
-                if combined_true_posterior_samples[i].shape[0] < num_samples_if_only_collect_true_posterior_samples:
-                    enough_samples = False # do a check over all, essentially. Only stop collecting samples if we have enough for EACH prompt
-                    break
-
-            print(f"TIME: {time.time() - new_start}", flush=True)
+        rng_key, combined_true_posterior_samples = collect_true_posterior_samples(
+            rng_key, experiment_cfg, jnp_prompts, cfg_p, params_p, rm_type,
+            indicator_pos_zero_index,
+            output_len, n_true_posterior_samples, huggingface_model,
+            index_of_token_contained, indices_of_continuation, rewardModel,
+            tokenizer_RM, tokenizer, threshold, pos_threshold,
+            num_samples_if_only_collect_true_posterior_samples
+        )
+        # new_start = time.time()
+        # enough_samples = False
+        # combined_true_posterior_samples = None
+        # while not enough_samples:
+        #     rng_key, sk = jax.random.split(rng_key)
+        #     log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+        #         = experiment_cfg.get_log_true_final_twists(
+        #         sk, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
+        #         output_len, n_true_posterior_samples, huggingface_model,
+        #         index_of_token_contained, indices_of_continuation, rewardModel,
+        #         tokenizer_RM, tokenizer,threshold, pos_threshold, get_true_posterior_samples=True
+        #     )
+        #     if combined_true_posterior_samples is None:
+        #         combined_true_posterior_samples = true_posterior_samples_by_prompt_and_by_token
+        #     else:
+        #         for i in range(len(combined_true_posterior_samples)):
+        #             print("----")
+        #             print(combined_true_posterior_samples[i].shape)
+        #             print(true_posterior_samples_by_prompt_and_by_token[i].shape)
+        #             combined_true_posterior_samples[i] = jnp.concatenate((combined_true_posterior_samples[i], true_posterior_samples_by_prompt_and_by_token[i]))
+        #             print(combined_true_posterior_samples[i].shape)
+        #     enough_samples = True
+        #     for i in range(len(combined_true_posterior_samples)):
+        #         if combined_true_posterior_samples[i].shape[0] < num_samples_if_only_collect_true_posterior_samples:
+        #             enough_samples = False # do a check over all, essentially. Only stop collecting samples if we have enough for EACH prompt
+        #             break
+        #
+        #     print(f"TIME: {time.time() - new_start}", flush=True)
 
         return combined_true_posterior_samples
 
@@ -3642,7 +3724,7 @@ def main():
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
         args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora, lora_rank=args.lora_rank,
         hidden_units_multiplier=args.hidden_units_multiplier, n_twist_ebm_vmap=args.n_twist_ebm_vmap,
-        ebm_combined_alpha=args.ebm_combined_alpha
+        ebm_combined_alpha=args.ebm_combined_alpha, train_on_true_posterior_samples=args.train_on_true_posterior_samples
     )
 
 
@@ -4344,6 +4426,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--ebm_combined_alpha", type=float, help="Weight to place on Roger's EBM update; 1-alpha goes on Rob's update (now also allows for alpha * RL + (1-alpha) * Rob for the rl-onekl update)",
                         default=0.5)
+    parser.add_argument("--train_on_true_posterior_samples", action="store_true", help="Use True rather than approximate posterior samples. This could take very long (uses rejection sampling)")
 
     args = parser.parse_args()
 
@@ -4385,5 +4468,9 @@ if __name__ == "__main__":
     if args.overwrite_n_plot_seeds:
         n_seeds = args.n_plot_seeds
         print(f"Overwriting n plot seeds: {n_seeds}")
+
+    if args.train_on_true_posterior_samples:
+        assert args.beta_temp == 1
+        assert "one_total_kl" in args.twist_learn_type # Not yet tested for other twist learn types
 
     main()
