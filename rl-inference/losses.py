@@ -362,7 +362,7 @@ get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
     "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
-    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap"])
+    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap", "use_smc_ub_for_pos_samples"])
 def get_l_ebm_ml_jit_vmapped_over_condition_tokens(
     rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
     log_true_final_twist,
@@ -373,7 +373,7 @@ def get_l_ebm_ml_jit_vmapped_over_condition_tokens(
     tempered_twist=False, beta_prop=None, mixed_p_q_sample=False,
     true_sigma_samples=None,
     replay_buffer=None, replay_buffer_log_w_ts=None,
-    reweight_for_second_term=False, only_one_sample=False, n_twist_ebm_vmap=0
+    reweight_for_second_term=False, only_one_sample=False, n_twist_ebm_vmap=0, use_smc_ub_for_pos_samples=True
 ):
     assert condition_twist_on_tokens is not None
     # print(condition_twist_on_tokens)
@@ -381,36 +381,74 @@ def get_l_ebm_ml_jit_vmapped_over_condition_tokens(
 
     assert n_twist_ebm_vmap > 0
 
+    if use_smc_ub_for_pos_samples:
+        # TODO later replace with jit instead of partial jit (well it's ok, outside jit makes this fine)
+        vmapped_loss = jax.vmap(get_l_ebm_ml_partial_jit, in_axes=(
+            None, None, None, None, None, None,
+            None,
+            None, None, None,
+            0, None,
+            None, None,
+            None,
+            None, None, None,
+            None,
+            None, None,
+            None, None,
+            0
+        ))
 
-    # TODO later replace with jit instead of partial jit (well it's ok, outside jit makes this fine)
-    vmapped_loss = jax.vmap(get_l_ebm_ml_partial_jit, in_axes=(
-        None, None, None, None, None, None,
-        None,
-        None, None, None,
-        0, None,
-        None, None,
-        None,
-        None, None, None,
-        None,
-        None, None,
-        None, None,
-        0
-    ))
+        loss = vmapped_loss(
+            rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            log_true_final_twist,
+            output_len, n_twist_ebm_vmap, prepend_tokens_for_twists,
+            condition_twist_on_tokens, smc_procedure_type,
+            token_of_interest_as_int, proposal_is_p,
+            huggingface_model,
+            tempered_twist, beta_prop, mixed_p_q_sample,
+            None, # IMPORTANT - do not pass in true sigma samples here
+            replay_buffer, replay_buffer_log_w_ts,
+            reweight_for_second_term, only_one_sample,
+            true_sigma_samples # instead pass in here, then we have one posterior which the ebm function uses to generate more posteriors from
+        )
+    else:
+        # TODO later replace with jit instead of partial jit (well it's ok, outside jit makes this fine)
+        vmapped_loss = jax.vmap(get_l_ebm_ml_partial_jit, in_axes=(
+            None, None, None, None, None, None,
+            None,
+            None, None, None,
+            0, None,
+            None, None,
+            None,
+            None, None, None,
+            0,
+            None, None,
+            None, None,
+            None
+        ))
 
 
-    loss = vmapped_loss(
-        rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
-        log_true_final_twist,
-        output_len, n_twist_ebm_vmap, prepend_tokens_for_twists,
-        condition_twist_on_tokens, smc_procedure_type,
-        token_of_interest_as_int, proposal_is_p,
-        huggingface_model,
-        tempered_twist, beta_prop, mixed_p_q_sample,
-        None, # IMPORTANT - do not pass in true sigma samples here
-        replay_buffer, replay_buffer_log_w_ts,
-        reweight_for_second_term, only_one_sample,
-        true_sigma_samples # instead pass in here, then we have one posterior which the ebm function uses to generate more posteriors from
-    )
+        # print("vmap shapes")
+        # print(true_sigma_samples)
+        # print(true_sigma_samples.shape)
+
+        full_sigma_samples = jnp.full((true_sigma_samples.shape[0], n_twist_ebm_vmap, true_sigma_samples.shape[-1]), true_sigma_samples[:, None, :]) # Broadcast along second dimension e.g. 25, 10 (batch, seq_len) -> 25, 4, 10 (where 4 is the inner batch size n_twist_ebm_vmap)
+        # print(full_sigma_samples)
+        # print(full_sigma_samples.shape)
+
+
+        loss = vmapped_loss(
+            rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            log_true_final_twist,
+            output_len, n_twist_ebm_vmap, prepend_tokens_for_twists,
+            condition_twist_on_tokens, smc_procedure_type,
+            token_of_interest_as_int, proposal_is_p,
+            huggingface_model,
+            tempered_twist, beta_prop, mixed_p_q_sample,
+            full_sigma_samples,  # DO pass in true sigma samples here. IDEA: just copy the true sigma sample over (i.e. we have a single positive sample, no need for SMC UB sampling or whatever)
+            replay_buffer, replay_buffer_log_w_ts,
+            reweight_for_second_term, only_one_sample,
+            None # Do not pass in here
+        )
 
     # print(loss)
     # print(loss.shape)

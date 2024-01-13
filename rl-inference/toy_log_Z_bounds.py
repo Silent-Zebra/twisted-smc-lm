@@ -150,6 +150,10 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
+        elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub":
+            dre_grad_fn = jax.grad(partial(
+                get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True,
+                n_twist_ebm_vmap=self.n_twist_ebm_vmap, use_smc_ub_for_pos_samples=False), argnums=5)
         elif self.twist_learn_type == "ebm_ml_vmap_with_one_total_kl":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap, alpha=self.alpha), argnums=5)
         elif self.twist_learn_type == "ebm_combined":
@@ -382,7 +386,7 @@ class ExperimentConfig:
                 if self.beta_temp != 1.:
                     assert "ebm" in self.twist_learn_type
 
-                if self.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_vmap_with_one_total_kl"]:
+                if self.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_vmap_with_one_total_kl"]:
                     assert self.beta_temp == 1
                     sk, sk2 = jax.random.split(sk)
                     p_samples = stochastic_transformer_sample(sk2, cfg_p,
@@ -4320,6 +4324,7 @@ if __name__ == "__main__":
             "ebm_one_sample",
             # "ebm_q_rsmp",
             "ebm_reweight", "ebm_mixed_p_q_reweight", "ebm_ml_jit_vmapped_over_condition_tokens",
+            "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub",
             "ebm_combined",
             "ebm_ml_vmap_with_one_total_kl",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
@@ -4459,7 +4464,7 @@ if __name__ == "__main__":
 
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
 
-    if args.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_vmap_with_one_total_kl", "one_total_kl_with_rl", "ebm_ml_vmap_with_one_total_kl"]:
+    if args.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_vmap_with_one_total_kl", "one_total_kl_with_rl", "ebm_ml_vmap_with_one_total_kl"]:
         assert args.rm_type == "p_last_tokens"
 
     if 'gcd' in args.twist_learn_type:
