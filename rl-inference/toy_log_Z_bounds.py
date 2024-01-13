@@ -4471,6 +4471,6 @@ if __name__ == "__main__":
 
     if args.train_on_true_posterior_samples:
         assert args.beta_temp == 1
-        assert "one_total_kl" in args.twist_learn_type # Not yet tested for other twist learn types
+        assert "one_total_kl" in args.twist_learn_type or "ebm" in args.twist_learn_type # Not yet tested for other twist learn types
 
     main()

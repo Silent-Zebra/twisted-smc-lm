@@ -48,6 +48,17 @@ load_prefixes_sent_rl_comparison = [
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-02_seed1_rl_q_gcd_partial_jit_nsamples12_sent1_00001",
 ]
 
+load_prefixes_sent_truepost_comparison = [
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-13_08-32_seed1_one_total_kl_partial_jit_nsamples10_sent1_trainontruepost_0001",
+]
+
+load_prefixes_tox_truepost_comparison = [
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-13_06-16_seed1_one_total_kl_partial_jit_nsamples7_toxc_trainontruepost_00003",
+]
+
+
 
 load_prefixes_plasttok2_1 = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_07-12_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples14_10_10_0001",
@@ -86,29 +97,6 @@ twist_learn_method_names = [
 # ]
 
 
-# twist_learn_method_names = [
-#     "EBM",
-#     # "EBM2",
-#     # "EBM3",
-#     # "EBM4",
-#     # "RL (Twist)",
-#     # "RL (Twist)2",
-#     # "RL (Twist)3",
-#     # "RL (Twist)4",
-#     "EBM-One-KL",
-#     # "EBM-One-KL2",
-#     # "SIXO",
-#     # "SIXO2",
-#     # "SIXO3",
-#     # "SIXO4",
-#     # "BCE",
-#     # "BCE2",
-#     # "BCE3",
-#     # "BCE4",
-#     # "PPO",
-#     # "PPO2",
-#     "PPO3"
-# ]
 
 
 
@@ -272,4 +260,12 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 # make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-10")
 
 # make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_01-10")
-make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_01-10")
+# make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_01-10")
+
+
+twist_learn_method_names = [
+    "EBM-One-KL",
+    "EBM-One-KL Trained on Only Exact Posterior Samples",
+]
+make_combined_plot(load_prefixes_sent_truepost_comparison, "sent_truep_comp_01-13")
+make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-13")
