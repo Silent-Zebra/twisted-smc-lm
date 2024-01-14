@@ -3106,6 +3106,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
             if 'linear_layers' in params_twist[1]:
                 params_twist[1]['linear_layers'] = list(params_twist[1]['linear_layers'].values())
 
+        elif 'linear_layers' in params_twist:
+            params_twist['linear_layers'] = list(params_twist['linear_layers'].values())
         # print(optim_twist_state)
         # optim_twist_state = optimizer_twist.init(params_twist)
         # print(optim_twist_state)
