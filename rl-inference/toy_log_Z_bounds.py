@@ -2807,18 +2807,24 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     plt.legend()
 
     if proposal_is_p:
-        plt.savefig(f"{args.save_dir}/fig_pproposal_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf")
+        figname = f"{args.save_dir}/fig_pproposal_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf"
+        ckpt_name = f"logZ_bounds_pproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_nsamples"
     else:
-        plt.savefig(f"{args.save_dir}/fig_twistproposal_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf")
+        figname = f"{args.save_dir}/fig_twistproposal_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf"
+        ckpt_name = f"logZ_bounds_twistproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_nsamples"
 
-        if do_checkpoint_of_plot_info:
+    plt.savefig(figname)
 
-            checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                        target=(logZ_ubs_iwae_across_samples_time_seeds, logZ_lbs_iwae_across_samples_time_seeds,
-                                                logZ_ubs_smc_across_samples_time_seeds, logZ_lbs_smc_across_samples_time_seeds),
-                                        step=len(kl_ubs_iwae),
-                                        prefix=f"logZ_bounds_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_nsamples")
+    if do_checkpoint_of_plot_info:
 
+        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                    target=(
+                                    logZ_ubs_iwae_across_samples_time_seeds,
+                                    logZ_lbs_iwae_across_samples_time_seeds,
+                                    logZ_ubs_smc_across_samples_time_seeds,
+                                    logZ_lbs_smc_across_samples_time_seeds),
+                                    step=len(kl_ubs_iwae),
+                                    prefix=ckpt_name)
     return plot_over_time_list
 
 
