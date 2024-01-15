@@ -49,12 +49,20 @@ load_prefixes_sent_rl_comparison = [
 ]
 
 load_prefixes_sent_truepost_comparison = [
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-14_00-54_seed1_ebm_reweight_nsamples10_sent1_trainontruepost_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-13_22-51_seed1_ebm_reweight_nsamples9_sent1_trainontruepost_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-13_08-32_seed1_one_total_kl_partial_jit_nsamples10_sent1_trainontruepost_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-14_01-36_seed1_one_total_kl_partial_jit_nsamples10_sent1_trainontruepost_00003",
 ]
 
 load_prefixes_tox_truepost_comparison = [
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-13_23-09_seed1_ebm_reweight_nsamples7_toxc_trainontruepost_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-14_00-12_seed1_ebm_reweight_nsamples7_toxc_trainontruepost_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-13_23-27_seed1_one_total_kl_partial_jit_nsamples7_toxc_trainontruepost_0001", # This does even better. But I guess lower lr with approx sampling is more stable
     "f_q_g_q_logZbestmidpoint_info_2024-01-13_06-16_seed1_one_total_kl_partial_jit_nsamples7_toxc_trainontruepost_00003",
 ]
 
@@ -264,8 +272,12 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
 
 twist_learn_method_names = [
+    "EBM",
+    "EBM Trained on Only Exact Posterior Samples",
+    # "EBM Trained on Only Exact Posterior Samples",
     "EBM-One-KL",
+    # "EBM-One-KL Trained on Only Exact Posterior Samples",
     "EBM-One-KL Trained on Only Exact Posterior Samples",
 ]
-make_combined_plot(load_prefixes_sent_truepost_comparison, "sent_truep_comp_01-13")
-make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-13")
+# make_combined_plot(load_prefixes_sent_truepost_comparison, "sent_truep_comp_01-14")
+make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-14")
