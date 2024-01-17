@@ -1701,7 +1701,11 @@ def inspect_and_record_evidence_setting_for_index(
         # and then I'm broacasting it to however many n samples we want, so that we can do SMC or whatever we want with everything conditioned on the same set of tokens
         condition_twist_on_tokens_for_chosen_posterior_sample = condition_twist_on_tokens[index_of_true_posterior_sample]
         print(condition_twist_on_tokens_for_chosen_posterior_sample.shape)
-        condition_twist_on_tokens_broadcasted = jnp.full((n_test_smc_samples, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens_for_chosen_posterior_sample)
+
+        if args.rm_type == "sent_cond_twist":
+            condition_twist_on_tokens_broadcasted = jnp.full((n_test_smc_samples,), condition_twist_on_tokens_for_chosen_posterior_sample)
+        else:
+            condition_twist_on_tokens_broadcasted = jnp.full((n_test_smc_samples, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens_for_chosen_posterior_sample)
         print(condition_twist_on_tokens_broadcasted.shape)
 
 
