@@ -15,12 +15,15 @@ from custom_transformer import linear_init_normal, linear
 
 class CustomLMWithTwistHead:
     def __init__(self, key, model_name, output_size=-1, hface_nn_twist=False, softmax_twist=False,
-                 conditional_twist=False, num_last_tokens_to_condition_on=0, from_pt=False, n_layers_twist=3, hidden_units_multiplier=1.):
+                 conditional_twist_type=None, num_last_tokens_to_condition_on=0, from_pt=False, n_layers_twist=3, hidden_units_multiplier=1., one_hot_dim=0):
         self.huggingface_model = FlaxAutoModel.from_pretrained(model_name, from_pt=from_pt)  # Produces embeddings of d_model size
-        if conditional_twist:
+        self.conditional_twist_type = conditional_twist_type
+        if conditional_twist_type == "tokens":
             assert num_last_tokens_to_condition_on > 0
-            self.conditional_twist = conditional_twist
             self.num_last_tokens_to_condition_on = num_last_tokens_to_condition_on
+        elif conditional_twist_type == "one_hot":
+            assert one_hot_dim > 0
+            self.one_hot_dim = one_hot_dim
 
         self.n_layers_twist = n_layers_twist
 
@@ -38,12 +41,20 @@ class CustomLMWithTwistHead:
             self.twist_head_params = {}
             self.twist_head_params['linear_layers'] = []
 
-            if conditional_twist:
-                hidden_size = int(d_model * 2 * hidden_units_multiplier)
+            if conditional_twist_type == "tokens":
+                base_hidden_size = d_model * 2
+                hidden_size = int(base_hidden_size * hidden_units_multiplier)
                 key, linear_layer = linear_init_normal(
-                    key, d_model * 2, hidden_size, d_model * 2 + hidden_size)
+                    key, base_hidden_size, hidden_size, base_hidden_size + hidden_size)
+                self.twist_head_params['linear_layers'].append(linear_layer)
+            elif conditional_twist_type == "one_hot":
+                input_plusonehot_dim = (d_model + self.one_hot_dim)
+                hidden_size = int(d_model * hidden_units_multiplier) # TODO may need to increase capacity to be comparable with the separate twists...
+                key, linear_layer = linear_init_normal(
+                    key, input_plusonehot_dim, hidden_size, input_plusonehot_dim + hidden_size)
                 self.twist_head_params['linear_layers'].append(linear_layer)
             else:
+                assert conditional_twist_type is None
                 hidden_size = int(d_model * hidden_units_multiplier)
                 key, linear_layer = linear_init_normal(
                     key, d_model, hidden_size, d_model + hidden_size)
@@ -63,19 +74,17 @@ class CustomLMWithTwistHead:
             key, linear_layer = linear_init_normal(
                 key, hidden_size, output_size, hidden_size + output_size)
             self.twist_head_params['linear_layers'].append(linear_layer)
-                # key, self.twist_head_params['linear1'] = linear_init_normal(
-                #     key, d_model * 2, d_model * 2, d_model * 4)
-                # key, self.twist_head_params['linear2'] = linear_init_normal(
-                #     key, d_model * 2, d_model * 2, d_model * 4)
-                # key, self.twist_head_params['linear3'] = linear_init_normal(
-                #     key, d_model * 2, output_size, d_model * 2 + output_size)
 
 
         else:
-            if conditional_twist:
+            if conditional_twist_type == "tokens":
                 key, self.twist_head_params = linear_init_normal(
                     key, d_model * 2, output_size, d_model * 2 + output_size)
+            elif conditional_twist_type == "one_hot":
+                key, self.twist_head_params = linear_init_normal(
+                    key, (d_model + self.one_hot_dim), output_size, (d_model + self.one_hot_dim) + output_size)
             else:
+                assert conditional_twist_type is None
                 key, self.twist_head_params = linear_init_normal(key, d_model, output_size, d_model + output_size)
 
         self.softmax_twist = softmax_twist
@@ -121,14 +130,32 @@ class CustomLMWithTwistHead:
         if hface_model_params is None:
             hface_model_params = self.huggingface_model._params
 
-        if condition_twist_on_tokens is not None:
-            assert self.conditional_twist
-            prompt_plus_output_embeddings = self.huggingface_model(train=train, params=hface_model_params, input_ids=input_ids, **kwargs)[0]
-            condition_on_embeddings = self.huggingface_model(train=train, params=hface_model_params, input_ids=condition_twist_on_tokens, **kwargs)[0]
+        if condition_twist_on_tokens is not None: # TODO should we call it something other than condition_twist_on_tokens, if I also use it for sentiment?
+            assert self.conditional_twist_type is not None
+            prompt_plus_output_embeddings = \
+            self.huggingface_model(train=train, params=hface_model_params,
+                                   input_ids=input_ids, **kwargs)[0]
             embeddings_p = prompt_plus_output_embeddings
-            condition_on_embeddings = condition_on_embeddings[:, -1, :][:, None, :] # Take the last embedding - this embeds all the information of the entire sequence of last tokens (what we want to condition on)
-            condition_on_embeddings = jnp.broadcast_to(condition_on_embeddings, embeddings_p.shape)
+
+            if self.conditional_twist_type == "tokens":
+                condition_on_embeddings = self.huggingface_model(train=train, params=hface_model_params, input_ids=condition_twist_on_tokens, **kwargs)[0]
+                condition_on_embeddings = condition_on_embeddings[:, -1, :][:, None, :] # Take the last embedding - this embeds all the information of the entire sequence of last tokens (what we want to condition on)
+                condition_on_embeddings = jnp.broadcast_to(condition_on_embeddings, embeddings_p.shape)
+            elif self.conditional_twist_type == "one_hot":
+                condition_on_embeddings = jax.nn.one_hot(condition_twist_on_tokens, self.one_hot_dim) # TODO get one hot version of inputs
+                # print("HIHI")
+                # print(condition_on_embeddings)
+                # print(condition_on_embeddings.shape)
+                # print(prompt_plus_output_embeddings.shape)
+
+                condition_on_embeddings = jnp.broadcast_to(condition_on_embeddings[:, None, :],
+                                                           (prompt_plus_output_embeddings.shape[0], prompt_plus_output_embeddings.shape[1], condition_on_embeddings.shape[-1]))
+            else:
+                raise NotImplementedError
             embeddings_twist = jnp.concatenate((prompt_plus_output_embeddings, condition_on_embeddings), axis=-1)
+
+            print(embeddings_twist.shape)
+
         else:
             # embeddings have d_model shape. Attribute name of the [0] element is "last_hidden_state"
             embeddings_p = self.huggingface_model(train=train, params=hface_model_params, input_ids=input_ids, **kwargs)[0]

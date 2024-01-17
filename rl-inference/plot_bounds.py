@@ -11,10 +11,15 @@ import matplotlib.pyplot as plt
 from toy_log_Z_bounds import plot_with_conf_bounds
 
 
-load_pref_twist_32_512 = "logZ_bounds_twistproposal_2024-01-14_15-57_seed1_ebm_one_sample_nsamples1_1"
-load_pref_p_32_512 = "logZ_bounds_pproposal_2024-01-14_16-03_seed1_ebm_one_sample_nsamples1_1"
-load_pref_twist_128_2048 = "logZ_bounds_twistproposal_2024-01-14_16-03_seed1_ebm_one_sample_nsamples1_2"
-load_pref_p_128_2048 = "logZ_bounds_pproposal_2024-01-14_16-13_seed1_ebm_one_sample_nsamples1_2"
+# load_pref_twist_32_512 = "logZ_bounds_twistproposal_2024-01-14_15-57_seed1_ebm_one_sample_nsamples1_1"
+# load_pref_p_32_512 = "logZ_bounds_pproposal_2024-01-14_16-03_seed1_ebm_one_sample_nsamples1_1"
+# load_pref_twist_128_2048 = "logZ_bounds_twistproposal_2024-01-14_16-03_seed1_ebm_one_sample_nsamples1_2"
+# load_pref_p_128_2048 = "logZ_bounds_pproposal_2024-01-14_16-13_seed1_ebm_one_sample_nsamples1_2"
+
+load_pref_twist_32_512 = "logZ_bounds_twistproposal_2024-01-15_12-52_seed1_ebm_one_sample_nsamples1_1"
+load_pref_p_32_512 = "logZ_bounds_pproposal_2024-01-15_12-58_seed1_ebm_one_sample_nsamples1_1"
+load_pref_twist_128_2048 = "logZ_bounds_twistproposal_2024-01-15_12-59_seed1_ebm_one_sample_nsamples1_2"
+load_pref_p_128_2048 = "logZ_bounds_pproposal_2024-01-15_13-10_seed1_ebm_one_sample_nsamples1_2"
 
 
 color_list_for_lbs = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey']
@@ -117,7 +122,7 @@ last, conf_bound = plot_with_conf_bounds(
 )
 
 plt.legend()
-plt.savefig(f"./fig_bounds_toxt_01-14.pdf")
+plt.savefig(f"./fig_bounds_toxt_-5_01-14.pdf")
 
 
 #

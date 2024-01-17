@@ -529,7 +529,7 @@ def log_exp_beta_toxicity_class_logprob(
     return log_prob_of_class * beta_temp # in the phi = e^(beta r) formulation (here r = log p(c|s)), the log phi is going to be just beta * r
 
 def log_exp_beta_sentiment_class_logprob(
-    seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num
+    seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, varying_class_num=False
 ):
     # Here what we're going to do is set r = log p(c | s) where c is 1,2,3,4,5 (number of stars)
     # Then we have phi = e^(beta r) = e^(beta log p(c|s))
@@ -538,7 +538,7 @@ def log_exp_beta_sentiment_class_logprob(
     # What about when beta = -1? We get phi = 1/e^(log p(c|s)) = 1/p(c|s). We're sort of then applying a modifier to the base model p(s) such that we reduce the probability in accordance with p(c|s), that is, the more likely a string s is to be of class c, the more we reduce its probability - essentially high positive beta approaches sampling the most likely string that matches class c, while very negative beta approaches sampling the string LEAST likely to be of class c. Not necessarily the one most likely to be of any other class (except in the binary classifier case).
     # Anyway, with phi = e^(beta log p(c|s)), then log phi = beta log p(c|s)
 
-    class_prob = reward_model_sentiment_class_prob(seq, rewardModel, tokenizer_RM, tokenizer, class_num)
+    class_prob = reward_model_sentiment_class_prob(seq, rewardModel, tokenizer_RM, tokenizer, class_num, varying_class_num)
     log_prob_of_class = jnp.log(class_prob)
     return log_prob_of_class * beta_temp
 
@@ -555,9 +555,14 @@ def curried_log_exp_beta_toxicity_class_logprob(rewardModel, tokenizer_RM, token
 
 def curried_log_exp_beta_sentiment_class_logprob(rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index):
     def new_rm(seq):
-        return log_exp_beta_sentiment_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index)
+        return log_exp_beta_sentiment_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index, varying_class_num=False)
     return new_rm
 
+def curried_log_sentclass_cond(rewardModel, tokenizer_RM, tokenizer, beta_temp):
+    assert beta_temp == 1
+    def new_rm(seq, class_nums):
+        return log_exp_beta_sentiment_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_nums, varying_class_num=True)
+    return new_rm
 
 def stochastic_classify(rng_key, seq, classifier, tokenizer_RM, tokenizer, singledimlogit=False):
     rng_key, subkey = jax.random.split(rng_key)
@@ -599,15 +604,26 @@ def get_sentiment_score(tokens, rewardModel):
 
 
 
-def get_sentiment_class_prob(tokens, sentimentClassifier, class_num):
+def get_sentiment_class_prob(tokens, sentimentClassifier, class_num, varying_class_num=False):
     classification_logits = sentimentClassifier(**tokens)[0]
     classification_probs = jax.nn.softmax(classification_logits, axis=-1)
-    class_prob = classification_probs[:, class_num]
+    if varying_class_num:
+        print("class prob")
+        print(classification_probs)
+        print(classification_probs.shape)
+        print(class_num)
+        print(class_num.shape)
+        class_prob = classification_probs[jnp.arange(classification_probs.shape[0]), class_num]
+        print(class_prob)
+    else:
+        class_prob = classification_probs[:, class_num]
     # Note that the above is equivalent to doing softmax, then inverse sigmoid (is this interesting in any way?)
     # score = score.squeeze(-1)
     return class_prob
 
-def reward_model_sentiment_class_prob(seq, sentimentClassifier, tokenizer_RM, tokenizer, class_num):
+
+
+def reward_model_sentiment_class_prob(seq, sentimentClassifier, tokenizer_RM, tokenizer, class_num, varying_class_num=False):
     if len(seq.shape) == 3:
         raise NotImplementedError
 
@@ -620,7 +636,7 @@ def reward_model_sentiment_class_prob(seq, sentimentClassifier, tokenizer_RM, to
                           return_tensors="np",
                           return_attention_mask=True)
 
-    class_prob = get_sentiment_class_prob(tokens, sentimentClassifier, class_num)
+    class_prob = get_sentiment_class_prob(tokens, sentimentClassifier, class_num, varying_class_num)
 
     return class_prob
 
@@ -956,13 +972,6 @@ def build_exp_beta_toxicity_twists(jnp_prompts, rewardModel, tokenizer_RM, token
         log_true_final_twists.append(log_true_final_twist)
     return log_true_final_twists, None, None
 
-# def build_exp_beta_toxicity_class_logprob_twists(jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class):
-#     log_true_final_twists = []
-#     for jnp_prompt in jnp_prompts:
-#         log_true_final_twist = curried_log_exp_beta_toxicity_class_logprob(rewardModel, tokenizer_RM, tokenizer, beta_temp, pos_class)
-#         log_true_final_twists.append(log_true_final_twist)
-#     return log_true_final_twists, None, None
-
 def build_exp_beta_toxicity_class_logprob_twists(rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
     jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples=False):
     curried_log_true_final_twist_function = curried_log_exp_beta_toxicity_class_logprob
@@ -974,14 +983,6 @@ def build_exp_beta_toxicity_class_logprob_twists(rng_key, cfg_p, params_p, outpu
         get_true_posterior_samples
     )
 
-# def build_exp_beta_sentiment_class_logprob_twists(jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num):
-#     log_true_final_twists = []
-#     for jnp_prompt in jnp_prompts:
-#         log_true_final_twist = curried_log_exp_beta_sentiment_class_logprob(
-#             rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num)
-#         log_true_final_twists.append(log_true_final_twist)
-#     return log_true_final_twists, None, None
-
 def build_exp_beta_sentiment_class_logprob_twists(
     rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
     jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples=False
@@ -992,6 +993,72 @@ def build_exp_beta_sentiment_class_logprob_twists(
         curried_log_true_final_twist_function, jnp_prompts, rewardModel,
         tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples
     )
+
+
+
+def build_log_sentclass_cond_twists(
+    rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
+    jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, get_true_posterior_samples=False):
+    # This is the setting where we always have 1 true posterior sample every time we draw a sample
+    # Draw samples from the base model
+    # Here true twist is prob of the sentiment class
+
+
+    log_true_final_twists = []
+    true_posterior_samples_by_prompt = []
+
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+        log_true_final_twist = curried_log_sentclass_cond(rewardModel, tokenizer_RM, tokenizer, beta_temp)
+
+        log_true_final_twists.append(log_true_final_twist)
+
+        if get_true_posterior_samples:
+            rng_key, sk = jax.random.split(rng_key)
+            p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+                                                      jnp_prompt,
+                                                      output_len,
+                                                      n_samples_at_a_time,
+                                                      huggingface_model=huggingface_model)
+
+
+            rng_key, classes = stochastic_classify(rng_key, p_samples,
+                                                   rewardModel, tokenizer_RM,
+                                                   tokenizer,
+                                                   singledimlogit=False)
+
+            posterior_samples = p_samples
+
+            num_posterior_samples = \
+            posterior_samples.shape[0]
+            print("NUM samples", flush=True)
+            print(num_posterior_samples)
+
+            print(posterior_samples)
+            print(posterior_samples.shape)
+            print(log_true_final_twist(posterior_samples, classes))
+            print(log_true_final_twist(posterior_samples[:10], classes[:10]))
+            if tokenizer is not None:
+                # text_outputs = tokenizer.batch_decode(
+                #     p_samples,
+                #     skip_special_tokens=True)
+                # print(text_outputs)
+                text_outputs = tokenizer.batch_decode(posterior_samples[:10],
+                                                      skip_special_tokens=True)
+                print(text_outputs)
+
+            # token = ordered_token_list[i]
+            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
+            # assert extracted_true_posterior_samples.shape[0] != 0
+
+            true_posterior_samples_by_prompt.append(
+                posterior_samples)
+
+    # print(true_posterior_samples_by_prompt_and_by_token)
+
+    return rng_key, log_true_final_twists, None, true_posterior_samples_by_prompt
+
+
 
 def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indices_of_continuation, output_len,
                                    n_samples_at_a_time, tokenizer=None, huggingface_model=None, get_true_posterior_samples=True):
