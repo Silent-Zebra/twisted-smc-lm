@@ -458,7 +458,7 @@ get_l_ebm_ml_jit_vmapped_over_condition_tokens = partial(jax.jit, static_argname
     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
     "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
-    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap", "use_smc_ub_for_pos_samples"])(get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens())
+    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap", "use_smc_ub_for_pos_samples"])(get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens)
 
 # # This is the EBM Maximum Likelihood approach, but with resampling on the proposal distribution.
 # # Possibly less theoretically justified, but saves one call to SMC
