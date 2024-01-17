@@ -523,7 +523,7 @@ class ExperimentConfig:
 
                 condition_twist_on_tokens = stochastic_classes
 
-
+                true_sigma_samples = p_samples
 
             grad_params_twist = self.dre_grad_fn(
                 sk, prompt, cfg_p, params_p, cfg_twist,
