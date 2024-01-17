@@ -106,6 +106,10 @@ def get_l_ebm_ml_partial_jit(
         )
         # print(condition_twist_on_tokens)
         # print(condition_twist_on_tokens.shape)
+    elif condition_twist_on_tokens is not None and len(condition_twist_on_tokens.shape) == 0:
+        condition_twist_on_tokens = jnp.full(
+            (n_twist,), condition_twist_on_tokens
+        )
 
     # print("STARTING GET L EBM UPDATE")
     # new_start = time.time()
