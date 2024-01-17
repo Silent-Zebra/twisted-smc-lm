@@ -797,8 +797,12 @@ class ExperimentConfig:
         elif args.rm_type == "sent_cond_twist":
             true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
                 prompt_num]
-            _, classes = stochastic_classify(jax.random.PRNGKey(0), # USE A FIXED PRNG KEY HERE to keep the classes consistent across evaluations
-                                          true_posterior_samples, self.rewardModel, self.tokenizer_RM, self.tokenizer, singledimlogit=False)
+
+            if args.set_sent_class_for_post_samples:
+                classes = jnp.ones((true_posterior_samples.shape[0],), dtype=jnp.int32) * (args.sentiment_class - 1)
+            else:
+                _, classes = stochastic_classify(jax.random.PRNGKey(0), # USE A FIXED PRNG KEY HERE to keep the classes consistent across evaluations
+                                              true_posterior_samples, self.rewardModel, self.tokenizer_RM, self.tokenizer, singledimlogit=False)
 
             condition_twist_on_tokens = classes
 
@@ -1278,11 +1282,14 @@ class ExperimentConfig:
                                                       output_len,
                                                       n_samples,
                                                       huggingface_model=huggingface_model)
-            _, classes = stochastic_classify(jax.random.PRNGKey(0),
-                                          # USE A FIXED PRNG KEY HERE to keep the classes consistent across evaluations
-                                          p_samples,
-                                          self.rewardModel, self.tokenizer_RM,
-                                          self.tokenizer, singledimlogit=False)
+            if args.set_sent_class_for_post_samples:
+                classes = jnp.ones((p_samples.shape[0],), dtype=jnp.int32) * (args.sentiment_class - 1)
+            else:
+                _, classes = stochastic_classify(jax.random.PRNGKey(0),
+                                              # USE A FIXED PRNG KEY HERE to keep the classes consistent across evaluations
+                                              p_samples,
+                                              self.rewardModel, self.tokenizer_RM,
+                                              self.tokenizer, singledimlogit=False)
 
             condition_twist_on_tokens = classes
 
@@ -1510,7 +1517,6 @@ class ExperimentConfig:
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
         elif rm_type == "sent_cond_twist":
             assert self.beta_temp == 1 # not yet tested for other beta
-            get_true_posterior_samples = True
             rng_key, log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token =\
                 build_log_sentclass_cond_twists(
                     rng_key, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model,
@@ -4568,7 +4574,8 @@ if __name__ == "__main__":
                         help="Use a positive (>) threshold for the toxicity threshold reward model. If not set, then uses negative (<) threshold. Now also used for the exp_beta_toxicity_class_logprob; set to true means use the pos class, otherwise we are using the neg class")
     parser.add_argument("--sentiment_class", type=int, default=1, choices=[1, 2, 3, 4, 5],
                         help="Only for the sentiment classifier")
-
+    parser.add_argument("--set_sent_class_for_post_samples", action="store_true",
+                        help="Manually set the class for the loaded true posterior samples")
     parser.add_argument("--tempered_twist", action="store_true", help="Use beta_prop to temper the twists (purpose is to maintain exploration)")
     parser.add_argument("--beta_prop", type=float, help="beta used for temperature scaling ON THE q (smart twist) PROPOSAL (and q/twist weights for SMC); purpose is to serve as interp between p and q sampling; purpose of that is to maintain exploration/avoid immediately focusing on one mode of posterior. Default 1 means just sample from q (p psi), whereas 0 means sample from p only",
                         default=1.)
@@ -4653,5 +4660,8 @@ if __name__ == "__main__":
     if args.train_on_true_posterior_samples:
         assert args.beta_temp == 1
         assert "one_total_kl" in args.twist_learn_type or "ebm" in args.twist_learn_type # Not yet tested for other twist learn types
+
+    if args.rm_type == "sent_cond_twist" and args.load_posterior_samples:
+        assert args.set_sent_class_for_post_samples # More of a check, just to make sure that when I'm doing this loading, I'm consciously setting the sentiment class
 
     main()
