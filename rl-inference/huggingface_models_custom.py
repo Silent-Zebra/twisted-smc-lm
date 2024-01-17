@@ -143,10 +143,11 @@ class CustomLMWithTwistHead:
                 condition_on_embeddings = jnp.broadcast_to(condition_on_embeddings, embeddings_p.shape)
             elif self.conditional_twist_type == "one_hot":
                 condition_on_embeddings = jax.nn.one_hot(condition_twist_on_tokens, self.one_hot_dim) # TODO get one hot version of inputs
-                # print("HIHI")
-                # print(condition_on_embeddings)
-                # print(condition_on_embeddings.shape)
-                # print(prompt_plus_output_embeddings.shape)
+                print("HIHI")
+                print(condition_on_embeddings)
+                print(condition_on_embeddings.shape)
+                print(condition_on_embeddings[:, None, :].shape)
+                print(prompt_plus_output_embeddings.shape)
 
                 condition_on_embeddings = jnp.broadcast_to(condition_on_embeddings[:, None, :],
                                                            (prompt_plus_output_embeddings.shape[0], prompt_plus_output_embeddings.shape[1], condition_on_embeddings.shape[-1]))
