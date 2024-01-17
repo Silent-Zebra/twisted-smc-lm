@@ -150,6 +150,12 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=5)
         elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
+        elif self.twist_learn_type == "ebm_ml_partial_jit_vmapped_over_condition_tokens":
+            dre_grad_fn = jax.grad(
+                partial(get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens,
+                        reweight_for_second_term=True,
+                        n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=5)
+
         elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub":
             dre_grad_fn = jax.grad(partial(
                 get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True,
@@ -4487,6 +4493,7 @@ if __name__ == "__main__":
             "ebm_one_sample",
             # "ebm_q_rsmp",
             "ebm_reweight", "ebm_mixed_p_q_reweight", "ebm_ml_jit_vmapped_over_condition_tokens",
+            "ebm_ml_partial_jit_vmapped_over_condition_tokens",
             "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub",
             "ebm_combined",
             "ebm_ml_vmap_with_one_total_kl",
@@ -4628,7 +4635,9 @@ if __name__ == "__main__":
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
 
     if args.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_vmap_with_one_total_kl", "one_total_kl_with_rl", "ebm_ml_vmap_with_one_total_kl"]:
-        assert args.rm_type in ["p_last_tokens", "sent_cond_twist"]
+        assert args.rm_type in ["p_last_tokens"]
+    elif args.twist_learn_type == "ebm_ml_partial_jit_vmapped_over_condition_tokens":
+        assert args.rm_type == "sent_cond_twist"
 
     if 'gcd' in args.twist_learn_type:
         assert args.beta_temp == 1 # because of the weird way that paper defines the KL regularized objective and the weird sampling, we only can directly plug it into our framework when our beta=1, corresponding to their beta = 0.5
