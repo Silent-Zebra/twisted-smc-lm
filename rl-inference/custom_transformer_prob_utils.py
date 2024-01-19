@@ -119,11 +119,30 @@ def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, 
                            prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
     if huggingface_model is not None: # huggingface model
         if prepend_tokens_for_twists or isinstance(huggingface_model, HashableDict):
-            log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
-                                  prepend_tokens_for_twists, condition_twist_on_tokens,
-                                  token_of_interest_as_int,
-                                                      huggingface_model)
             p_logits = get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=huggingface_model)
+            if huggingface_model['call_type'] == "p_psi_combined":
+                log_p_plus_log_psi_logits_all_vocab = huggingface_model['twist'](
+                    input_ids=full_seq, ret="twist",
+                    hface_model_params=params_twist[0],
+                    params_twist_head=params_twist[1],
+                    condition_twist_on_tokens=condition_twist_on_tokens
+                ) # then taking a logsoftmax of the logit gives you the log(p psi).
+                # Note that, say you have p logits a1 a2, and you have psi values b1 b2 (2 vocab)
+                # If you were to do logsoftmax on p (say we only care about 1st token in vocab), then you get
+                # a1 - log(e^a1 + e^a2)
+                # and then log psi is just b1
+                # sum of those is a1 + b1 - log(e^a1 + e^a2)
+                # Now if you instead have a1+b1 directly as the logit, and you do log softmax
+                # you get a1+b1 - log(e^(a1+b1) + e^(a2+b2))
+                # Which is the same, except for a different subtracted constant. But in log space, for sampling, this doesn't matter, this constant will go away
+                # That is, we would indeed learn different values of a1 and b1 across the two cases, but they would only differ by a constant
+                log_psi_all_vocab = log_p_plus_log_psi_logits_all_vocab - p_logits
+
+            else:
+                log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
+                                      prepend_tokens_for_twists, condition_twist_on_tokens,
+                                      token_of_interest_as_int,
+                                                          huggingface_model)
         else:
             # TODO NOTE THAT if not specifying the hface_model_params, it defaults to whatever is in the huggingface_model
             # Which is based on the CustomLMWithTwistHead.huggingface_model._params

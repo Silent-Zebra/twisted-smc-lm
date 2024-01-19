@@ -3050,7 +3050,8 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
               num_samples_if_only_collect_true_posterior_samples=100,
               load_posterior_samples=False, load_prefix_posterior_samples=None,
               sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
-              softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False):
+              softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
+              output_p_psi=False):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
         twist_learn_type=twist_learn_type,
@@ -3135,7 +3136,12 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
                                           weight_decay=weight_decay)
             optim_twist_state = optimizer_twist.init(params_twist)
 
-            huggingface_model = HashableDict({'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "custom"})
+            if output_p_psi:
+                huggingface_model = HashableDict(
+                    {'p': model_p.__call__, 'twist': model_twist.__call__,
+                     'call_type': "p_psi_combined"})
+            else:
+                huggingface_model = HashableDict({'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "custom"})
 
             model = {'p': model_p, 'twist': model_twist}
 
@@ -3907,7 +3913,8 @@ def main():
         args.num_last_tokens_to_condition_on, False, 0, args.load_posterior_samples,
         args.load_prefix_posterior_samples, sentiment_class=args.sentiment_class, use_lora=args.use_lora, lora_rank=args.lora_rank,
         hidden_units_multiplier=args.hidden_units_multiplier, n_twist_ebm_vmap=args.n_twist_ebm_vmap,
-        ebm_combined_alpha=args.ebm_combined_alpha, train_on_true_posterior_samples=args.train_on_true_posterior_samples
+        ebm_combined_alpha=args.ebm_combined_alpha, train_on_true_posterior_samples=args.train_on_true_posterior_samples,
+        output_p_psi=args.output_p_psi
     )
 
 
@@ -4614,6 +4621,8 @@ if __name__ == "__main__":
                         default=0.5)
     parser.add_argument("--train_on_true_posterior_samples", action="store_true", help="Use True rather than approximate posterior samples. This could take very long (uses rejection sampling)")
 
+    parser.add_argument("--output_p_psi", action="store_true", help="Instead of outputting psi separate from the base model p, keep the base model separate, and then directly output p psi. Ie. we directly parameterize q = p psi rather than psi. If you need psi, you then have to divide by the base model prob")
+
     args = parser.parse_args()
 
 
@@ -4663,5 +4672,8 @@ if __name__ == "__main__":
 
     if args.rm_type == "sent_cond_twist" and args.load_posterior_samples:
         assert args.set_sent_class_for_post_samples # More of a check, just to make sure that when I'm doing this loading, I'm consciously setting the sentiment class
+
+    if args.output_p_psi:
+        assert args.separate_hface_twist_model
 
     main()
