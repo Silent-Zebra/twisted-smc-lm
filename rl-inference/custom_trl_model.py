@@ -1,4 +1,4 @@
-# Source: https://github.com/huggingface/trl/blob/6614b8aa6bd752bf19963a5b308f44e079e8e9fe/trl/models/modeling_value_head.py
+# Adapted from source: https://github.com/huggingface/trl/blob/6614b8aa6bd752bf19963a5b308f44e079e8e9fe/trl/models/modeling_value_head.py
 
 import torch
 import torch.nn as nn
@@ -136,7 +136,14 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             linear_layer.bias.data.zero_()
 
     def get_lm_logits(self, base_model_output, last_hidden_state):
-        return base_model_output.logits + self.nn_head(last_hidden_state) # Do this so that the text probs are close to the initial model at the beginning
+        return nn.functional.log_softmax(base_model_output.logits, axis=-1) + self.nn_head(last_hidden_state)
+        # Do this so that the text probs are close to the initial model at the beginning. Also, this formulation with the log softmax is now identical to in my other setup. We now actually have log p + (log psi) where log psi is directly output by the nn head. Maybe adding onto log p helps with stability
+        # Note that there is no equivalent formulation to the separate twist + nn head that I had in the other code. In order to be equivalent, I would need to keep the base p a constant separate, and then have this new network fully just tune the modifier to that base p. So I might have to keep another reference model copy within the model, and then stop grad on that, make sure that one doesn't change...
+
+        # So maybe I should redo all the infilling experiments with just nn head on PPO, and just nn head on all the other methods... That way everything is consistent. And having only nn head is not that much more expensive...
+        # But what about the demo???
+
+        # return base_model_output.logits + self.nn_head(last_hidden_state) # Do this so that the text probs are close to the initial model at the beginning
 
 
     def remove_requires_grad_base_model(self):
