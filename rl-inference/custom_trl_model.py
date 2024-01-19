@@ -136,7 +136,7 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             linear_layer.bias.data.zero_()
 
     def get_lm_logits(self, base_model_output, last_hidden_state):
-        return nn.functional.log_softmax(base_model_output.logits, axis=-1) + self.nn_head(last_hidden_state)
+        return nn.functional.log_softmax(base_model_output.logits, dim=-1) + self.nn_head(last_hidden_state)
         # Do this so that the text probs are close to the initial model at the beginning. Also, this formulation with the log softmax is now identical to in my other setup. We now actually have log p + (log psi) where log psi is directly output by the nn head. Maybe adding onto log p helps with stability
         # Note that there is no equivalent formulation to the separate twist + nn head that I had in the other code. In order to be equivalent, I would need to keep the base p a constant separate, and then have this new network fully just tune the modifier to that base p. So I might have to keep another reference model copy within the model, and then stop grad on that, make sure that one doesn't change...
 
