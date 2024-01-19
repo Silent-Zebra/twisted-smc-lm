@@ -801,8 +801,10 @@ class PPOTrainer(BaseTrainer):
                     # print([batch_dict["queries"][i] for i in mini_batch_inds])
                     # print('responses')
                     # print([batch_dict["responses"][i] for i in mini_batch_inds])
-                    condition_twist_on_tokens_shuffled = [condition_twist_on_tokens[i] for i in mini_batch_inds]
-                    condition_twist_on_tokens_shuffled = torch.stack(condition_twist_on_tokens_shuffled)
+                    condition_twist_on_tokens_shuffled = None
+                    if condition_twist_on_tokens is not None:
+                        condition_twist_on_tokens_shuffled = [condition_twist_on_tokens[i] for i in mini_batch_inds]
+                        condition_twist_on_tokens_shuffled = torch.stack(condition_twist_on_tokens_shuffled)
                     # print(condition_twist_on_tokens_shuffled)
                     # print(condition_twist_on_tokens_shuffled.shape)
 
