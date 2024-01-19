@@ -121,8 +121,9 @@ def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, 
         if prepend_tokens_for_twists or isinstance(huggingface_model, HashableDict):
             p_logits = get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=huggingface_model)
             if huggingface_model['call_type'] == "p_psi_combined":
-                log_p_plus_log_psi_logits_all_vocab = huggingface_model['twist'](
-                    input_ids=full_seq, ret="twist",
+                # this p_logits_new is not really a "p" logit, in that it's not necessarily from the base model, since we are finetuning (p psi) together in one go
+                p_logits_new, log_psi_logits = huggingface_model['twist'](
+                    input_ids=full_seq, ret="both",
                     hface_model_params=params_twist[0],
                     params_twist_head=params_twist[1],
                     condition_twist_on_tokens=condition_twist_on_tokens
@@ -136,6 +137,7 @@ def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, 
                 # you get a1+b1 - log(e^(a1+b1) + e^(a2+b2))
                 # Which is the same, except for a different subtracted constant. But in log space, for sampling, this doesn't matter, this constant will go away
                 # That is, we would indeed learn different values of a1 and b1 across the two cases, but they would only differ by a constant
+                log_p_plus_log_psi_logits_all_vocab = p_logits_new + log_psi_logits
                 log_psi_all_vocab = log_p_plus_log_psi_logits_all_vocab - p_logits
 
             else:
