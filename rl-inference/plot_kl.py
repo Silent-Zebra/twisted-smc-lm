@@ -18,7 +18,8 @@ load_prefixes_sent1_nnonly = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples12_sent1_00003",
     # "f_q_g_q_estimates_2024-01-09_00-49_seed0_nsamples12_sent1_ppo_00001",
-    "f_q_g_q_estimates_2024-01-09_01-21_seed0_nsamples12_sent1_ppo_000003",
+    # "f_q_g_q_estimates_2024-01-09_01-21_seed0_nsamples12_sent1_ppo_000003",
+    "f_q_g_q_estimates_2024-01-19_06-11_ppo_seed0_nsamples12_sent1_newnnonly",
     # "f_q_g_q_estimates_2024-01-09_00-37_seed0_nsamples12_sent1_ppo_000001"
 ]
 
@@ -260,7 +261,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
     for x in output_latex:
         print(x)
 
-# make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-10")
+make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-18")
 
 # make_combined_plot(load_prefixes_tox, "tox_01-08")
 
@@ -280,4 +281,4 @@ twist_learn_method_names = [
     "EBM-One-KL Trained on Only Exact Posterior Samples",
 ]
 # make_combined_plot(load_prefixes_sent_truepost_comparison, "sent_truep_comp_01-14")
-make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-14")
+# make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-14")
