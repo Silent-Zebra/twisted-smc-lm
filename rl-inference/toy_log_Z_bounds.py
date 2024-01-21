@@ -456,7 +456,7 @@ class ExperimentConfig:
                     assert "ebm" in self.twist_learn_type
 
                 if self.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub",
-                                             "ebm_ml_pprop_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_finalrl", "ebm_ml_vmap_with_one_total_kl"]:
+                                             "ebm_ml_pprop_jit_vmapped_over_condition_tokens", "ebm_p_neg", "ebm_ml_jit_vmapped_over_condition_tokens_finalrl", "ebm_ml_vmap_with_one_total_kl"]:
                     assert self.beta_temp == 1
                     sk, sk2 = jax.random.split(sk)
                     p_samples = stochastic_transformer_sample(sk2, cfg_p,
