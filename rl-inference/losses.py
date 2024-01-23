@@ -1330,7 +1330,7 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
                           normalized_log_w_t_on_sigma_samples)
                        # normalized_log_w_t_on_samples)  # Use mean to be consistent with the scale of the DRE/EBM updates. Dot with the normalized weights is a weighted average as well.
     elif rl_loss_type == "ratio":
-        rl_loss = jnp.dot((((values / target_term) - 1) ** 2).mean(axis=-1),
+        rl_loss = jnp.dot((((jnp.exp(values) / jnp.exp(target_term)) - 1) ** 2).mean(axis=-1),
                           normalized_log_w_t_on_sigma_samples)
     else:
         raise NotImplementedError
