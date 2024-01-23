@@ -190,8 +190,41 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True, exact_expectation=False), argnums=5)
         elif self.twist_learn_type == "one_total_kl_partial_jit":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=5)
-        elif self.twist_learn_type == "one_total_kl_with_rl":
-            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha), argnums=5)
+        # elif self.twist_learn_type == "one_total_kl_with_rl_old":
+        #     dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_with_rl_lsq_sgtarget":
+            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+                                           rl_loss_type="squared_error_in_log_space", rl_stop_grad="target"), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_with_rl_lsq_sgvalue":
+            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+                                           rl_loss_type="squared_error_in_log_space", rl_stop_grad="value"), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_with_rl_lsq_sgnone":
+            dre_grad_fn = jax.grad(
+                partial(get_l_combined_rl_onekl, alpha=self.alpha,
+                        rl_loss_type="squared_error_in_log_space",
+                        rl_stop_grad=None), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_with_rl_sq_sgtarget":
+            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+                                           rl_loss_type="squared_error", rl_stop_grad="target"), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_with_rl_sq_sgvalue":
+            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+                                           rl_loss_type="squared_error", rl_stop_grad="value"), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_with_rl_sq_sgnone":
+            dre_grad_fn = jax.grad(
+                partial(get_l_combined_rl_onekl, alpha=self.alpha,
+                        rl_loss_type="squared_error",
+                        rl_stop_grad=None), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_with_rl_ratio_sgtarget":
+            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+                                           rl_loss_type="ratio", rl_stop_grad="target"), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_with_rl_ratio_sgvalue":
+            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+                                           rl_loss_type="ratio", rl_stop_grad="value"), argnums=5)
+        elif self.twist_learn_type == "one_total_kl_with_rl_ratio_sgnone":
+            dre_grad_fn = jax.grad(
+                partial(get_l_combined_rl_onekl, alpha=self.alpha,
+                        rl_loss_type="ratio",
+                        rl_stop_grad=None), argnums=5)
         elif self.twist_learn_type == "one_total_kl_with_sixo":
             dre_grad_fn = jax.grad(get_l_combined_sixo_onekl, argnums=5)
         elif self.twist_learn_type == "rl_p_sq":
@@ -4533,7 +4566,13 @@ if __name__ == "__main__":
             "ebm_ml_vmap_with_one_total_kl",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
-            "one_total_kl_with_rl", "one_total_kl_with_sixo",
+            # "one_total_kl_with_rl_old",
+            "one_total_kl_with_rl_lsq_sgtarget", "one_total_kl_with_rl_lsq_sgvalue",
+            "one_total_kl_with_rl_lsq_sgnone", "one_total_kl_with_rl_sq_sgtarget",
+            "one_total_kl_with_rl_sq_sgvalue", "one_total_kl_with_rl_sq_sgnone",
+            "one_total_kl_with_rl_ratio_sgtarget", "one_total_kl_with_rl_ratio_sgvalue",
+            "one_total_kl_with_rl_ratio_sgnone",
+            "one_total_kl_with_sixo",
             "rl_p_sq", "rl_q_sq", "rl_qrsmp_sq", "rl_q_sq_partial_jit",
             "rl_sigma_sq", "rl_mixed_p_q_sq", "rl_p_lsq", "rl_q_lsq", "rl_q_lsq_partial_jit",
             "rl_q_gcd", "rl_q_gcd_partial_jit", "rl_qsigma_lsq", "rl_qsigma_lsq_partial_jit", "rl_qsigma_gcd",
@@ -4634,7 +4673,7 @@ if __name__ == "__main__":
     parser.add_argument("--overwrite_n_plot_seeds", action="store_true", help="Use custom # of plot seeds")
     parser.add_argument("--n_plot_seeds", type=int, default=4, help="Only used in conjunction with --overwrite_n_plot_seeds")
 
-    parser.add_argument("--ebm_combined_alpha", type=float, help="Weight to place on Roger's EBM update; 1-alpha goes on Rob's update (now also allows for alpha * RL + (1-alpha) * Rob for the rl-onekl update)",
+    parser.add_argument("--ebm_combined_alpha", type=float, help="Weight to place on Roger's EBM update (or RL); 1-alpha goes on Rob's update (now also allows for alpha * RL + (1-alpha) * Rob for the rl-onekl update)",
                         default=0.5)
     parser.add_argument("--train_on_true_posterior_samples", action="store_true", help="Use True rather than approximate posterior samples. This could take very long (uses rejection sampling)")
 
@@ -4673,7 +4712,7 @@ if __name__ == "__main__":
 
     if args.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_jit_vmapped_over_condition_tokens_finalrl",
                                  "ebm_ml_pprop_jit_vmapped_over_condition_tokens", "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub",
-                                 "ebm_ml_vmap_with_one_total_kl", "one_total_kl_with_rl", "ebm_ml_vmap_with_one_total_kl"]:
+                                 "ebm_ml_vmap_with_one_total_kl", "ebm_ml_vmap_with_one_total_kl"] or ("one_total_kl_with_rl" in args.twist_learn_type):
         assert args.rm_type in ["p_last_tokens"]
     elif args.twist_learn_type == "ebm_ml_partial_jit_vmapped_over_condition_tokens":
         assert args.rm_type == "sent_cond_twist"

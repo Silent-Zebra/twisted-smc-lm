@@ -1132,12 +1132,14 @@ get_l_rl_based_jit = partial(jax.jit, static_argnames=[
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
-                                   "huggingface_model", "tempered_twist", "beta_prop", "append_sigma_samples", "alpha"])
+                                   "huggingface_model", "tempered_twist", "beta_prop", "append_sigma_samples", "alpha", "rl_loss_type", "rl_stop_grad"])
 def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                         output_len, n_twist, prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None,
                        mixed_p_q_sample=False, exact_expectation=True, true_sigma_samples=None, replay_buffer=None,
-                            replay_buffer_log_w_ts=None, append_sigma_samples=True, alpha=0.5):
+                            replay_buffer_log_w_ts=None, append_sigma_samples=True, alpha=0.5,
+                            rl_loss_type="squared_error_in_log_space", rl_stop_grad="target"
+):
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -1187,20 +1189,21 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
         # Mean along the time dimension, again we can debate if we want to use sum. Just be consistent, that's the most important.
 
     else:
-        # TODO NOV 3 IF USING THIS, SHOULD TRY TO MAKE MORE EFFICIENT. But may as well just use the exact version.
-        scan_over = jnp.arange(output_len)
-        carry = (rng_key, params_p, params_twist, prompt_len)
-        # Then the second part, we need to truncate the sigma samples to t-1, and then sample from the proposal q for the next time step, then those will be our negative samples
-        carry, (new_seqs_array, log_psi_eval_of_new_seqs_array) = jax.lax.scan(
-            partial(
-                get_proposal_q_sample_in_scan_non_modify, original_seq=prompt_w_sigma_sample_s_1_to_t, cfg_p=cfg_p, cfg_twist=cfg_twist,
-                prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-                token_of_interest_as_int=token_of_interest_as_int, proposal_is_p=proposal_is_p, huggingface_model=huggingface_model
-            ), carry, scan_over, output_len
-        )
-
-        log_psi_eval_of_new_seqs_array = jnp.transpose(log_psi_eval_of_new_seqs_array)
-        l_kl_second_term = log_psi_eval_of_new_seqs_array
+        raise NotImplementedError
+        # # TODO NOV 3 IF USING THIS, SHOULD TRY TO MAKE MORE EFFICIENT. But may as well just use the exact version.
+        # scan_over = jnp.arange(output_len)
+        # carry = (rng_key, params_p, params_twist, prompt_len)
+        # # Then the second part, we need to truncate the sigma samples to t-1, and then sample from the proposal q for the next time step, then those will be our negative samples
+        # carry, (new_seqs_array, log_psi_eval_of_new_seqs_array) = jax.lax.scan(
+        #     partial(
+        #         get_proposal_q_sample_in_scan_non_modify, original_seq=prompt_w_sigma_sample_s_1_to_t, cfg_p=cfg_p, cfg_twist=cfg_twist,
+        #         prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+        #         token_of_interest_as_int=token_of_interest_as_int, proposal_is_p=proposal_is_p, huggingface_model=huggingface_model
+        #     ), carry, scan_over, output_len
+        # )
+        #
+        # log_psi_eval_of_new_seqs_array = jnp.transpose(log_psi_eval_of_new_seqs_array)
+        # l_kl_second_term = log_psi_eval_of_new_seqs_array
 
 
     l_kl_first_term = log_psi_on_truncated_sigma_samples # mean along the time dimension; we can debate if we want to use sum. Ultimately doesn't really matter because of the learning rate, is just a question of what's more convenient to avoid scaling lr with output_len. Mean means that the earlier twists get constant-ish scale of signal, but sum means the later twists get constant-ish scale of signal
@@ -1209,60 +1212,80 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     l_kl = jnp.dot((l_kl_first_term - l_kl_second_term).mean(axis=1), normalized_w_t_sigma_samples) # This dot with the sigma weighting gives us the expectation over sigma (s_1:t-1)
     l_kl = -l_kl  # negative because now we have a loss
 
-    # Use Q samples and sigma samples for RL
-    # Get q samples with no resampling anywhere
-    (_, _, _), _, (intermediate_twist_samples_hist,
-                   intermediate_log_w_t_hist, _) = smc_procedure(
-        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-        log_true_final_twist, output_len, n_twist,
-        smc_procedure_type=smc_procedure_type,
-        get_intermediate_sample_history_based_on_learned_twists=True,
-        prepend_tokens_for_twists=prepend_tokens_for_twists,
-        condition_twist_on_tokens=condition_twist_on_tokens,
-        token_of_interest_as_int=token_of_interest_as_int,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop
-    )
-    samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
-    print(samples_to_evaluate_over.shape)
-    log_w_t = jnp.zeros((samples_to_evaluate_over.shape[
-        0]))  # Do this because with the no resample case, we already have samples from the q distribution, reweighting again would do nothing, just increase variance/redundancy in samples
 
-    normalized_log_w_t_on_samples = jax.nn.softmax(
-        jax.lax.stop_gradient(log_w_t))
+    # TODO JAN 22
+    # TRY JUST SIGMA SAMPLES ON normalization consistency, since that's what we're training the One total KL on!
+    # The softmax term appears twice - once in RL loss and once in the Rob loss. Can we combine these somehow?
+    # Also, does this suggest perhaps that the stop grad is on the wrong thing?
+    # SHould I maybe do stop grad on the V on the previous time step instead of over the softmax? Because the softmax thing is what's being trained by Rob update!
+    # And if that works, should I also redo the RL update like that?
+    # Maybe I should have no stop grads anywhere???
+    # Geez... a lot to try here...
 
 
-    assert append_sigma_samples # Add the sigma samples to our data/batch we're training on
+    # # Use Q samples and sigma samples for RL
+    # # Get q samples with no resampling anywhere
+    # (_, _, _), _, (intermediate_twist_samples_hist,
+    #                intermediate_log_w_t_hist, _) = smc_procedure(
+    #     sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    #     log_true_final_twist, output_len, n_twist,
+    #     smc_procedure_type=smc_procedure_type,
+    #     get_intermediate_sample_history_based_on_learned_twists=True,
+    #     prepend_tokens_for_twists=prepend_tokens_for_twists,
+    #     condition_twist_on_tokens=condition_twist_on_tokens,
+    #     token_of_interest_as_int=token_of_interest_as_int,
+    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+    #     resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop
+    # )
+    # samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
+    # print(samples_to_evaluate_over.shape)
+    # log_w_t = jnp.zeros((samples_to_evaluate_over.shape[
+    #     0]))  # Do this because with the no resample case, we already have samples from the q distribution, reweighting again would do nothing, just increase variance/redundancy in samples
+    #
+    # normalized_log_w_t_on_samples = jax.nn.softmax(
+    #     jax.lax.stop_gradient(log_w_t))
+    #
+    #
+    # assert append_sigma_samples # Add the sigma samples to our data/batch we're training on
     assert true_sigma_samples is not None
-    samples_to_evaluate_over = jnp.concatenate(
-        (samples_to_evaluate_over, true_sigma_samples), axis=0)
-    if condition_twist_on_tokens is not None:
-        condition_twist_on_tokens = jnp.concatenate((condition_twist_on_tokens, condition_twist_on_tokens), axis=0)
-    print("Appending sigma samples")
-    print(samples_to_evaluate_over.shape)
-    print(condition_twist_on_tokens.shape)
+    samples_to_evaluate_over = true_sigma_samples
+    # samples_to_evaluate_over = jnp.concatenate(
+    #     (samples_to_evaluate_over, true_sigma_samples), axis=0)
+    # if condition_twist_on_tokens is not None:
+    #     condition_twist_on_tokens = jnp.concatenate((condition_twist_on_tokens, condition_twist_on_tokens), axis=0)
+    # print("Appending sigma samples")
+    # print(samples_to_evaluate_over.shape)
+    # print(condition_twist_on_tokens.shape)
 
     log_w_t_sigma_samples = jnp.zeros((true_sigma_samples.shape[0]))
     normalized_log_w_t_on_sigma_samples = jax.nn.softmax(
         jax.lax.stop_gradient(log_w_t_sigma_samples))
 
-    normalized_log_w_t_on_samples = jnp.concatenate((normalized_log_w_t_on_samples, normalized_log_w_t_on_sigma_samples), axis=0)
+    # normalized_log_w_t_on_samples = jnp.concatenate((normalized_log_w_t_on_samples, normalized_log_w_t_on_sigma_samples), axis=0)
     # The above is basically summing up the gradient on both sets of samples. If we want an average... once crude way is just halve the learning rate.
 
 
-    p_logits, log_psi = \
-        get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p,
-                                           params_twist,
-                                           cfg_p, cfg_twist,
-                                           prepend_tokens_for_twists,
-                                           condition_twist_on_tokens,
-                                           token_of_interest_as_int,
-                                           huggingface_model=huggingface_model)
-    log_psi = log_psi[:, prompt_len:]
+    # p_logits, log_psi = \
+    #     get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p,
+    #                                        params_twist,
+    #                                        cfg_p, cfg_twist,
+    #                                        prepend_tokens_for_twists,
+    #                                        condition_twist_on_tokens,
+    #                                        token_of_interest_as_int,
+    #                                        huggingface_model=huggingface_model)
+    log_psi = log_psi_all_vocab[:, prompt_len:]
 
     log_p = jax.nn.log_softmax(p_logits,
                                axis=-1)  # gives you the normalized p values, since the regular output is the unnormalized log p values
     log_p = log_p[:, prompt_len:]
+
+    # log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
+    # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+    # log_p_plus_log_psi_all_vocab_for_expectation = jax.lax.stop_gradient(
+    #     log_p + log_psi)  # stop gradient, no gradient on this
+    # # p_psi_all_vocab_for_expectation = jnp.exp(log_p_plus_log_psi_all_vocab_for_expectation)
+    # normalized_p_psi_all_vocab_for_expectation = jax.nn.softmax(
+    #     log_p_plus_log_psi_all_vocab_for_expectation, axis=-1)
 
     target_term = jax.nn.logsumexp((log_p + log_psi),
                                    axis=-1)  # first we get log(p psi), then we do exp, so we have p psi (psi = e^V), then we sum all the (p psi), then we log again. Therefore logsumexp. We use axis = -1 because we want to preserve the different values across different time steps. Essentially doing all the different time steps in one go
@@ -1279,23 +1302,36 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
                                                     condition_twist_on_tokens)
 
     target_term = target_term.at[:, -1].set(log_phi_final_eval)
-    target_term = jax.lax.stop_gradient(target_term)
+
+
 
     values = evaluate_log_psi_selected_tokens(
         samples_to_evaluate_over, prompt_len, cfg_twist, params_twist,
         prepend_tokens_for_twists, condition_twist_on_tokens,
         token_of_interest_as_int, huggingface_model)
 
-    loss_type = "squared_error_in_log_space"
+    if rl_stop_grad == "target":
+        target_term = jax.lax.stop_gradient(target_term)
+    elif rl_stop_grad == "value":
+        values = jax.lax.stop_gradient(values)
+    elif rl_stop_grad is None:
+        pass
+    else:
+        raise NotImplementedError
 
-    if loss_type == "squared_error":
+    if rl_loss_type == "squared_error":
         # DO the exp version for squared error - this might help with stability with indicator func (avoid targeting really large negative value, when indicator is 0 everywhere)
         rl_loss = jnp.dot(
-            ((jnp.exp(values) - jnp.exp(target_term)) ** 2).mean(axis=-1),
-            normalized_log_w_t_on_samples)  # Use mean to be consistent with the scale of the DRE/EBM updates. Dot with the normalized weights is a weighted average as well.
-    elif loss_type == "squared_error_in_log_space":
+            ((jnp.expm1(values) - jnp.expm1(target_term)) ** 2).mean(axis=-1),
+            normalized_log_w_t_on_sigma_samples)
+            # normalized_log_w_t_on_samples)  # Use mean to be consistent with the scale of the DRE/EBM updates. Dot with the normalized weights is a weighted average as well.
+    elif rl_loss_type == "squared_error_in_log_space":
         rl_loss = jnp.dot(((values - target_term) ** 2).mean(axis=-1),
-                       normalized_log_w_t_on_samples)  # Use mean to be consistent with the scale of the DRE/EBM updates. Dot with the normalized weights is a weighted average as well.
+                          normalized_log_w_t_on_sigma_samples)
+                       # normalized_log_w_t_on_samples)  # Use mean to be consistent with the scale of the DRE/EBM updates. Dot with the normalized weights is a weighted average as well.
+    elif rl_loss_type == "ratio":
+        rl_loss = jnp.dot((((values / target_term) - 1) ** 2).mean(axis=-1),
+                          normalized_log_w_t_on_sigma_samples)
     else:
         raise NotImplementedError
 
