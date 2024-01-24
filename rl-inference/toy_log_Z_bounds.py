@@ -1196,7 +1196,7 @@ class ExperimentConfig:
                         params_p, cfg_twist, params_twist,
                         prompt_len, output_len,
                         prepend_tokens_for_twists,
-                        condition_twist_on_tokens=None,
+                        condition_twist_on_tokens=condition_twist_on_tokens,
                         huggingface_model=huggingface_model, params_proposal=params_proposal)
                     print(f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
 
@@ -1317,7 +1317,7 @@ class ExperimentConfig:
                         params_p, cfg_twist, params_twist,
                         prompt_len, output_len,
                         prepend_tokens_for_twists,
-                        condition_twist_on_tokens=None,
+                        condition_twist_on_tokens=condition_twist_on_tokens,
                         huggingface_model=huggingface_model, params_proposal=params_proposal)
                     print(
                         f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
@@ -1421,7 +1421,7 @@ class ExperimentConfig:
                         params_p, cfg_twist, params_twist,
                         prompt_len, output_len,
                         prepend_tokens_for_twists,
-                        condition_twist_on_tokens=None,
+                        condition_twist_on_tokens=condition_twist_on_tokens,
                         huggingface_model=huggingface_model, params_proposal=params_proposal)
                 print(
                     f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
