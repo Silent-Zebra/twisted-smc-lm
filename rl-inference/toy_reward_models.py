@@ -790,33 +790,6 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface_model=None):
            bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob
 
 
-# def inspect_bad_word_reward(sk, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist,
-#                             log_true_final_twist, output_len, n_samples, rew_model, analytic_sigma_sample, n_vocab):
-#     sk, sk2 = jax.random.split(sk)
-#     _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
-#                                                       cfg_p, params_p,
-#                                                       cfg_twist,
-#                                                       params_twist,
-#                                                       log_true_final_twist,
-#                                                       output_len,
-#                                                       n_samples, analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
-#
-#     r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
-#
-#     model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
-#                                                output_len, n_samples)
-#     r_seqs_model = rew_model(model_seqs, prompt_len)
-#
-#     adv_reward = r_seqs_adv.mean()
-#     p_reward = r_seqs_model.mean()
-#
-#     print("Average rewards:")
-#     print(adv_reward)
-#     print(p_reward)
-#
-#     return adv_reward, p_reward
-#
-
 
 def print_bad_word_env_generations(key, indices_prompt, cfg_p, params_p, prompt_len, output_len, n_samples):
 
