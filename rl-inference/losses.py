@@ -1130,6 +1130,10 @@ get_l_rl_based_jit = partial(jax.jit, static_argnames=[
     "train_final_twist_only", "stop_grad", "append_sigma_samples"])(get_l_rl_based_partial_jit)
 
 
+
+def logmeanexp(x, axis=-1):
+    return jax.nn.logsumexp(x, axis=axis) - jnp.log(x.shape[axis])
+
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
                                    "huggingface_model", "tempered_twist", "beta_prop", "append_sigma_samples", "alpha", "rl_loss_type", "rl_stop_grad"])
@@ -1330,8 +1334,12 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
                           normalized_log_w_t_on_sigma_samples)
                        # normalized_log_w_t_on_samples)  # Use mean to be consistent with the scale of the DRE/EBM updates. Dot with the normalized weights is a weighted average as well.
     elif rl_loss_type == "ratio":
-        rl_loss = jnp.dot((((jnp.exp(values - target_term)) - 1) ** 2).mean(axis=-1),
-                          normalized_log_w_t_on_sigma_samples)
+        variance = (jnp.expm1( 2 * (target_term - values))
+                           - jnp.expm1( 2 * logmeanexp( target_term - values, axis=0) )).mean()
+        assert true_sigma_samples is not None # Above outer mean only works if equal weights
+        rl_loss = variance
+        # rl_loss = jnp.dot((((jnp.exp(values - target_term)) - 1) ** 2).mean(axis=-1),
+        #                   normalized_log_w_t_on_sigma_samples)
     else:
         raise NotImplementedError
 
