@@ -583,6 +583,71 @@ get_l_ebm_ml_jit_vmapped_over_condition_tokens = partial(jax.jit, static_argname
 
 
 
+
+@partial(jax.jit, static_argnames=[
+    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
+    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
+    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap",
+    "use_smc_ub_for_pos_samples", "add_rl_final_twist_loss"])
+def get_l_ebm_ml_os_jit_vmapped_over_condition_tokens(
+    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    log_true_final_twist,
+    output_len, n_twist, prepend_tokens_for_twists,
+    condition_twist_on_tokens, smc_procedure_type,
+    token_of_interest_as_int=None, proposal_is_p=False,
+    huggingface_model=None,
+    tempered_twist=False, beta_prop=None, mixed_p_q_sample=False,
+    true_sigma_samples=None,
+    replay_buffer=None, replay_buffer_log_w_ts=None,
+    reweight_for_second_term=False, only_one_sample=True, n_twist_ebm_vmap=0,
+    use_smc_ub_for_pos_samples=True, add_rl_final_twist_loss=False, params_proposal=None
+):
+    assert condition_twist_on_tokens is not None
+    assert true_sigma_samples is None
+    assert only_one_sample
+
+    assert n_twist_ebm_vmap > 0
+
+    vmapped_loss = jax.vmap(get_l_ebm_ml_partial_jit, in_axes=(
+        None, None, None, None, None, None,
+        None,
+        None, None, None,
+        0, None,
+        None, None,
+        None,
+        None, None, None,
+        None,
+        None, None,
+        None, None,
+        None,
+        None,
+        None
+    ))
+    loss = vmapped_loss(
+        rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        log_true_final_twist,
+        output_len, n_twist_ebm_vmap, prepend_tokens_for_twists,
+        condition_twist_on_tokens, smc_procedure_type,
+        token_of_interest_as_int, proposal_is_p,
+        huggingface_model,
+        tempered_twist, beta_prop, mixed_p_q_sample,
+        None, # IMPORTANT - do not pass in true sigma samples here
+        replay_buffer, replay_buffer_log_w_ts,
+        reweight_for_second_term, only_one_sample,
+        None,
+        False,
+        params_proposal
+    )
+
+    ebm_loss = loss.mean()
+
+
+    return ebm_loss
+
+
+
+
 # Don't modify the original sequence; built for use with Rob's update
 def get_proposal_q_sample_in_scan_non_modify(carry, t, original_seq, cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None, params_proposal=None):
     rng_key, params_p, params_twist, prompt_len = carry
