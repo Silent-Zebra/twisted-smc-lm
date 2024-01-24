@@ -98,7 +98,7 @@ def get_l_ebm_ml_partial_jit(
     token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
     tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
     replay_buffer=None, replay_buffer_log_w_ts=None, reweight_for_second_term=False, only_one_sample=False,
-    posterior_sample=None, return_proposal_samples=False, p_neg_sample=False, params_proposal=None
+    posterior_sample=None, return_proposal_samples=False, params_proposal=None
 ):
 
     if condition_twist_on_tokens is not None and len(condition_twist_on_tokens.shape) == 1:
@@ -123,7 +123,7 @@ def get_l_ebm_ml_partial_jit(
         assert true_sigma_samples is None
         assert replay_buffer is None
         assert posterior_sample is None
-        assert not p_neg_sample
+        # assert not p_neg_sample
         (log_w_t_sigma_samples, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
             intermediate_twist_samples_hist,
             intermediate_log_w_t_hist, _) = smc_procedure(
@@ -303,72 +303,67 @@ def get_l_ebm_ml_partial_jit(
         prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
         token_of_interest_as_int, huggingface_model)
 
-
     # BELOW IS NEGATIVE SAMPLING PART
-    if p_neg_sample:
-        raise NotImplementedError # This doesn't work
 
-    else:
-
-        # TODO just do base model sample instead of the SMC sample.
-        # Then using that sequence as the prefix, do a one step expectation over next token prob (p psi), similar to one_total_kl. Copy code from there.
-        if reweight_for_second_term: # Get approximate p(s_{1:t}) psi_t(s_{1:t}) samples by reweighting the produce of conditionals q(s_1) q(s_2|s_1)...
-            (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
-                intermediate_twist_samples_hist,
-                intermediate_log_w_t_hist, _) = smc_procedure(
-                sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                log_true_final_twist, output_len, n_twist,
-                smc_procedure_type=smc_procedure_type,
-                get_intermediate_sample_history_based_on_learned_twists=True,
-                prepend_tokens_for_twists=prepend_tokens_for_twists,
-                condition_twist_on_tokens=condition_twist_on_tokens,
-                token_of_interest_as_int=token_of_interest_as_int,
-                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                resample=False,
-                # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
-                # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
-                resample_for_log_psi_t_eval_list=False, # NOTE THE FALSE HERE
-                tempered_twist=False,
-                params_proposal=params_proposal
-                # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
-            )
-
-            # print(proposal_samples)
-            # print(proposal_samples.shape)
-
-            ebm_second_term = 0.
-
-            for i in range(intermediate_log_w_t_hist.shape[0]):
-                ebm_second_term += jnp.dot(
-                    jax.nn.softmax(jax.lax.stop_gradient(intermediate_log_w_t_hist[i])), # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
-                    log_psi_t_eval_list_proposal_samples[i])
-
-
-            ebm_second_term /= intermediate_log_w_t_hist.shape[0]
-
-        else: # Get approximate p(s_{1:t}) psi_t(s_{1:t}) samples by resampling from the produce of conditionals q(s_1) q(s_2|s_1)...
-            # Get q samples with no resampling anywhere
-            (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
+    # TODO just do base model sample instead of the SMC sample.
+    # Then using that sequence as the prefix, do a one step expectation over next token prob (p psi), similar to one_total_kl. Copy code from there.
+    if reweight_for_second_term: # Get approximate p(s_{1:t}) psi_t(s_{1:t}) samples by reweighting the produce of conditionals q(s_1) q(s_2|s_1)...
+        (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
             intermediate_twist_samples_hist,
             intermediate_log_w_t_hist, _) = smc_procedure(
-                sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                log_true_final_twist, output_len, n_twist,
-                smc_procedure_type=smc_procedure_type,
-                get_intermediate_sample_history_based_on_learned_twists=True,
-                prepend_tokens_for_twists=prepend_tokens_for_twists,
-                condition_twist_on_tokens=condition_twist_on_tokens,
-                token_of_interest_as_int=token_of_interest_as_int,
-                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                resample=False,
-                # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
-                # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
-                resample_for_log_psi_t_eval_list=True,
-                tempered_twist=False,
-                params_proposal=params_proposal
-                # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
-            )
+            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            log_true_final_twist, output_len, n_twist,
+            smc_procedure_type=smc_procedure_type,
+            get_intermediate_sample_history_based_on_learned_twists=True,
+            prepend_tokens_for_twists=prepend_tokens_for_twists,
+            condition_twist_on_tokens=condition_twist_on_tokens,
+            token_of_interest_as_int=token_of_interest_as_int,
+            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+            resample=False,
+            # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
+            # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
+            resample_for_log_psi_t_eval_list=False, # NOTE THE FALSE HERE
+            tempered_twist=False,
+            params_proposal=params_proposal
+            # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
+        )
 
-            ebm_second_term = jnp.transpose(log_psi_t_eval_list_proposal_samples).mean()
+        # print(proposal_samples)
+        # print(proposal_samples.shape)
+
+        ebm_second_term = 0.
+
+        for i in range(intermediate_log_w_t_hist.shape[0]):
+            ebm_second_term += jnp.dot(
+                jax.nn.softmax(jax.lax.stop_gradient(intermediate_log_w_t_hist[i])), # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
+                log_psi_t_eval_list_proposal_samples[i])
+
+
+        ebm_second_term /= intermediate_log_w_t_hist.shape[0]
+
+    else: # Get approximate p(s_{1:t}) psi_t(s_{1:t}) samples by resampling from the produce of conditionals q(s_1) q(s_2|s_1)...
+        # Get q samples with no resampling anywhere
+        (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
+        intermediate_twist_samples_hist,
+        intermediate_log_w_t_hist, _) = smc_procedure(
+            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            log_true_final_twist, output_len, n_twist,
+            smc_procedure_type=smc_procedure_type,
+            get_intermediate_sample_history_based_on_learned_twists=True,
+            prepend_tokens_for_twists=prepend_tokens_for_twists,
+            condition_twist_on_tokens=condition_twist_on_tokens,
+            token_of_interest_as_int=token_of_interest_as_int,
+            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+            resample=False,
+            # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
+            # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
+            resample_for_log_psi_t_eval_list=True,
+            tempered_twist=False,
+            params_proposal=params_proposal
+            # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
+        )
+
+        ebm_second_term = jnp.transpose(log_psi_t_eval_list_proposal_samples).mean()
 
 
     l_ebm_new = -(jnp.dot(log_psi_on_truncated_sigma_samples.mean(axis=-1), normalized_w_t_sigma_samples) - ebm_second_term)
@@ -383,7 +378,7 @@ get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
     "prepend_tokens_for_twists", "token_of_interest_as_int", "smc_procedure_type", "proposal_is_p",
     "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
-    "reweight_for_second_term", "only_one_sample", "return_proposal_samples", "p_neg_sample"])(get_l_ebm_ml_partial_jit)
+    "reweight_for_second_term", "only_one_sample", "return_proposal_samples"])(get_l_ebm_ml_partial_jit)
 
 
 
@@ -425,7 +420,8 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 None, None,
                 None, None,
                 0,
-                None, None,
+                None,
+                None,
             ), out_axes=(0, 0))
             x = vmapped_loss(
                 rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -456,7 +452,9 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 None,
                 None, None,
                 None, None,
-                0, None
+                0,
+                None,
+                None
             ))
             loss = vmapped_loss(
                 rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -470,6 +468,7 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 replay_buffer, replay_buffer_log_w_ts,
                 reweight_for_second_term, only_one_sample,
                 true_sigma_samples, # instead pass in here, then we have one posterior which the ebm function uses to generate more posteriors from
+                False,
                 params_proposal
             )
 
@@ -497,6 +496,7 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 0,
                 None, None,
                 None, None,
+                None,
                 None, None
             ), out_axes=(0, 0))
             loss, proposal_samples = vmapped_loss(
@@ -528,7 +528,7 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 None, None,
                 None, None,
                 None,
-                None
+                None, None
             ))
             loss = vmapped_loss(
                 rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
@@ -542,7 +542,7 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 replay_buffer, replay_buffer_log_w_ts,
                 reweight_for_second_term, only_one_sample,
                 None, # Do not pass in here
-                params_proposal
+                False, params_proposal
             )
 
     # print(loss)

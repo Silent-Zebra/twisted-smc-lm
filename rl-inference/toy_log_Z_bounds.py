@@ -138,8 +138,6 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_ebm_fn, argnums=5)
         elif self.twist_learn_type == "ebm_one_sample":
             dre_grad_fn = jax.grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=5)
-        elif self.twist_learn_type == "ebm_p_neg":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_fn, p_neg_sample=True), argnums=5)
         elif self.twist_learn_type == "ebm_reweight":
             dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True), argnums=5)
         elif self.twist_learn_type == "ebm_partial_jit":
@@ -490,7 +488,7 @@ class ExperimentConfig:
                 assert "ebm" in self.twist_learn_type
 
             if self.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub",
-                                         "ebm_ml_pprop_jit_vmapped_over_condition_tokens", "ebm_p_neg", "ebm_ml_jit_vmapped_over_condition_tokens_finalrl", "ebm_ml_vmap_with_one_total_kl"]:
+                                         "ebm_ml_pprop_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_finalrl", "ebm_ml_vmap_with_one_total_kl"]:
                 assert self.beta_temp == 1
                 sk, sk2 = jax.random.split(sk)
                 p_samples = stochastic_transformer_sample(sk2, cfg_p,
@@ -3559,7 +3557,7 @@ if __name__ == "__main__":
         "--twist_learn_type", type=str, default="ebm_one_sample",
         choices=[
             "ebm_old", "ebm_partial_jit", "ebm_mixed_p_q", # partial jit only for testing
-            "ebm_one_sample", "ebm_p_neg",
+            "ebm_one_sample",
             # "ebm_q_rsmp",
             "ebm_reweight", "ebm_mixed_p_q_reweight", "ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_finalrl",
             "ebm_ml_partial_jit_vmapped_over_condition_tokens", "ebm_ml_pprop_jit_vmapped_over_condition_tokens",
