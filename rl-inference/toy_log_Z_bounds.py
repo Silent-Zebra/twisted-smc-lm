@@ -1021,11 +1021,11 @@ class ExperimentConfig:
                 if params_proposal is not None:
                     kl_vals_prop = get_kl_vals(
                         no_intermediate_resample_proposal_samples, cfg_p,
-                        params_p, cfg_twist, params_proposal,
+                        params_p, cfg_twist, params_twist,
                         prompt_len, output_len,
                         prepend_tokens_for_twists,
                         condition_twist_on_tokens=None,
-                        huggingface_model=huggingface_model)
+                        huggingface_model=huggingface_model, params_proposal=params_proposal)
                     print(f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
 
 
@@ -1073,11 +1073,11 @@ class ExperimentConfig:
                 if params_proposal is not None:
                     kl_vals_prop = get_kl_vals(
                         no_intermediate_resample_proposal_samples, cfg_p,
-                        params_p, cfg_twist, params_proposal,
+                        params_p, cfg_twist, params_twist,
                         prompt_len, output_len,
                         prepend_tokens_for_twists,
                         condition_twist_on_tokens=None,
-                        huggingface_model=huggingface_model)
+                        huggingface_model=huggingface_model, params_proposal=params_proposal)
                     print(f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
 
             if huggingface_model:
@@ -1193,11 +1193,11 @@ class ExperimentConfig:
                 if params_proposal is not None:
                     kl_vals_prop = get_kl_vals(
                         no_intermediate_resample_proposal_samples, cfg_p,
-                        params_p, cfg_twist, params_proposal,
+                        params_p, cfg_twist, params_twist,
                         prompt_len, output_len,
                         prepend_tokens_for_twists,
                         condition_twist_on_tokens=None,
-                        huggingface_model=huggingface_model)
+                        huggingface_model=huggingface_model, params_proposal=params_proposal)
                     print(f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
 
                 if huggingface_model:
@@ -1314,11 +1314,11 @@ class ExperimentConfig:
                 if params_proposal is not None:
                     kl_vals_prop = get_kl_vals(
                         no_intermediate_resample_proposal_samples, cfg_p,
-                        params_p, cfg_twist, params_proposal,
+                        params_p, cfg_twist, params_twist,
                         prompt_len, output_len,
                         prepend_tokens_for_twists,
                         condition_twist_on_tokens=None,
-                        huggingface_model=huggingface_model)
+                        huggingface_model=huggingface_model, params_proposal=params_proposal)
                     print(
                         f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
                 if huggingface_model:
@@ -1417,12 +1417,12 @@ class ExperimentConfig:
             print(f"KL to prior estimate: {kl_vals.mean()}")
             if params_proposal is not None:
                 kl_vals_prop = get_kl_vals(
-                    no_intermediate_resample_proposal_samples, cfg_p,
-                    params_p, cfg_twist, params_proposal,
-                    prompt_len, output_len,
-                    prepend_tokens_for_twists,
-                    condition_twist_on_tokens=None,
-                    huggingface_model=huggingface_model)
+                        no_intermediate_resample_proposal_samples, cfg_p,
+                        params_p, cfg_twist, params_twist,
+                        prompt_len, output_len,
+                        prepend_tokens_for_twists,
+                        condition_twist_on_tokens=None,
+                        huggingface_model=huggingface_model, params_proposal=params_proposal)
                 print(
                     f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
 
