@@ -348,15 +348,15 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 
     if params_proposal is not None: # do the q/p for the twist value for resampling/reweighting/SMC intermediate distribution only
         print("ssshapes")
-        print(full_seq[:,:prompt_len + t + 1].shape)
+        print(full_seq.shape) # [:,:prompt_len + t + 1]
         print(prompt_len)
 
-        log_psi_eval = evaluate_log_psi_selected_tokens(full_seq[:,:prompt_len + t + 1], prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
+        log_psi_eval = evaluate_log_psi_selected_tokens(full_seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
                                      condition_twist_on_tokens, token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model,
                                      params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p
                                      )
 
-        log_psi_eval_of_new_seqs = log_psi_eval[:, -1]
+        log_psi_eval_of_new_seqs = log_psi_eval[:, t]
 
         print(log_psi_eval.shape)
         print(log_psi_eval_of_new_seqs.shape)
