@@ -348,9 +348,6 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
     log_psi_eval_of_new_seqs = log_psi[jnp.arange(full_seq.shape[0]), indices_to_use]
 
     if params_proposal is not None: # do the q/p for the twist value for resampling/reweighting/SMC intermediate distribution only
-        print("ssshapes")
-        print(full_seq.shape) # [:,:prompt_len + t + 1]
-        print(t)
 
         log_psi_eval = evaluate_log_psi_selected_tokens(full_seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
                                      condition_twist_on_tokens, token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model,
@@ -359,8 +356,8 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 
         log_psi_eval_of_new_seqs = log_psi_eval[:, t]
 
-        print(log_psi_eval.shape)
-        print(log_psi_eval_of_new_seqs.shape)
+        # print(log_psi_eval.shape)
+        # print(log_psi_eval_of_new_seqs.shape)
 
     return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
 
@@ -370,9 +367,8 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 # Which is equivalent to p(s_1) psi(s_1) / (sum of p(s_1) psi(s_1)) * p(s_2|s_1) psi(s_1:2) / (sum of p(s_2|s_1) psi(s_1:2)) ...
 # which is NOT the same as evaluating p(s_{1:t}) psi(s_{1:t}) / (sum of p(s_{1:t}) psi(s_{1:t})) in general. Only would be the same if "normalization consistency" holds.
 
-# TODO REJIT
-# @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int",
-#                                    "huggingface_model", "return_cumsum", "return_cumsum_w_last_all"])
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int",
+                                   "huggingface_model", "return_cumsum", "return_cumsum_w_last_all"])
 def evaluate_normalized_log_q_1_to_t(
     full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
     prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None,
@@ -401,28 +397,27 @@ def evaluate_normalized_log_q_1_to_t(
 
     if return_cumsum_w_last_all:
         assert not return_cumsum
-        print("return_cumsum_w_last_all")
+        # print("return_cumsum_w_last_all")
         normalized_log_q_1_to_t_cumsum = jnp.cumsum(normalized_log_q_t_across_t, axis=-1)
-        print(normalized_log_q_1_to_t_cumsum.shape)
+        # print(normalized_log_q_1_to_t_cumsum.shape)
         normalized_log_q_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((normalized_log_q_1_to_t_cumsum.shape[0], 1)), normalized_log_q_1_to_t_cumsum[:, :-1]), axis=-1)
-        print(normalized_log_q_1_to_t_minus_1)
+        # print(normalized_log_q_1_to_t_minus_1)
         normalized_log_q_1_to_t_minus_1_with_t_all_vocab = normalized_log_q_t_all_vocab + normalized_log_q_1_to_t_minus_1[:, :, None]
-        print(normalized_log_q_1_to_t_minus_1_with_t_all_vocab)
-
-        print(normalized_log_q_1_to_t_cumsum)
+        # print(normalized_log_q_1_to_t_minus_1_with_t_all_vocab)
+        # print(normalized_log_q_1_to_t_cumsum)
 
         log_p_t_across_t = log_p_t[
             jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
                 seq_selected.shape[1]), seq_selected]
         log_p_1_to_t_cumsum = jnp.cumsum(log_p_t_across_t, axis=-1)
-        print(log_p_1_to_t_cumsum.shape)
+        # print(log_p_1_to_t_cumsum.shape)
         log_p_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((log_p_1_to_t_cumsum.shape[0], 1)), log_p_1_to_t_cumsum[:, :-1]), axis=-1)
-        print(log_p_1_to_t_minus_1)
+        # print(log_p_1_to_t_minus_1)
         log_p_1_to_t_minus_1_with_t_all_vocab = log_p_t + log_p_1_to_t_minus_1[:, :, None]
-        print(log_p_1_to_t_minus_1_with_t_all_vocab)
+        # print(log_p_1_to_t_minus_1_with_t_all_vocab)
 
-        print(log_p_1_to_t_cumsum)
-        print("end return_cumsum_w_last_all")
+        # print(log_p_1_to_t_cumsum)
+        # print("end return_cumsum_w_last_all")
 
         return normalized_log_q_1_to_t_minus_1_with_t_all_vocab, log_p_1_to_t_minus_1_with_t_all_vocab
         # takes cumsum added with the normalized_log_q_1_to_t_all_vocab (check indexing, make sure about the appropriate off by one or not offset)
