@@ -1006,9 +1006,9 @@ def get_l_rl_based_partial_jit(
             (samples_to_evaluate_over, true_sigma_samples), axis=0)
         if condition_twist_on_tokens is not None:
             condition_twist_on_tokens = jnp.concatenate((condition_twist_on_tokens, condition_twist_on_tokens), axis=0)
+            print(condition_twist_on_tokens.shape)
         print("Appending sigma samples")
         print(samples_to_evaluate_over.shape)
-        print(condition_twist_on_tokens.shape)
 
         log_w_t_sigma_samples = jnp.zeros((true_sigma_samples.shape[0]))
         normalized_log_w_t_on_sigma_samples = jax.nn.softmax(
