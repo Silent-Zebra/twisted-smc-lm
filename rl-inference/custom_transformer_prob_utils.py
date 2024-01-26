@@ -72,11 +72,10 @@ def get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=None):
 
     return p_logits
 
-
-def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
-
+def _get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+                          token_of_interest_as_int=None, huggingface_model=None):
     # produces output of size (batch, n_vocab)
-    if huggingface_model is not None: # huggingface model
+    if huggingface_model is not None:  # huggingface model
         if isinstance(huggingface_model, HashableDict):
             if huggingface_model['call_type'] == "lora":
 
@@ -96,33 +95,67 @@ def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twist
                     hface_model_params=params_twist[0],
                     params_twist_head=params_twist[1],
                     condition_twist_on_tokens=condition_twist_on_tokens
-            )
+                )
 
         else:
             if prepend_tokens_for_twists:
-                seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1),
-                    dtype=jnp.int32) + token_of_interest_as_int, seq), axis=1)
-                return huggingface_model(input_ids=seqs_with_prepended_prompts, ret="twist", params_twist_head=params_twist, condition_twist_on_tokens=condition_twist_on_tokens)[:, 1:, :]
+                seqs_with_prepended_prompts = jnp.concatenate(
+                    (jnp.zeros((seq.shape[0], 1),
+                               dtype=jnp.int32) + token_of_interest_as_int,
+                     seq), axis=1)
+                return huggingface_model(input_ids=seqs_with_prepended_prompts,
+                                         ret="twist",
+                                         params_twist_head=params_twist,
+                                         condition_twist_on_tokens=condition_twist_on_tokens)[
+                       :, 1:, :]
             else:
-                return huggingface_model(input_ids=seq, ret="twist", params_twist_head=params_twist, condition_twist_on_tokens=condition_twist_on_tokens)
+                return huggingface_model(input_ids=seq, ret="twist",
+                                         params_twist_head=params_twist,
+                                         condition_twist_on_tokens=condition_twist_on_tokens)
 
     else:
         if condition_twist_on_tokens is not None:
-            return batch_transformer_with_prepend_tokens(cfg_twist, params_twist, seq, condition_twist_on_tokens)
+            return batch_transformer_with_prepend_tokens(cfg_twist,
+                                                         params_twist, seq,
+                                                         condition_twist_on_tokens)
 
         if prepend_tokens_for_twists:
             assert token_of_interest_as_int >= 0
-            return batch_transformer_with_prepend_token_of_interest(token_of_interest_as_int)(cfg_twist, params_twist, seq)
+            return batch_transformer_with_prepend_token_of_interest(
+                token_of_interest_as_int)(cfg_twist, params_twist, seq)
         else:
             return batch_transformer(cfg_twist, params_twist, seq)
 
-def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, cfg_twist,
-                           prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
 
+def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+                          token_of_interest_as_int=None, huggingface_model=None, params_proposal=None,
+                          cfg_p=None, params_p=None, prompt_len=None):
+
+    log_psi_all_vocab = _get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+                              token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model)
+    if params_proposal is None:
+        return log_psi_all_vocab
+    else:
+        assert params_p is not None
+        normalized_log_q_1_to_t_minus_1_with_t_all_vocab, log_p_1_to_t_minus_1_with_t_all_vocab = evaluate_normalized_log_q_1_to_t(
+            seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
+            prepend_tokens_for_twists, condition_twist_on_tokens,
+            token_of_interest_as_int=token_of_interest_as_int,
+            huggingface_model=huggingface_model, return_cumsum=False,
+            return_cumsum_w_last_all=True, params_proposal=params_proposal)
+        log_psi_all_vocab = normalized_log_q_1_to_t_minus_1_with_t_all_vocab - log_p_1_to_t_minus_1_with_t_all_vocab + log_psi_all_vocab # This new formulation: psi = (q/p) psi', where psi' is the exp of our parameterized twist model that we're learning - then this makes sure that at the beginning when log psi' is close to 0, then our psi value is close to q/p, so that when we target the intermediate distribution p psi = p q/p = q, we get just the twisted proposal, which was something that we could do a good job of learning in infilling
+        return log_psi_all_vocab
+
+def get_p_logits_and_log_psi_all_vocab(
+    full_seq, params_p, params_twist, cfg_p, cfg_twist,
+    prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None,
+    params_proposal=None, prompt_len=None
+):
     if huggingface_model is not None: # huggingface model
         if prepend_tokens_for_twists or isinstance(huggingface_model, HashableDict):
             p_logits = get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=huggingface_model)
             if huggingface_model['call_type'] == "p_psi_combined":
+                assert params_proposal is None  # Not yet implemented/tested
                 log_p_plus_log_psi_logits_all_vocab = huggingface_model[
                     'twist'](
                     input_ids=full_seq, ret="twist",
@@ -142,10 +175,11 @@ def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, 
                 log_psi_all_vocab = log_p_plus_log_psi_logits_all_vocab - p_logits
 
             else:
+                assert prompt_len is not None
                 log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
                                       prepend_tokens_for_twists, condition_twist_on_tokens,
-                                      token_of_interest_as_int,
-                                                          huggingface_model)
+                                      token_of_interest_as_int, huggingface_model, params_proposal=params_proposal,
+                                                          cfg_p=cfg_p, params_p=params_p, prompt_len=prompt_len)
         else:
             # TODO NOTE THAT if not specifying the hface_model_params, it defaults to whatever is in the huggingface_model
             # Which is based on the CustomLMWithTwistHead.huggingface_model._params
@@ -153,6 +187,7 @@ def get_p_logits_and_log_psi_all_vocab(full_seq, params_p, params_twist, cfg_p, 
 
 
     else:
+        assert params_proposal is None # Not yet implemented/tested
         p_logits = get_transformer_p_logits(cfg_p, params_p, full_seq)
 
         log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
@@ -165,7 +200,8 @@ def get_log_p_plus_log_psi_t(full_seq, params_p, params_twist, prompt_len, t, cf
                            prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         full_seq, params_p, params_twist, cfg_p, cfg_twist,
-        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model)
+        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
+        huggingface_model) # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
 
     # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
     # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
@@ -245,7 +281,8 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 
 
     log_p, log_psi = get_log_p_plus_log_psi_t(full_seq, params_p, params_to_use, prompt_len, t,
-                                            cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
+                                            cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+                                              token_of_interest_as_int, huggingface_model=huggingface_model)
 
     if tempered_twist:
         # log_psi = beta_prop * jnp.exp(log_psi) # Now instead of p psi, I will sample from p e^(beta psi)
@@ -304,11 +341,12 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 # NOTE that what this does is evaluate q(s_1) q(s_2 | s_1) q(s_3 | s_1:2)...
 # Which is equivalent to p(s_1) psi(s_1) / (sum of p(s_1) psi(s_1)) * p(s_2|s_1) psi(s_1:2) / (sum of p(s_2|s_1) psi(s_1:2)) ...
 # which is NOT the same as evaluating p(s_{1:t}) psi(s_{1:t}) / (sum of p(s_{1:t}) psi(s_{1:t})) in general. Only would be the same if "normalization consistency" holds.
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'prompt_len', "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model", "return_cumsum"])
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'prompt_len', "prepend_tokens_for_twists", "token_of_interest_as_int",
+                                   "huggingface_model", "return_cumsum", "return_cumsum_w_last_all"])
 def evaluate_normalized_log_q_1_to_t(
     full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
     prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None,
-    huggingface_model=None, return_cumsum=False, params_proposal=None):
+    huggingface_model=None, return_cumsum=False, return_cumsum_w_last_all=False, params_proposal=None):
 
     if params_proposal is None:
         params_to_use = params_twist
@@ -317,23 +355,56 @@ def evaluate_normalized_log_q_1_to_t(
 
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         full_seq, params_p, params_to_use, cfg_p, cfg_twist,
-        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model)
+        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
+        huggingface_model)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
 
-    log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
+    log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
     log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
-    log_p_plus_log_psi_all_vocab = log_p + log_psi
-    normalized_log_q_1_to_t_all_vocab = jax.nn.log_softmax(log_p_plus_log_psi_all_vocab, axis=-1)
+    log_p_plus_log_psi_all_vocab = log_p_t + log_psi
+    normalized_log_q_t_all_vocab = jax.nn.log_softmax(log_p_plus_log_psi_all_vocab, axis=-1)
 
     seq_selected = full_seq[:, prompt_len:]
-    normalized_log_q_1_to_t_across_t = normalized_log_q_1_to_t_all_vocab[
+    normalized_log_q_t_across_t = normalized_log_q_t_all_vocab[
         jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
             seq_selected.shape[1]), seq_selected]
 
+    if return_cumsum_w_last_all:
+        assert not return_cumsum
+        normalized_log_q_1_to_t_cumsum = jnp.cumsum(normalized_log_q_t_across_t, axis=-1)
+        print(normalized_log_q_1_to_t_cumsum.shape)
+        normalized_log_q_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((normalized_log_q_1_to_t_cumsum.shape[0], 1)), normalized_log_q_1_to_t_cumsum[:, :-1]), axis=-1)
+        print(normalized_log_q_1_to_t_minus_1)
+        normalized_log_q_1_to_t_minus_1_with_t_all_vocab = normalized_log_q_t_all_vocab + normalized_log_q_1_to_t_minus_1
+        print(normalized_log_q_1_to_t_minus_1_with_t_all_vocab)
+
+        print(normalized_log_q_1_to_t_cumsum)
+        1/0
+        log_p_t_across_t = log_p_t[
+            jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+                seq_selected.shape[1]), seq_selected]
+        log_p_1_to_t_cumsum = jnp.cumsum(log_p_t_across_t, axis=-1)
+        print(log_p_1_to_t_cumsum.shape)
+        log_p_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((log_p_1_to_t_cumsum.shape[0], 1)), log_p_1_to_t_cumsum[:, :-1]), axis=-1)
+        print(log_p_1_to_t_minus_1)
+        log_p_1_to_t_minus_1_with_t_all_vocab = log_p_t + log_p_1_to_t_minus_1
+        print(log_p_1_to_t_minus_1_with_t_all_vocab)
+
+        print(log_p_1_to_t_cumsum)
+        1/0
+        return normalized_log_q_1_to_t_minus_1_with_t_all_vocab, log_p_1_to_t_minus_1_with_t_all_vocab
+        # takes cumsum added with the normalized_log_q_1_to_t_all_vocab (check indexing, make sure about the appropriate off by one or not offset)
+        # Once we have this, that gives q(1_to_t) for the selected tokens 1 to t-1 but for all tokens t
+        # TEST THIS, MAKE SURE IT DOES WHAT YOU WANT. INSPECT IT.
+        # Then we can do something similar for p(1 to t), also need this cumsum structure
+        # then we can do log psi = log (q/p psi') = log q - log p + log psi' where we directly parameterize log psi' (50257 output). Then this gets plugged into everywhere we have log psi normally.
+
     if return_cumsum:
-        normalized_log_q_1_to_t_cumsum = jnp.cumsum(normalized_log_q_1_to_t_across_t, axis=-1)
+        normalized_log_q_1_to_t_cumsum = jnp.cumsum(normalized_log_q_t_across_t, axis=-1)
         return normalized_log_q_1_to_t_cumsum
 
-    normalized_log_q_1_to_t = normalized_log_q_1_to_t_across_t.sum(axis=-1)
+
+
+    normalized_log_q_1_to_t = normalized_log_q_t_across_t.sum(axis=-1)
 
     return normalized_log_q_1_to_t
 
@@ -377,10 +448,17 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists, 
     # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
     return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
-@partial(jax.jit, static_argnames = ["cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model"])
+@partial(jax.jit, static_argnames = ["cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model", "cfg_p"])
 # Evaluate log psi_t for every t from 1 to T for the sequence seq (not including the prompt)
-def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
-    log_psi = get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
+def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
+                                     condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None,
+                                     params_proposal=None, cfg_p=None, params_p=None
+                                     ):
+    log_psi = get_log_psi_all_vocab(
+        seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+        token_of_interest_as_int, huggingface_model=huggingface_model,
+        params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p, prompt_len=prompt_len
+    )
     log_psi_selected = log_psi[:, prompt_len - 1: -1]
     seq_selected = seq[:, prompt_len: ]
     return log_psi_selected[jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(seq_selected.shape[1]), seq_selected]
@@ -485,13 +563,13 @@ def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t
 
     return jax.nn.log_softmax(p_logits[:,prompt_len_plus_t-1,:])[jnp.arange(token_indices.shape[0]), token_indices]
 
-# Assume 0-based indexing for t
-def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
-    # see def evaluate_log_psi_t for more comments/detail
-    # Similar also to evaluate_log_p_theta_t_full_seq, except adapting evaluate_log_psi_t instead of adapting evaluate_log_p_theta_t
-    log_psi = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
-    token_indices = full_seq[:,prompt_len_plus_t]
-    return log_psi[:,prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
+# # Assume 0-based indexing for t
+# def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
+#     # see def evaluate_log_psi_t for more comments/detail
+#     # Similar also to evaluate_log_p_theta_t_full_seq, except adapting evaluate_log_psi_t instead of adapting evaluate_log_p_theta_t
+#     log_psi = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
+#     token_indices = full_seq[:,prompt_len_plus_t]
+#     return log_psi[:,prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
 
 
 
