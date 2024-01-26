@@ -279,7 +279,7 @@ def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, out
     return full_seq
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "prepend_tokens_for_twists", "token_of_interest_as_int",
-                                   "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop"])
+                                   "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop", "prompt_len"])
 def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t,
                           prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, proposal_is_p=False,
                           huggingface_model=None, true_posterior_sample=None, tempered_twist=False, beta_prop=None, params_proposal=None):
@@ -349,7 +349,7 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
     if params_proposal is not None: # do the q/p for the twist value for resampling/reweighting/SMC intermediate distribution only
         print("ssshapes")
         print(full_seq.shape) # [:,:prompt_len + t + 1]
-        print(prompt_len)
+        print(t)
 
         log_psi_eval = evaluate_log_psi_selected_tokens(full_seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
                                      condition_twist_on_tokens, token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model,
