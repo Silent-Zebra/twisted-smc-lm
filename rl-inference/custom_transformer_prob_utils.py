@@ -189,7 +189,7 @@ def get_p_logits_and_log_psi_all_vocab(
                                                               prepend_tokens_for_twists,
                                                               condition_twist_on_tokens,
                                                               token_of_interest_as_int,
-                                                              huggingface_model,
+                                                              huggingface_model, prompt_len=prompt_len
                                                               )
         else:
             assert params_proposal is None  # Not yet implemented/tested
@@ -204,7 +204,7 @@ def get_p_logits_and_log_psi_all_vocab(
 
         log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
                                                prepend_tokens_for_twists, condition_twist_on_tokens,
-                                               token_of_interest_as_int, huggingface_model=huggingface_model)
+                                               token_of_interest_as_int, huggingface_model=huggingface_model, prompt_len=prompt_len)
 
     return p_logits, log_psi_all_vocab
 
