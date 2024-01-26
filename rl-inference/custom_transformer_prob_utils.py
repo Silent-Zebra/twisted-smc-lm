@@ -602,10 +602,10 @@ def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t
 
 def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, resample=True,
                             true_posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-                            tempered_twist=False, beta_prop=None, params_proposal=None):
+                            tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None):
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     output_len, params_p, params_twist, \
-    prompt_len, log_z_hat_t = carry
+    log_z_hat_t = carry
 
     log_w_t_minus_1 = log_w_t
 
@@ -620,35 +620,6 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
     log_p_theta_t_eval = log_p_eval_of_new_seqs
 
-    # if true_posterior_sample is not None:
-    #     # print(full_seq)
-    #     # print(true_posterior_sample.shape)
-    #     full_seq = full_seq.at[0].set(true_posterior_sample)
-    #     # print(full_seq)
-    #
-    #     if proposal_is_p:
-    #         normalized_log_q_t_posterior_sample = evaluate_log_p_theta_t_full_seq(true_posterior_sample[None, :], cfg_p, params_p, prompt_len + t)
-    #         log_p_theta_t_eval = log_p_theta_t_eval.at[0].set(normalized_log_q_t_posterior_sample.squeeze())
-    #     else:
-    #         normalized_log_q_t_posterior_sample = evaluate_normalized_log_q_t_given_1_to_t_minus_1(
-    #             true_posterior_sample[None, :], params_p, params_twist, prompt_len,
-    #             t, cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-    #             token_of_interest_as_int)
-    #         log_p_theta_t_eval = log_p_theta_t_eval.at[0].set(
-    #             evaluate_log_p_theta_t_full_seq(true_posterior_sample[None, :],
-    #                                             cfg_p, params_p,
-    #                                             prompt_len + t).squeeze())
-    #
-    #     normalized_log_q_t = normalized_log_q_t.at[0].set(normalized_log_q_t_posterior_sample.squeeze())
-    #     # normalized_log_q_t_b = evaluate_normalized_log_q_t_given_1_to_t_minus_1(full_seq, params_p, params_twist, prompt_len,
-    #     #                                                                       t, cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int)
-    #     # print(normalized_log_q_t_a)
-    #     # print(normalized_log_q_t_b)
-    #     # print(normalized_log_q_t_a.shape)
-    #     # print(normalized_log_q_t_b.shape)
-
-    # Need to re-evaluate the log q_t values because we have this new insertion
-    # Note that we could just evaluate the true posterior sample and then add that on...
 
     log_gamma_1_to_t_minus_1_eval = log_gamma_1_to_t_eval
 
@@ -767,7 +738,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
                 log_r_psi_t_eval_w_potential_resample = log_r_psi_t_eval[a_t]
 
     carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
-    output_len, params_p, params_twist, prompt_len, log_z_hat_t)
+    output_len, params_p, params_twist, log_z_hat_t)
 
     return carry, (full_seq, log_w_t, log_r_psi_t_eval_w_potential_resample, log_w_t_before_resample)
 
@@ -1111,14 +1082,14 @@ def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, par
     full_seq = jnp.concatenate((batch_prompt, output), axis=1)
 
     carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
-    output_len, params_p, params_twist, prompt_len, log_z_hat_t)
+    output_len, params_p, params_twist, log_z_hat_t)
 
     carry, (full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list) = jax.lax.scan(
         partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens, resample=resample,
                 token_of_interest_as_int=token_of_interest_as_int, true_posterior_sample=true_posterior_sample,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                 resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-                tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal),
+                tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal, prompt_len=prompt_len),
         carry, jnp.arange(output_len - 1, dtype=jnp.int32), output_len - 1)
 
     # args become traced after passed through scan? Yes. So it's important not to
@@ -1127,7 +1098,7 @@ def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, par
     # The functools.partial approach I used later on to pass cfg outside of the carry
     # is another, possibly better, approach to avoid this problem too.
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
-    output_len, params_p, params_twist, prompt_len, log_z_hat_t = carry
+    output_len, params_p, params_twist, log_z_hat_t = carry
 
     return rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
            prompt_len, log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list
@@ -1145,7 +1116,7 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
     # start = time.time()
 
 
-    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, _prompt_len, \
+    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, _, \
     log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list = \
         smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
                         params_twist,
@@ -1155,8 +1126,7 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
                         resample, true_posterior_sample, proposal_is_p,
                         huggingface_model, resample_for_log_psi_t_eval_list,
                         tempered_twist, beta_prop, params_proposal=params_proposal)
-    if prompt_len is None:
-        prompt_len = _prompt_len
+
 
     # print(time.time() - start)
     # start = time.time()
