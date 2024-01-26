@@ -176,13 +176,13 @@ def get_p_logits_and_log_psi_all_vocab(
 
             else:
                 if params_proposal is not None:
-
                     assert prompt_len is not None
                     log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
                                           prepend_tokens_for_twists, condition_twist_on_tokens,
                                           token_of_interest_as_int, huggingface_model, params_proposal=params_proposal,
                                                               cfg_p=cfg_p, params_p=params_p, prompt_len=prompt_len)
                 else:
+                    assert prompt_len is not None
                     log_psi_all_vocab = get_log_psi_all_vocab(full_seq,
                                                               cfg_twist,
                                                               params_twist,
@@ -386,7 +386,7 @@ def evaluate_normalized_log_q_1_to_t(
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         full_seq, params_p, params_to_use, cfg_p, cfg_twist,
         prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
-        huggingface_model)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
+        huggingface_model, prompt_len=prompt_len)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
 
     log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
     # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
