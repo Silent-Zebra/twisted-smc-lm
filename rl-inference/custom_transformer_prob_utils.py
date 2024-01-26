@@ -1140,12 +1140,13 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False,
                     no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
-                    params_proposal=None
+                    params_proposal=None, prompt_len=None
                     ):
     # print("SMC TIME")
     # start = time.time()
 
-    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, prompt_len, \
+
+    rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, _prompt_len, \
     log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list = \
         smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist,
                         params_twist,
@@ -1155,6 +1156,8 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
                         resample, true_posterior_sample, proposal_is_p,
                         huggingface_model, resample_for_log_psi_t_eval_list,
                         tempered_twist, beta_prop, params_proposal=params_proposal)
+    if prompt_len is None:
+        prompt_len = _prompt_len
 
     # print(time.time() - start)
     # start = time.time()
@@ -1200,7 +1203,7 @@ smc_jit = partial(jax.jit,
                                    "get_intermediate_sample_history_based_on_learned_twists",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p",
                                    "huggingface_model", "resample_for_log_psi_t_eval_list", "no_final_resample",
-                                   "tempered_twist", "beta_prop", "use_log_true_final_twist_for_final_weight_calc"])(smc_partial_jit)
+                                   "tempered_twist", "beta_prop", "use_log_true_final_twist_for_final_weight_calc", "prompt_len"])(smc_partial_jit)
 
 
 
@@ -1394,9 +1397,10 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                   posterior_sample=None, proposal_is_p=False, huggingface_model=None,
                   resample_for_log_psi_t_eval_list=False, no_final_resample=False,
                   tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True, params_proposal=None):
+    prompt_len = prompt.shape[-1]
+
     if smc_procedure_type == "analytic_sigma_sample":
         assert n_vocab > 0
-        prompt_len = prompt.shape[-1]
         return None, get_analytic_sigma_sample(rng_key, prompt, prompt_len, n_vocab,
                                      output_len, cfg_p, params_p, log_true_final_twist,
                                      n_smc_samples)
@@ -1413,7 +1417,7 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
             no_final_resample=no_final_resample,
             tempered_twist=tempered_twist, beta_prop=beta_prop,
             use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc,
-            params_proposal=params_proposal
+            params_proposal=params_proposal, prompt_len=prompt_len
         )
     elif smc_procedure_type == "partial_jit":
         return smc_partial_jit(
@@ -1423,7 +1427,7 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
             huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
             no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop,
             use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc,
-            params_proposal=params_proposal
+            params_proposal=params_proposal, prompt_len=prompt_len
         )
     elif smc_procedure_type == "debug":
         return smc_debug(
