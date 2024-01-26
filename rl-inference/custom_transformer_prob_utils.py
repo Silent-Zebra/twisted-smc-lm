@@ -213,7 +213,7 @@ def get_log_p_plus_log_psi_t(full_seq, params_p, params_twist, prompt_len, t, cf
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         full_seq, params_p, params_twist, cfg_p, cfg_twist,
         prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
-        huggingface_model) # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
+        huggingface_model, prompt_len=prompt_len) # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
 
     # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
     # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
