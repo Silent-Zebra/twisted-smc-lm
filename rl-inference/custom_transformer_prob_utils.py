@@ -134,7 +134,7 @@ def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twist
     log_psi_all_vocab = _get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
                               token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model)
     if params_proposal is None:
-        return log_psi_all_vocab
+        return log_psi_all_vocab[:, prompt_len - 1: -1]
     else:
         assert params_p is not None
         normalized_log_q_1_to_t_minus_1_with_t_all_vocab, log_p_1_to_t_minus_1_with_t_all_vocab = evaluate_normalized_log_q_1_to_t(
@@ -143,7 +143,7 @@ def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twist
             token_of_interest_as_int=token_of_interest_as_int,
             huggingface_model=huggingface_model, return_cumsum=False,
             return_cumsum_w_last_all=True, params_proposal=params_proposal)
-        log_psi_all_vocab = normalized_log_q_1_to_t_minus_1_with_t_all_vocab - log_p_1_to_t_minus_1_with_t_all_vocab + log_psi_all_vocab # This new formulation: psi = (q/p) psi', where psi' is the exp of our parameterized twist model that we're learning - then this makes sure that at the beginning when log psi' is close to 0, then our psi value is close to q/p, so that when we target the intermediate distribution p psi = p q/p = q, we get just the twisted proposal, which was something that we could do a good job of learning in infilling
+        log_psi_all_vocab = normalized_log_q_1_to_t_minus_1_with_t_all_vocab - log_p_1_to_t_minus_1_with_t_all_vocab + log_psi_all_vocab[:, prompt_len - 1: -1] # This new formulation: psi = (q/p) psi', where psi' is the exp of our parameterized twist model that we're learning - then this makes sure that at the beginning when log psi' is close to 0, then our psi value is close to q/p, so that when we target the intermediate distribution p psi = p q/p = q, we get just the twisted proposal, which was something that we could do a good job of learning in infilling
         return log_psi_all_vocab
 
 def get_p_logits_and_log_psi_all_vocab(
@@ -220,7 +220,8 @@ def get_log_p_plus_log_psi_t(full_seq, params_p, params_twist, prompt_len, t, cf
     # And then we set full_seq at index 4 with the newly generated tokens
 
     log_p = jax.nn.log_softmax(p_logits[:,prompt_len + t - 1,:])
-    log_psi = log_psi_all_vocab[:,prompt_len + t - 1,:]
+    # log_psi = log_psi_all_vocab[:,prompt_len + t - 1,:]
+    log_psi = log_psi_all_vocab[:,t,:]
 
     # log_p_plus_log_psi = jax.nn.log_softmax(output_unnormalized_batch[:,prompt_len + t - 1,:]) \
     #                      + log_psi_batch[:,prompt_len + t - 1,:] # psi is already in log space
@@ -388,7 +389,8 @@ def evaluate_normalized_log_q_1_to_t(
         huggingface_model)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
 
     log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
-    log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+    # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+    log_psi = log_psi_all_vocab
     log_p_plus_log_psi_all_vocab = log_p_t + log_psi
     normalized_log_q_t_all_vocab = jax.nn.log_softmax(log_p_plus_log_psi_all_vocab, axis=-1)
 
@@ -477,7 +479,8 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists, 
     # we cannot constrain the psi (psi, or at least the output from the twist, is not a probability). We also have a choice: we can make the twist directly
     # represent exp(-beta r(s)), or we can make it represent the log of that, -beta r(s).
     # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
-    return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
+    # return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
+    return log_psi[:,-1,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
 @partial(jax.jit, static_argnames = ["cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model", "cfg_p"])
 # Evaluate log psi_t for every t from 1 to T for the sequence seq (not including the prompt)
@@ -490,7 +493,8 @@ def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist, p
         token_of_interest_as_int, huggingface_model=huggingface_model,
         params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p, prompt_len=prompt_len
     )
-    log_psi_selected = log_psi[:, prompt_len - 1: -1]
+    # log_psi_selected = log_psi[:, prompt_len - 1: -1]
+    log_psi_selected = log_psi
     seq_selected = seq[:, prompt_len: ]
     return log_psi_selected[jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(seq_selected.shape[1]), seq_selected]
 

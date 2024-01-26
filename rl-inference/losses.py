@@ -801,7 +801,8 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
         # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
         # And then we set full_seq at index 4 with the newly generated tokens
         log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
-        log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+        # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+        log_psi = log_psi_all_vocab
         log_p_plus_log_psi_all_vocab_for_expectation = jax.lax.stop_gradient(log_p + log_psi) # stop gradient, no gradient on this
         # p_psi_all_vocab_for_expectation = jnp.exp(log_p_plus_log_psi_all_vocab_for_expectation)
         normalized_p_psi_all_vocab_for_expectation = jax.nn.softmax(log_p_plus_log_psi_all_vocab_for_expectation, axis=-1)
@@ -1037,10 +1038,11 @@ def get_l_rl_based_partial_jit(
                                        prepend_tokens_for_twists, condition_twist_on_tokens,
                                        token_of_interest_as_int,
                                        huggingface_model=huggingface_model, params_proposal=params_proposal, prompt_len=prompt_len)
-    log_psi = log_psi[:, prompt_len:]
+    # log_psi = log_psi[:, prompt_len:]
 
     log_p = jax.nn.log_softmax(p_logits, axis=-1) # gives you the normalized p values, since the regular output is the unnormalized log p values
-    log_p = log_p[:, prompt_len:]
+    # log_p = log_p[:, prompt_len:]
+    log_p = log_p[:, prompt_len:-1]
 
     if loss_type == "googleCD":
         target_term = (jnp.exp(log_p) * log_psi).sum(axis=-1) # first we get log(p psi), then we do exp, so we have p psi (psi = e^V), then we sum all the (p psi), then we log again. Therefore logsumexp. We use axis = -1 because we want to preserve the different values across different time steps. Essentially doing all the different time steps in one go
@@ -1057,8 +1059,8 @@ def get_l_rl_based_partial_jit(
     if log_phi_final_eval is None:
         log_phi_final_eval = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist, condition_twist_on_tokens)
 
-
-    target_term = target_term.at[:, -1].set(log_phi_final_eval)
+    target_term = jnp.concatenate((target_term, log_phi_final_eval), axis=1)
+    # target_term = target_term.at[:, -1].set(log_phi_final_eval)
     if stop_grad:
         target_term = jax.lax.stop_gradient(target_term)
 
@@ -1159,7 +1161,7 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
         # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
         # And then we set full_seq at index 4 with the newly generated tokens
         log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
-        log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+        log_psi = log_psi_all_vocab #[:, prompt_len - 1: -1]
         log_p_plus_log_psi_all_vocab_for_expectation = jax.lax.stop_gradient(log_p + log_psi) # stop gradient, no gradient on this
         # p_psi_all_vocab_for_expectation = jnp.exp(log_p_plus_log_psi_all_vocab_for_expectation)
         normalized_p_psi_all_vocab_for_expectation = jax.nn.softmax(log_p_plus_log_psi_all_vocab_for_expectation, axis=-1)
@@ -1371,7 +1373,7 @@ def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, param
         # Then we need index 3 to get the logits (remember 0 based indexing), which we then use for generation
         # And then we set full_seq at index 4 with the newly generated tokens
         log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
-        log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+        log_psi = log_psi_all_vocab #[:, prompt_len - 1: -1]
         log_p_plus_log_psi_all_vocab_for_expectation = jax.lax.stop_gradient(log_p + log_psi) # stop gradient, no gradient on this
         # p_psi_all_vocab_for_expectation = jnp.exp(log_p_plus_log_psi_all_vocab_for_expectation)
         normalized_p_psi_all_vocab_for_expectation = jax.nn.softmax(log_p_plus_log_psi_all_vocab_for_expectation, axis=-1)
@@ -1607,7 +1609,7 @@ def get_l_ebm_ml_combined_objective_partial_jit(
         token_of_interest_as_int, huggingface_model, params_proposal=params_proposal, prompt_len=prompt_len)
 
     log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
-    log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+    log_psi = log_psi_all_vocab #[:, prompt_len - 1: -1]
     log_p_plus_log_psi_all_vocab_for_expectation = jax.lax.stop_gradient(
         log_p + log_psi)  # stop gradient, no gradient on this
     # p_psi_all_vocab_for_expectation = jnp.exp(log_p_plus_log_psi_all_vocab_for_expectation)
