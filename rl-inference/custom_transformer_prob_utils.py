@@ -416,7 +416,7 @@ def evaluate_normalized_log_q_1_to_t(
         print(log_p_1_to_t_cumsum.shape)
         log_p_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((log_p_1_to_t_cumsum.shape[0], 1)), log_p_1_to_t_cumsum[:, :-1]), axis=-1)
         print(log_p_1_to_t_minus_1)
-        log_p_1_to_t_minus_1_with_t_all_vocab = log_p_t + log_p_1_to_t_minus_1
+        log_p_1_to_t_minus_1_with_t_all_vocab = log_p_t + log_p_1_to_t_minus_1[:, :, None]
         print(log_p_1_to_t_minus_1_with_t_all_vocab)
 
         print(log_p_1_to_t_cumsum)
