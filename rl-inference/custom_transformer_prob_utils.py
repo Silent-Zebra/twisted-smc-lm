@@ -368,7 +368,7 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 # NOTE that what this does is evaluate q(s_1) q(s_2 | s_1) q(s_3 | s_1:2)...
 # Which is equivalent to p(s_1) psi(s_1) / (sum of p(s_1) psi(s_1)) * p(s_2|s_1) psi(s_1:2) / (sum of p(s_2|s_1) psi(s_1:2)) ...
 # which is NOT the same as evaluating p(s_{1:t}) psi(s_{1:t}) / (sum of p(s_{1:t}) psi(s_{1:t})) in general. Only would be the same if "normalization consistency" holds.
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'prompt_len', "prepend_tokens_for_twists", "token_of_interest_as_int",
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int",
                                    "huggingface_model", "return_cumsum", "return_cumsum_w_last_all"])
 def evaluate_normalized_log_q_1_to_t(
     full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
@@ -1091,8 +1091,8 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'output_len', 'n_smc_samples',
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p",
-                                   "huggingface_model", "resample_for_log_psi_t_eval_list", "tempered_twist", "beta_prop"])
-def smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, output_len,
+                                   "huggingface_model", "resample_for_log_psi_t_eval_list", "tempered_twist", "beta_prop", "prompt_len"])
+def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist, output_len,
             n_smc_samples,
             prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
@@ -1100,7 +1100,6 @@ def smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, o
                     tempered_twist=False, beta_prop=None, params_proposal=None):
     # Generate samples using SMC with twists (learned and final, if use_log_true_final_twist_for_final_weight_calc)
     # IF RESAMPLE=FALSE, MAKE SURE THAT WHATEVER END RESULT RESAMPLES OR REWEIGHTS BASED ON THE RETURNED WEIGHTS (do I even return the weights always though??)
-    prompt_len = prompt.shape[-1]
 
     log_z_hat_t = 0.
     log_w_t = jnp.zeros((n_smc_samples,))
@@ -1148,7 +1147,7 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
 
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, _prompt_len, \
     log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list = \
-        smc_jitted_part(rng_key, prompt, cfg_p, params_p, cfg_twist,
+        smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
                         params_twist,
                         output_len,
                         n_smc_samples,
