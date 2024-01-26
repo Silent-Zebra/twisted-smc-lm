@@ -346,6 +346,12 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
     log_p_eval_of_new_seqs = log_p[jnp.arange(full_seq.shape[0]), indices_to_use]
     log_psi_eval_of_new_seqs = log_psi[jnp.arange(full_seq.shape[0]), indices_to_use]
 
+    if params_proposal is not None: # do the q/p for the twist value for resampling/reweighting/SMC intermediate distribution only
+        log_psi_eval_of_new_seqs = evaluate_log_psi_selected_tokens(full_seq[:,prompt_len + t - 1,:], prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
+                                     condition_twist_on_tokens, token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model,
+                                     params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p
+                                     )
+
     return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
 
 
@@ -386,7 +392,7 @@ def evaluate_normalized_log_q_1_to_t(
         print(normalized_log_q_1_to_t_cumsum.shape)
         normalized_log_q_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((normalized_log_q_1_to_t_cumsum.shape[0], 1)), normalized_log_q_1_to_t_cumsum[:, :-1]), axis=-1)
         print(normalized_log_q_1_to_t_minus_1)
-        normalized_log_q_1_to_t_minus_1_with_t_all_vocab = normalized_log_q_t_all_vocab + normalized_log_q_1_to_t_minus_1
+        normalized_log_q_1_to_t_minus_1_with_t_all_vocab = normalized_log_q_t_all_vocab + normalized_log_q_1_to_t_minus_1[:, :, None]
         print(normalized_log_q_1_to_t_minus_1_with_t_all_vocab)
 
         print(normalized_log_q_1_to_t_cumsum)
