@@ -3735,7 +3735,7 @@ if __name__ == "__main__":
 
     if args.train_on_true_posterior_samples:
         assert args.beta_temp == 1
-        assert "one_total_kl" in args.twist_learn_type or "ebm" in args.twist_learn_type # Not yet tested for other twist learn types
+        # assert "one_total_kl" in args.twist_learn_type or "ebm" in args.twist_learn_type # Not yet tested for other twist learn types
 
     if args.rm_type == "sent_cond_twist" and args.load_posterior_samples:
         assert args.set_sent_class_for_post_samples # More of a check, just to make sure that when I'm doing this loading, I'm consciously setting the sentiment class
