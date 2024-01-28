@@ -1823,7 +1823,7 @@ def inspect_and_record_evidence_setting_for_index(
     if tokenizer is not None:
         print("INSPECTION OF SMC SAMPLES WITH INTERMEDIATE RESAMPLING together with the conditioning tokens")
         text_outputs = tokenizer.batch_decode(jnp.concatenate(
-            (smc_samples, condition_twist_on_tokens),
+            (smc_samples, condition_twist_on_tokens_broadcasted),
             axis=-1), skip_special_tokens=True)
         if huggingface_model:
             for s in text_outputs:
