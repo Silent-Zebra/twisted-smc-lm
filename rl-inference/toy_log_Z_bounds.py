@@ -1727,7 +1727,7 @@ class ExperimentConfig:
             raise NotImplementedError
 
 
-
+print_smc_samples = True
 
 def inspect_and_record_evidence_setting_for_index(
     rng_key, prompt, cfg_p, params_p, cfg_twist,
@@ -1735,7 +1735,7 @@ def inspect_and_record_evidence_setting_for_index(
     n_test_smc_samples, token_of_interest_as_int, true_posterior_samples,
     true_log_z, analytic_kl_q_sigma, smc_procedure_type,
     proposal_is_p=False, prepend_tokens_for_twists=False,
-    condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None):
+    condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None, tokenizer=None):
 
     assert true_posterior_samples.shape[0] > 0
 
@@ -1806,12 +1806,19 @@ def inspect_and_record_evidence_setting_for_index(
         prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        params_proposal=params_proposal
+        params_proposal=params_proposal, resample=True,
     )
 
     smc_lower_bound_estimate = log_z_hat_t
 
-
+    if tokenizer is not None:
+        print("INSPECTION OF SMC SAMPLES WITH INTERMEDIATE RESAMPLING together with the conditioning tokens")
+        text_outputs = tokenizer.batch_decode(jnp.concatenate(
+            (smc_samples, condition_twist_on_tokens),
+            axis=-1), skip_special_tokens=True)
+        if huggingface_model:
+            for s in text_outputs:
+                print(s)
 
     rng_key, sk_smc = jax.random.split(rng_key)
     smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
@@ -2045,7 +2052,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 condition_twist_on_tokens=condition_twist_on_tokens,
                 huggingface_model=huggingface_model,
                 index_of_true_posterior_sample=seed,
-                params_proposal=params_proposal
+                params_proposal=params_proposal, tokenizer=tokenizer
             )
             (true_log_z, true_one_post_upper_bound_estimate,
              true_all_post_upper_bound_estimate,
