@@ -1869,7 +1869,7 @@ def inspect_and_record_evidence_setting_for_index(
 inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argnames=[
     "log_true_final_twist", 'output_len', 'n_test_smc_samples',
     "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",
-    "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type"
+    "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type", "tokenizer"
 ])(inspect_and_record_evidence_setting_for_index)
 
 
