@@ -1727,6 +1727,7 @@ class ExperimentConfig:
             raise NotImplementedError
 
 
+# TODO JAN 28 LATER REMOVE WHEN DONE INSPECTING/PRINTING
 print_smc_samples = True
 
 def inspect_and_record_evidence_setting_for_index(
@@ -1811,28 +1812,30 @@ def inspect_and_record_evidence_setting_for_index(
 
     smc_lower_bound_estimate = log_z_hat_t
 
-    print("log wts")
-    for x in log_w_t_list:
-        print(x)
-    # print(log_w_t_list)
-    print("log wts before resample")
-    for x in log_w_t_before_resample_list:
-        print(x)
-    # print(log_w_t_before_resample_list)
+    if print_smc_samples:
 
-    if tokenizer is not None:
-        print("INSPECTION OF SMC SAMPLES WITH INTERMEDIATE RESAMPLING together with the conditioning tokens")
-        text_outputs = tokenizer.batch_decode(jnp.concatenate(
-            (smc_samples, condition_twist_on_tokens_broadcasted),
-            axis=-1), skip_special_tokens=True)
-        if huggingface_model:
-            for s in text_outputs:
-                print(s)
+        print("log wts")
+        for x in log_w_t_list:
+            print(x)
+        # print(log_w_t_list)
+        print("log wts before resample")
+        for x in log_w_t_before_resample_list:
+            print(x)
+        # print(log_w_t_before_resample_list)
 
-        print("INSPECTION OF SEQS ALONG THE WAY")
-        for full_seq in full_seq_list:
-            text_outputs = tokenizer.batch_decode(full_seq, skip_special_tokens=True)
-            print(text_outputs)
+        if tokenizer is not None:
+            print("INSPECTION OF SMC SAMPLES WITH INTERMEDIATE RESAMPLING together with the conditioning tokens")
+            text_outputs = tokenizer.batch_decode(jnp.concatenate(
+                (smc_samples, condition_twist_on_tokens_broadcasted),
+                axis=-1), skip_special_tokens=True)
+            if huggingface_model:
+                for s in text_outputs:
+                    print(s)
+
+            print("INSPECTION OF SEQS ALONG THE WAY")
+            for full_seq in full_seq_list:
+                text_outputs = tokenizer.batch_decode(full_seq, skip_special_tokens=True)
+                print(text_outputs)
 
 
     rng_key, sk_smc = jax.random.split(rng_key)
@@ -2052,7 +2055,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
             rng_key, sk = jax.random.split(rng_key)
 
             inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index_jit
-            if smc_procedure_type == "partial_jit":
+            if smc_procedure_type == "partial_jit" or print_smc_samples:
                 inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index
 
             # print(f"Number of Particles: {n_test_smc_samples}")
