@@ -1795,7 +1795,7 @@ def inspect_and_record_evidence_setting_for_index(
 
 
     rng_key, sk_smc = jax.random.split(rng_key)
-    (_, log_z_hat_t, _), smc_samples = smc_procedure(
+    (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list, log_w_t_before_resample_list) = smc_procedure(
         sk_smc, prompt, cfg_p, params_p,
         cfg_twist, params_twist,
         log_true_final_twist,
@@ -1806,10 +1806,19 @@ def inspect_and_record_evidence_setting_for_index(
         prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
         token_of_interest_as_int=token_of_interest_as_int,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        params_proposal=params_proposal, resample=True,
+        params_proposal=params_proposal, resample=True, get_intermediate_sample_history_based_on_learned_twists=True
     )
 
     smc_lower_bound_estimate = log_z_hat_t
+
+    print("log wts")
+    for x in log_w_t_list:
+        print(x)
+    # print(log_w_t_list)
+    print("log wts before resample")
+    for x in log_w_t_before_resample_list:
+        print(x)
+    # print(log_w_t_before_resample_list)
 
     if tokenizer is not None:
         print("INSPECTION OF SMC SAMPLES WITH INTERMEDIATE RESAMPLING together with the conditioning tokens")
@@ -1819,6 +1828,12 @@ def inspect_and_record_evidence_setting_for_index(
         if huggingface_model:
             for s in text_outputs:
                 print(s)
+
+        print("INSPECTION OF SEQS ALONG THE WAY")
+        for full_seq in full_seq_list:
+            text_outputs = tokenizer.batch_decode(full_seq, skip_special_tokens=True)
+            print(text_outputs)
+
 
     rng_key, sk_smc = jax.random.split(rng_key)
     smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
