@@ -1039,6 +1039,7 @@ def get_l_rl_based_partial_jit(
                                        token_of_interest_as_int,
                                        huggingface_model=huggingface_model, params_proposal=params_proposal, prompt_len=prompt_len)
     # log_psi = log_psi[:, prompt_len:]
+    log_psi = log_psi[:, 1:] # because the current formulation gives prompt_len-1:-1, so 1: gives prompt_len:-1
 
     log_p = jax.nn.log_softmax(p_logits, axis=-1) # gives you the normalized p values, since the regular output is the unnormalized log p values
     # log_p = log_p[:, prompt_len:]
