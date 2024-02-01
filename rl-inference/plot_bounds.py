@@ -67,61 +67,65 @@ p_smc_ubs = np.transpose(np.stack([p_smc_ubs_32, p_smc_ubs_128, p_smc_ubs_512, p
 p_smc_lbs = np.transpose(np.stack([p_smc_lbs_32, p_smc_lbs_128, p_smc_lbs_512, p_smc_lbs_2048]))
 
 plt.clf()
-plt.xlabel(f"2^ of Number of Samples")
+plt.xlabel(f"Number of Samples")
 x_range = np.array([5,7,9,11])
+xticks_range = x_range
+xticks_labels = 2 ** xticks_range
 plt.ylabel(f"Log Z Bound")
 
 
 last, conf_bound = plot_with_conf_bounds(
-    t_iwae_ubs, x_range, label=f"IWAE UBs (Twist Proposal)",
+    t_iwae_ubs, x_range, label=f"SIS/IWAE UB (Twisted Proposal)",
     color=color_list_for_ubs[0],
-    linestyle=linestyle_list_for_ubs[0]
+    linestyle=linestyle_list_for_ubs[0],
 )
 
 last, conf_bound = plot_with_conf_bounds(
-    t_iwae_lbs, x_range, label=f"IWAE LBs (Twist Proposal)",
+    t_iwae_lbs, x_range, label=f"SIS/IWAE LB (Twisted Proposal)",
     color=color_list_for_lbs[0],
-    linestyle=linestyle_list_for_lbs[0]
+    linestyle=linestyle_list_for_lbs[0],
 )
 
 last, conf_bound = plot_with_conf_bounds(
-    t_smc_ubs, x_range, label=f"SMC UBs (Twist Proposal)",
+    t_smc_ubs, x_range, label=f"SMC UB (Twisted Proposal)",
     color=color_list_for_ubs[1],
-    linestyle=linestyle_list_for_ubs[1]
+    linestyle=linestyle_list_for_ubs[1],
 )
 
 last, conf_bound = plot_with_conf_bounds(
-    t_smc_lbs, x_range, label=f"SMC LBs (Twist Proposal)",
+    t_smc_lbs, x_range, label=f"SMC LB (Twisted Proposal)",
     color=color_list_for_lbs[1],
-    linestyle=linestyle_list_for_lbs[1]
+    linestyle=linestyle_list_for_lbs[1],
 )
 
 
 last, conf_bound = plot_with_conf_bounds(
-    p_iwae_ubs, x_range, label=f"IWAE UBs (P Proposal)",
+    p_iwae_ubs, x_range, label=f"SIS/IWAE UB (Base $p_0$ Proposal)",
     color=color_list_for_ubs[2],
-    linestyle=linestyle_list_for_ubs[2]
+    linestyle=linestyle_list_for_ubs[2],
 )
 
 last, conf_bound = plot_with_conf_bounds(
-    p_iwae_lbs, x_range, label=f"IWAE LBs (P Proposal)",
+    p_iwae_lbs, x_range, label=f"SIS/IWAE LB (Base $p_0$ Proposal)",
     color=color_list_for_lbs[2],
-    linestyle=linestyle_list_for_lbs[2]
+    linestyle=linestyle_list_for_lbs[2],
 )
 
 last, conf_bound = plot_with_conf_bounds(
-    p_smc_ubs, x_range, label=f"SMC UBs (P Proposal)",
+    p_smc_ubs, x_range, label=f"SMC UB (Base $p_0$ Proposal)",
     color=color_list_for_ubs[3],
-    linestyle=linestyle_list_for_ubs[3]
+    linestyle=linestyle_list_for_ubs[3],
 )
 
 last, conf_bound = plot_with_conf_bounds(
-    p_smc_lbs, x_range, label=f"SMC LBs (P Proposal)",
+    p_smc_lbs, x_range, label=f"SMC LB (Base $p_0$ Proposal)",
     color=color_list_for_lbs[3],
-    linestyle=linestyle_list_for_lbs[3]
+    linestyle=linestyle_list_for_lbs[3],
 )
 
-plt.legend()
+plt.xticks(xticks_range, xticks_labels)
+
+plt.legend(loc="lower right")
 plt.savefig(f"./fig_bounds_toxt_-5_01-14.pdf")
 
 

@@ -14,9 +14,9 @@ from toy_log_Z_bounds import plot_with_conf_bounds
 load_prefixes_sent1_nnonly = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples12_sent1_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
     # "f_q_g_q_estimates_2024-01-09_00-49_seed0_nsamples12_sent1_ppo_00001",
     # "f_q_g_q_estimates_2024-01-09_01-21_seed0_nsamples12_sent1_ppo_000003",
     "f_q_g_q_estimates_2024-01-19_06-11_ppo_seed0_nsamples12_sent1_newnnonly",
@@ -27,10 +27,10 @@ load_prefixes_sent1_nnonly = [
 load_prefixes_tox = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-22_seed1_sixo_partial_jit_nsamples12_toxc_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-54_seed1_bce_q_nsamples12_toxc_00005",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
     "f_q_g_q_estimates_2024-01-08_06-40_seed0_nsamples12_toxc_ppo_000001",
 ]
 
@@ -53,6 +53,10 @@ load_prefixes_sent_truepost_comparison = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-14_00-54_seed1_ebm_reweight_nsamples10_sent1_trainontruepost_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-13_22-51_seed1_ebm_reweight_nsamples9_sent1_trainontruepost_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-26_07-03_seed1_rl_qsigma_lsq_partial_jit_nsamples10_trainontruepost_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-26_02-18_seed1_sixo_partial_jit_nsamples10_trainontruepost_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-13_08-32_seed1_one_total_kl_partial_jit_nsamples10_sent1_trainontruepost_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-14_01-36_seed1_one_total_kl_partial_jit_nsamples10_sent1_trainontruepost_00003",
@@ -62,6 +66,8 @@ load_prefixes_tox_truepost_comparison = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-13_23-09_seed1_ebm_reweight_nsamples7_toxc_trainontruepost_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-14_00-12_seed1_ebm_reweight_nsamples7_toxc_trainontruepost_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-27_05-15_seed1_sixo_partial_jit_nsamples7_trainontruepost_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-13_23-27_seed1_one_total_kl_partial_jit_nsamples7_toxc_trainontruepost_0001", # This does even better. But I guess lower lr with approx sampling is more stable
     "f_q_g_q_logZbestmidpoint_info_2024-01-13_06-16_seed1_one_total_kl_partial_jit_nsamples7_toxc_trainontruepost_00003",
@@ -73,9 +79,9 @@ load_prefixes_plasttok2_1 = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_07-12_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples14_10_10_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_22-45_seed1_rl_qsigma_lsq_nsamples14_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_18-33_seed1_rl_q_lsq_nsamples14_00001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-10_05-46_seed1_one_total_kl_nsamples14_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-29_seed1_sixo_nsamples14_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples14_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-10_05-46_seed1_one_total_kl_nsamples14_0001",
     # "f_q_g_q_estimates_2024-01-09_20-11_seed0_nsamples14_00003",
     "f_q_g_q_estimates_2024-01-09_20-04_seed0_nsamples14_00001",
 ]
@@ -83,21 +89,39 @@ load_prefixes_plasttok2_1 = [
 load_prefixes_plasttok15_10 = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_08-36_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples12_plast15_10_25_4_000003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-11_01-27_seed1_rl_qsigma_lsq_nsamples12_plast15_10_00003",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_05-11_seed1_one_total_kl_nsamples12_plast15_10_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_00003",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_08-54_seed1_bce_q_nsamples12_plast15_10_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_07-14_seed1_bce_q_nsamples12_plast15_10_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_05-11_seed1_one_total_kl_nsamples12_plast15_10_0001",
     "f_q_g_q_estimates_2024-01-09_21-38_seed0_nsamples12_ppo_plast15_10_000001",
 ]
 
 twist_learn_method_names = [
-    "EBM",
-    "RL (Twist)",
-    "EBM-One-KL",
-    "SIXO",
-    "BCE",
-    "PPO",
+    "Contrastive Twist",
+    "RL Twist",
+    "SIXO Twist",
+    "BCE Twist",
+    "N/A",
+    "N/A",
+]
+
+proposal_names = [
+    "Twisted Proposal",
+    "Twisted Proposal",
+    "Twisted Proposal",
+    "Twisted Proposal",
+    "Variational Proposal",
+    "PPO Proposal",
+]
+
+plot_names = [
+    "Twisted Proposal (Contrastive)",
+    "Twisted Proposal (RL)",
+    "Twisted Proposal (SIXO)",
+    "Twisted Proposal (BCE)",
+    "Variational Proposal",
+    "PPO Proposal",
 ]
 
 # twist_learn_method_names = [
@@ -109,14 +133,14 @@ twist_learn_method_names = [
 
 
 
-color_list_for_f_q = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey']
-color_list_for_g_q = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkcd:purple', 'xkcd:black']
+color_list_for_f_q = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey', 'xkcd:light grey', 'xkcd:light brown']
+color_list_for_g_q = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkcd:purple', 'xkcd:black', 'xkcd:grey', 'xkcd:brown' ]
 
 linestyle_list_for_f_q = ['solid'] * len(twist_learn_method_names)
 linestyle_list_for_g_q = ['dashed'] * len(twist_learn_method_names)
 
 
-def make_combined_plot(load_prefixes, fig_name_modifier):
+def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, legendsize=8):
 
     logZ_midpoint_estimates = []
     for i in range(len(load_prefixes)):
@@ -155,6 +179,13 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
         g_q_estimates = x[1]
         reward = x[2]
 
+        if exact_num_epochs is not None:
+            if (i % 2 == 1):  # do on every second one (e.g. for the exact samples)
+                f_q_estimates = f_q_estimates[:,:exact_num_epochs]
+                g_q_estimates = g_q_estimates[:,:exact_num_epochs]
+                reward = reward[:,:exact_num_epochs]
+
+
         print("F_qs")
         print(f_q_estimates.mean(axis=0))
         print("G_qs")
@@ -190,7 +221,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
         plt.xlabel(f"Number of Twist Updates")
     else:
-        plt.xlabel(f"2^ of Number of Twist Updates")
+        plt.xlabel(f"Number of Twist Updates")
     plt.ylabel(f"KL Divergence")
 
     # if fig_name_modifier == "tox":
@@ -203,6 +234,12 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
         plt.ylim([0, 50])
 
     output_latex = []
+    if exact_num_epochs is not None:
+        output_latex_names = []
+        output_latex_exact = []
+        output_latex_approx_samewallclock = []
+        output_latex_approx_samesamples = []
+
 
     logZ_midpoint_estimate = median_logZ_midpoint
 
@@ -219,25 +256,78 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
         # print(g_q_estimates.shape[0])
 
         twist_learn_method_name = twist_learn_method_names[i]
+        proposal_name = proposal_names[i]
+        plot_name = plot_names[i]
+
+        if i == 0:
+            use_xticks = True
+            xticks_range = np.arange(0, f_q_estimates.shape[-1], 2)
+            xticks_labels = 2 ** xticks_range
+            xticks_labels[0] = 0
+            if "15_10" in fig_name_modifier:
+                use_xticks = False
+            if use_xticks:
+                plt.xticks(xticks_range, xticks_labels)
 
         last_avg_kl_q_sigma, conf_bound_q_sigma = plot_with_conf_bounds(
-            logZ_midpoint_estimate - f_q_estimates, x_range, label=f"{twist_learn_method_name} KL(q||sigma)", # Best logZ meaning using the midpoint of the tightest LogZ bounds that we had.
+            logZ_midpoint_estimate - f_q_estimates, x_range, label=f"{plot_name} " + r"$D_{KL} (q||\sigma)$", # Best logZ meaning using the midpoint of the tightest LogZ bounds that we had.
             color=color_list_for_f_q[i],
-            linestyle=linestyle_list_for_f_q[i]
+            linestyle=linestyle_list_for_f_q[i],
         )
         last_avg_kl_sigma_q, conf_bound_sigma_q = plot_with_conf_bounds(
-            g_q_estimates - logZ_midpoint_estimate, x_range, label=f"{twist_learn_method_name} KL(sigma||q)",
+            g_q_estimates - logZ_midpoint_estimate, x_range, label=f"{plot_name} " + r"$D_{KL} (\sigma||q)$",
             color=color_list_for_g_q[i],
-            linestyle=linestyle_list_for_g_q[i]
+            linestyle=linestyle_list_for_g_q[i],
         )
 
-        output_latex.append(f"{twist_learn_method_name} & ${last_avg_kl_q_sigma:.2f} \pm {conf_bound_q_sigma:.2f}$ & ${last_avg_kl_sigma_q:.2f} \pm {conf_bound_sigma_q:.2f}$ \\\\ \midrule")
+        midrule = " \midrule"
+        if i == 3:
+            midrule = " \midrule \midrule"
+        elif i == len(load_prefixes) - 1:
+            midrule = ""
 
-    plt.legend()
+        tabularnewline = r"\tabularnewline"
+
+        if exact_num_epochs is not None:
+            midrule = ""
+            tabularnewline = ""
+            if (i % 2 == 0):
+                output_latex_approx_samewallclock.append(
+                    f" & ${last_avg_kl_q_sigma:.2f} \pm {conf_bound_q_sigma:.2f}$ & ${last_avg_kl_sigma_q:.2f} \pm {conf_bound_sigma_q:.2f}$ {tabularnewline} {midrule}")
+
+        else:
+            output_latex.append(
+                f"{proposal_name} & {twist_learn_method_name} & ${last_avg_kl_q_sigma:.2f} \pm {conf_bound_q_sigma:.2f}$ & ${last_avg_kl_sigma_q:.2f} \pm {conf_bound_sigma_q:.2f}$ {tabularnewline} {midrule}")
+
+        if exact_num_epochs is not None:
+            z_score = 1.96
+            record = logZ_midpoint_estimate - f_q_estimates
+            avg = record.mean(axis=0)
+            stdev = jnp.std(record, axis=0)
+            conf_bound = z_score * stdev / np.sqrt(record.shape[0])
+            avg_kl_q_sigma = avg[exact_num_epochs - 1]
+            conf_bound_q_sigma = conf_bound[exact_num_epochs - 1]
+
+            record = g_q_estimates - logZ_midpoint_estimate
+            avg = record.mean(axis=0)
+            stdev = jnp.std(record, axis=0)
+            conf_bound = z_score * stdev / np.sqrt(record.shape[0])
+            avg_kl_sigma_q = avg[exact_num_epochs - 1]
+            conf_bound_sigma_q = conf_bound[exact_num_epochs - 1]
+            if (i % 2 == 0):
+                output_latex_approx_samesamples.append(
+                    f" & ${avg_kl_q_sigma:.2f} \pm {conf_bound_q_sigma:.2f}$ & ${avg_kl_sigma_q:.2f} \pm {conf_bound_sigma_q:.2f}$ {midrule}")
+                output_latex_names.append(f"{proposal_name} & {twist_learn_method_name} ")
+            else:
+                output_latex_exact.append(
+                    f" & ${avg_kl_q_sigma:.2f} \pm {conf_bound_q_sigma:.2f}$ & ${avg_kl_sigma_q:.2f} \pm {conf_bound_sigma_q:.2f}$ {midrule}")
+
+
+    plt.legend(prop={'size': legendsize})
     plt.savefig(f"./fig_kl_{fig_name_modifier}_{f_q_estimates.shape[-1]}.pdf")
 
     plt.clf()
-    plt.xlabel(f"2^ of Number of Twist Updates")
+    plt.xlabel(f"Number of Twist Updates")
     plt.ylabel(f"Average Reward")
 
     for i in range(len(load_prefixes)):
@@ -246,10 +336,20 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
 
         x_range = np.arange(reward.shape[-1])
 
-        twist_learn_method_name = twist_learn_method_names[i]
+        plot_name = plot_names[i]
+
+        if i == 0:
+            use_xticks = True
+            xticks_range = np.arange(0, reward.shape[-1], 2)
+            xticks_labels = 2 ** xticks_range
+            xticks_labels[0] = 0
+            if "15_10" in fig_name_modifier:
+                use_xticks = False
+            if use_xticks:
+                plt.xticks(xticks_range, xticks_labels)
 
         plot_with_conf_bounds(
-            reward, x_range, label=f"{twist_learn_method_name}", # Best logZ meaning using the midpoint of the tightest LogZ bounds that we had.
+            reward, x_range, label=f"{plot_name}", # Best logZ meaning using the midpoint of the tightest LogZ bounds that we had.
             color=color_list_for_g_q[i],
             linestyle=linestyle_list_for_f_q[i]
         )
@@ -258,27 +358,72 @@ def make_combined_plot(load_prefixes, fig_name_modifier):
     plt.savefig(f"./fig_rew_{fig_name_modifier}_{reward.shape[-1]}.pdf")
 
 
-    for x in output_latex:
-        print(x)
+    if exact_num_epochs is not None:
+        for i in range(len(output_latex_names)):
+            print(output_latex_names[i])
+            print(output_latex_exact[i])
+            print(output_latex_approx_samesamples[i])
+            print(output_latex_approx_samewallclock[i] + r" \tabularnewline \midrule ")
+            if i == 2:
+                print(r" \midrule")
 
-make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-18")
+    else:
 
-# make_combined_plot(load_prefixes_tox, "tox_01-08")
+        for x in output_latex:
+            print(x)
 
-# make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-10")
-# make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-10")
+# make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-30")
 
-# make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_01-10")
-# make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_01-10")
+# make_combined_plot(load_prefixes_tox, "tox_01-30")
+
+# make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_01-30")
+# make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_01-30")
 
 
-twist_learn_method_names = [
-    "EBM",
-    "EBM Trained on Only Exact Posterior Samples",
-    # "EBM Trained on Only Exact Posterior Samples",
-    "EBM-One-KL",
-    # "EBM-One-KL Trained on Only Exact Posterior Samples",
-    "EBM-One-KL Trained on Only Exact Posterior Samples",
+# make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-30")
+# make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-30")
+
+
+# twist_learn_method_names = [
+#     "EBM",
+#     "EBM Trained on Only Exact Posterior Samples",
+#     # "EBM Trained on Only Exact Posterior Samples",
+#     "EBM-One-KL",
+#     # "EBM-One-KL Trained on Only Exact Posterior Samples",
+#     "EBM-One-KL Trained on Only Exact Posterior Samples",
+# ]
+plot_names = [
+    r"Twisted Proposal (Contrastive)",
+    r"Twisted Proposal (Contrastive, Exact $\sigma$)",
+    r"Twisted Proposal (RL)",
+    r"Twisted Proposal (RL, Exact $\sigma$)",
+    r"Twisted Proposal (SIXO)",
+    r"Twisted Proposal (SIXO, Exact $\sigma$)",
+    r"Variational Proposal",
+    r"Variational Proposal (Exact $\sigma$)",
 ]
-# make_combined_plot(load_prefixes_sent_truepost_comparison, "sent_truep_comp_01-14")
-# make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-14")
+twist_learn_method_names = [
+    r"Contrastive Twist",
+    r"Contrastive Twist, Exact $\sigma$",
+    r"RL Twist",
+    r"RL Twist, Exact $\sigma$",
+    r"SIXO Twist",
+    r"SIXO Twist, Exact $\sigma$",
+    "N/A",
+    "N/A",
+]
+proposal_names = [
+    "Twisted Proposal",
+    "Twisted Proposal",
+    "Twisted Proposal",
+    "Twisted Proposal",
+    "Twisted Proposal",
+    "Twisted Proposal",
+    "Variational Proposal",
+    "Variational Proposal, Exact $\sigma$",
+]
+linestyle_list_for_f_q = ['solid'] * len(twist_learn_method_names)
+linestyle_list_for_g_q = ['dashed'] * len(twist_learn_method_names)
+
+# make_combined_plot(load_prefixes_sent_truepost_comparison, "sent_truep_comp_01-30", exact_num_epochs=9, legendsize=6)
+make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-30", exact_num_epochs=6, legendsize=6)

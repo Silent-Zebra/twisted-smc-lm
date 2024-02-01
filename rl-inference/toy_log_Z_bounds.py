@@ -1727,8 +1727,7 @@ class ExperimentConfig:
             raise NotImplementedError
 
 
-# TODO JAN 28 LATER REMOVE WHEN DONE INSPECTING/PRINTING
-print_smc_samples = True
+print_smc_samples = False
 
 def inspect_and_record_evidence_setting_for_index(
     rng_key, prompt, cfg_p, params_p, cfg_twist,
@@ -1824,13 +1823,14 @@ def inspect_and_record_evidence_setting_for_index(
         # print(log_w_t_before_resample_list)
 
         if tokenizer is not None:
-            print("INSPECTION OF SMC SAMPLES WITH INTERMEDIATE RESAMPLING together with the conditioning tokens")
-            text_outputs = tokenizer.batch_decode(jnp.concatenate(
-                (smc_samples, condition_twist_on_tokens_broadcasted),
-                axis=-1), skip_special_tokens=True)
-            if huggingface_model:
-                for s in text_outputs:
-                    print(s)
+            if condition_twist_on_tokens_broadcasted is not None:
+                print("INSPECTION OF SMC SAMPLES WITH INTERMEDIATE RESAMPLING together with the conditioning tokens")
+                text_outputs = tokenizer.batch_decode(jnp.concatenate(
+                    (smc_samples, condition_twist_on_tokens_broadcasted),
+                    axis=-1), skip_special_tokens=True)
+                if huggingface_model:
+                    for s in text_outputs:
+                        print(s)
 
             print("INSPECTION OF SEQS ALONG THE WAY")
             for full_seq in full_seq_list:
@@ -1951,9 +1951,12 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96, **kwargs):
     upper_conf_bound = avg + conf_bound
     lower_conf_bound = avg - conf_bound
 
+
     plt.plot(x_range, avg, label=label, **kwargs)
     plt.fill_between(x_range, lower_conf_bound,
                      upper_conf_bound, alpha=0.3, **kwargs)
+
+
 
     return avg[-1], conf_bound[-1]
 
