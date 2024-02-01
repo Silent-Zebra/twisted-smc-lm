@@ -21,6 +21,7 @@ import datetime
 from transformers import AutoModelForSequenceClassification
 
 import math
+from custom_trl_model import *
 
 
 def get_sentiment_class_prob(tokens, sentimentClassifier, class_num):
@@ -159,10 +160,15 @@ def main():
         raise NotImplementedError
 
     if args.hface_nn_twist:
-        from custom_trl_model import CustomAutoModelForCausalLMWithValueHead, CustomAutoModelForCausalLMWithValueHeadandConditionalTwist
         if args.rm_type == "p_last_tokens":
-            model = CustomAutoModelForCausalLMWithValueHeadandConditionalTwist.from_pretrained(model_config)
+            if args.separate_twist:
+                model = CustomAutoModelForCausalLMWithSeparateValueHeadandConditionalTwist.from_pretrained(model_config)
+                model.remove_requires_grad_ref_base_model()
+            else:
+                model = CustomAutoModelForCausalLMWithValueHeadandConditionalTwist.from_pretrained(model_config)
         else:
+            if args.separate_twist:
+                raise NotImplementedError
             model = CustomAutoModelForCausalLMWithValueHead.from_pretrained(model_config)
 
         ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
@@ -655,6 +661,7 @@ if __name__ == "__main__":
     parser.add_argument("--hface_nn_twist", action="store_true", help="Use an NN instead of a single linear layer for the twist head for the hface model")
     parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. Basically only for debug/testing. In general, don't use this flag.")
     parser.add_argument("--only_train_nn_head", action="store_true", help="Only train twist head modifier for PPO")
+    parser.add_argument("--separate_twist", action="store_true")
 
     args = parser.parse_args()
 
@@ -664,5 +671,8 @@ if __name__ == "__main__":
     if args.rm_type == "p_last_tokens":
         assert args.num_last_tokens_to_condition_on > 0
         assert args.beta_temp == 1 # Others not yet implemented...
+
+    if args.separate_twist:
+        assert args.rm_type == "p_last_tokens" # Ensure proper setup for other envs later
 
     main()

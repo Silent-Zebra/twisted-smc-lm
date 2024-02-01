@@ -69,7 +69,7 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         "v_head_init_strategy",
     )
 
-    def __init__(self, pretrained_model, conditional_twist=False, **kwargs):
+    def __init__(self, pretrained_model, conditional_twist=False, separate_base_model=False, **kwargs):
         r"""
         Initializes the model.
 
@@ -85,6 +85,9 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
 
         self.conditional_twist = conditional_twist
 
+        self.separate_base_model = separate_base_model
+
+
         if not any(hasattr(self.pretrained_model, attribute) for attribute in self.lm_head_namings):
             raise ValueError("The model does not have a language model head, please use a model that has one.")
 
@@ -96,6 +99,12 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
                 d_model = x[1].shape[-1]
                 output_size = x[1].shape[0]
                 break
+
+        if self.separate_base_model:
+            import copy
+            self.ref_pretrained_model = copy.deepcopy(self.pretrained_model)
+            print("using separate base model")
+
 
         if conditional_twist:
             hidden_size = d_model * 2
@@ -146,6 +155,12 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
         # return base_model_output.logits + self.nn_head(last_hidden_state) # Do this so that the text probs are close to the initial model at the beginning
 
 
+    def remove_requires_grad_ref_base_model(self):
+        for x in filter(lambda p: p[1].requires_grad,
+                        self.ref_pretrained_model.named_parameters()):
+            # name = x[0]
+            x[1].requires_grad = False
+
     def remove_requires_grad_base_model(self):
         for x in filter(lambda p: p[1].requires_grad, self.named_parameters()):
             name = x[0]
@@ -193,6 +208,13 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             **kwargs,
         )
 
+
+        if self.separate_base_model:
+            ref_base_model_output = self.ref_pretrained_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
         if condition_twist_on_tokens is not None:
 
             # if attention_mask is not None:
@@ -231,8 +253,10 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
             value = self.v_head(last_hidden_state).squeeze(-1)
         else:
             value = None
-
-        lm_logits = self.get_lm_logits(base_model_output, last_hidden_state)
+        if self.separate_base_model:
+            lm_logits = self.get_lm_logits(ref_base_model_output, last_hidden_state)
+        else:
+            lm_logits = self.get_lm_logits(base_model_output, last_hidden_state)
         # force upcast in fp32 if logits are in half-precision
         if lm_logits.dtype != torch.float32:
             lm_logits = lm_logits.float()
@@ -351,4 +375,8 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
 class CustomAutoModelForCausalLMWithValueHeadandConditionalTwist(CustomAutoModelForCausalLMWithValueHead):
     def __init__(self, pretrained_model, **kwargs):
         super().__init__(pretrained_model, conditional_twist=True, **kwargs)
+
+class CustomAutoModelForCausalLMWithSeparateValueHeadandConditionalTwist(CustomAutoModelForCausalLMWithValueHead):
+    def __init__(self, pretrained_model, **kwargs):
+        super().__init__(pretrained_model, conditional_twist=True, separate_base_model=True, **kwargs)
 
