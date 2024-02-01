@@ -1060,7 +1060,7 @@ def get_l_rl_based_partial_jit(
     if log_phi_final_eval is None:
         log_phi_final_eval = evaluate_log_phi_final(samples_to_evaluate_over, log_true_final_twist, condition_twist_on_tokens)
 
-    target_term = jnp.concatenate((target_term, log_phi_final_eval), axis=1)
+    target_term = jnp.concatenate((target_term, log_phi_final_eval[:, None]), axis=1)
     # target_term = target_term.at[:, -1].set(log_phi_final_eval)
     if stop_grad:
         target_term = jax.lax.stop_gradient(target_term)
