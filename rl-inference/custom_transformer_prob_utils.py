@@ -196,7 +196,7 @@ def get_p_logits_and_log_psi_all_vocab(
             # TODO NOTE THAT if not specifying the hface_model_params, it defaults to whatever is in the huggingface_model
             # Which is based on the CustomLMWithTwistHead.huggingface_model._params
             p_logits, log_psi_all_vocab = huggingface_model(input_ids=full_seq, ret="both", params_twist_head=params_twist, condition_twist_on_tokens=condition_twist_on_tokens)
-
+            log_psi_all_vocab = log_psi_all_vocab[:, prompt_len - 1: -1]
 
     else:
         assert params_proposal is None # Not yet implemented/tested

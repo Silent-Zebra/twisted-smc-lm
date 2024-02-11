@@ -66,6 +66,8 @@ load_prefixes_tox_truepost_comparison = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-13_23-09_seed1_ebm_reweight_nsamples7_toxc_trainontruepost_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-14_00-12_seed1_ebm_reweight_nsamples7_toxc_trainontruepost_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-02-01_07-11_seed1_rl_qsigma_lsq_partial_jit_nsamples7_trainontruepost_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-27_05-15_seed1_sixo_partial_jit_nsamples7_trainontruepost_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
@@ -83,7 +85,8 @@ load_prefixes_plasttok2_1 = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples14_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_05-46_seed1_one_total_kl_nsamples14_0001",
     # "f_q_g_q_estimates_2024-01-09_20-11_seed0_nsamples14_00003",
-    "f_q_g_q_estimates_2024-01-09_20-04_seed0_nsamples14_00001",
+    # "f_q_g_q_estimates_2024-01-09_20-04_seed0_nsamples14_00001",
+    "f_q_g_q_estimates_2024-02-01_19-30_ppo_seed0_nsamples14_00003",
 ]
 
 load_prefixes_plasttok15_10 = [
@@ -94,33 +97,34 @@ load_prefixes_plasttok15_10 = [
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_08-54_seed1_bce_q_nsamples12_plast15_10_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_07-14_seed1_bce_q_nsamples12_plast15_10_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_05-11_seed1_one_total_kl_nsamples12_plast15_10_0001",
-    "f_q_g_q_estimates_2024-01-09_21-38_seed0_nsamples12_ppo_plast15_10_000001",
+    "f_q_g_q_estimates_2024-02-01_22-13_ppo_seed0_nsamples12_00003",
+    # "f_q_g_q_estimates_2024-01-09_21-38_seed0_nsamples12_ppo_plast15_10_000001",
 ]
 
 twist_learn_method_names = [
-    "Contrastive Twist",
-    "RL Twist",
-    "SIXO Twist",
-    "BCE Twist",
-    "N/A",
-    "N/A",
+    "Contrastive",
+    "RL",
+    "SIXO",
+    "FUDGE",
+    "--",
+    "--",
 ]
 
 proposal_names = [
-    "Twisted Proposal",
-    "Twisted Proposal",
-    "Twisted Proposal",
-    "Twisted Proposal",
-    "Variational Proposal",
-    "PPO Proposal",
+    "Twisted",
+    "Twisted",
+    "Twisted",
+    "Twisted",
+    "DPG",
+    "PPO",
 ]
 
 plot_names = [
     "Twisted Proposal (Contrastive)",
     "Twisted Proposal (RL)",
     "Twisted Proposal (SIXO)",
-    "Twisted Proposal (BCE)",
-    "Variational Proposal",
+    "Twisted Proposal (FUDGE)",
+    "DPG Proposal",
     "PPO Proposal",
 ]
 
@@ -219,9 +223,9 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
         median_logZ_midpoint = -20.708 # Estimate from thousands of IWAE bounds on the best model (EBM One-KL). Should be pretty accurate.
 
 
-        plt.xlabel(f"Number of Twist Updates")
+        plt.xlabel(f"Number of Gradient Updates")
     else:
-        plt.xlabel(f"Number of Twist Updates")
+        plt.xlabel(f"Number of Gradient Updates")
     plt.ylabel(f"KL Divergence")
 
     # if fig_name_modifier == "tox":
@@ -237,7 +241,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
     if exact_num_epochs is not None:
         output_latex_names = []
         output_latex_exact = []
-        output_latex_approx_samewallclock = []
+        # output_latex_approx_samewallclock = []
         output_latex_approx_samesamples = []
 
 
@@ -291,9 +295,9 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
         if exact_num_epochs is not None:
             midrule = ""
             tabularnewline = ""
-            if (i % 2 == 0):
-                output_latex_approx_samewallclock.append(
-                    f" & ${last_avg_kl_q_sigma:.2f} \pm {conf_bound_q_sigma:.2f}$ & ${last_avg_kl_sigma_q:.2f} \pm {conf_bound_sigma_q:.2f}$ {tabularnewline} {midrule}")
+            # if (i % 2 == 0):
+            #     output_latex_approx_samewallclock.append(
+            #         f" & ${last_avg_kl_q_sigma:.2f} \pm {conf_bound_q_sigma:.2f}$ & ${last_avg_kl_sigma_q:.2f} \pm {conf_bound_sigma_q:.2f}$ {tabularnewline} {midrule}")
 
         else:
             output_latex.append(
@@ -327,7 +331,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
     plt.savefig(f"./fig_kl_{fig_name_modifier}_{f_q_estimates.shape[-1]}.pdf")
 
     plt.clf()
-    plt.xlabel(f"Number of Twist Updates")
+    plt.xlabel(f"Number of Gradient Updates")
     plt.ylabel(f"Average Reward")
 
     for i in range(len(load_prefixes)):
@@ -363,7 +367,11 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
             print(output_latex_names[i])
             print(output_latex_exact[i])
             print(output_latex_approx_samesamples[i])
-            print(output_latex_approx_samewallclock[i] + r" \tabularnewline \midrule ")
+            # print(output_latex_approx_samewallclock[i])
+            if i != len(output_latex_names) - 1:
+                print(r" \tabularnewline \midrule ")
+            else:
+                print(r" \tabularnewline ")
             if i == 2:
                 print(r" \midrule")
 
@@ -373,15 +381,16 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
             print(x)
 
 # make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-30")
-
 # make_combined_plot(load_prefixes_tox, "tox_01-30")
+
 
 # make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_01-30")
 # make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_01-30")
 
 
-# make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-30")
-# make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-30")
+
+make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-30")
+make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-30")
 
 
 # twist_learn_method_names = [
@@ -399,31 +408,31 @@ plot_names = [
     r"Twisted Proposal (RL, Exact $\sigma$)",
     r"Twisted Proposal (SIXO)",
     r"Twisted Proposal (SIXO, Exact $\sigma$)",
-    r"Variational Proposal",
-    r"Variational Proposal (Exact $\sigma$)",
+    r"DPG Proposal",
+    r"DPG Proposal (Exact $\sigma$)",
 ]
 twist_learn_method_names = [
-    r"Contrastive Twist",
-    r"Contrastive Twist, Exact $\sigma$",
-    r"RL Twist",
-    r"RL Twist, Exact $\sigma$",
-    r"SIXO Twist",
-    r"SIXO Twist, Exact $\sigma$",
-    "N/A",
-    "N/A",
+    r"Contrastive",
+    r"Contrastive, Exact $\sigma$",
+    r"RL",
+    r"RL, Exact $\sigma$",
+    r"SIXO",
+    r"SIXO, Exact $\sigma$",
+    "--",
+    "--",
 ]
 proposal_names = [
-    "Twisted Proposal",
-    "Twisted Proposal",
-    "Twisted Proposal",
-    "Twisted Proposal",
-    "Twisted Proposal",
-    "Twisted Proposal",
-    "Variational Proposal",
-    "Variational Proposal, Exact $\sigma$",
+    "Twisted",
+    "Twisted",
+    "Twisted",
+    "Twisted",
+    "Twisted",
+    "Twisted",
+    "DPG",
+    "DPG, Exact $\sigma$",
 ]
 linestyle_list_for_f_q = ['solid'] * len(twist_learn_method_names)
 linestyle_list_for_g_q = ['dashed'] * len(twist_learn_method_names)
 
 # make_combined_plot(load_prefixes_sent_truepost_comparison, "sent_truep_comp_01-30", exact_num_epochs=9, legendsize=6)
-make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-30", exact_num_epochs=6, legendsize=6)
+# make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-30", exact_num_epochs=6, legendsize=6)
