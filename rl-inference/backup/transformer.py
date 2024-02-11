@@ -1,6 +1,6 @@
 # Some inspiration from https://github.com/vpj/jax_transformer and https://github.com/awf/functional-transformer; these were sometimes used as a reference, but everything remaining here should be code I wrote myself
 
-from jax import vmap, jit
+from jax import jit
 
 import time
 
@@ -22,7 +22,7 @@ import datetime
 from custom_transformer import transformer_init_params
 
 from ppo_custom import ppo_and_value_loss
-from custom_transformer_rl_loss import rl_loss, rl_loss_custom_baselinep, rl_loss_custom_mixed_sampling, rl_loss_custom_extremes
+from backup.custom_transformer_rl_loss import rl_loss, rl_loss_custom_baselinep, rl_loss_custom_mixed_sampling, rl_loss_custom_extremes
 from custom_transformer_prob_utils import get_all_seqs_up_to_output_len, evaluate_log_p_theta_1_to_t, get_l_ebm_ml_jit, get_l_dre_sixo, smc_procedure, calc_analytic_sigma_vals
 from toy_reward_models import l_rel_compare_learned_twist_vs_optimal, l_abs_compare_learned_twist_vs_optimal, compare_learned_twist_vs_optimal, tokens_to_jnp_indices, ordered_token_list, inspect_one_bad_info, inspect_bad_word_info, inspect_bad_word_reward, inspect_varied_info, indices_to_tokens, print_bad_word_env_generations, batch_reward_model, build_log_true_final_twists, neg_beta_times_batch_reward_model_curry, reward_model_one_bad, reward_model_varied, reward_model_bad_word
 

@@ -3602,7 +3602,6 @@ if __name__ == "__main__":
             "ebm_ml_vmap_with_one_total_kl",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
-            # "one_total_kl_with_rl_old",
             "one_total_kl_with_rl_lsq_sgtarget", "one_total_kl_with_rl_lsq_sgvalue",
             "one_total_kl_with_rl_lsq_sgnone", "one_total_kl_with_rl_sq_sgtarget",
             "one_total_kl_with_rl_sq_sgvalue", "one_total_kl_with_rl_sq_sgnone",

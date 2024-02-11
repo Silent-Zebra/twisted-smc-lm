@@ -6,7 +6,7 @@ import numpy as np
 # import optax
 from flax.training import checkpoints
 
-load_dir = "."
+load_dir = ".."
 
 epochs = 40
 load_prefixes_to_use = [

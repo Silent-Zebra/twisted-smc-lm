@@ -6,7 +6,7 @@ import numpy as np
 # import optax
 from flax.training import checkpoints
 
-load_dir = "."
+load_dir = ".."
 
 action_size = 2
 input_size = 6
