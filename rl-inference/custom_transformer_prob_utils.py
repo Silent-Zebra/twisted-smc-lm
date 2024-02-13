@@ -680,6 +680,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
     if resample:
         do_resample = True
         if resample_criterion == "ESS":
+            # TODO FEB if this actually works well and I have to rerun expmts, then I have to figure out how to do the scan with this, otherwise that has to go outside the loop somehow, probably I have to move the resampling operation out of the jitted part.
             # check ESS criteria, if true, then do_resample = True, otherwise False
             normalized_w_ts = jax.nn.softmax(log_w_t)
             ess = 1. / (normalized_w_ts ** 2).sum()
@@ -1014,9 +1015,11 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
     full_seq_list = []
     log_w_t_list = []
     log_psi_t_eval_list = []
+    do_resample_record = []
+    ess_record = []
 
     for t in range(output_len - 1):
-        carry, (full_seq, log_w_t, log_psi_t_eval, log_w_t_before_resample, do_resample_record, ess_record) =\
+        carry, (full_seq, log_w_t, log_psi_t_eval, log_w_t_before_resample, do_resample, ess) =\
             partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist,
                     prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
                     resample=resample,
@@ -1031,6 +1034,13 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
         full_seq_list.append(full_seq)
         log_w_t_list.append(log_w_t)
         log_psi_t_eval_list.append(log_psi_t_eval)
+        do_resample_record.append(do_resample)
+        ess_record.append(ess)
+
+    # TODO FEB Remove/comment out later
+    print("ESS STATS")
+    print(do_resample_record)
+    print(ess_record)
 
     full_seq_list = jnp.stack(full_seq_list)
     log_w_t_list = jnp.stack(log_w_t_list)
@@ -1391,6 +1401,8 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                   resample_criterion="ESS" # "every_step" # TODO FEB 12 CHANGE BACK
                   ):
     prompt_len = prompt.shape[-1]
+
+    smc_procedure_type = "debug" # TODO FEB 12 CHANGE BACK
 
     if smc_procedure_type == "analytic_sigma_sample":
         assert n_vocab > 0
