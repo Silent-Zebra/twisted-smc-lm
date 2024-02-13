@@ -10,38 +10,24 @@ LORA_FULL = -1
 
 
 from jax import vmap, jit
-
 import time
-
 import argparse
-
 import jax.numpy as jnp
-
 from functools import partial
-
 import jax
-
 import jax.profiler
-
 import optax
-
 from flax.training import checkpoints
 import datetime
-
 import numpy as np
-
 import matplotlib
 
 matplotlib.use('PDF')
 
 import matplotlib.pyplot as plt
-
 from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
-
 import copy
-
 from custom_transformer import transformer_init_params
-
 from custom_transformer_prob_utils import *
 from toy_reward_models import *
 from losses import *
@@ -66,23 +52,16 @@ records_labels_list = ["True Log Z",
                        "KL(q||sigma) Lower Bound Estimate (SMC)",
                        ] # TODO Sep 16 make dynamic later
 
-
 n_seeds = 4
 n_seeds_f_q_rew_and_kl = 4
 
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
 def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist):
-    # print("Updates time")
-    # new_time = time.time()
-    # print(new_time)
     updates_twist, optim_twist_state = optimizer_twist.update(
         grad_params_twist, optim_twist_state, params_twist)
-    # print(time.time() - new_time)
-    # new_time = time.time()
-    # print(new_time)
+
     params_twist = optax.apply_updates(params_twist, updates_twist)
-    # print(time.time() - new_time)
-    # print("Updates finished")
+
     return params_twist, optim_twist_state
 
 
@@ -107,8 +86,6 @@ class ExperimentConfig:
         if self.rm_type == "indicator_at_index" or self.rm_type == "p_token_last_index" \
             or self.rm_type == "contains_token" or self.rm_type == "contains_token_eps":
             self.prepend_tokens_for_twists = True
-        # elif self.rm_type == "only_contains_token":
-        #     self.prepend_tokens_for_twists = False
         else:
             self.prepend_tokens_for_twists = False
 
@@ -3222,12 +3199,6 @@ def main():
             rng_key, sk = jax.random.split(rng_key)
 
 
-            # if args.rm_type == "indicator_at_index" or args.rm_type == "p_token_last_index" \
-            #     or args.rm_type == "contains_token" or args.rm_type == "contains_token_eps":
-            #
-            #     records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
-
-
             # DO plotting before the twist updates
             test_info = True
             if args.no_test_info:
@@ -3265,10 +3236,7 @@ def main():
 
                     if args.rm_type in ["p_last_tokens", "sent_cond_twist"] and args.beta_temp == 1.:
                         g_q_estimates, f_q_estimates = aux_info
-                        # g_q_estimates_list.append(g_q_estimates)
-                        # f_q_estimates_list.append(f_q_estimates)
-                        # experiment_cfg.plot_plasttokens(g_q_estimates_list,
-                        #                                 f_q_estimates_list)
+
                         if f_qs is None:
                             f_qs = f_q_estimates
                         else:
@@ -3409,21 +3377,9 @@ def main():
                         replay_buffer_log_prob_eval_by_prompt[prompt_num] = replay_buffer_log_prob_eval
 
 
-                # if twist_update != 0:
-                #     new_time = time.time()
-
-                # print(jnp_prompts)
-                # start_x = huggingface_model['p'](input_ids=jnp_prompts) # model (embeddings)
-                # start_y, start_z = huggingface_model['twist'](
-                #     input_ids=jnp_prompts, ret="both",
-                #     hface_model_params=params_twist[0],
-                #     params_twist_head=params_twist[1]
-                # )
-
                 if (twist_update + 1) % print_every_twist_updates == 0:
                     print(f"Twist update: {twist_update + 1}")
                     print(f"TIME: {time.time() - start}", flush=True)
-                    # jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory{twist_update}.prof")
 
                 if "ebm" in experiment_cfg.twist_learn_type:
                     rng_key, params_twist, optim_twist_state = \
@@ -3486,10 +3442,7 @@ def main():
                         records_list_by_twist = records_list_by_prompt_then_twist[
                             prompt_num]
                         print(records_list_by_twist)
-                        # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                        #                             target=records_list_by_twist,
-                        #                             step=epoch + 1,
-                        #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_prompt{prompt_num}_epoch")
+
                 last_ckpt_epoch = epoch
 
 
@@ -3509,10 +3462,6 @@ def main():
                     print(f"Prompt: {prompts[prompt_num]}")
                     records_list_by_twist = records_list_by_prompt_then_twist[prompt_num]
                     print(records_list_by_twist)
-                    # checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                    #                             target=records_list_by_twist,
-                    #                             step=epoch + 1,
-                    #                             prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_prompt{prompt_num}_epoch")
 
 
     end = time.time()

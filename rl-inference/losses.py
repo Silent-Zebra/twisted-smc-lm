@@ -999,6 +999,7 @@ def get_l_rl_based_partial_jit(
         else:
             raise NotImplementedError
 
+    # TODO should rename as normalized_w_t_on_samples
     normalized_log_w_t_on_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t))
 
     if append_sigma_samples: # Add the sigma samples to our data/batch we're training on

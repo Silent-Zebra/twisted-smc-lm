@@ -605,7 +605,7 @@ def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t
 
 def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, resample=True,
                             true_posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-                            tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None):
+                            tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None, resample_criterion="every_step"):
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     output_len, params_p, params_twist, \
     log_z_hat_t = carry
@@ -676,7 +676,19 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
     log_w_t_before_resample = None
 
+    ess = None
     if resample:
+        do_resample = True
+        if resample_criterion == "ESS":
+            # check ESS criteria, if true, then do_resample = True, otherwise False
+            normalized_w_ts = jax.nn.softmax(log_w_t)
+            ess = 1. / (normalized_w_ts ** 2).sum()
+            if ess < normalized_w_ts.shape[0] / 2:
+                do_resample = True
+            else:
+                do_resample = False
+
+    if do_resample:
         # Do resampling
 
         if true_posterior_sample is not None:
@@ -743,7 +755,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
     carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
     output_len, params_p, params_twist, log_z_hat_t)
 
-    return carry, (full_seq, log_w_t, log_r_psi_t_eval_w_potential_resample, log_w_t_before_resample)
+    return carry, (full_seq, log_w_t, log_r_psi_t_eval_w_potential_resample, log_w_t_before_resample, do_resample, ess)
 
 
 @partial(jax.jit, static_argnames=["resample", "resample_for_log_psi_t_eval_list"])
@@ -972,13 +984,15 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     return (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_r_psi_t_eval_w_potential_resample), full_seq_based_on_true_twist, full_seq_based_on_learned_twist
 
 
+# TODO MOVE TO BACKUP
 # Debug version, use only for debugging
 def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
             n_smc_samples, get_intermediate_sample_history_based_on_learned_twists=False,
             prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-                    no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True, params_proposal=None):
+                    no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
+              params_proposal=None, resample_criterion="every_step"):
     # print("SMC TIME")
     # start = time.time()
 
@@ -1002,16 +1016,18 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
     log_psi_t_eval_list = []
 
     for t in range(output_len - 1):
-        carry, (full_seq, log_w_t, log_psi_t_eval, log_w_t_before_resample) =\
+        carry, (full_seq, log_w_t, log_psi_t_eval, log_w_t_before_resample, do_resample_record, ess_record) =\
             partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist,
-                prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-                resample=resample,
-                token_of_interest_as_int=token_of_interest_as_int,
-                true_posterior_sample=true_posterior_sample,
-                proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model,
-                resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-                tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal)(carry, t)
+                    prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+                    resample=resample,
+                    token_of_interest_as_int=token_of_interest_as_int,
+                    true_posterior_sample=true_posterior_sample,
+                    proposal_is_p=proposal_is_p,
+                    huggingface_model=huggingface_model,
+                    resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
+                    tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal,
+                    resample_criterion=resample_criterion
+                    )(carry, t)
         full_seq_list.append(full_seq)
         log_w_t_list.append(log_w_t)
         log_psi_t_eval_list.append(log_psi_t_eval)
@@ -1065,13 +1081,13 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'output_len', 'n_smc_samples',
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p",
-                                   "huggingface_model", "resample_for_log_psi_t_eval_list", "tempered_twist", "beta_prop", "prompt_len"])
+                                   "huggingface_model", "resample_for_log_psi_t_eval_list", "tempered_twist", "beta_prop", "prompt_len", "resample_criterion"])
 def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist, output_len,
             n_smc_samples,
             prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-                    tempered_twist=False, beta_prop=None, params_proposal=None):
+                    tempered_twist=False, beta_prop=None, params_proposal=None, resample_criterion="every_step"):
     # Generate samples using SMC with twists (learned and final, if use_log_true_final_twist_for_final_weight_calc)
     # IF RESAMPLE=FALSE, MAKE SURE THAT WHATEVER END RESULT RESAMPLES OR REWEIGHTS BASED ON THE RETURNED WEIGHTS (do I even return the weights always though??)
 
@@ -1087,12 +1103,13 @@ def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, par
     carry = (rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
     output_len, params_p, params_twist, log_z_hat_t)
 
-    carry, (full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list) = jax.lax.scan(
+    carry, (full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list, do_resample_record, ess_record) = jax.lax.scan(
         partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens, resample=resample,
                 token_of_interest_as_int=token_of_interest_as_int, true_posterior_sample=true_posterior_sample,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                 resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-                tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal, prompt_len=prompt_len),
+                tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal, prompt_len=prompt_len,
+                resample_criterion=resample_criterion),
         carry, jnp.arange(output_len - 1, dtype=jnp.int32), output_len - 1)
 
     # args become traced after passed through scan? Yes. So it's important not to
@@ -1104,7 +1121,8 @@ def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, par
     output_len, params_p, params_twist, log_z_hat_t = carry
 
     return rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
-           prompt_len, log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list
+           prompt_len, log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list, \
+           do_resample_record, ess_record
 
 
 def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
@@ -1113,14 +1131,14 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False,
                     no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
-                    params_proposal=None, prompt_len=None
+                    params_proposal=None, prompt_len=None, resample_criterion="every_step"
                     ):
     # print("SMC TIME")
     # start = time.time()
 
 
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, _, \
-    log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list = \
+    log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list, do_resample_record, ess_record = \
         smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist,
                         params_twist,
                         output_len,
@@ -1128,12 +1146,13 @@ def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, l
                         prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
                         resample, true_posterior_sample, proposal_is_p,
                         huggingface_model, resample_for_log_psi_t_eval_list,
-                        tempered_twist, beta_prop, params_proposal=params_proposal)
+                        tempered_twist, beta_prop, params_proposal=params_proposal, resample_criterion=resample_criterion)
 
+    # TODO FEB Remove/comment out later
+    print("ESS STATS")
+    print(do_resample_record)
+    print(ess_record)
 
-    # print(time.time() - start)
-    # start = time.time()
-    # print("SMC JITTED PART FINISHED")
 
     resample_for_final = resample
     if no_final_resample:
@@ -1175,7 +1194,7 @@ smc_jit = partial(jax.jit,
                                    "get_intermediate_sample_history_based_on_learned_twists",
                                    "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p",
                                    "huggingface_model", "resample_for_log_psi_t_eval_list", "no_final_resample",
-                                   "tempered_twist", "beta_prop", "use_log_true_final_twist_for_final_weight_calc", "prompt_len"])(smc_partial_jit)
+                                   "tempered_twist", "beta_prop", "use_log_true_final_twist_for_final_weight_calc", "prompt_len", "resample_criterion"])(smc_partial_jit)
 
 
 
@@ -1368,7 +1387,9 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                   prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None, resample=True,
                   posterior_sample=None, proposal_is_p=False, huggingface_model=None,
                   resample_for_log_psi_t_eval_list=False, no_final_resample=False,
-                  tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True, params_proposal=None):
+                  tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True, params_proposal=None,
+                  resample_criterion="ESS" # "every_step" # TODO FEB 12 CHANGE BACK
+                  ):
     prompt_len = prompt.shape[-1]
 
     if smc_procedure_type == "analytic_sigma_sample":
@@ -1389,7 +1410,7 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
             no_final_resample=no_final_resample,
             tempered_twist=tempered_twist, beta_prop=beta_prop,
             use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc,
-            params_proposal=params_proposal, prompt_len=prompt_len
+            params_proposal=params_proposal, prompt_len=prompt_len, resample_criterion=resample_criterion
         )
     elif smc_procedure_type == "partial_jit":
         return smc_partial_jit(
@@ -1399,7 +1420,7 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
             huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
             no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop,
             use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc,
-            params_proposal=params_proposal, prompt_len=prompt_len
+            params_proposal=params_proposal, prompt_len=prompt_len, resample_criterion=resample_criterion
         )
     elif smc_procedure_type == "debug":
         return smc_debug(
@@ -1409,7 +1430,7 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
             huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
             no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop,
             use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc,
-            params_proposal=params_proposal
+            params_proposal=params_proposal, resample_criterion=resample_criterion
         )
     else:
         raise NotImplementedError
