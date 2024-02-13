@@ -676,6 +676,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
     log_w_t_before_resample = None
 
+    do_resample = resample
     ess = None
     if resample:
         do_resample = True
