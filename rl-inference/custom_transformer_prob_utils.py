@@ -1010,7 +1010,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
 
     carry = (
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
-    output_len, params_p, params_twist, prompt_len, log_z_hat_t)
+    output_len, params_p, params_twist, log_z_hat_t)
 
     full_seq_list = []
     log_w_t_list = []
@@ -1029,6 +1029,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
                     huggingface_model=huggingface_model,
                     resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
                     tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal,
+                    prompt_len=prompt_len,
                     resample_criterion=resample_criterion
                     )(carry, t)
         full_seq_list.append(full_seq)
@@ -1052,7 +1053,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
     # The functools.partial approach I used later on to pass cfg outside of the carry
     # is another, possibly better, approach to avoid this problem too.
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
-    output_len, params_p, params_twist, prompt_len, log_z_hat_t = carry
+    output_len, params_p, params_twist, log_z_hat_t = carry
 
     # print(time.time() - start)
     # start = time.time()
