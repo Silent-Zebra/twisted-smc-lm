@@ -1015,6 +1015,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
     full_seq_list = []
     log_w_t_list = []
     log_psi_t_eval_list = []
+    log_w_t_before_resample_list = []
     do_resample_record = []
     ess_record = []
 
@@ -1035,6 +1036,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
         full_seq_list.append(full_seq)
         log_w_t_list.append(log_w_t)
         log_psi_t_eval_list.append(log_psi_t_eval)
+        log_w_t_before_resample_list.append(log_w_t_before_resample)
         do_resample_record.append(do_resample)
         ess_record.append(ess)
 
@@ -1083,7 +1085,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
     # print(time.time() - start)
 
     if get_intermediate_sample_history_based_on_learned_twists:
-        return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list)
+        return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list, log_w_t_before_resample_list)
 
     return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist
 
