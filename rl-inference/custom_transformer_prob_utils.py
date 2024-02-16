@@ -1402,11 +1402,9 @@ def smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log
                   posterior_sample=None, proposal_is_p=False, huggingface_model=None,
                   resample_for_log_psi_t_eval_list=False, no_final_resample=False,
                   tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True, params_proposal=None,
-                  resample_criterion="ESS" # "every_step" # TODO FEB 12 CHANGE BACK
+                  resample_criterion="every_step" # "ESS"
                   ):
     prompt_len = prompt.shape[-1]
-
-    smc_procedure_type = "debug" # TODO FEB 12 CHANGE BACK
 
     if smc_procedure_type == "analytic_sigma_sample":
         assert n_vocab > 0

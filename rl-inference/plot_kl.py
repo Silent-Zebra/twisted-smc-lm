@@ -144,13 +144,15 @@ linestyle_list_for_f_q = ['solid'] * len(twist_learn_method_names)
 linestyle_list_for_g_q = ['dashed'] * len(twist_learn_method_names)
 
 
+load_dir = "./f_q_g_q_logZ_info"
+
 def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, legendsize=8):
 
     logZ_midpoint_estimates = []
     for i in range(len(load_prefixes)):
 
         prefix = load_prefixes[i]
-        x = checkpoints.restore_checkpoint(ckpt_dir=f"./{prefix}", target=None,
+        x = checkpoints.restore_checkpoint(ckpt_dir=f"{load_dir}/{prefix}", target=None,
                                            prefix="checkpoint"
                                            )
 

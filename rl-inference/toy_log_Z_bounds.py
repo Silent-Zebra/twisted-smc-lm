@@ -2490,11 +2490,16 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
         if separate_hface_twist_model:
             model_p = CustomLMHeadModel(model_config, from_pt=from_pt)
 
+            log_sigmoid_twist = False
+            if "bce" in experiment_cfg.twist_learn_type:
+                log_sigmoid_twist = True
+
             model_twist = CustomLMWithTwistHead(
                 sk, model_config, hface_nn_twist=hface_nn_twist,
                 softmax_twist=softmax_twist, conditional_twist_type=conditional_twist_type,
                 num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt,
-                n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier, one_hot_dim=one_hot_dim
+                n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier,
+                one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
             )
 
             params_p = model_p.huggingface_model.params
@@ -2559,10 +2564,14 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
 
 
         else:
+            log_sigmoid_twist = False
+            if "bce" in experiment_cfg.twist_learn_type:
+                log_sigmoid_twist = True
             model = CustomLMWithTwistHead(
                 sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist,
                 conditional_twist_type=conditional_twist_type, num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
-                from_pt=from_pt, n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier, one_hot_dim=one_hot_dim
+                from_pt=from_pt, n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier,
+                one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
             )
             params_p = model.huggingface_model.params
             params_twist = model.twist_head_params

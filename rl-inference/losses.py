@@ -1474,11 +1474,24 @@ def get_l_bce(
 
     class_prob_broadcasted = jnp.full((log_psi_on_p_samples.shape), class_prob[:, None]) # broadcast along the time dimension
 
-    loss = optax.sigmoid_binary_cross_entropy(log_psi_on_p_samples, class_prob_broadcasted)
+    loss = binary_cross_entropy(log_psi_on_p_samples, class_prob_broadcasted)
+
+    # loss = optax.sigmoid_binary_cross_entropy(log_psi_on_p_samples, class_prob_broadcasted)
 
     return loss.mean()
 
 
+def binary_cross_entropy(log_prob, labels):
+    # Adapted from https://github.com/google-deepmind/optax/blob/main/optax/losses/_classification.py#L24#L59
+    # labels = labels.astype(logits.dtype)
+    labels = labels.astype(log_prob.dtype)
+    # log_p = jax.nn.log_sigmoid(logits) # Before, the logits were just the NN output
+    # Now if we have the nn directly output the log sigmoid, then we just directly use the value
+    # log(1 - sigmoid(x)) = log_sigmoid(-x), the latter more numerically stable
+    # log_not_p = jax.nn.log_sigmoid(-logits)
+    one_minus_log_prob = jnp.log(-jnp.expm1(log_prob))
+    # log_not_p = jnp.log(1 - jnp.exp(log_p))
+    return -labels * log_prob - (1. - labels) * one_minus_log_prob
 
 
 
