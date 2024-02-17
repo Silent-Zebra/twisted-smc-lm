@@ -267,7 +267,7 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         elif self.twist_learn_type == "sixo_mixed_p_q_partial_jit":
             dre_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=5)
-        elif self.twist_learn_type in ["bce_p", "bce_q"]:
+        elif "bce" in self.twist_learn_type: # in ["bce_p", "bce_q"]:
             dre_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=5)
         elif self.twist_learn_type == "analytic_mse_rel":
             dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
@@ -311,7 +311,7 @@ class ExperimentConfig:
 
         if "bce" in self.twist_learn_type:
             assert self.beta_temp == 1. # because otherwise the Bayesian formulation doesn't work does it? TODO confirm
-            sk, sk2 = jax.random.split(sk)
+            sk, sk2, sk3 = jax.random.split(sk, 3)
 
 
             if self.rm_type in ["p_last_tokens",]:
@@ -325,7 +325,7 @@ class ExperimentConfig:
                                      :-self.num_last_tokens_to_condition_on]
                 condition_twist_on_tokens = p_samples[:,
                                             -self.num_last_tokens_to_condition_on:]
-                if self.twist_learn_type == "bce_p":
+                if self.twist_learn_type == "bce_sigma":
                     samples_to_evaluate_over = true_sigma_samples
                 elif self.twist_learn_type == "bce_q":
                     (_, _, _), _, (intermediate_twist_samples_hist,
@@ -344,6 +344,53 @@ class ExperimentConfig:
                         beta_prop=beta_prop, params_proposal=params_proposal
                     )
                     samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
+                elif self.twist_learn_type == "bce_p":
+                    independent_p_samples = stochastic_transformer_sample(sk3, cfg_p,
+                                                              params_p, prompt,
+                                                              output_len,
+                                                              n_twist,
+                                                              huggingface_model=huggingface_model)
+                    samples_to_evaluate_over = independent_p_samples
+                elif self.twist_learn_type == "bce_qsigma":
+                    (_, _, _), _, (intermediate_twist_samples_hist,
+                                   intermediate_log_w_t_hist,
+                                   _) = smc_procedure(
+                        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                        log_true_final_twist, output_len, n_twist,
+                        smc_procedure_type=self.smc_procedure_type,
+                        get_intermediate_sample_history_based_on_learned_twists=True,
+                        prepend_tokens_for_twists=prepend_tokens_for_twists,
+                        condition_twist_on_tokens=condition_twist_on_tokens,
+                        token_of_interest_as_int=token_of_interest_as_int,
+                        proposal_is_p=proposal_is_p,
+                        huggingface_model=huggingface_model,
+                        resample=False, tempered_twist=tempered_twist,
+                        beta_prop=beta_prop, params_proposal=params_proposal
+                    )
+                    samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
+                    samples_to_evaluate_over = jnp.concatenate(
+                        (samples_to_evaluate_over, true_sigma_samples), axis=0)
+                    if condition_twist_on_tokens is not None:
+                        condition_twist_on_tokens = jnp.concatenate((
+                                                                    condition_twist_on_tokens,
+                                                                    condition_twist_on_tokens),
+                                                                    axis=0)
+                elif self.twist_learn_type == "bce_psigma":
+                    independent_p_samples = stochastic_transformer_sample(sk3,
+                                                                          cfg_p,
+                                                                          params_p,
+                                                                          prompt,
+                                                                          output_len,
+                                                                          n_twist,
+                                                                          huggingface_model=huggingface_model)
+                    samples_to_evaluate_over = independent_p_samples
+                    samples_to_evaluate_over = jnp.concatenate(
+                        (samples_to_evaluate_over, true_sigma_samples), axis=0)
+                    if condition_twist_on_tokens is not None:
+                        condition_twist_on_tokens = jnp.concatenate((
+                                                                    condition_twist_on_tokens,
+                                                                    condition_twist_on_tokens),
+                                                                    axis=0)
                 else:
                     raise NotImplementedError
 
@@ -358,8 +405,6 @@ class ExperimentConfig:
                                                           n_twist,
                                                           huggingface_model=huggingface_model)
 
-                true_sigma_samples = p_samples
-
                 sk4, stochastic_classes = stochastic_classify(sk3, p_samples,
                                                             self.rewardModel,
                                                             self.tokenizer_RM,
@@ -368,7 +413,7 @@ class ExperimentConfig:
                 condition_twist_on_tokens = stochastic_classes
 
                 if self.twist_learn_type == "bce_p":
-                    samples_to_evaluate_over = true_sigma_samples
+                    samples_to_evaluate_over = p_samples
                 elif self.twist_learn_type == "bce_q":
                     (_, _, _), _, (intermediate_twist_samples_hist,
                                    intermediate_log_w_t_hist,
@@ -3572,7 +3617,7 @@ if __name__ == "__main__":
             "rl_q_lsq_nostopgrad", "rl_q_lsq_partial_jit_nostopgrad", "rl_qrsmp_lsq", "rl_q_multistep", "rl_q_multistep_partial_jit",
             "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mixed_p_q_lsq_partial_jit", "rl_mc", "rl_mc_partial_jit",
             "sixo", "sixo_mixed_p_q", "sixo_mixed_p_q_partial_jit", "sixo_partial_jit",
-            "bce_p", "bce_q"
+            "bce_p", "bce_q", "bce_sigma", "bce_qsigma", "bce_psigma"
         ]
     )
     # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
