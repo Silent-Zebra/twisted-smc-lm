@@ -29,7 +29,7 @@ from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
 import copy
 from custom_transformer import transformer_init_params
 from custom_transformer_prob_utils import *
-from toy_reward_models import *
+from reward_models import *
 from losses import *
 
 # Update the twists, update the whole framework for the Bayesian thing.

@@ -10,7 +10,7 @@ matplotlib.use('PDF')
 
 
 from custom_transformer_prob_utils import *
-from toy_reward_models import *
+from reward_models import *
 from losses import *
 
 
