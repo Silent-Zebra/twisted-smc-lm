@@ -9,7 +9,7 @@ from transformers import FlaxAutoModelForCausalLM, FlaxAutoModel
 from transformers import AutoTokenizer
 
 
-from custom_transformer import linear_init_normal, linear
+from utils import linear_init_normal, linear
 
 
 

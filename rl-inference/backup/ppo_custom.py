@@ -2,7 +2,7 @@ import jax
 from jax import jit
 from functools import partial
 import jax.numpy as jnp
-from custom_transformer import batch_transformer, stochastic_transformer_sample
+from custom_toy_transformer_and_analytic_tests.custom_transformer import batch_transformer, stochastic_transformer_sample
 from custom_transformer_prob_utils import evaluate_log_p_theta_1_to_t
 
 # PPO STUFF

@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import jax
 
 from custom_transformer_prob_utils import smc_procedure, evaluate_log_p_theta_1_to_t, calculate_kl_term, calculate_entropy_gradient_term
-from custom_transformer import transformer, stochastic_transformer_sample
+from custom_toy_transformer_and_analytic_tests.custom_transformer import transformer, stochastic_transformer_sample
 
 
 def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,

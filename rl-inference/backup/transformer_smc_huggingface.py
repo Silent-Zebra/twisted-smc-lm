@@ -32,7 +32,7 @@ from transformers import FlaxAutoModelForSequenceClassification
 
 import os
 
-from custom_transformer import linear_init_normal, linear
+from custom_toy_transformer_and_analytic_tests.custom_transformer import linear_init_normal, linear
 
 # os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
 # os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".25"

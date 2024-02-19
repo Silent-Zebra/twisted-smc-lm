@@ -3,9 +3,8 @@ import jax.numpy as jnp
 from functools import partial
 
 import jax
-import time
 
-from custom_transformer import batch_transformer, batch_transformer_with_prepend_token_of_interest, HashableDict, batch_transformer_with_prepend_tokens
+from custom_toy_transformer_and_analytic_tests.custom_transformer import batch_transformer, batch_transformer_with_prepend_token_of_interest, HashableDict, batch_transformer_with_prepend_tokens
 
 
 def kl_div_jax(log_p_target, log_p_curr):
