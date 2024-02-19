@@ -15,7 +15,9 @@ load_prefixes_sent1_nnonly = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples12_sent1_00003",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples12_sent1_00003",
+    # "f_q_g_q_logZbestmidpoint_info_2024-02-16_21-50_seed1_bce_p_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-02-17_21-26_seed1_bce_p_nsamples12_sent_001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
     # "f_q_g_q_estimates_2024-01-09_00-49_seed0_nsamples12_sent1_ppo_00001",
     # "f_q_g_q_estimates_2024-01-09_01-21_seed0_nsamples12_sent1_ppo_000003",
@@ -29,7 +31,8 @@ load_prefixes_tox = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-22_seed1_sixo_partial_jit_nsamples12_toxc_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-54_seed1_bce_q_nsamples12_toxc_00005",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-54_seed1_bce_q_nsamples12_toxc_00005",
+    "f_q_g_q_logZbestmidpoint_info_2024-02-16_22-17_seed1_bce_p_nsamples12_toxc_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
     "f_q_g_q_estimates_2024-01-08_06-40_seed0_nsamples12_toxc_ppo_000001",
 ]
@@ -82,7 +85,8 @@ load_prefixes_plasttok2_1 = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_22-45_seed1_rl_qsigma_lsq_nsamples14_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_18-33_seed1_rl_q_lsq_nsamples14_00001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-29_seed1_sixo_nsamples14_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples14_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-02-16_22-31_seed1_bce_psigma_nsamples14_plast2_1_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples14_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_05-46_seed1_one_total_kl_nsamples14_0001",
     # "f_q_g_q_estimates_2024-01-09_20-11_seed0_nsamples14_00003",
     # "f_q_g_q_estimates_2024-01-09_20-04_seed0_nsamples14_00001",
@@ -95,7 +99,8 @@ load_prefixes_plasttok15_10 = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_00003",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_08-54_seed1_bce_q_nsamples12_plast15_10_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-10_07-14_seed1_bce_q_nsamples12_plast15_10_00003",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_07-14_seed1_bce_q_nsamples12_plast15_10_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-02-18_03-47_seed1_bce_psigma_nsamples12_plast15_10_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_05-11_seed1_one_total_kl_nsamples12_plast15_10_0001",
     "f_q_g_q_estimates_2024-02-01_22-13_ppo_seed0_nsamples12_00003",
     # "f_q_g_q_estimates_2024-01-09_21-38_seed0_nsamples12_ppo_plast15_10_000001",
@@ -148,6 +153,7 @@ load_dir = "./f_q_g_q_logZ_info"
 
 def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, legendsize=8):
 
+    smallest_gap = jnp.inf
     logZ_midpoint_estimates = []
     for i in range(len(load_prefixes)):
 
@@ -156,11 +162,26 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
                                            prefix="checkpoint"
                                            )
 
+
+
         if len(x) > 4:
             if x[3] is not None:
                 logZ_midpoint_estimate = x[3]
                 print(logZ_midpoint_estimate)
                 logZ_midpoint_estimates.append(logZ_midpoint_estimate)
+
+    #             f_q_estimates = x[0]
+    #             g_q_estimates = x[1]
+    #             gap_of_last_f_q_g_q = (g_q_estimates.mean(axis=0)[-1] - f_q_estimates.mean(axis=0)[-1])
+    #             print(gap_of_last_f_q_g_q)
+    #             if gap_of_last_f_q_g_q < smallest_gap:
+    #                 smallest_gap = gap_of_last_f_q_g_q
+    #                 logZ_midpoint_estimate_of_tightest_gap_twists = logZ_midpoint_estimate
+    #
+    # print("LOG Z Midpoint using tightest gap twists")
+    # print(logZ_midpoint_estimate_of_tightest_gap_twists)
+    # logZ_midpoint_to_use = logZ_midpoint_estimate_of_tightest_gap_twists
+
 
     # print(logZ_midpoint_estimates)
     median_logZ_midpoint = np.median(np.stack(logZ_midpoint_estimates))
@@ -168,6 +189,9 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
     if "sent_rl_comp" in fig_name_modifier:
         median_logZ_midpoint = logZ_midpoint_estimates[0] # Needed when you have a bunch of unstable estimates.
         print(f"USING ONE LOG Z MIDPOINT ESTIMATE: {median_logZ_midpoint}")
+    # 1/0
+    logZ_midpoint_to_use = median_logZ_midpoint
+
 
     f_q_estimates_list = []
     g_q_estimates_list = []
@@ -178,7 +202,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
 
         prefix = load_prefixes[i]
 
-        x = checkpoints.restore_checkpoint(ckpt_dir=f"./{prefix}", target=None,
+        x = checkpoints.restore_checkpoint(ckpt_dir=f"{load_dir}/{prefix}", target=None,
                                            prefix="checkpoint")
 
         f_q_estimates = x[0]
@@ -214,15 +238,15 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
     print(midpoint_of_last_f_q_g_q_list)
     print("Median")
     print(np.median(np.stack(midpoint_of_last_f_q_g_q_list)))
-    if "plast2_1_01" in fig_name_modifier: # Only if there aren't enough samples (e.g. 30 conditioning token samples isn't really enough) to get a good idea of the average log partition function over conditioning tokens
+    if "plast2_1" in fig_name_modifier: # Only if there aren't enough samples (e.g. 30 conditioning token samples isn't really enough) to get a good idea of the average log partition function over conditioning tokens
         # median_logZ_midpoint = np.median(np.stack(midpoint_of_last_f_q_g_q_list))
-        median_logZ_midpoint = -2.753 # Estimate from thousands of IWAE bounds. Should be pretty accurate.
+        logZ_midpoint_to_use = -2.753 # Estimate from thousands of IWAE bounds. Should be pretty accurate.
 
 
 
     plt.clf()
     if "15_10" in fig_name_modifier:
-        median_logZ_midpoint = -20.708 # Estimate from thousands of IWAE bounds on the best model (EBM One-KL). Should be pretty accurate.
+        logZ_midpoint_to_use = -20.708 # Estimate from thousands of IWAE bounds on the best model (EBM One-KL). Should be pretty accurate.
 
 
         plt.xlabel(f"Number of Gradient Updates")
@@ -247,7 +271,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
         output_latex_approx_samesamples = []
 
 
-    logZ_midpoint_estimate = median_logZ_midpoint
+    logZ_midpoint_estimate = logZ_midpoint_to_use
 
     for i in range(len(load_prefixes)):
 
@@ -382,17 +406,16 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
         for x in output_latex:
             print(x)
 
-# make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_01-30")
-# make_combined_plot(load_prefixes_tox, "tox_01-30")
+make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_02-17")
+make_combined_plot(load_prefixes_tox, "tox_02-17")
+
+# make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_02-17")
+# make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_02-17")
 
 
-# make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_01-30")
-# make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_01-30")
 
-
-
-make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-30")
-make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-30")
+# make_combined_plot(load_prefixes_tox_rl_comparison, "tox_rl_comp_01-30")
+# make_combined_plot(load_prefixes_sent_rl_comparison, "sent_rl_comp_01-30")
 
 
 # twist_learn_method_names = [
