@@ -1,4 +1,4 @@
-from toy_log_Z_bounds import *
+from do_training_and_log_Z_bounds import *
 
 import jax.numpy as jnp
 

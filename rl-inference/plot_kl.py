@@ -8,7 +8,7 @@ matplotlib.use('PDF')
 
 import matplotlib.pyplot as plt
 
-from toy_log_Z_bounds import plot_with_conf_bounds
+from do_training_and_log_Z_bounds import plot_with_conf_bounds
 
 
 load_prefixes_sent1_nnonly = [
