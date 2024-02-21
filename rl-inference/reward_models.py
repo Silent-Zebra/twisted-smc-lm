@@ -374,8 +374,6 @@ def curried_log_sentiment_threshold(rewardModel, tokenizer_RM, tokenizer, thresh
 
 
 
-
-
 def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None, divide_by_p=False):
     # This here is a reward model in the framework phi = e^(beta r) where r = probability of continuation | prompt, s_{1:T} (r = p(continuation | s_{1:T}, prompt))
     # No posterior samples here
@@ -458,27 +456,27 @@ def build_exp_beta_toxicity_twists(jnp_prompts, rewardModel, tokenizer_RM, token
         log_true_final_twists.append(log_true_final_twist)
     return log_true_final_twists, None, None
 
-def build_exp_beta_toxicity_class_logprob_twists(rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
-    jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples=False):
-    curried_log_true_final_twist_function = curried_log_exp_beta_toxicity_class_logprob
-    return build_exp_beta_twists(
-        rng_key, cfg_p, params_p, output_len, n_samples_at_a_time,
-        huggingface_model,
-        curried_log_true_final_twist_function, jnp_prompts, rewardModel,
-        tokenizer_RM, tokenizer, beta_temp, class_num,
-        get_true_posterior_samples
-    )
-
-def build_exp_beta_sentiment_class_logprob_twists(
-    rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
-    jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples=False
-):
-    curried_log_true_final_twist_function = curried_log_exp_beta_sentiment_class_logprob
-    return build_exp_beta_twists(
-        rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
-        curried_log_true_final_twist_function, jnp_prompts, rewardModel,
-        tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples
-    )
+# def build_exp_beta_toxicity_class_logprob_twists(rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
+#     jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples=False):
+#     curried_log_true_final_twist_function = curried_log_exp_beta_toxicity_class_logprob
+#     return build_exp_beta_twists(
+#         rng_key, cfg_p, params_p, output_len, n_samples_at_a_time,
+#         huggingface_model,
+#         curried_log_true_final_twist_function, jnp_prompts, rewardModel,
+#         tokenizer_RM, tokenizer, beta_temp, class_num,
+#         get_true_posterior_samples
+#     )
+#
+# def build_exp_beta_sentiment_class_logprob_twists(
+#     rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
+#     jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples=False
+# ):
+#     curried_log_true_final_twist_function = curried_log_exp_beta_sentiment_class_logprob
+#     return build_exp_beta_twists(
+#         rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
+#         curried_log_true_final_twist_function, jnp_prompts, rewardModel,
+#         tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples
+#     )
 
 
 
@@ -607,67 +605,6 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indice
 
     return log_true_final_twists, None, true_posterior_samples_by_prompt
 
-
-
-def build_p_of_continuation_one_post_twists(
-    rng_key, jnp_prompts, cfg_p, params_p, output_len, num_tokens_in_continuation,
-    tokenizer=None, huggingface_model=None,):
-    # Like build_p_of_continuation_twists except instead of a specific continuation
-    # we just take one sample per prompt, and whatever the last num_tokens_in_continuation tokens are, that's our continuation
-    # That is, this is still us having a particular continuation that we are going to test. But it's just one that's drawn from p samples (so that we always have exactly one true posterior sample) instead of us predefining that continuation and having to rejection sample in order to get a true posterior
-
-    indices_of_continuations_chosen_by_prompt = []
-    log_true_final_twists = []
-    true_posterior_samples_by_prompt = []
-    for jnp_prompt in jnp_prompts:
-        prompt_len = jnp_prompt.shape[-1]
-
-        rng_key, sk = jax.random.split(rng_key)
-        p_sample = stochastic_transformer_sample(sk, cfg_p, params_p,
-                                                  jnp_prompt,
-                                                  output_len + num_tokens_in_continuation,
-                                                  1,
-                                                  huggingface_model=huggingface_model)
-
-        print(p_sample.shape)
-        posterior_sample = p_sample[:, :prompt_len + output_len]
-
-        print(posterior_sample.shape)
-        indices_of_continuation = p_sample[:, prompt_len + output_len:]
-
-        print(indices_of_continuation.shape)
-        indices_of_continuation = indices_of_continuation.reshape(indices_of_continuation.shape[-1],)
-        print(indices_of_continuation.shape)
-
-        log_true_final_twist = curried_log_p_of_continuation(cfg_p, params_p, indices_of_continuation, huggingface_model)
-        log_true_final_twists.append(log_true_final_twist)
-
-        if tokenizer is not None:
-            text_outputs = tokenizer.batch_decode(
-                p_sample, skip_special_tokens=True)
-            print(text_outputs)
-
-            print("Continuation only")
-            text_outputs = tokenizer.batch_decode(
-                p_sample[:, prompt_len + output_len:], skip_special_tokens=True)
-            print(text_outputs)
-
-        true_posterior_samples_by_prompt.append(
-            posterior_sample)
-
-        print("True posterior log_p value:")
-        print(log_true_final_twist(posterior_sample))
-
-        indices_of_continuations_chosen_by_prompt.append(indices_of_continuation)
-
-        # TODO FIGURE OUT how to make use of the indices of continuations chosen by prompt and
-        # pass that into the rest of the code such that it still works...
-        # Then test it, get a plot that shows wide divergences...
-
-
-    # print(true_posterior_samples_by_prompt_and_by_token)
-
-    return log_true_final_twists, indices_of_continuations_chosen_by_prompt, true_posterior_samples_by_prompt
 
 
 
