@@ -49,6 +49,252 @@ def kl_div_jax_sum_last_axis(log_p, log_q):
 #     return kl_term
 
 
+base_reward = 1.
+bad_reward = -10.
+nonsense_reward = 0 # negative (Maybe?) would help with learning at the very beginning
+good_reward = 2.
+evasive_reward = 1.
+
+# @partial(jax.jit, static_argnames=["prompt_len"])
+def reward_model_one_bad(single_seq, prompt_len):
+    # Super simple arbitrary reward model that designates the all 0s output string to be bad (achieving the bad_reward),
+    # and other strings to be acceptable (achieving the base_reward)
+
+    if len(single_seq.shape) == 2:
+        output_seq = single_seq[:, prompt_len:]
+        return (output_seq.sum(axis=-1) == 0) * (bad_reward - base_reward) + base_reward
+    elif len(single_seq.shape) == 1:
+        output_seq = single_seq[prompt_len:]
+        return (output_seq.sum() == 0) * (bad_reward - base_reward) + base_reward
+    else:
+        raise NotImplementedError
+
+
+# @partial(jax.jit, static_argnames=["prompt_len"])
+def reward_model_varied(single_seq, prompt_len):
+    # Just for testing
+    reward_0, reward_1, reward_2, reward_3, reward_4, reward_5 = -4, -3, -2, -1, 0, 1
+    # The default reward for other strings not specified above is 0
+
+    if len(single_seq.shape) == 2:
+        output_seq = single_seq[:, prompt_len:]
+    elif len(single_seq.shape) == 1:
+        output_seq = single_seq[prompt_len:]
+    else:
+        raise NotImplementedError
+    output_sum = output_seq.sum(axis=-1)
+    return (output_sum == 0) * reward_0 + (output_sum == 1) * reward_1 + (
+            output_sum == 2) * reward_2 + (output_sum == 3) * reward_3 + (
+            output_sum == 4) * reward_4 + (output_sum == 5) * reward_5
+
+
+def indices_to_tokens(ordered_token_list, indices):
+    output_list = [ordered_token_list[index] for index in indices]
+    return output_list
+
+def tokens_to_jnp_indices(ordered_token_list, tokens):
+    return jnp.array([ordered_token_list.index(token) for token in tokens], dtype=jnp.int32)
+
+def check_indices_match(seq1, seq2):
+    return (jnp.abs(seq1 - seq2).sum() == 0)
+
+def check_contains_bad_word(seq, bad_word="bad_term"):
+    bad_index = ordered_token_list.index(bad_word)
+
+    contains_bad_word = jnp.where(jnp.abs(seq - bad_index) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
+
+    return jnp.minimum(contains_bad_word.sum(), 1)
+
+ordered_token_list = ["what", "is", "the", "term", "for", "neutral_term", "bad_term", "unsure", "_"] # last token is placeholder for no output e.g. if you want to just end the string, fill it with that.
+desired_output = ["neutral_term", "_"]
+desired_output2 = ["the", "term", "is", "neutral_term", "_"]
+
+# bad_output = ["bad_term", "_"]
+evasive_output = ["unsure", "_"]
+# TODO JUL 22 check reshapes in the case where batch size or n_vocab is equal to the seq_Len (output_len + prompt_len; may be edge cases with reshaping that way? Just make sure the reshape does the right dimensions/right reshaping, which it should)
+good_indices = tokens_to_jnp_indices(ordered_token_list, desired_output)
+good_indices2 = tokens_to_jnp_indices(ordered_token_list, desired_output2)
+# bad_indices = tokens_to_jnp_indices(ordered_token_list, bad_output)
+evasive_indices = tokens_to_jnp_indices(ordered_token_list, evasive_output)
+
+def reward_model_bad_word_single(single_seq, prompt_len):
+    assert len(single_seq.shape) == 1
+    output_seq = single_seq[prompt_len:]
+
+    # basically assumes that nonsense_reward is a base reward and the other rewards are modifiers on that reward. Works non-confusingly when nonsense reward is 0
+    # Basically this reward structure says: always avoid the bad word. After doing that, it's best to produce a sequence that makes sense, even if it's evasive, rather than nonsense.
+    # Finally, it's better to produce the good, informative answer, rather than the evasive answer, even if the informative answer is closer to the bad (offensive) answer.
+    reward = nonsense_reward + check_indices_match(output_seq[:2], good_indices[:2]) * good_reward + \
+               check_indices_match(output_seq[:2], evasive_indices[:2]) * evasive_reward + \
+               check_contains_bad_word(output_seq) * bad_reward  # Without mutual exclusivity of conditions, then a sequence starting with don't know but having the bad word gets slightly better reward than just the bad word. I guess this is fine? # assumes mutual exclusivity of various conditions: e.g. cannot match evasive_indices and have the bad output
+    # check_indices_match(output_seq, good_indices2) * good_reward + \
+
+    # TODO now test this reward model with a few different output_seq, manually set even, just to see if it's right. Then test on a bunch of batches and individually print examples to see if it's working right. Finally, test directly in the whole code, print the reward, and see that it matches up and makes sense. Then finally run the experiments and see results.
+
+    return reward # TODO can -1 on the reward if we want to shift the base reward e.g. make learning easier by punishing nonsense.
+
+
+
+def reward_model_bad_word(seq, prompt_len):
+
+    # print("check seq in rew model")
+    # print(seq.shape)
+
+    if len(seq.shape) == 2:
+        return jax.vmap(reward_model_bad_word_single, in_axes=(0, None))(seq, prompt_len)
+    elif len(seq.shape) == 1:
+        return reward_model_bad_word_single(seq, prompt_len)
+    else:
+        raise NotImplementedError
+
+
+
+
+def build_log_true_final_twists(jnp_prompts, curr_beta_temp, rm_fn):
+    log_true_final_twists = []
+    log_true_final_twists_pos = []
+    for jnp_prompt in jnp_prompts:
+        log_true_final_twist = neg_beta_times_batch_reward_model_curry(jnp_prompt.shape[-1],
+                                                              beta=curr_beta_temp,
+                                                              reward_model_fn=rm_fn)
+        log_true_final_twist_pos = neg_beta_times_batch_reward_model_curry(jnp_prompt.shape[-1],
+                                                              beta=curr_beta_temp * -1.,
+                                                              reward_model_fn=rm_fn)
+        log_true_final_twists.append(log_true_final_twist)
+        log_true_final_twists_pos.append(log_true_final_twist_pos)
+
+    return log_true_final_twists, log_true_final_twists_pos
+
+
+
+# Just check the all 0s string and adjacent probabilities
+def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, huggingface_model=None):
+    print("--INSPECT ONE_BAD PROGRESS--")
+    seq = jnp.concatenate((jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
+    seq = seq[None, :]
+    seq = get_all_new_seqs_single_t(seq, n_vocab)
+    seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
+    # Seq is the all zeros sequence (following the prompt) along with all zeros except for the last token, for which we check all the n_vocab possibilities
+    log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
+    # log_psi = evaluate_log_phi_final(seq, log_true_final_twist)
+    print(log_p)
+
+# Analytic, all sequences
+# def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p):
+#     print("--INSPECT ONE_BAD PROGRESS--")
+#     all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len)
+#     log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
+#                                                  prompt_len, output_len)
+#     print(log_p_all_seqs)
+
+
+def inspect_varied_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, huggingface_model=None):
+    print("--INSPECT VARIED PROGRESS--")
+    all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len)
+    log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
+                                                 prompt_len, output_len, huggingface_model=huggingface_model)
+    print(log_p_all_seqs)
+
+
+def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface_model=None):
+    print("--INSPECT BAD WORD PROGRESS--")
+    # test_seqs = [
+    #     ["what", "is", "the", "term", "for", "neutral_term", "the", "term",
+    #      "is", "neutral_term", "_"],
+    #     ["what", "is", "the", "term", "for", "neutral_term", "the", "term",
+    #      "is", "bad_term", "_"],
+    #     ["what", "is", "the", "term", "for", "neutral_term", "don't", "know",
+    #      "_", "_", "_"],
+    #     ["what", "is", "the", "term", "for", "neutral_term", "term", "term",
+    #      "the", "for", "_"],
+    #     ["what", "is", "the", "term", "for", "neutral_term", "bad_term", "term",
+    #      "is", "neutral_term", "_"],
+    # ] # Test probs for: good output, bad output, evasive output, garbage/nonsense, and nonsense containing bad-word. There are lots of other possible sequences but they should all have very low prob.
+    # So first prob should go up, second should go down fast, third and fourth should ideally go down, fifth should go down fast.
+    # Then added a sixth which is just testing first 3 tokens of an evasive response and how likely that is
+
+    output_len = 2
+    test_seqs = [
+        ["what", "is", "the", "term", "for", "neutral_term", "neutral_term", "_"],
+        ["what", "is", "the", "term", "for", "neutral_term", "unsure", "_", ],
+        ["what", "is", "the", "term", "for", "neutral_term", "_", "_", ],
+        ["what", "is", "the", "term", "for", "neutral_term", "term", "the", ],
+    ] # good, evasive, nonsense, nonsense
+    jnp_indices_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_seqs])
+
+    log_p_all_seqs = evaluate_log_p_theta_1_to_t(jnp_indices_seqs, cfg_p, params_p,
+                                                 prompt_len, output_len, huggingface_model=huggingface_model)
+    print(log_p_all_seqs)
+    print(reward_model_bad_word(jnp_indices_seqs, prompt_len))
+    desired_cont_indist_prob = jnp.exp(log_p_all_seqs[0])
+    evasive_cont_indist_prob = jnp.exp(log_p_all_seqs[1])
+
+    test_bad_seqs = []
+    for x in ordered_token_list:
+        seq = ["what", "is", "the", "term", "for", "neutral_term", x, "bad_term"]
+        test_bad_seqs.append(seq)
+    for y in ordered_token_list:
+        if y != "bad_term":
+            seq = ["what", "is", "the", "term", "for", "neutral_term", "bad_term", y, ]
+            test_bad_seqs.append(seq)
+    jnp_ind_test_bad_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_bad_seqs])
+    log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_bad_seqs, cfg_p, params_p,
+                                                 prompt_len, 2, huggingface_model=None)
+    print("BAD WORD In dist Prob")
+    bad_word_indist_prob = jnp.exp(log_p).sum()
+    print(bad_word_indist_prob) # total sum prob of bad term in the ood prompt case
+
+    # DO SOME OOD TESTING
+    ood_prompt_len = 9
+    test_ood_bad_seqs = []
+    for x in ordered_token_list:
+        seq = ["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", x, "bad_term" ]
+        test_ood_bad_seqs.append(seq)
+    for y in ordered_token_list:
+        if y != "bad_term":
+            seq = ["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "bad_term", y, ]
+            test_ood_bad_seqs.append(seq)
+
+    jnp_ind_test_ood_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_bad_seqs])
+    log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_seqs, cfg_p, params_p,
+                                                 ood_prompt_len, output_len, huggingface_model=huggingface_model)
+    print("BAD WORD OOD Prob")
+    bad_word_ood_prob = jnp.exp(log_p).sum()
+    print(bad_word_ood_prob) # total sum prob of bad term in the ood prompt case
+
+    test_ood_good_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "neutral_term", "_" ]]
+    jnp_ind_test_ood_good_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_good_seq])
+    log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_good_seq, cfg_p, params_p,
+                                        ood_prompt_len, output_len, huggingface_model=huggingface_model) # prompt_len = 6, 6+3=9
+    print("Desired continuation OOD Prob")
+    desired_cont_ood_prob = jnp.exp(log_p)
+    print(desired_cont_ood_prob)
+
+    test_ood_evasive_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "unsure", "_" ]]
+    jnp_ind_test_ood_evasive_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_evasive_seq])
+    log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_evasive_seq, cfg_p, params_p,
+                                        ood_prompt_len, output_len, huggingface_model=huggingface_model) # prompt_len = 6, 6+3=9
+    print("Evasive continuation OOD Prob")
+    evasive_cont_ood_prob = jnp.exp(log_p)
+    print(evasive_cont_ood_prob)
+
+    return bad_word_indist_prob, desired_cont_indist_prob, evasive_cont_indist_prob, \
+           bad_word_ood_prob, desired_cont_ood_prob, evasive_cont_ood_prob
+
+def print_bad_word_env_generations(key, indices_prompt, cfg_p, params_p, prompt_len, output_len, n_samples):
+
+    print("Model Stochastic Generations")
+    key, sk = jax.random.split(key)
+    samples = stochastic_transformer_sample(sk, cfg_p, params_p, indices_prompt, output_len, n_samples)
+    for sample in samples:
+        token_sample = indices_to_tokens(ordered_token_list, sample)
+        print(token_sample[prompt_len:])
+
+
+
+
+
+
 def get_updated_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p,
                        optimizer_baseline, grad_params_baseline, optim_baseline_state, params_baseline):
     updates_p, optim_p_state = optimizer_p.update(

@@ -16,6 +16,248 @@ from losses import *
 
 
 
+# THIS FUNCTION ONLY WORKS FOR THE ONE_BAD REWARD MODEL (WITH THE ALL 0s BEING BAD), and only calculates twists on strings containing 0s e.g. 0, then 00, 000, etc. regardless of the n_vocab (although each computation must calculate using a sum over all n_vocab tokens)
+def calc_optimal_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
+    # Add output_len-1 zeros first
+    seq = jnp.concatenate((jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
+    seq = seq[None, :]
+    # then call the get_all_new_seqs_single_t function
+    seq = get_all_new_seqs_single_t(seq, n_vocab)
+    seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
+
+    # then do the summation done for the other stuff, recursively
+    opt_log_twist_array_list = []
+
+    opt_log_twist_single = calc_opt_twist_helper(seq, cfg_p, params_p, log_true_final_twist)
+    opt_log_twist_array = jnp.concatenate((opt_log_twist_single.reshape((1,)),
+                                           jnp.ones(
+                                               n_vocab - 1, ) * - base_reward))
+
+    opt_log_twist_array_list.append(opt_log_twist_array)
+
+    for t in range(output_len - 1 - 1, 0, -1):
+        seq = jnp.concatenate(
+            (jnp_prompt, jnp.zeros((t,), dtype=jnp.int32)))
+        seq = seq[None, :]
+        seq = get_all_new_seqs_single_t(seq, n_vocab)
+        seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
+
+        eval_log_p_t = evaluate_log_p_theta_t(seq, cfg_p, params_p, huggingface_model=huggingface_model)
+
+        # optimal_twist = (jnp.exp(eval_log_p + opt_log_twist_array[i * args.n_vocab:(i+1) * args.n_vocab])).sum()
+        opt_log_twist_single = jax.nn.logsumexp(eval_log_p_t + opt_log_twist_array)
+        opt_log_twist_array = jnp.concatenate((opt_log_twist_single.reshape((1,)), jnp.ones(n_vocab - 1,) * - base_reward ))
+
+        opt_log_twist_array_list.append(opt_log_twist_array)
+
+    return opt_log_twist_array_list
+
+# Check the model twists in a similar manner to the optimal twists for the one_bad reward model
+def calc_model_twists_one_bad(jnp_prompt, n_vocab, output_len, cfg_twist, params_twist, stop_grad=False, huggingface_model=None):
+    # Add output_len-1 zeros first
+    seq = jnp.concatenate(
+        (jnp_prompt, jnp.zeros((output_len - 1,), dtype=jnp.int32)))
+    seq = seq[None, :]
+    # then call the get_all_new_seqs_single_t function
+    seq = get_all_new_seqs_single_t(seq, n_vocab)
+    seq = seq.reshape(-1, seq.shape[
+        -1])  # turn into (batch_size = n_vocab, seq_len) shape
+
+    model_twist_array_list = []
+
+    model_twist = evaluate_log_psi_t(seq, cfg_twist, params_twist, huggingface_model=huggingface_model)
+
+    model_twist_array_list.append(model_twist)
+
+    for t in range(output_len - 1 - 1, 0, -1):
+        seq = jnp.concatenate(
+            (jnp_prompt, jnp.zeros((t,), dtype=jnp.int32)))
+        seq = seq[None, :]
+        seq = get_all_new_seqs_single_t(seq, n_vocab)
+        seq = seq.reshape(-1, seq.shape[
+            -1])  # turn into (batch_size = n_vocab, seq_len) shape
+
+        model_twist = evaluate_log_psi_t(seq, cfg_twist, params_twist, huggingface_model=huggingface_model)
+
+        if stop_grad:
+            model_twist = jax.lax.stop_gradient(model_twist)
+
+        model_twist_array_list.append(model_twist)
+
+    return model_twist_array_list
+
+
+def calc_opt_twist_helper(seqs_2d, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
+    eval_log_p_t = evaluate_log_p_theta_t(
+        seqs_2d, cfg_p, params_p, huggingface_model=huggingface_model)
+
+    eval_log_psi = evaluate_log_phi_final(
+        seqs_2d, log_true_final_twist)
+
+    # eval_log_p_t and eval_log_psi are both 1d arrays anyway, so using axis=-1 or not makes no difference
+    optimal_log_twist = jax.nn.logsumexp(eval_log_p_t + eval_log_psi)
+
+    return optimal_log_twist
+
+def calc_opt_twist_helper_mapped(seqs_3d, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
+    return jax.vmap(calc_opt_twist_helper, in_axes=(0, None, None, None))(seqs_3d, cfg_p, params_p, log_true_final_twist, huggingface_model=huggingface_model)
+
+
+def calc_optimal_twists(jnp_prompt, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, huggingface_model=None):
+    if huggingface_model is not None:
+        raise Exception("Don't do this with huggingface transformer. It will take forever and use absurd amounts of memory.") # Don't do this with huggingface. It will take forever.
+    all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len - 1)
+
+    all_seqs_to_T_minus_1 = all_seqs_list[-1]
+    all_seqs_with_n_vocab_at_T = get_all_new_seqs_single_t(
+        all_seqs_to_T_minus_1, n_vocab)
+    # When we call print(all_seqs_with_n_vocab_at_t.shape), we get shape of: batch (which should be n_vocab ^ (output_len - 1) I believe), n_vocab, output_len - 1 + prompt_len
+
+    opt_log_twist_array_list = []
+
+    # We're going to iterate over all of the sequences of length t: but since they're sorted into groups of n_vocab size, and we have
+    # n_vocab ^ (output_len - 1) of those groups, we're going to iterate over each of those groups, calculate the twist value for each of the
+    # n_vocab ^ (output_len - 1) groups based on summing over the n_vocab tokens for the next time step, in this case directly using the
+    # known final twist values (e.g. RM/PM). This gives us our twists for the t-1 time step (indeed we assume output_len > 1, otherwise there are no twists to calculate)
+
+    opt_log_twist_array = calc_opt_twist_helper_mapped(all_seqs_with_n_vocab_at_T, cfg_p, params_p, log_true_final_twist)
+    opt_log_twist_array_list.append(opt_log_twist_array)
+
+    eval_log_phi_final = evaluate_log_phi_final(all_seqs_with_n_vocab_at_T.reshape(-1, all_seqs_with_n_vocab_at_T.shape[-1]), log_true_final_twist)
+
+    # The above section calculates the optimal twists for the t-1 time step
+    # The below now takes those, and recursively calculates the optimal twists for time step t-2, and so on, decrementing by 1 each time.
+    j = 2
+    while (j < output_len):
+
+        new_opt_log_twist_list = []
+
+        all_seqs_to_T_minus_j = all_seqs_list[-j]
+
+        all_seqs_with_n_vocab_at_t = get_all_new_seqs_single_t(
+            all_seqs_to_T_minus_j, n_vocab)
+        for i in range(all_seqs_with_n_vocab_at_t.shape[0]):
+            eval_log_p_t = evaluate_log_p_theta_t(
+                all_seqs_with_n_vocab_at_t[i, :, :], cfg_p, params_p, huggingface_model=huggingface_model)
+            # optimal_twist = (jnp.exp(eval_log_p + opt_log_twist_array[i * args.n_vocab:(i+1) * args.n_vocab])).sum()
+            optimal_log_twist = jax.nn.logsumexp(
+                eval_log_p_t + opt_log_twist_array[
+                             i * n_vocab:(i + 1) * n_vocab])
+            new_opt_log_twist_list.append(optimal_log_twist)
+
+        new_opt_log_twist_array = jnp.stack(new_opt_log_twist_list)
+
+        opt_log_twist_array_list.append(new_opt_log_twist_array)
+
+        opt_log_twist_array = new_opt_log_twist_array
+
+        # Remember again essentially what the optimal twists are doing are giving you marginals (using the final twist as the reference)
+
+        j += 1
+
+    opt_log_twist_array_list.insert(0, eval_log_phi_final) # This inserts the twist values at time T
+    # print(eval_log_phi_final)
+    # print(opt_log_twist_array_list)
+
+    return opt_log_twist_array_list
+
+def calc_model_twists(prompt, n_vocab, output_len, cfg_twist, params_twist,
+                      prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=None):
+    # Calculates on all possible sequences (not practical for large n_vocab or large output_len)
+    all_seqs_list = get_full_list_of_all_seqs_up_to_output_len(
+        prompt, n_vocab, output_len)
+
+    model_twist_array_list = []
+
+    for j in range(1, output_len + 1):
+        all_seqs = all_seqs_list[-j]
+        model_twist = evaluate_log_psi_t(all_seqs, cfg_twist, params_twist,
+                                         prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
+        model_twist_array_list.append(model_twist)
+
+    return model_twist_array_list
+
+def l_rel_compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
+                                     params_p, log_true_final_twist, cfg_twist, params_twist, rm_type):
+    return compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
+                                     params_p, log_true_final_twist, cfg_twist, params_twist, rm_type, verbose=False,  relative_diff_loss=True)
+
+def l_abs_compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
+                                     params_p, log_true_final_twist, cfg_twist, params_twist, rm_type):
+    return compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
+                                     params_p, log_true_final_twist, cfg_twist, params_twist, rm_type, verbose=False,  relative_diff_loss=False)
+
+def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
+                                     params_p, log_true_final_twist, cfg_twist, params_twist, rm_type,
+                                     prepend_tokens_for_twists, condition_twist_on_tokens,
+                                     token_of_interest_as_int,
+                                     huggingface_model,
+                                     verbose=True, relative_diff_loss=True, stop_grad=False):
+    if condition_twist_on_tokens:
+        raise NotImplementedError
+
+    if rm_type == "one_bad":
+        opt_log_twist_array_list = calc_optimal_twists_one_bad(prompt, n_vocab,
+                                                   output_len, cfg_p,
+                                                   params_p, log_true_final_twist)
+    elif rm_type == "bad_word":
+        raise NotImplementedError
+    else:
+        # FIRST generate optimal twists
+        # seqs_to_test_on = all_seqs # For longer time horizons can instead use some randomly sampled sequences s_{1:T} (Works only when you can avoid the exponential number of sums e.g. with some structure in the reward model) For shorter time horizons, can literally test every sequence
+        opt_log_twist_array_list = calc_optimal_twists(prompt, n_vocab,
+                                                       output_len, cfg_p,
+                                                       params_p, log_true_final_twist, huggingface_model=huggingface_model)
+
+    if verbose:
+        print("OPTIMAL TWISTS")
+        print(opt_log_twist_array_list)
+
+    if rm_type == "one_bad":
+        model_twist_array_list = calc_model_twists_one_bad(prompt, n_vocab, output_len,
+                                                   cfg_twist, params_twist, stop_grad)
+    else:
+        # NEXT generate all seqs, and compare the model twists on all 1:t for all t on all seqs.
+        model_twist_array_list = calc_model_twists(prompt, n_vocab, output_len,
+                                                   cfg_twist, params_twist,
+                                                   prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
+                                                   huggingface_model)
+
+    if verbose:
+        print("MODEL TWISTS")
+        print(model_twist_array_list)
+
+    sum_diff = 0.
+    total_size = 0.
+
+    if verbose:
+        print("DIFFS")
+    for i in range(len(opt_log_twist_array_list)):
+        diff_i = opt_log_twist_array_list[i] - model_twist_array_list[i]
+
+        if verbose:
+            print(diff_i)
+            print(diff_i - diff_i.mean())
+            print((jnp.abs(diff_i - diff_i.mean())).mean()) # This is useful because adding a constant to log twists changes nothing (like multiplying unnormalized probabilities by a constant). Therefore we should not be concerned if the learned twists differ from the optimal only by a constant amount across all entries. What we care about are RELATIVE differences - after removing a constant shift (using the mean of the differences, to give the most charitable interpretation), how much remaining differences are left?
+            print(((diff_i - diff_i.mean()) ** 2).mean())
+
+        if relative_diff_loss:
+            sum_diff += ((diff_i - diff_i.mean()) ** 2).mean() # Using mean instead of sum here helps us avoid overweighting the later twists
+        else:
+            sum_diff += (diff_i ** 2).mean()
+        total_size += 1
+
+    # print(total_size)
+    # print(sum_diff / total_size)
+
+
+    return sum_diff / total_size
+
+
+
+
+
+
 class TestClass:
 
     def test_debug_smc(self):

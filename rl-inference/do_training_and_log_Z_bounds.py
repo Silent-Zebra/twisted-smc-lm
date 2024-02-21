@@ -20,7 +20,7 @@ from flax.training import checkpoints
 import datetime
 import numpy as np
 import matplotlib
-from utils import HashableDict
+from utils import *
 
 matplotlib.use('PDF')
 
@@ -1468,45 +1468,16 @@ class ExperimentConfig:
 
     def get_log_true_final_twists(self, rng_key, jnp_prompts, cfg_p,
                                   params_p,
-                                  rm_type, indicator_pos_zero_index, output_len,
+                                  rm_type, output_len,
                                   n_true_posterior_samples,
                                   huggingface_model=None,
-                                  index_of_token_contained=None,
                                   indices_of_continuation=None,
                                   rewardModel=None, tokenizer_RM=None, tokenizer=None,
                                   threshold=0, pos_threshold=True,
                                   get_true_posterior_samples=True):
-        if rm_type == "bad_word_pos":
-            log_true_final_twists = build_log_true_final_twists_positive_rew(
-                jnp_prompts, self.rm_fn,
-                huggingface_model=huggingface_model)
-            return log_true_final_twists, None, None
 
-        elif rm_type == "indicator_at_index":
-            rng_key, sk = jax.random.split(rng_key)
-            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = build_indicator_twists_all_tokens_at_position(
-                sk, jnp_prompts, indicator_pos_zero_index, cfg_p, params_p,
-                output_len, n_true_posterior_samples,
-                huggingface_model=huggingface_model)
 
-            print(log_true_final_twists)
-            print(indices_of_tokens_chosen_by_prompt)
-            print(true_posterior_samples_by_prompt_and_by_token)
-            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
-        elif rm_type == "p_token_last_index":
-            rng_key, sk = jax.random.split(rng_key)
-            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = build_log_p_token_last_pos_twists(sk, jnp_prompts, cfg_p,
-                                                    params_p,
-                                                    output_len,
-                                                    n_true_posterior_samples,
-                                                    huggingface_model=huggingface_model)
-            print(log_true_final_twists)
-            print(indices_of_tokens_chosen_by_prompt)
-            print(true_posterior_samples_by_prompt_and_by_token)
-            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
-        elif rm_type == "exp_beta_rew_p_continuation":
+        if rm_type == "exp_beta_rew_p_continuation":
             assert indices_of_continuation is not None
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
                 = build_rew_p_of_continuation_twists(jnp_prompts, cfg_p,
@@ -1601,17 +1572,7 @@ class ExperimentConfig:
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
-        elif rm_type == "p_continuation_one_post":
-            assert indices_of_continuation is None
-            assert self.num_last_tokens_to_condition_on > 0
-            rng_key, sk = jax.random.split(rng_key)
-            log_true_final_twists, indices_of_continuations_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token = \
-                build_p_of_continuation_one_post_twists(
-                    sk, jnp_prompts, cfg_p, params_p, output_len, self.num_last_tokens_to_condition_on,
-                    tokenizer, huggingface_model
-                    )
 
-            return log_true_final_twists, indices_of_continuations_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
 
         elif rm_type == "p_last_tokens":
             rng_key, sk = jax.random.split(rng_key)
@@ -1628,19 +1589,7 @@ class ExperimentConfig:
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
-        elif rm_type == "contains_continuation":
-            assert indices_of_continuation is not None
-            rng_key, sk = jax.random.split(rng_key)
-            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = build_contains_continuation_twists(sk, jnp_prompts, cfg_p,
-                                                     params_p, output_len,
-                                                     n_samples_at_a_time=n_true_posterior_samples,
-                                                     indices_of_continuation=indices_of_continuation,
-                                                     huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples)
-            print(log_true_final_twists)
-            print(indices_of_tokens_chosen_by_prompt)
-            print(true_posterior_samples_by_prompt_and_by_token)
-            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
+
         elif rm_type == "toxicity_threshold":
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
@@ -1665,45 +1614,7 @@ class ExperimentConfig:
             print(indices_of_tokens_chosen_by_prompt)
             print(true_posterior_samples_by_prompt_and_by_token)
             return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
-        elif rm_type == "contains_token":
-            rng_key, sk = jax.random.split(rng_key)
-            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = build_contains_token_twists(sk, jnp_prompts, cfg_p,
-                                              params_p,
-                                              output_len,
-                                              n_samples_at_a_time=n_true_posterior_samples,
-                                              # Not quite number of true posterior samples, this naming is misleading here. Here the n true posterior is used as a guideline for which we do rejection sampling until we get the token we want
-                                              index_of_token_of_interest=index_of_token_contained,
-                                              huggingface_model=huggingface_model)
-            print(log_true_final_twists)
-            print(indices_of_tokens_chosen_by_prompt)
-            print(true_posterior_samples_by_prompt_and_by_token)
-            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
-        elif rm_type == "contains_token_eps":
-            rng_key, sk = jax.random.split(rng_key)
-            log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
-                = build_contains_token_eps_twists(sk, jnp_prompts, cfg_p,
-                                                  params_p,
-                                                  output_len,
-                                                  n_samples_at_a_time=n_true_posterior_samples,
-                                                  # Not quite number of true posterior samples, this naming is misleading here. Here the n true posterior is used as a guideline for which we do rejection sampling until we get the token we want
-                                                  index_of_token_of_interest=index_of_token_contained,
-                                                  huggingface_model=huggingface_model)
-            print(log_true_final_twists)
-            print(indices_of_tokens_chosen_by_prompt)
-            print(true_posterior_samples_by_prompt_and_by_token)
-            return log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token
-        elif rm_type == "only_contains_token":
-            rng_key, sk = jax.random.split(rng_key)
-            log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
-                = build_only_contains_token_twists(sk, jnp_prompts, cfg_p,
-                                                   params_p, output_len,
-                                                   n_samples_at_a_time=n_true_posterior_samples,
-                                                   indices_of_tokens=indices_of_tokens_for_only_contains_token,
-                                                   huggingface_model=huggingface_model)
-            print(log_true_final_twists)
-            print(true_posterior_samples_by_prompt_and_by_token)
-            return log_true_final_twists, None, true_posterior_samples_by_prompt_and_by_token
+
         else:
             raise NotImplementedError
 
@@ -2375,9 +2286,9 @@ def collect_true_posterior_samples(
         rng_key, sk = jax.random.split(rng_key)
         log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
             = experiment_cfg.get_log_true_final_twists(
-            sk, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
+            sk, jnp_prompts, cfg_p, params_p, rm_type,
             output_len, n_true_posterior_samples, huggingface_model,
-            index_of_token_contained, indices_of_continuation, rewardModel,
+            indices_of_continuation, rewardModel,
             tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples=True
         )
         if combined_true_posterior_samples is None:
@@ -2812,9 +2723,9 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
     rng_key, sk = jax.random.split(rng_key)
     log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
         = experiment_cfg.get_log_true_final_twists(
-        sk, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
+        sk, jnp_prompts, cfg_p, params_p, rm_type,
         output_len, n_true_posterior_samples, huggingface_model,
-        index_of_token_contained, indices_of_continuation, rewardModel,
+        indices_of_continuation, rewardModel,
         tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples
     )
 
@@ -3529,15 +3440,13 @@ if __name__ == "__main__":
     parser.add_argument("--twist_updates_per_epoch", type=int, default=100)
 
     parser.add_argument("--rm_type", type=str, default="p_token_last_index",
-                        choices=["bad_word_pos", "indicator_at_index",
-                                 "p_token_last_index", "contains_token",
-                                 "only_contains_token", "contains_token_eps",
+                        choices=["p_token_last_index",
                                  "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
                                  "contains_continuation",
                                  "p_continuation", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
                                  "exp_beta_sentiment_class_logprob", "sent_cond_twist",
                                  "toxicity_threshold", "sentiment_threshold",
-                                 "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"])
+                                 "hard_p_continuation", "p_last_tokens", "p_continuation_one_post"]) # TODO remove unused options
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens or rm_type == )")

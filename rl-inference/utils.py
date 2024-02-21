@@ -21,3 +21,10 @@ def linear_init_normal(key: jax.random.KeyArray, in_features: int, out_features:
 
 def linear(params, x: jnp.ndarray):
     return x @ params['w'] + params['b'][None, :]
+
+
+def hist_by_token_index(samples, n_vocab, token_index=-1):
+    # Do the summary by last token by default
+    samples_hist = jnp.histogram(samples[:, token_index], bins=jnp.arange(n_vocab + 1), density=True)[0]
+
+    return samples_hist
