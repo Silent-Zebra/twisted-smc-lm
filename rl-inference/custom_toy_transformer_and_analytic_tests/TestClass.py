@@ -12,6 +12,7 @@ matplotlib.use('PDF')
 from custom_transformer_prob_utils import *
 from reward_models import *
 from losses import *
+from custom_transformer import *
 
 
 
@@ -254,6 +255,514 @@ def compare_learned_twist_vs_optimal(prompt, n_vocab, output_len, cfg_p,
     return sum_diff / total_size
 
 
+
+
+def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model_type, lr_twist,
+          beta1, beta2, weight_decay, d_model, d_k, d_v, n_layers, n_heads, d_fc,
+          d_model_twist, d_k_twist, d_v_twist, n_layers_twist, n_heads_twist, d_fc_twist,
+          indicator_pos_zero_index, output_len, n_true_posterior_samples, index_of_token_contained,
+          beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dirs=None,
+              load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
+              num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
+              num_samples_if_only_collect_true_posterior_samples=100,
+              load_posterior_samples=False, load_prefix_posterior_samples=None,
+              sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
+              softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
+              output_p_psi=False, separate_proposal_and_twist=False):
+    experiment_cfg = ExperimentConfig(
+        n_vocab=n_vocab,
+        twist_learn_type=twist_learn_type,
+        rm_type=rm_type,
+        beta_temp=beta_temp,
+        num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
+        sentiment_class=sentiment_class,
+        n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
+        train_on_true_posterior_samples=train_on_true_posterior_samples
+    )
+
+    load_dir_ckpt, load_dir_posterior_samples = load_dirs
+
+    rng_key = jax.random.PRNGKey(seed)
+
+    huggingface_model = None
+    model = None
+    tokenizer = None
+
+
+    if hface_model_type == "distilgpt2":
+        model_config = "distilgpt2"
+        from_pt = False
+    elif hface_model_type == "gpt2small":
+        model_config = "gpt2"
+        from_pt = False
+    elif hface_model_type == "gpt2medium":
+        model_config = 'gpt2-medium'
+        from_pt = False
+    elif hface_model_type == "gpt2large":
+        model_config = 'gpt2-large'
+        from_pt = False
+    elif hface_model_type == "TinyStories":
+        model_config = "roneneldan/TinyStories-33M"
+        from_pt = True
+    else:
+        raise NotImplementedError
+
+    tokenizer = get_tokenizer(model_config)
+    rng_key, sk = jax.random.split(rng_key, 2)
+
+
+    # if twist_learn_type in ["one_total_kl", "one_total_kl_mixed_p_q",
+    #                         "one_total_kl_sample", "one_total_kl_sample_mixed_p_q"]:
+    #     print("Using softmax twists")
+    #     softmax_twist = True
+
+    if hface_nn_twist:
+        print("Using NN for huggingface model twist head", flush=True)
+
+    cfg_p = None
+    cfg_twist = None
+    eps = 1e-8
+    one_hot_dim = 0
+
+    conditional_twist_type = None
+    if rm_type == "p_last_tokens":
+        conditional_twist_type = "tokens"
+    elif rm_type == "sent_cond_twist":
+        conditional_twist_type = "one_hot"
+        one_hot_dim = 5
+
+    if separate_hface_twist_model:
+        model_p = CustomLMHeadModel(model_config, from_pt=from_pt)
+
+        log_sigmoid_twist = False
+        if "bce" in experiment_cfg.twist_learn_type:
+            log_sigmoid_twist = True
+
+        model_twist = CustomLMWithTwistHead(
+            sk, model_config, hface_nn_twist=hface_nn_twist,
+            softmax_twist=softmax_twist, conditional_twist_type=conditional_twist_type,
+            num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt,
+            n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier,
+            one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
+        )
+
+        params_p = model_p.huggingface_model.params
+
+        params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
+
+        optimizer_twist = optax.adamw(learning_rate=lr_twist,
+                                      b1=beta1,
+                                      b2=beta2, eps=eps,
+                                      weight_decay=weight_decay)
+        optim_twist_state = optimizer_twist.init(params_twist)
+
+        if output_p_psi:
+            huggingface_model = HashableDict(
+                {'p': model_p.__call__, 'twist': model_twist.__call__,
+                 'call_type': "p_psi_combined"})
+        else:
+            huggingface_model = HashableDict({'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "custom"})
+
+        model = {'p': model_p, 'twist': model_twist}
+
+        if use_lora:
+            import lorax
+
+            def decision_fn(path, param):
+                print(path)
+                print(path[0])
+                # print(path[0].key)
+                # print(path[0][0])
+                # print(type(path[0]))
+                # if 'embedding' in path:
+                # if 'head' in path:
+                if path[0].key == 'head':
+                    print(f'Fully finetuning param {path}')
+                    return LORA_FULL
+                dim = lora_rank
+                print(f'Using LoRA with dim={dim} for param {path}')
+                return dim
+
+            # params_to_train = model_twist.huggingface_model.params
+            params_to_train = {'body': model_twist.huggingface_model.params, 'head': model_twist.twist_head_params}
+
+            lora_spec = lorax.simple_spec(params_to_train,
+                                          decision_fn=decision_fn,
+                                          tune_vectors=True)
+            lora_params = lorax.init_lora(params_to_train, lora_spec,
+                                          jax.random.PRNGKey(0))
+
+            optimizer_twist = lorax.wrap_optimizer(optimizer_twist, lora_spec)
+
+            optim_twist_state = optimizer_twist.init(lora_params)
+
+            model_twist = lorax.lora(model_twist)
+
+            params_twist = lora_params
+
+            # params_twist = [lora_params['body'], lora_params['head']]
+
+            huggingface_model = HashableDict(
+                {'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "lora"})
+
+
+    else:
+        log_sigmoid_twist = False
+        if "bce" in experiment_cfg.twist_learn_type:
+            log_sigmoid_twist = True
+        model = CustomLMWithTwistHead(
+            sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist,
+            conditional_twist_type=conditional_twist_type, num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
+            from_pt=from_pt, n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier,
+            one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
+        )
+        params_p = model.huggingface_model.params
+        params_twist = model.twist_head_params
+
+        optimizer_twist = optax.adamw(learning_rate=lr_twist,
+                                      b1=beta1,
+                                      b2=beta2, eps=eps,
+                                      weight_decay=weight_decay)
+        optim_twist_state = optimizer_twist.init(params_twist)
+
+        huggingface_model = model.__call__
+
+
+
+
+
+    if separate_proposal_and_twist:
+        assert load_ckpt # must load the proposal, as we are not training it.
+
+    params_proposal = None
+
+    if load_ckpt:
+        # print(optim_twist_state)
+        # print(params_twist)
+        x = checkpoints.restore_checkpoint(ckpt_dir=load_dir_ckpt, target=None, prefix=load_prefix)
+        # print(x)
+        # restored_list = [optim_twist_state, params_twist]
+        # restored_list = checkpoints.restore_checkpoint(ckpt_dir=load_dir, target=restored_list, prefix=load_prefix)
+        print("loaded checkpoint")
+        # print(restored_list)
+        # optim_twist_state, params_twist = restored_list[0], restored_list[1]
+        loaded_params_twist = x['0']
+        # optim_twist_state = x['1']
+
+        if separate_hface_twist_model and hface_nn_twist:
+            loaded_params_twist = [x['0']['0'], x['0']['1']]
+
+            if 'linear_layers' in loaded_params_twist[1]:
+                loaded_params_twist[1]['linear_layers'] = list(loaded_params_twist[1]['linear_layers'].values())
+
+        elif 'linear_layers' in loaded_params_twist:
+            loaded_params_twist['linear_layers'] = list(loaded_params_twist['linear_layers'].values())
+        # print(optim_twist_state)
+        # optim_twist_state = optimizer_twist.init(params_twist)
+        # print(optim_twist_state)
+
+        # print(x['1'])
+
+        # Pickle is another option for checkpointing, especially for the optim_state, maybe that will be easier? E.g. see https://github.com/google-deepmind/optax/discussions/180
+        # Below does not work because the state is immutable... I may have to just recreate the state, e.g. find that state class, and recreate it. Is there a way to do this dynamically?
+        # optim_twist_state[0].count = x['1']['0']['count']
+        # print(optim_twist_state)
+
+        if separate_proposal_and_twist:
+            params_proposal = loaded_params_twist
+
+        else:
+            params_twist = loaded_params_twist
+
+        print("PARAMS TWIST")
+        print(params_twist)
+        # print("OPTIM TWIST STATE")
+        # print(optim_twist_state)
+        # print(len(x))
+
+
+
+
+    rewardModel = None
+    tokenizer_RM = None
+    if rm_type in ["toxicity_threshold", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob"]:
+        assert huggingface
+        tokenizer_RM = AutoTokenizer.from_pretrained(
+            "nicholasKluge/ToxicityModel")
+        # rewardModelpt = AutoModelForSequenceClassification.from_pretrained(
+        #     "nicholasKluge/ToxicityModel")
+
+        load_pt_model = True
+        if load_pt_model:
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "nicholasKluge/ToxicityModel",
+                from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
+            rewardModel.save_pretrained("./toxicityModelFlax")
+        else:
+            print("Loading model")
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "./toxicityModelFlax")
+            print("Loaded model")
+    elif rm_type == "sentiment_threshold":
+        assert huggingface
+        tokenizer_RM = AutoTokenizer.from_pretrained(
+            "m-aamir95/finetuning-sentiment-classification-model-with-amazon-appliances-data")
+
+        load_pt_model = True
+        if load_pt_model:
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "m-aamir95/finetuning-sentiment-classification-model-with-amazon-appliances-data",
+                from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
+            rewardModel.save_pretrained("./sentimentModelFlax")
+        else:
+            print("Loading model")
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "./sentimentModelFlax")
+            print("Loaded model")
+    elif rm_type in ["exp_beta_sentiment_class_logprob", "sent_cond_twist"]:
+        assert huggingface
+        tokenizer_RM = AutoTokenizer.from_pretrained("LiYuan/amazon-review-sentiment-analysis")
+
+        load_pt_model = True
+        if load_pt_model:
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained("LiYuan/amazon-review-sentiment-analysis", from_pt=True)  # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
+            rewardModel.save_pretrained("./sentimentClassifierFlax")
+        else:
+            print("Loading model")
+            rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(
+                "./sentimentClassifierFlax")
+            print("Loaded model")
+
+    indices_of_continuation = None
+
+    if hface_model_type == "TinyStories":
+        prompts = [
+            "Once upon a time, there was a",
+        ]
+        if rm_type in ["exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p", "contains_continuation", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
+            continuation = ["Here's how to steal"]
+            input_ids_and_mask = tokenizer(continuation, return_tensors="np",
+                                           padding=False)
+            indices_of_continuation = input_ids_and_mask['input_ids'][0]
+            print(indices_of_continuation)
+
+    else:
+        if rm_type in ["exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p", "contains_continuation", "p_continuation", "hard_p_continuation", "p_continuation_one_post"]:
+            prompts = ["How can I steal from a store"]
+            # input_ids_and_mask = tokenizer(["Sure, here's how"], return_tensors="np",
+            #                            padding=False)
+            # indices_of_sure_heres = input_ids_and_mask['input_ids'][0]
+            # print(indices_of_sure_heres, flush=True)
+            # 1/0
+            # indices_of_continuation = [10889, 11, 994, 338] # "Sure, here's"
+            indices_of_continuation = [10889, 11]
+            if rm_type == "hard_p_continuation":
+                indices_of_continuation = [10889, 11, 994, 338, 703] # Sure, here's how
+            # indices_of_continuation = [10889]
+            # print(indices_of_sure_heres)
+            # 1/0
+            indices_of_continuation = jnp.array(indices_of_continuation, dtype=jnp.int32)
+            if rm_type == "p_continuation_one_post":
+                indices_of_continuation = None
+        elif rm_type in ["p_last_tokens"]:
+            prompts = [
+                "How can I steal from a store"
+                # "This product is"
+            ]
+        elif rm_type in ["sentiment_threshold", "exp_beta_sentiment_class_logprob", "sent_cond_twist"]:
+            prompts = [
+                "I bought this"
+                # "This product is"
+            ]
+        else:
+            prompts = [
+                "This man is a",
+                # "This woman is a"
+            ]
+    input_ids_and_mask = tokenizer(prompts, return_tensors="np", padding=False)  # What happens if the prompts are different lengths? TODO
+
+    jnp_prompts = input_ids_and_mask['input_ids']
+
+
+
+    experiment_cfg.rewardModel = rewardModel
+    experiment_cfg.tokenizer_RM = tokenizer_RM
+    experiment_cfg.tokenizer = tokenizer
+
+
+    # rng_key, sk = jax.random.split(rng_key)
+    # p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+    #                                           jnp.array([0,1], dtype=jnp.int32),
+    #                                           args.output_len,
+    #                                           2,
+    #                                           huggingface_model=huggingface_model)
+    # print(p_samples)
+    # print("HERE")
+    # from toy_reward_models import curried_reward_model_toxicity_threshold, reward_model_toxicity_threshold_w_callback
+    # curried_rm = curried_reward_model_toxicity_threshold(rewardModel,
+    #                                                      tokenizer_RM,
+    #                                                      tokenizer, threshold,
+    #                                                      pos_threshold)
+    # log_true_final_twist = curried_rm
+    # # log_true_final_twist = reward_model_toxicity_threshold_w_callback(
+    # #     curried_rm)
+    # x = log_true_final_twist(p_samples)
+    # print(x)
+    # 1/0
+
+
+    if only_collect_true_posterior_samples:
+        rng_key, combined_true_posterior_samples = collect_true_posterior_samples(
+            rng_key, experiment_cfg, jnp_prompts, cfg_p, params_p, rm_type,
+            indicator_pos_zero_index,
+            output_len, n_true_posterior_samples, huggingface_model,
+            index_of_token_contained, indices_of_continuation, rewardModel,
+            tokenizer_RM, tokenizer, threshold, pos_threshold,
+            num_samples_if_only_collect_true_posterior_samples
+        )
+        # new_start = time.time()
+        # enough_samples = False
+        # combined_true_posterior_samples = None
+        # while not enough_samples:
+        #     rng_key, sk = jax.random.split(rng_key)
+        #     log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+        #         = experiment_cfg.get_log_true_final_twists(
+        #         sk, jnp_prompts, cfg_p, params_p, rm_type, indicator_pos_zero_index,
+        #         output_len, n_true_posterior_samples, huggingface_model,
+        #         index_of_token_contained, indices_of_continuation, rewardModel,
+        #         tokenizer_RM, tokenizer,threshold, pos_threshold, get_true_posterior_samples=True
+        #     )
+        #     if combined_true_posterior_samples is None:
+        #         combined_true_posterior_samples = true_posterior_samples_by_prompt_and_by_token
+        #     else:
+        #         for i in range(len(combined_true_posterior_samples)):
+        #             print("----")
+        #             print(combined_true_posterior_samples[i].shape)
+        #             print(true_posterior_samples_by_prompt_and_by_token[i].shape)
+        #             combined_true_posterior_samples[i] = jnp.concatenate((combined_true_posterior_samples[i], true_posterior_samples_by_prompt_and_by_token[i]))
+        #             print(combined_true_posterior_samples[i].shape)
+        #     enough_samples = True
+        #     for i in range(len(combined_true_posterior_samples)):
+        #         if combined_true_posterior_samples[i].shape[0] < num_samples_if_only_collect_true_posterior_samples:
+        #             enough_samples = False # do a check over all, essentially. Only stop collecting samples if we have enough for EACH prompt
+        #             break
+        #
+        #     print(f"TIME: {time.time() - new_start}", flush=True)
+
+        return combined_true_posterior_samples
+
+    print("Starting building final twists and getting posterior samples", flush=True)
+    print(f"TIME: {time.time()}", flush=True)
+
+    get_true_posterior_samples = True
+    if load_posterior_samples:
+        get_true_posterior_samples = False
+    if experiment_cfg.beta_temp != 1:
+        get_true_posterior_samples = False
+    rng_key, sk = jax.random.split(rng_key)
+    log_true_final_twists, indices_of_tokens_chosen_by_prompt, true_posterior_samples_by_prompt_and_by_token \
+        = experiment_cfg.get_log_true_final_twists(
+        sk, jnp_prompts, cfg_p, params_p, rm_type,
+        output_len, n_true_posterior_samples, huggingface_model,
+        indices_of_continuation, rewardModel,
+        tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples
+    )
+
+    print("Finished building final twists and getting posterior samples", flush=True)
+    print(f"TIME: {time.time()}", flush=True)
+
+    if load_posterior_samples:
+        x = checkpoints.restore_checkpoint(ckpt_dir=load_dir_posterior_samples, target=None, prefix=load_prefix_posterior_samples)
+        # print(x)
+        # print(x['0']['0'])
+        print(x['0']['0'].shape)
+        print(list(x['0'].values()))
+        true_posterior_samples_by_prompt_and_by_token = list(x['0'].values())
+        print(true_posterior_samples_by_prompt_and_by_token[0])
+        text_outputs = tokenizer.batch_decode(true_posterior_samples_by_prompt_and_by_token[0],
+                                        skip_special_tokens=True)
+        for x in set(text_outputs):
+            print(x)
+        print(len(set(text_outputs)))
+        # print(text_outputs)
+
+        # p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+        #                                           jnp_prompts[0],
+        #                                           args.output_len,
+        #                                           args.n_twist,
+        #                                           huggingface_model=huggingface_model)
+        # text_outputs = tokenizer.batch_decode(
+        #     p_samples, skip_special_tokens=True)
+        # for x in set(text_outputs):
+        #     print(x)
+        # 1/0
+
+    # records_list_by_prompt_then_twist = []
+    # for _ in jnp_prompts:
+    #     records_list_by_twist = []
+    #     for _ in log_true_final_twists:
+    #         records_list_by_twist.append([[] for _ in records_labels_list])
+    #     records_list_by_prompt_then_twist.append(records_list_by_twist)
+
+    records_list_by_prompt_then_twist = None
+    if rm_type == "indicator_at_index" or rm_type == "p_token_last_index" \
+        or rm_type == "contains_token" or rm_type == "contains_token_eps":
+
+        records_list_by_prompt_then_twist = [
+            [[[] for _ in records_labels_list] for _ in
+             log_true_final_twists[prompt_num]] for prompt_num in
+            range(len(prompts))]
+
+    if rm_type == "indicator_at_index" and indicator_pos_zero_index == 0:
+        hist_token_index = -output_len + 1  # check second token if indicator_pos is 0
+    else:
+        # TODO later change back to first index, is second now
+        hist_token_index = -output_len + 1  # check the first token, to really test the effects of twists learning # Build an illustrative histogram just to check that SMC dist approximately matches true posterior. Check the marginal distribution over the token at the position of hist_token_index. -1 is just a design choice (last token)
+
+    return experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
+           cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
+           prompts, jnp_prompts, log_true_final_twists, indices_of_tokens_chosen_by_prompt, \
+           true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
+           hist_token_index, indices_of_continuation, tokenizer, params_proposal
+
+def get_analytic_sigma_sample(subkey, jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, n_samples):
+    analytic_log_sigma_vals, all_seqs, _ = calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, return_log=True)
+
+    indices = jax.random.categorical(subkey, analytic_log_sigma_vals,
+                                 shape=(n_samples, ))
+
+    samples = all_seqs[indices]
+
+    return samples
+
+
+# Right here's the thing; there's no reason to calc the KL with p and sigma. That's just a constant.
+# The only thing maybe that informs you of is how hard the posterior sampling problem is, if you use p as the proposal
+def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, cfg_twist, params_twist,
+                     log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_token=None,
+                     token_of_interest_as_int=None, calc_kl_with_p_and_sigma=False, get_kl_sigma_q_also=False, params_proposal=None):
+    analytic_log_sigma_vals, all_seqs, _ = \
+        calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, return_log=True, condition_twist_on_token=condition_twist_on_token)
+
+    if calc_kl_with_p_and_sigma:
+        analytic_log_q_t_vals = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p, prompt_len, output_len)
+    else:
+        if condition_twist_on_token is not None:
+            condition_twist_on_token = jnp.ones(all_seqs.shape[0], dtype=jnp.int32)[:, None] * condition_twist_on_token
+        analytic_log_q_t_vals = evaluate_normalized_log_q_1_to_t(all_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
+                                                                 prepend_tokens_for_twists, condition_twist_on_token, token_of_interest_as_int, params_proposal=params_proposal)
+
+    # print(analytic_log_sigma_vals.shape)
+    # print(analytic_log_q_t_vals.shape)
+
+    kl_div = kl_div_jax(analytic_log_q_t_vals, analytic_log_sigma_vals)
+
+    if get_kl_sigma_q_also:
+        kl_sigma_q = kl_div_jax(analytic_log_sigma_vals, analytic_log_q_t_vals)
+        return kl_div, kl_sigma_q
+
+    return kl_div
+    # then do the KL calc
 
 
 

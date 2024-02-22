@@ -299,7 +299,6 @@ def get_sentiment_score(tokens, rewardModel):
     classification_logits = rewardModel(**tokens)[0]
     score = classification_logits[:, 1] - classification_logits[:, 0] # positive minus negative logits
     # Note that the above is equivalent to doing softmax, then inverse sigmoid (is this interesting in any way?)
-    # score = score.squeeze(-1)
     return score
 
 
@@ -317,8 +316,6 @@ def get_sentiment_class_prob(tokens, sentimentClassifier, class_num, varying_cla
         print(class_prob)
     else:
         class_prob = classification_probs[:, class_num]
-    # Note that the above is equivalent to doing softmax, then inverse sigmoid (is this interesting in any way?)
-    # score = score.squeeze(-1)
     return class_prob
 
 
@@ -412,12 +409,9 @@ def build_exp_beta_twists(
                     sk, cfg_p, params_p, jnp_prompt, output_len,
                     n_samples_at_a_time, huggingface_model=huggingface_model
                 )
-
-                # TODO
                 # Classify the p samples, then draw categorical according to the p(c|s). This then gives you a sample from the joint p(c,s) = p(s|c)p(c). Suppose we want samples from p(s|c=4) = p(s,c=4)/p(c=4) propto p(s,c=4) = p(c=4|s)p(s) which is exactly how we drew these samples - for each class, we drew base samples s, and then proportionally according to p(c|s) drew the class c.
                 # But you have to reject all the ones outside of the class you want, in the current formulation...
                 # Anyway, just set up the check satisfies posterior here, which is now done stochastically...
-
                 rng_key, classes = stochastic_classify(rng_key, p_samples, rewardModel, tokenizer_RM, tokenizer, singledimlogit=singledimlogit)
 
                 check_satisfies_posterior = (classes == class_num_zero_index)
@@ -441,7 +435,6 @@ def build_exp_beta_twists(
                 text_outputs = tokenizer.batch_decode(p_samples[:10],
                                                       skip_special_tokens=True)
                 print(text_outputs)
-
 
             true_posterior_samples_by_prompt.append(
                 posterior_samples)
