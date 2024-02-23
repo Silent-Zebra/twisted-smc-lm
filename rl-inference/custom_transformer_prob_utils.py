@@ -1117,14 +1117,15 @@ def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, par
            do_resample_record, ess_record
 
 
-def smc_partial_jit(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
-            n_smc_samples, get_intermediate_sample_history_based_on_learned_twists=False,
-            prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
-            resample=True, true_posterior_sample=None, proposal_is_p=False,
-            huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-                    no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
-                    params_proposal=None, prompt_len=None, resample_criterion="every_step"
-                    ):
+def smc_partial_jit(
+    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
+    n_smc_samples, get_intermediate_sample_history_based_on_learned_twists=False,
+    prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
+    resample=True, true_posterior_sample=None, proposal_is_p=False,
+    huggingface_model=None, resample_for_log_psi_t_eval_list=False,
+    no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
+    params_proposal=None, prompt_len=None, resample_criterion="every_step"
+):
     # print("SMC TIME")
     # start = time.time()
 
@@ -1289,7 +1290,7 @@ def print_g_q_f_q_estimates(
 
 def iwae_forward_and_backward(
     rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-    output_len, n_smc_samples, n_vocab, prepend_tokens_for_twists,
+    output_len, n_smc_samples, prepend_tokens_for_twists,
     condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
     proposal_is_p=False, huggingface_model=None, params_proposal=None
 ):
@@ -1328,7 +1329,7 @@ def iwae_forward_and_backward(
     return proposal_dist_weights, target_dist_weights, f_q_estimate
 
 def smc_backward(rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-                                  output_len, n_smc_samples, n_vocab,
+                                  output_len, n_smc_samples,
                                   prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
                  token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None, params_proposal=None):
 

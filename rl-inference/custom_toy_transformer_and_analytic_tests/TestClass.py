@@ -15,6 +15,40 @@ from losses import *
 from custom_transformer import *
 
 
+indices_of_tokens_for_only_contains_token = [6, 8]
+
+def make_hists(true_posterior_samples, smc_samples, prompt_len, token_of_interest_as_int, n_vocab, hist_token_index):
+    true_posterior_samples_hist = hist_by_token_index(
+        true_posterior_samples, n_vocab, token_index=hist_token_index)
+    print("Extracted samples", flush=True)
+    print(true_posterior_samples)
+    print("Extracted samples proportion by first token")
+    print(true_posterior_samples_hist)
+    print(true_posterior_samples_hist[token_of_interest_as_int])
+
+    if args.rm_type == "indicator_at_index":
+        print("SMC SAMPLES (extracted):")
+        extracted_smc_samples = smc_samples[smc_samples[:,
+                                            prompt_len + args.indicator_pos_zero_index] == token_of_interest_as_int]
+        print(f"Num extracted Samples: {extracted_smc_samples.shape[0]}")
+        print(f"Num total Samples: {smc_samples.shape[0]}")
+        # print(smc_samples) # TODO AUG 27 check that these approximately match the true posterior. Devise a counting test over marginal probabilities to make sure this is the case (print it first, then turn it into a test case)
+        smc_samples_hist = hist_by_token_index(
+            extracted_smc_samples, n_vocab, token_index=hist_token_index)
+        print(
+            "SMC samples (extracted) proportion by marginal of first token")
+        print(smc_samples_hist)
+        print(smc_samples_hist[token_of_interest_as_int])
+    elif args.rm_type == "p_token_last_index" or args.rm_type == "contains_token" \
+        or args.rm_type == "only_contains_token" or args.rm_type == "contains_token_eps":
+        smc_samples_hist = hist_by_token_index(
+            smc_samples, n_vocab,
+            token_index=hist_token_index)
+        print("SMC samples proportion by marginal of first token")
+        print(smc_samples_hist)
+        print(smc_samples_hist[token_of_interest_as_int])
+    else:
+        raise NotImplementedError
 
 
 # THIS FUNCTION ONLY WORKS FOR THE ONE_BAD REWARD MODEL (WITH THE ALL 0s BEING BAD), and only calculates twists on strings containing 0s e.g. 0, then 00, 000, etc. regardless of the n_vocab (although each computation must calculate using a sum over all n_vocab tokens)

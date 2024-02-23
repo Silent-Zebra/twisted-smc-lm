@@ -1,3 +1,69 @@
+# Pretrain the final twist in the hopes that this will keep the later updates more grounded...
+def pretrain_final_twist():
+    if args.pretrain_final_twist:  # Doesn't have to be RL, can be used with other twist training as well...
+        print("Pretraining Final Twist", flush=True)
+        experiment_cfg_pretrain = ExperimentConfig(
+            n_vocab=args.n_vocab,
+            twist_learn_type="pretrain_final_twist_lsq",
+            rm_type=args.rm_type, beta_temp=args.beta_temp,
+            sentiment_class=args.sentiment_class,
+            n_twist_ebm_vmap=args.n_twist_ebm_vmap,
+            alpha=args.ebm_combined_alpha
+        )
+
+        for epoch in range(args.pretrain_twist_epochs):
+            if (epoch + 1) % args.print_every == 0:
+                print(f"Pretraining Final Twist Epoch: {epoch + 1}", flush=True)
+            prompt_num = 0
+            for prompt in jnp_prompts:
+                prompt_len = prompt.shape[-1]
+                log_true_final_twist = log_true_final_twists[prompt_num]
+
+                for twist_update in range(args.twist_updates_per_epoch):
+
+                    if (twist_update + 1) % print_every_twist_updates == 0:
+                        print(f"Twist update: {twist_update + 1}")
+                        print(f"TIME: {time.time() - start}", flush=True)
+                        # jax.profiler.save_device_memory_profile(f"{args.save_dir}/memory{twist_update}.prof")
+
+                    rng_key, params_twist, optim_twist_state = \
+                        experiment_cfg_pretrain.update_twist(
+                            rng_key, prompt, args.n_twist,
+                            args.output_len, cfg_p, params_p, cfg_twist,
+                            params_twist,
+                            log_true_final_twist, args.proposal_is_p,
+                            huggingface_model,
+                            optimizer_twist, optim_twist_state,
+                            args.tempered_twist, args.beta_prop,
+                            replay_buffer=None, replay_buffer_log_w_ts=None,
+                            params_proposal=params_proposal
+                        )
+
+                    if (twist_update + 1) % print_every_twist_updates == 0:
+                        print(f"Testing twist update: {twist_update + 1}")
+                        print(f"TIME: {time.time() - start}", flush=True)
+                        rng_key, sk = jax.random.split(rng_key)
+                        test_loss = get_l_rl_based_jit(sk, prompt, cfg_p,
+                                                       params_p, cfg_twist,
+                                                       params_twist,
+                                                       log_true_final_twist,
+                                                       args.output_len,
+                                                       args.n_twist,
+                                                       experiment_cfg.prepend_tokens_for_twists,
+                                                       experiment_cfg.condition_twist_on_tokens,
+                                                       experiment_cfg_pretrain.smc_procedure_type,
+                                                       proposal_is_p=args.proposal_is_p,
+                                                       evaluate_over_samples_from="p",
+                                                       huggingface_model=huggingface_model,
+                                                       loss_type="squared_error_in_log_space",
+                                                       tempered_twist=args.tempered_twist,
+                                                       beta_prop=args.beta_prop,
+                                                       train_final_twist_only=True,
+                                                       params_proposal=params_proposal)
+                        print(test_loss)
+        print("Finished Pretraining Final Twist", flush=True)
+        print(f"TIME: {time.time() - start}", flush=True)
+
 
 # @partial(jax.jit, static_argnames=[
 #     "cfg_p", "cfg_twist", "output_len", "log_true_final_twist", "experiment_cfg",

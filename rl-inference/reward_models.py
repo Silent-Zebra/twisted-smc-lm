@@ -383,7 +383,7 @@ def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indices_of_
 
         log_true_final_twists.append(log_true_final_twist)
 
-    return log_true_final_twists, None, None
+    return log_true_final_twists, None
 
 
 def build_exp_beta_twists(
@@ -439,37 +439,7 @@ def build_exp_beta_twists(
             true_posterior_samples_by_prompt.append(
                 posterior_samples)
 
-    return rng_key, log_true_final_twists, None, true_posterior_samples_by_prompt
-
-
-def build_exp_beta_toxicity_twists(jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp):
-    log_true_final_twists = []
-    for jnp_prompt in jnp_prompts:
-        log_true_final_twist = curried_log_exp_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_temp)
-        log_true_final_twists.append(log_true_final_twist)
-    return log_true_final_twists, None, None
-
-# def build_exp_beta_toxicity_class_logprob_twists(rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
-#     jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples=False):
-#     curried_log_true_final_twist_function = curried_log_exp_beta_toxicity_class_logprob
-#     return build_exp_beta_twists(
-#         rng_key, cfg_p, params_p, output_len, n_samples_at_a_time,
-#         huggingface_model,
-#         curried_log_true_final_twist_function, jnp_prompts, rewardModel,
-#         tokenizer_RM, tokenizer, beta_temp, class_num,
-#         get_true_posterior_samples
-#     )
-#
-# def build_exp_beta_sentiment_class_logprob_twists(
-#     rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
-#     jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples=False
-# ):
-#     curried_log_true_final_twist_function = curried_log_exp_beta_sentiment_class_logprob
-#     return build_exp_beta_twists(
-#         rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
-#         curried_log_true_final_twist_function, jnp_prompts, rewardModel,
-#         tokenizer_RM, tokenizer, beta_temp, class_num, get_true_posterior_samples
-#     )
+    return rng_key, log_true_final_twists, true_posterior_samples_by_prompt
 
 
 
@@ -533,7 +503,7 @@ def build_log_sentclass_cond_twists(
 
     # print(true_posterior_samples_by_prompt_and_by_token)
 
-    return rng_key, log_true_final_twists, None, true_posterior_samples_by_prompt
+    return rng_key, log_true_final_twists, true_posterior_samples_by_prompt
 
 
 
@@ -596,7 +566,7 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indice
 
     # print(true_posterior_samples_by_prompt_and_by_token)
 
-    return log_true_final_twists, None, true_posterior_samples_by_prompt
+    return log_true_final_twists, true_posterior_samples_by_prompt
 
 
 
@@ -660,7 +630,7 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continu
 
     # print(true_posterior_samples_by_prompt_and_by_token)
 
-    return log_true_final_twists, None, true_posterior_samples_by_prompt
+    return log_true_final_twists, true_posterior_samples_by_prompt
 
 
 
@@ -725,7 +695,7 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
 
     # print(true_posterior_samples_by_prompt_and_by_token)
 
-    return log_true_final_twists, None, true_posterior_samples_by_prompt
+    return log_true_final_twists, true_posterior_samples_by_prompt
 
 
 def build_sentiment_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time,
@@ -785,7 +755,7 @@ def build_sentiment_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outp
 
     # print(true_posterior_samples_by_prompt_and_by_token)
 
-    return log_true_final_twists, None, true_posterior_samples_by_prompt
+    return log_true_final_twists, true_posterior_samples_by_prompt
 
 
 
