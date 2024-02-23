@@ -28,3 +28,35 @@ def hist_by_token_index(samples, n_vocab, token_index=-1):
     samples_hist = jnp.histogram(samples[:, token_index], bins=jnp.arange(n_vocab + 1), density=True)[0]
 
     return samples_hist
+
+
+def inspect_text_samples(tokenizer, samples, n_samples_to_print, name):
+    text_outputs = tokenizer.batch_decode(samples, skip_special_tokens=True)
+    print(f"INSPECTION OF {name} SAMPLES")
+    for s in text_outputs[:n_samples_to_print]:
+        print(s)
+
+
+def print_scores_with_averages(score_func, list_of_samples, list_of_names, n_samples_to_print, log_prob_text=False):
+    str_names = ", ".join(list_of_names)
+
+    list_of_samples_scores = []
+
+    for samples in list_of_samples:
+        scores = score_func(samples)
+        list_of_samples_scores.append(scores)
+
+    if log_prob_text:
+        print(f"LOG PROB OF CONTINUATION FOR: {str_names}", flush=True)
+    else:
+        print(f"Scores for: {str_names}", flush=True)
+    for scores in list_of_samples_scores:
+        print(scores[:n_samples_to_print])
+
+    print(f"Averages of the above for {str_names}", flush=True)
+    for scores in list_of_samples_scores:
+        print(scores.mean())
+
+    return list_of_samples_scores
+
+

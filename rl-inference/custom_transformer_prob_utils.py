@@ -1253,6 +1253,40 @@ def get_f_q_estimate(
     return f_q_estimate
 
 
+def print_g_q_f_q_estimates(
+    true_sigma_samples, proposal_samples, prompt, cfg_p, params_p, cfg_twist,
+    params_twist, output_len, log_true_final_twist, prepend_tokens_for_twists,
+    condition_twist_on_tokens, token_of_interest_as_int,
+    proposal_is_p, huggingface_model, params_proposal
+):
+    g_q_estimates = iwae_backward(
+        true_sigma_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        output_len, log_true_final_twist, prepend_tokens_for_twists,
+        condition_twist_on_tokens,
+        token_of_interest_as_int, proposal_is_p, huggingface_model,
+        params_proposal=params_proposal)
+    f_q_estimates = iwae_backward(
+        proposal_samples, prompt, cfg_p, params_p, cfg_twist,
+        params_twist, output_len, log_true_final_twist,
+        prepend_tokens_for_twists,
+        condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p,
+        huggingface_model, params_proposal=params_proposal)
+    print("G_q estimates")
+    print(g_q_estimates)
+    print(f"Average G_q: {g_q_estimates.mean()}")
+    print("F_q estimates")
+    print(f_q_estimates)
+    print(f"Average F_q: {f_q_estimates.mean()}")
+    print("Gaps")
+    print(g_q_estimates - f_q_estimates)
+    print(f"Average gap: {(g_q_estimates - f_q_estimates).mean()}")
+
+    aux_info = (g_q_estimates, f_q_estimates)
+
+    return aux_info
+
+
+
 def iwae_forward_and_backward(
     rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
     output_len, n_smc_samples, n_vocab, prepend_tokens_for_twists,

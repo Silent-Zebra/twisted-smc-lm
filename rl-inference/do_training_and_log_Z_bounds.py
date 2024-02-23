@@ -348,25 +348,7 @@ class ExperimentConfig:
 
                 if self.twist_learn_type == "bce_p":
                     samples_to_evaluate_over = p_samples
-                # elif self.twist_learn_type == "bce_q":
-                #     (_, _, _), _, (intermediate_twist_samples_hist,
-                #                    intermediate_log_w_t_hist,
-                #                    _) = smc_procedure(
-                #         sk4, prompt, cfg_p, params_p, cfg_twist,
-                #         params_twist,
-                #         log_true_final_twist, output_len, n_twist,
-                #         smc_procedure_type=self.smc_procedure_type,
-                #         get_intermediate_sample_history_based_on_learned_twists=True,
-                #         prepend_tokens_for_twists=prepend_tokens_for_twists,
-                #         condition_twist_on_tokens=condition_twist_on_tokens,
-                #         token_of_interest_as_int=token_of_interest_as_int,
-                #         proposal_is_p=proposal_is_p,
-                #         huggingface_model=huggingface_model,
-                #         resample=False, tempered_twist=tempered_twist,
-                #         beta_prop=beta_prop, params_proposal=params_proposal
-                #     )
-                #     samples_to_evaluate_over = \
-                #     intermediate_twist_samples_hist[-1]
+
                 else:
                     raise NotImplementedError
 
@@ -384,21 +366,6 @@ class ExperimentConfig:
 
                     samples_to_evaluate_over = p_samples
 
-                # elif self.twist_learn_type == "bce_q":
-                #
-                #     (_, _, _), q_samples = smc_procedure(
-                #             sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                #             log_true_final_twist, output_len,
-                #             n_twist,
-                #             smc_procedure_type=self.smc_procedure_type,
-                #             get_intermediate_sample_history_based_on_learned_twists=False,
-                #             proposal_is_p=proposal_is_p,
-                #             huggingface_model=huggingface_model,
-                #             resample=False,
-                #             tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal
-                #         )
-                #
-                #     samples_to_evaluate_over = q_samples
                 else:
                     raise NotImplementedError
 
@@ -550,38 +517,6 @@ class ExperimentConfig:
         )
         return grad_params_twist
 
-    # @partial(jax.jit, static_argnames=[
-    #     "self", "n_twist", "output_len",
-    #         "cfg_p", "cfg_twist",
-    #         "log_true_final_twist", "proposal_is_p", "huggingface_model",
-    #         "optimizer_twist"])
-    # def do_twist_update(self, rng_key, optimizer_twist, optim_twist_state,
-    #                 params_twist, prompt, n_twist, output_len, cfg_p, params_p, cfg_twist,
-    #     log_true_final_twist, proposal_is_p, huggingface_model):
-    #     rng_key, sk = jax.random.split(rng_key)
-    #     grad_params_twist = self.get_grad_params_twist(
-    #         sk, prompt, self.n_vocab, n_twist,
-    #         output_len, cfg_p, params_p, cfg_twist,
-    #         params_twist, log_true_final_twist,
-    #         # Only one set of log final twists (for the token we are interested in)
-    #         prepend_tokens_for_twists=self.prepend_tokens_for_twists, condition_twist_on_tokens,
-    #         proposal_is_p=proposal_is_p,
-    #         huggingface_model=huggingface_model
-    #     )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
-    #     # print(time.time() - new_time)
-    #     # new_time = time.time()
-    #     # print(new_time)
-    #     # print(optimizer_twist)
-    #     # print(grad_params_twist)
-    #     # print(optim_twist_state)
-    #     # print(time.time() - new_time)
-    #     # print("hihi")
-    #     params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
-    #         optimizer_twist,
-    #         grad_params_twist,
-    #         optim_twist_state,
-    #         params_twist)
-    #     return params_twist, optim_twist_state
 
     # @partial(jax.jit, static_argnames=[
     #     "self", "n_twist", "output_len",
@@ -879,25 +814,34 @@ class ExperimentConfig:
         proposal_scores = None
         kl_vals = None
 
+        condition_twist_on_tokens = None
+
+        smc_args = {
+            "rng_key": sk1,
+            "prompt": prompt,
+            "cfg_p": cfg_p, "params_p": params_p,
+            "cfg_twist": cfg_twist, "params_twist": params_twist,
+            "log_true_final_twist": log_true_final_twist,
+            "output_len": output_len,
+            "n_smc_samples": n_samples,
+            "smc_procedure_type": self.smc_procedure_type,
+            "get_intermediate_sample_history_based_on_learned_twists": True,
+            "prepend_tokens_for_twists": prepend_tokens_for_twists,
+            "token_of_interest_as_int": token_of_interest_as_int,
+            "proposal_is_p": proposal_is_p,
+            "huggingface_model": huggingface_model,
+            "params_proposal": params_proposal
+        }
+
         if self.rm_type in [
             "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
             "p_continuation", "hard_p_continuation",
             "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
             "exp_beta_sentiment_class_logprob",
             "toxicity_threshold", "sentiment_threshold"
-        ]:
+        ]: # TODO consider set up a set of final twist classes, sort them into classes, and then do if/else/switch based on those
 
-            _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(
-                sk1, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                log_true_final_twist, output_len, n_samples,
-                smc_procedure_type=self.smc_procedure_type,
-                get_intermediate_sample_history_based_on_learned_twists=True,
-                prepend_tokens_for_twists=prepend_tokens_for_twists,
-                token_of_interest_as_int=token_of_interest_as_int,
-                proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model,
-                params_proposal=params_proposal
-            )
+            _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
 
             proposal_samples = intermediate_seq_list[-1]
 
@@ -906,170 +850,54 @@ class ExperimentConfig:
                                                       output_len, n_samples,
                                                       huggingface_model=huggingface_model)
 
-            (log_w_t_sigma_samples, _, _), no_intermediate_resample_smc_samples, (intermediate_seq_list2, _, _) = smc_procedure(
-                sk1, prompt, cfg_p, params_p, cfg_twist, params_twist, # actually reusing the same subkey here might be interesting, see if you can see some commonalities
-                log_true_final_twist, output_len, n_samples,
-                smc_procedure_type=self.smc_procedure_type,
-                get_intermediate_sample_history_based_on_learned_twists=True,
-                prepend_tokens_for_twists=prepend_tokens_for_twists,
-                token_of_interest_as_int=token_of_interest_as_int,
-                resample=False,
-                proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model,
-                params_proposal=params_proposal
-            )
+            smc_args["resample"] = False # Reuse the same subkey for RNG, this is the only thing I change here
+            (log_w_t_sigma_samples, _, _), no_intermediate_resample_smc_samples, (intermediate_seq_list2, _, _) = smc_procedure(**smc_args)
 
             no_intermediate_resample_proposal_samples = intermediate_seq_list2[-1]
 
             if self.rm_type in ["exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
                                 "p_continuation", "hard_p_continuation"]:
-                log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
-                    smc_samples, cfg_p, params_p, indices_of_continuation,
+                def score_func(samples):
+                    return log_reward_model_p_of_continuation(
+                    samples, cfg_p, params_p, indices_of_continuation,
                     huggingface_model=huggingface_model, return_log_w_no_temp=True)
-
-                log_prob_cont_proposal_samples = log_reward_model_p_of_continuation(
-                    proposal_samples, cfg_p, params_p, indices_of_continuation,
-                    huggingface_model=huggingface_model, return_log_w_no_temp=True)
-
-                log_prob_cont_p_samples = log_reward_model_p_of_continuation(
-                    p_samples, cfg_p, params_p, indices_of_continuation,
-                    huggingface_model=huggingface_model, return_log_w_no_temp=True)
-
-                print("LOG PROB OF CONTINUATION FOR: SMC samples, proposal samples, p samples", flush=True)
-                print(log_prob_cont_smc_samples[:n_samples_to_print])
-                print(log_prob_cont_proposal_samples[:n_samples_to_print])
-                print(log_prob_cont_p_samples[:n_samples_to_print])
-
-                print("Averages of the above for SMC samples, proposal samples, p samples", flush=True)
-                print(log_prob_cont_smc_samples.mean())
-                print(log_prob_cont_proposal_samples.mean())
-                print(log_prob_cont_p_samples.mean())
-
-
-                log_prob_cont_smc_samples = log_reward_model_p_of_continuation(
-                    no_intermediate_resample_smc_samples, cfg_p, params_p, indices_of_continuation,
-                    huggingface_model=huggingface_model,
-                    return_log_w_no_temp=True)
-
-                log_prob_cont_proposal_samples = log_reward_model_p_of_continuation(
-                    no_intermediate_resample_proposal_samples, cfg_p, params_p, indices_of_continuation,
-                    huggingface_model=huggingface_model,
-                    return_log_w_no_temp=True)
-
-                print(
-                    "LOG PROB OF CONTINUATION FOR NO-INTERMEDIATE-RESAMPLE: SMC samples, proposal samples, p samples", flush=True)
-                print(log_prob_cont_smc_samples[:n_samples_to_print])
-                print(log_prob_cont_proposal_samples[:n_samples_to_print])
-
-                print(
-                    "Averages of the above FOR NO-INTERMEDIATE-RESAMPLE for SMC samples, proposal samples, p samples", flush=True)
-                print(log_prob_cont_smc_samples.mean())
-                print(log_prob_cont_proposal_samples.mean())
-
-                proposal_scores = log_prob_cont_proposal_samples
-
-                kl_vals = get_kl_vals(
-                    no_intermediate_resample_proposal_samples, cfg_p, params_p, cfg_twist, params_twist,
-                    prompt_len, output_len,
-                    prepend_tokens_for_twists,
-                    condition_twist_on_tokens=None, huggingface_model=huggingface_model)
-
-                print(f"KL to prior estimate: {kl_vals.mean()}")
-
-                if params_proposal is not None:
-                    kl_vals_prop = get_kl_vals(
-                        no_intermediate_resample_proposal_samples, cfg_p,
-                        params_p, cfg_twist, params_twist,
-                        prompt_len, output_len,
-                        prepend_tokens_for_twists,
-                        condition_twist_on_tokens=None,
-                        huggingface_model=huggingface_model, params_proposal=params_proposal)
-                    print(f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
-
-
-                # TODO Jan 05 - should redo all the plot code to be consistent with the test_ppo plot code... that one is cleaner and simpler. Instead of averaging all the fqs, let's just concat all the fqs over all the seeds and use those...
-
-
-
+                log_prob_text = True
             else:
-                score_smc_samples = log_true_final_twist(smc_samples) / args.beta_temp
-                score_proposal_samples = log_true_final_twist(proposal_samples) / args.beta_temp
-                score_p_samples = log_true_final_twist(p_samples) / args.beta_temp
+                def score_func(samples):
+                    return log_true_final_twist(samples) / args.beta_temp
+                log_prob_text = False
 
-                print("Scores for: SMC samples, proposal samples, p samples")
-                print(score_smc_samples[:n_samples_to_print])
-                print(score_proposal_samples[:n_samples_to_print])
-                print(score_p_samples[:n_samples_to_print])
+            print_scores_with_averages(
+                score_func,
+                [smc_samples, proposal_samples, p_samples],
+                ["SMC samples", "proposal samples, p samples"],
+                n_samples_to_print, log_prob_text=log_prob_text
+            )
+            list_of_samples_scores = print_scores_with_averages(
+                score_func,
+                [no_intermediate_resample_smc_samples,
+                 no_intermediate_resample_proposal_samples],
+                ["NO-INTERMEDIATE-RESAMPLE SMC samples",
+                 "proposal samples"],
+                n_samples_to_print, log_prob_text=log_prob_text
+            )
+            proposal_scores = list_of_samples_scores[1]
 
-                print("Averages of the above for SMC samples, proposal samples, p samples")
-                print(score_smc_samples.mean())
-                print(score_proposal_samples.mean())
-                print(score_p_samples.mean())
 
-                score_smc_samples = log_true_final_twist(
-                    no_intermediate_resample_smc_samples) / args.beta_temp
-                score_proposal_samples = log_true_final_twist(
-                    no_intermediate_resample_proposal_samples) / args.beta_temp
+            inspect_text_samples(tokenizer, smc_samples, n_samples_to_print,
+                                 name="SMC")
+            inspect_text_samples(tokenizer, proposal_samples, n_samples_to_print,
+                                 name="RESAMPLED PROPOSAL")
 
-                print("Scores FOR NO-INTERMEDIATE-RESAMPLE: SMC samples, proposal samples, p samples")
-                print(score_smc_samples[:n_samples_to_print])
-                print(score_proposal_samples[:n_samples_to_print])
+            # text_outputs_smc_no_intermediate_resample = tokenizer.batch_decode(no_intermediate_resample_smc_samples,
+            #                                           skip_special_tokens=True)
+            # print("INSPECTION OF NO-INTERMEDIATE-RESAMPLE SMC SAMPLES") # Same as the below
+            # # print(no_intermediate_resample_smc_samples[:n_samples_to_print])
+            # for s in text_outputs_smc_no_intermediate_resample[:n_samples_to_print]:
+            #     print(s)
 
-                print(
-                    "Averages of the above FOR NO-INTERMEDIATE-RESAMPLE SMC samples, proposal samples, p samples")
-                print(score_smc_samples.mean())
-                print(score_proposal_samples.mean())
-
-                proposal_scores = score_proposal_samples
-                kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
-                                      cfg_p, params_p, cfg_twist, params_twist,
-                                      prompt_len, output_len,
-                                      prepend_tokens_for_twists,
-                                      condition_twist_on_tokens=None,
-                                      huggingface_model=huggingface_model)
-                print(f"KL to prior estimate: {kl_vals.mean()}")
-                if params_proposal is not None:
-                    kl_vals_prop = get_kl_vals(
-                        no_intermediate_resample_proposal_samples, cfg_p,
-                        params_p, cfg_twist, params_twist,
-                        prompt_len, output_len,
-                        prepend_tokens_for_twists,
-                        condition_twist_on_tokens=None,
-                        huggingface_model=huggingface_model, params_proposal=params_proposal)
-                    print(f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
-
-            text_outputs_smc = tokenizer.batch_decode(smc_samples,
-                                                  skip_special_tokens=True)
-
-            # print(intermediate_seq_list[-1])
-            print("INSPECTION OF SMC SAMPLES")
-            # print(smc_samples[:n_samples_to_print])
-            for s in text_outputs_smc[:n_samples_to_print]:
-                print(s)
-
-            text_outputs_proposal = tokenizer.batch_decode(proposal_samples,
-                                                  skip_special_tokens=True)
-
-            print("INSPECTION OF PROPOSAL SAMPLES")
-            # print(proposal_samples[:n_samples_to_print])
-            for s in text_outputs_proposal[:n_samples_to_print]:
-                print(s)
-
-            text_outputs_smc_no_intermediate_resample = tokenizer.batch_decode(no_intermediate_resample_smc_samples,
-                                                      skip_special_tokens=True)
-
-            print("INSPECTION OF NO-INTERMEDIATE-RESAMPLE SMC SAMPLES")
-            # print(no_intermediate_resample_smc_samples[:n_samples_to_print])
-            for s in text_outputs_smc_no_intermediate_resample[:n_samples_to_print]:
-                print(s)
-
-            text_outputs_proposal_no_intermediate_resample = tokenizer.batch_decode(no_intermediate_resample_proposal_samples,
-                                                           skip_special_tokens=True)
-
-            print("INSPECTION OF NO-INTERMEDIATE-RESAMPLE PROPOSAL SAMPLES")
-            # print(no_intermediate_resample_proposal_samples[:n_samples_to_print])
-            for s in text_outputs_proposal_no_intermediate_resample[:n_samples_to_print]:
-                print(s)
+            inspect_text_samples(tokenizer, no_intermediate_resample_proposal_samples, n_samples_to_print,
+                                 name="NO-INTERMEDIATE-RESAMPLE PROPOSAL")
 
             print("WEIGHTS OF THE NO-INTERMEDIATE-RESAMPLE SAMPLES")
             print(jax.lax.stop_gradient(log_w_t_sigma_samples))
@@ -1077,234 +905,79 @@ class ExperimentConfig:
 
 
         elif self.rm_type == "p_last_tokens":
-            p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p,
-                                                      prompt,
-                                                      output_len + self.num_last_tokens_to_condition_on,
-                                                      n_samples,
-                                                      huggingface_model=huggingface_model)
+            p_samples = stochastic_transformer_sample(
+                sk2, cfg_p, params_p, prompt,
+                output_len + self.num_last_tokens_to_condition_on, n_samples,
+                huggingface_model=huggingface_model
+            )
 
-            condition_twist_on_tokens = p_samples[:,
-                                        -self.num_last_tokens_to_condition_on:]
+            condition_twist_on_tokens = p_samples[:,-self.num_last_tokens_to_condition_on:]
+            smc_args["resample"] = False  # VERY IMPORTANT FOR THIS HERE
+            smc_args["condition_twist_on_tokens"] = condition_twist_on_tokens
+            _, _, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
+            proposal_samples = intermediate_seq_list[-1]
+
+            def score_func(samples):
+                return log_reward_model_p_of_last_tokens(
+                    samples, cfg_p, params_p,
+                    self.num_last_tokens_to_condition_on,
+                    huggingface_model=huggingface_model, beta_temp=1.)
+            log_prob_text = True
 
             if self.beta_temp == 1.:
 
                 true_sigma_samples = p_samples[:, :-self.num_last_tokens_to_condition_on]
 
-                log_prob_cont_sigma_samples = log_reward_model_p_of_last_tokens(
-                    p_samples, cfg_p, params_p, self.num_last_tokens_to_condition_on,
-                    huggingface_model=huggingface_model, beta_temp=1.)
-
-                # TODO OCT 29
-                # And then figure out how to do the UB LB stuff... I guess just no SMC bounds, just IWAE bounds then... because we only have 1 particle per posterior anyway.
-
-                _, _, (intermediate_seq_list, _, _) = smc_procedure(
-                    sk1, prompt, cfg_p, params_p,
-                    cfg_twist, params_twist,
-                    log_true_final_twist,
-                    output_len,
-                    n_samples,
-                    smc_procedure_type=self.smc_procedure_type,
-                    get_intermediate_sample_history_based_on_learned_twists=True,
-                    prepend_tokens_for_twists=prepend_tokens_for_twists,
-                    resample=False, # VERY IMPORTANT FOR THIS HERE
-                    condition_twist_on_tokens=condition_twist_on_tokens,
-                    token_of_interest_as_int=token_of_interest_as_int,
-                    proposal_is_p=proposal_is_p,
-                    huggingface_model=huggingface_model,
-                    params_proposal=params_proposal
+                list_of_samples_scores = print_scores_with_averages(
+                    score_func,
+                    [p_samples, jnp.concatenate((proposal_samples, condition_twist_on_tokens), axis=-1)],
+                    ["true sigma samples", "proposal samples"],
+                    n_samples_to_print, log_prob_text=log_prob_text
                 )
 
-                print("hihi")
-                print(intermediate_seq_list)
-                print(intermediate_seq_list[-1])
-                print(condition_twist_on_tokens.shape)
-                proposal_samples = intermediate_seq_list[-1]
-                # proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
+                proposal_scores = list_of_samples_scores[1]
 
-                log_prob_cont_proposal_samples = log_reward_model_p_of_last_tokens(
-                    jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1), cfg_p, params_p,
-                    self.num_last_tokens_to_condition_on,
-                    huggingface_model=huggingface_model, beta_temp=1.)
+                inspect_text_samples(tokenizer, p_samples, n_samples_to_print,
+                                     name="Sigma")
+                inspect_text_samples(tokenizer, proposal_samples, n_samples_to_print,
+                                     name="Proposal")
+                inspect_text_samples(
+                    tokenizer, jnp.concatenate((proposal_samples, condition_twist_on_tokens),
+                    axis=-1), n_samples_to_print,
+                    name="Proposal SAMPLES together with the conditioning tokens"
+                )
 
-                print(
-                    "LOG PROB OF CONTINUATION FOR: true sigma samples, proposal samples")
-                print(log_prob_cont_sigma_samples[:n_samples_to_print])
-                print(log_prob_cont_proposal_samples[:n_samples_to_print])
-
-                print(
-                    "Averages of the above for SMC samples, proposal samples, p samples")
-                print(log_prob_cont_sigma_samples.mean())
-                print(log_prob_cont_proposal_samples.mean())
-                no_intermediate_resample_proposal_samples = intermediate_seq_list[-1]
-
-                proposal_scores = log_prob_cont_proposal_samples
-                kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
-                                      cfg_p, params_p, cfg_twist, params_twist,
-                                      prompt_len, output_len,
-                                      prepend_tokens_for_twists,
-                                      condition_twist_on_tokens=condition_twist_on_tokens,
-                                      huggingface_model=huggingface_model
-                                      )
-                print(f"KL to prior estimate: {kl_vals.mean()}")
-                if params_proposal is not None:
-                    kl_vals_prop = get_kl_vals(
-                        no_intermediate_resample_proposal_samples, cfg_p,
-                        params_p, cfg_twist, params_twist,
-                        prompt_len, output_len,
-                        prepend_tokens_for_twists,
-                        condition_twist_on_tokens=condition_twist_on_tokens,
-                        huggingface_model=huggingface_model, params_proposal=params_proposal)
-                    print(f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
-
-                text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
-
-                # print(intermediate_seq_list[-1])
-                print("INSPECTION OF Sigma SAMPLES")
-                if huggingface_model:
-                    for s in text_outputs[:n_samples_to_print]:
-                        print(s)
-                else:
-                    print(p_samples[:n_samples_to_print])
-
-                text_outputs = tokenizer.batch_decode(proposal_samples, skip_special_tokens=True)
-
-                # print(intermediate_seq_list[-1])
-                print("INSPECTION OF Proposal SAMPLES")
-                if huggingface_model:
-                    for s in text_outputs[:n_samples_to_print]:
-                        print(s)
-                else:
-                    print(proposal_samples[:n_samples_to_print])
-
-                text_outputs = tokenizer.batch_decode(jnp.concatenate(
-                    (proposal_samples, condition_twist_on_tokens),
-                    axis=-1), skip_special_tokens=True)
-                print("INSPECTION OF Proposal SAMPLES together with the conditioning tokens")
-                if huggingface_model:
-                    for s in text_outputs[:n_samples_to_print]:
-                        print(s)
-                else:
-                    print(proposal_samples[:n_samples_to_print])
-
-                g_q_estimates = iwae_backward(
-                    true_sigma_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                    output_len, log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-                    token_of_interest_as_int, proposal_is_p, huggingface_model, params_proposal=params_proposal)
-                f_q_estimates = iwae_backward(
-                    proposal_samples, prompt, cfg_p, params_p, cfg_twist,
-                    params_twist, output_len, log_true_final_twist, prepend_tokens_for_twists,
-                    condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p, huggingface_model, params_proposal=params_proposal)
-
-                print("G_q estimates")
-                print(g_q_estimates)
-                print(f"Average G_q: {g_q_estimates.mean()}")
-                print("F_q estimates")
-                print(f_q_estimates)
-                print(f"Average F_q: {f_q_estimates.mean()}")
-                print("Gaps")
-                print(g_q_estimates - f_q_estimates)
-                print(f"Average gap: {(g_q_estimates - f_q_estimates).mean()}")
-
-                aux_info = (g_q_estimates, f_q_estimates)
+                aux_info = print_g_q_f_q_estimates(
+                    true_sigma_samples, proposal_samples, prompt, cfg_p,
+                    params_p, cfg_twist,
+                    params_twist, output_len, log_true_final_twist,
+                    prepend_tokens_for_twists,
+                    condition_twist_on_tokens, token_of_interest_as_int,
+                    proposal_is_p, huggingface_model, params_proposal
+                )
 
             else:
-
-                _, _, (intermediate_seq_list, _, _) = smc_procedure(
-                    sk1, prompt, cfg_p, params_p,
-                    cfg_twist, params_twist,
-                    log_true_final_twist,
-                    output_len,
-                    n_samples,
-                    smc_procedure_type=self.smc_procedure_type,
-                    get_intermediate_sample_history_based_on_learned_twists=True,
-                    prepend_tokens_for_twists=prepend_tokens_for_twists,
-                    resample=False,  # VERY IMPORTANT FOR THIS HERE
-                    condition_twist_on_tokens=condition_twist_on_tokens,
-                    token_of_interest_as_int=token_of_interest_as_int,
-                    proposal_is_p=proposal_is_p,
-                    huggingface_model=huggingface_model,
-                    params_proposal=params_proposal
+                list_of_samples_scores = print_scores_with_averages(
+                    score_func,
+                    [p_samples, jnp.concatenate(
+                        (proposal_samples, condition_twist_on_tokens),
+                        axis=-1)],
+                    ["p samples", "proposal samples"],
+                    n_samples_to_print, log_prob_text=log_prob_text
                 )
+                proposal_scores = list_of_samples_scores[1]
 
-                # print("hihi")
-                # print(intermediate_seq_list)
-                # print(intermediate_seq_list[-1])
-                # print(condition_twist_on_tokens.shape)
-                proposal_samples = intermediate_seq_list[-1]
-                # proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
+                inspect_text_samples(tokenizer, p_samples, n_samples_to_print,
+                                     name="P")
+                inspect_text_samples(tokenizer, proposal_samples, n_samples_to_print,
+                                     name="Proposal")
 
-                log_prob_cont_proposal_samples = log_reward_model_p_of_last_tokens(
-                    jnp.concatenate(
-                        (intermediate_seq_list[-1], condition_twist_on_tokens),
-                        axis=-1), cfg_p, params_p,
-                    self.num_last_tokens_to_condition_on,
-                    huggingface_model=huggingface_model, beta_temp=1.)
-
-                log_prob_cont_p_samples = log_reward_model_p_of_last_tokens(
-                    p_samples, cfg_p, params_p,
-                    self.num_last_tokens_to_condition_on,
-                    huggingface_model=huggingface_model, beta_temp=1.)
-
-
-                print(
-                    "LOG PROB OF CONTINUATION FOR: p samples, proposal samples")
-                print(log_prob_cont_p_samples[:n_samples_to_print])
-                print(log_prob_cont_proposal_samples[:n_samples_to_print])
-
-                print(
-                    "Averages of the above for p samples, proposal samples")
-                print(log_prob_cont_p_samples.mean())
-                print(log_prob_cont_proposal_samples.mean())
-
-                proposal_scores = log_prob_cont_proposal_samples
-                no_intermediate_resample_proposal_samples = intermediate_seq_list[-1]
-                kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
-                                      cfg_p, params_p, cfg_twist, params_twist,
-                                      prompt_len, output_len,
-                                      prepend_tokens_for_twists,
-                                      condition_twist_on_tokens=condition_twist_on_tokens,
-                                      huggingface_model=huggingface_model)
-                print(f"KL to prior estimate: {kl_vals.mean()}")
-                if params_proposal is not None:
-                    kl_vals_prop = get_kl_vals(
-                        no_intermediate_resample_proposal_samples, cfg_p,
-                        params_p, cfg_twist, params_twist,
-                        prompt_len, output_len,
-                        prepend_tokens_for_twists,
-                        condition_twist_on_tokens=condition_twist_on_tokens,
-                        huggingface_model=huggingface_model, params_proposal=params_proposal)
-                    print(
-                        f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
-
-
-                text_outputs = tokenizer.batch_decode(p_samples,
-                                                      skip_special_tokens=True)
-
-                # print(intermediate_seq_list[-1])
-                print("INSPECTION OF P SAMPLES")
-                if huggingface_model:
-                    for s in text_outputs[:n_samples_to_print]:
-                        print(s)
-                else:
-                    print(p_samples[:n_samples_to_print])
-
-                text_outputs = tokenizer.batch_decode(proposal_samples,
-                                                      skip_special_tokens=True)
-
-                # print(intermediate_seq_list[-1])
-                print("INSPECTION OF Proposal SAMPLES")
-                if huggingface_model:
-                    for s in text_outputs[:n_samples_to_print]:
-                        print(s)
-                else:
-                    print(proposal_samples[:n_samples_to_print])
 
         elif self.rm_type == "sent_cond_twist":
-            p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p,
-                                                      prompt,
-                                                      output_len,
-                                                      n_samples,
-                                                      huggingface_model=huggingface_model)
+            p_samples = stochastic_transformer_sample(
+                sk2, cfg_p, params_p, prompt, output_len, n_samples,
+                huggingface_model=huggingface_model
+            )
             if args.set_sent_class_for_post_samples:
                 classes = jnp.ones((p_samples.shape[0],), dtype=jnp.int32) * (args.sentiment_class - 1)
             else:
@@ -1320,113 +993,59 @@ class ExperimentConfig:
 
             true_sigma_samples = p_samples
 
-            log_prob_class_sigma_samples = log_true_final_twist(p_samples, condition_twist_on_tokens)
+            smc_args["resample"] = False  # VERY IMPORTANT FOR THIS HERE
+            smc_args["condition_twist_on_tokens"] = condition_twist_on_tokens
+            _, _, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
 
-
-            _, _, (intermediate_seq_list, _, _) = smc_procedure(
-                sk1, prompt, cfg_p, params_p,
-                cfg_twist, params_twist,
-                log_true_final_twist,
-                output_len,
-                n_samples,
-                smc_procedure_type=self.smc_procedure_type,
-                get_intermediate_sample_history_based_on_learned_twists=True,
-                prepend_tokens_for_twists=prepend_tokens_for_twists,
-                resample=False, # VERY IMPORTANT FOR THIS HERE
-                condition_twist_on_tokens=condition_twist_on_tokens,
-                token_of_interest_as_int=token_of_interest_as_int,
-                proposal_is_p=proposal_is_p,
-                huggingface_model=huggingface_model,
-                params_proposal=params_proposal
-            )
-
-            print("hihi")
-            print(intermediate_seq_list)
-            print(intermediate_seq_list[-1])
-            print(condition_twist_on_tokens.shape)
             proposal_samples = intermediate_seq_list[-1]
             # proposal_samples = jnp.concatenate((intermediate_seq_list[-1], condition_twist_on_tokens), axis=-1)
 
-            log_prob_class_q_samples = log_true_final_twist(proposal_samples, condition_twist_on_tokens)
+            def score_func(samples):
+                return log_true_final_twist(samples, condition_twist_on_tokens)
 
+            list_of_samples_scores = print_scores_with_averages(
+                score_func,
+                [p_samples,
+                 proposal_samples],
+                ["true sigma samples",
+                 "proposal samples"],
+                n_samples_to_print, log_prob_text=True
+            )
+            proposal_scores = list_of_samples_scores[1]
 
-            print(
-                "LOG PROB OF CONTINUATION FOR: true sigma samples, proposal samples")
-            print(log_prob_class_sigma_samples[:n_samples_to_print])
-            print(log_prob_class_q_samples[:n_samples_to_print])
+            inspect_text_samples(tokenizer, p_samples, n_samples_to_print,
+                                 name="Sigma")
+            inspect_text_samples(tokenizer, proposal_samples, n_samples_to_print,
+                                 name="Proposal")
 
-            print(
-                "Averages of the above for SMC samples, proposal samples, p samples")
-            print(log_prob_class_sigma_samples.mean())
-            print(log_prob_class_q_samples.mean())
-            no_intermediate_resample_proposal_samples = intermediate_seq_list[-1]
-
-            proposal_scores = log_prob_class_q_samples
-            kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
-                                  cfg_p, params_p, cfg_twist, params_twist,
-                                  prompt_len, output_len,
-                                  prepend_tokens_for_twists,
-                                  condition_twist_on_tokens=condition_twist_on_tokens,
-                                  huggingface_model=huggingface_model)
-            print(f"KL to prior estimate: {kl_vals.mean()}")
-            if params_proposal is not None:
-                kl_vals_prop = get_kl_vals(
-                        no_intermediate_resample_proposal_samples, cfg_p,
-                        params_p, cfg_twist, params_twist,
-                        prompt_len, output_len,
-                        prepend_tokens_for_twists,
-                        condition_twist_on_tokens=condition_twist_on_tokens,
-                        huggingface_model=huggingface_model, params_proposal=params_proposal)
-                print(
-                    f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
-
-            text_outputs = tokenizer.batch_decode(p_samples, skip_special_tokens=True)
-
-            # print(intermediate_seq_list[-1])
-            print("INSPECTION OF Sigma SAMPLES")
-            if huggingface_model:
-                for s in text_outputs[:n_samples_to_print]:
-                    print(s)
-            else:
-                print(p_samples[:n_samples_to_print])
-
-            text_outputs = tokenizer.batch_decode(proposal_samples, skip_special_tokens=True)
-
-            # print(intermediate_seq_list[-1])
-            print("INSPECTION OF Proposal SAMPLES")
-            if huggingface_model:
-                for s in text_outputs[:n_samples_to_print]:
-                    print(s)
-            else:
-                print(proposal_samples[:n_samples_to_print])
-
-            g_q_estimates = iwae_backward(
-                true_sigma_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                output_len, log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-                token_of_interest_as_int, proposal_is_p, huggingface_model, params_proposal=params_proposal)
-            f_q_estimates = iwae_backward(
-                proposal_samples, prompt, cfg_p, params_p, cfg_twist,
-                params_twist, output_len, log_true_final_twist, prepend_tokens_for_twists,
-                condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p, huggingface_model, params_proposal=params_proposal)
-
-            print("G_q estimates")
-            print(g_q_estimates)
-            print(f"Average G_q: {g_q_estimates.mean()}")
-            print("F_q estimates")
-            print(f_q_estimates)
-            print(f"Average F_q: {f_q_estimates.mean()}")
-            print("Gaps")
-            print(g_q_estimates - f_q_estimates)
-            print(f"Average gap: {(g_q_estimates - f_q_estimates).mean()}")
-
-            aux_info = (g_q_estimates, f_q_estimates)
-
-
-        elif self.rm_type == "contains_continuation":
-            raise NotImplementedError
+            aux_info = print_g_q_f_q_estimates(
+                true_sigma_samples, proposal_samples, prompt, cfg_p, params_p,
+                cfg_twist, params_twist, output_len, log_true_final_twist,
+                prepend_tokens_for_twists,
+                condition_twist_on_tokens, token_of_interest_as_int,
+                proposal_is_p, huggingface_model, params_proposal
+            )
 
         else:
             raise NotImplementedError
+
+        kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
+                              cfg_p, params_p, cfg_twist, params_twist,
+                              prompt_len, output_len,
+                              prepend_tokens_for_twists,
+                              condition_twist_on_tokens=condition_twist_on_tokens,
+                              huggingface_model=huggingface_model)
+        print(f"KL to prior estimate: {kl_vals.mean()}")
+        if params_proposal is not None:
+            kl_vals_prop = get_kl_vals(
+                no_intermediate_resample_proposal_samples, cfg_p,
+                params_p, cfg_twist, params_twist,
+                prompt_len, output_len,
+                prepend_tokens_for_twists,
+                condition_twist_on_tokens=condition_twist_on_tokens,
+                huggingface_model=huggingface_model,
+                params_proposal=params_proposal)
+            print(f"KL of PROPOSAL to prior estimate: {kl_vals_prop.mean()}")
 
         return rng_key, aux_info, proposal_scores, kl_vals
 
