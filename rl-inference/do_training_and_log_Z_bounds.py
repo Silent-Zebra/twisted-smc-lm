@@ -1434,23 +1434,26 @@ def plot_logZ_bounds(
     print(np.transpose(np.stack(f_q_estimates_list_of_arrays)).shape)
 
 
-    print(len(kl_ubs_iwae))
-    print(len(f_q_estimates_list_of_arrays))
-    print(len(g_q_estimates_list_of_arrays))
-    print(len(logZ_ubs_iwae_across_samples_time_trueposts))
+    print(len(kl_ubs_iwae)) # (step,)
+    print(len(f_q_estimates_list_of_arrays)) # (step, 2000)
+    print(len(g_q_estimates_list_of_arrays)) # (step, 2000)
+    # First 3 are the same, last is different
+    print(len(logZ_ubs_iwae_across_samples_time_trueposts)) #(2, step, 4)
+    print(epoch)
 
     print(np.stack(kl_ubs_iwae).shape)
     print(np.stack(f_q_estimates_list_of_arrays).shape)
     print(np.stack(g_q_estimates_list_of_arrays).shape)
     print(np.stack(logZ_ubs_iwae_across_samples_time_trueposts).shape)
-    if len(kl_ubs_iwae) > 1:
-        2/0
+    2/0
+
+    step = len(f_q_estimates_list_of_arrays)
 
     if args.exp_num_twist_updates:
-        x_range = np.arange(len(kl_ubs_iwae))
+        x_range = np.arange(step)
         plt_xlabel_text = f"2^ of Number of Twist Updates"
     else:
-        x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
+        x_range = np.arange(step) * args.twist_updates_per_epoch
         plt_xlabel_text = f"Number of Twist Updates"
 
 
@@ -1458,7 +1461,6 @@ def plot_logZ_bounds(
     if rm_type == "p_last_tokens":
         f_q_estimates_list_of_arrays = f_q_estimates_list # TODO check that this reordering doesn't mess up the plasttokens plots (or does it fix it?)
 
-    step = len(kl_ubs_iwae)
 
     if not proposal_is_p:
         # Save KL DIV Plot, only do this if not proposal_is_p
