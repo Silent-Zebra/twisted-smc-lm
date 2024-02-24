@@ -1328,19 +1328,19 @@ def iwae_forward_and_backward(
 
     return proposal_dist_weights, target_dist_weights, f_q_estimate
 
-def smc_backward(rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def smc_backward(rng_key, true_posterior_sample, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                                   output_len, n_smc_samples,
                                   prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
                  token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None, params_proposal=None):
 
-    assert len(posterior_sample.shape) == 1 # single posterior sample
+    assert len(true_posterior_sample.shape) == 1 # single posterior sample
 
     (log_w_t, log_z_hat_t, _), samples = smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
                                                log_true_final_twist, output_len, n_smc_samples,
                                                smc_procedure_type=smc_procedure_type,
                                                prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
                                                token_of_interest_as_int=token_of_interest_as_int,
-                                               resample=True, posterior_sample=posterior_sample,
+                                               resample=True, true_posterior_sample=true_posterior_sample,
                                                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                                                        params_proposal=params_proposal
                                                        ) # resample is very important here, otherwise is just IWAE bound

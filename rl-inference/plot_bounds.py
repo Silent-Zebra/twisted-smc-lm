@@ -8,7 +8,7 @@ matplotlib.use('PDF')
 
 import matplotlib.pyplot as plt
 
-from do_training_and_log_Z_bounds import plot_with_conf_bounds
+from plot_utils import plot_with_conf_bounds
 
 
 load_pref_twist_32_512 = "logZ_bounds_twistproposal_2024-01-15_12-52_seed1_ebm_one_sample_nsamples1_1"

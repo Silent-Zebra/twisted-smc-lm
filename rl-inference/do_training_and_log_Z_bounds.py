@@ -30,6 +30,9 @@ from custom_transformer_prob_utils import *
 from reward_models import *
 from losses import *
 
+from plot_utils import *
+
+
 # Update the twists, update the whole framework for the Bayesian thing.
 
 from huggingface_models_custom import CustomLMWithTwistHead, get_tokenizer, CustomLMHeadModel
@@ -50,8 +53,7 @@ records_labels_list = ["True Log Z",
                        "KL(q||sigma) Lower Bound Estimate (SMC)",
                        ] # TODO Sep 16 make dynamic later
 
-n_seeds = 4
-n_seeds_f_q_rew_and_kl = 4
+n_trueposts_for_evals = 4
 
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
 def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist):
@@ -537,7 +539,7 @@ class ExperimentConfig:
     def plot_logZ_bounds_based_on_cfg(
         self, rng_key, prompt, output_len, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, start, epoch, huggingface_model, proposal_is_p,
-        true_posterior_samples_by_prompt_and_by_token, prompt_num, plot_over_time_list, tokenizer=None,
+        true_posterior_samples_by_prompt_and_by_token, prompt_num, plot_over_time_list, save_dir, tokenizer=None,
         proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None
     ):
         prompt_len = prompt.shape[-1]
@@ -562,6 +564,9 @@ class ExperimentConfig:
             "smc_procedure_type": self.smc_procedure_type,
             "prepend_tokens_for_twists": self.prepend_tokens_for_twists,
             "condition_twist_on_tokens": None,
+            "save_dir": save_dir,
+            "twist_learn_type": self.twist_learn_type,
+            "rm_type": self.rm_type
         }
 
 
@@ -1033,7 +1038,7 @@ print_smc_samples = False
 
 def inspect_and_record_evidence_setting_for_index(
     rng_key, prompt, cfg_p, params_p, cfg_twist,
-    params_twist, n_vocab, output_len, log_true_final_twist,
+    params_twist, output_len, log_true_final_twist,
     n_test_smc_samples, token_of_interest_as_int, true_posterior_samples,
     smc_procedure_type,
     proposal_is_p=False, prepend_tokens_for_twists=False,
@@ -1084,10 +1089,6 @@ def inspect_and_record_evidence_setting_for_index(
         iwae_log_w_upper.shape[0])
 
     f_qs = iwae_log_w_lower
-
-
-    true_all_post_upper_bound_estimate = None
-    true_one_post_upper_bound_estimate = None
 
     # kl_q_sigma_estimate = true_all_post_upper_bound_estimate - lower_bound_estimate
     # print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
@@ -1157,11 +1158,9 @@ def inspect_and_record_evidence_setting_for_index(
 
 
     list_of_things_to_append_for_record_list = \
-        [None, true_one_post_upper_bound_estimate,
-         true_all_post_upper_bound_estimate,
-         iwae_upper_bound_estimate, iwae_lower_bound_estimate,
+        [iwae_upper_bound_estimate, iwae_lower_bound_estimate,
          smc_upper_bound_estimate, smc_lower_bound_estimate,
-         f_qs, None,
+         f_qs,
          kl_q_sigma_iwae_upper_bound_estimate,
          kl_q_sigma_iwae_lower_bound_estimate,
          kl_q_sigma_smc_upper_bound_estimate,
@@ -1177,31 +1176,6 @@ inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argn
 
 
 
-def plot_with_conf_bounds(record, x_range, label, z_score=1.96, **kwargs):
-
-    print("RECORD")
-    print(record.shape)
-
-    avg = record.mean(axis=0)
-
-    # print(x_range.shape)
-    # print(avg.shape)
-
-    stdev = jnp.std(record, axis=0)
-
-    conf_bound = z_score * stdev / np.sqrt(record.shape[0])
-
-    upper_conf_bound = avg + conf_bound
-    lower_conf_bound = avg - conf_bound
-
-
-    plt.plot(x_range, avg, label=label, **kwargs)
-    plt.fill_between(x_range, lower_conf_bound,
-                     upper_conf_bound, alpha=0.3, **kwargs)
-
-
-
-    return avg[-1], conf_bound[-1]
 
 
 
@@ -1216,31 +1190,34 @@ linestyle_list_for_smc_ub_plots = ['dashed', 'dashed']
 linestyle_list_for_smc_lb_plots = ['solid', 'solid']
 
 
-def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, prompt, prompt_len, output_len, cfg_p,
-                     params_p, cfg_twist, params_twist, log_true_final_twist, start, epoch,
-                     plot_over_time_list, smc_procedure_type, proposal_is_p=False,
-                     prepend_tokens_for_twists=False, condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
-                     proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None):
+def plot_logZ_bounds(
+    rng_key, true_posterior_samples, token_of_interest_as_int, prompt, prompt_len, output_len, cfg_p,
+    params_p, cfg_twist, params_twist, log_true_final_twist, start, epoch,
+    plot_over_time_list, smc_procedure_type, save_dir, twist_learn_type, rm_type,
+    proposal_is_p=False, prepend_tokens_for_twists=False,
+    condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
+    proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None,
+):
 
-    iwae_lbs_across_seeds = []
-    iwae_ubs_across_seeds = []
-    smc_lbs_across_seeds = []
-    smc_ubs_across_seeds = []
+    iwae_lbs_across_trueposts = []
+    iwae_ubs_across_trueposts = []
+    smc_lbs_across_trueposts = []
+    smc_ubs_across_trueposts = []
     print(f"Sampling Runs Starting")
     print(f"TIME: {time.time() - start}", flush=True)
 
     # Measure only for the largest number of particles (should be most accurate)
-    list_of_stuff_across_seeds_only_largest_n_samples = [[], 0., 0., 0., 0., 0., 0., 0., 0.]
+    list_of_stuff_across_trueposts_only_largest_n_samples = [[], 0., 0., 0., 0., 0., 0., 0., 0.]
 
-    logZ_ubs_iwae_across_samples_and_seeds = []
-    logZ_lbs_iwae_across_samples_and_seeds = []
-    logZ_ubs_smc_across_samples_and_seeds = []
-    logZ_lbs_smc_across_samples_and_seeds = []
-    logZ_all_bounds_across_samples_and_seeds = [
-        logZ_ubs_iwae_across_samples_and_seeds, logZ_lbs_iwae_across_samples_and_seeds,
-        logZ_ubs_smc_across_samples_and_seeds, logZ_lbs_smc_across_samples_and_seeds
+    logZ_ubs_iwae_across_samples_and_trueposts = []
+    logZ_lbs_iwae_across_samples_and_trueposts = []
+    logZ_ubs_smc_across_samples_and_trueposts = []
+    logZ_lbs_smc_across_samples_and_trueposts = []
+    logZ_all_bounds_across_samples_and_trueposts = [
+        logZ_ubs_iwae_across_samples_and_trueposts, logZ_lbs_iwae_across_samples_and_trueposts,
+        logZ_ubs_smc_across_samples_and_trueposts, logZ_lbs_smc_across_samples_and_trueposts
     ]
-    for lst in logZ_all_bounds_across_samples_and_seeds:
+    for lst in logZ_all_bounds_across_samples_and_trueposts:
         for n in range(len(n_samples_for_plots)):
             lst.append([])
 
@@ -1248,30 +1225,27 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     iwae_ubs = []
     smc_lbs = []
     smc_ubs = []
-    # TODO swap order of seeds and n_samples for loops?
-    for seed in range(n_seeds):
-        print(f"Sampling seed {seed}", flush=True)
-        print(f"TIME: {time.time() - start}", flush=True)
 
+    inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index_jit
+    if smc_procedure_type == "partial_jit" or print_smc_samples:
+        inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index
+
+    # TODO swap order of seeds and n_samples for loops?
+    for truepost_i in range(n_trueposts_for_evals):
+        print(f"Sampling seed {truepost_i}", flush=True)
+        print(f"TIME: {time.time() - start}", flush=True)
 
         for n in range(len(n_samples_for_plots)):
             n_test_smc_samples = n_samples_for_plots[n]
-            if seed == 0:
+            if truepost_i == 0:
                 print(f"n_smc: {n_test_smc_samples}")
                 # jax.profiler.save_device_memory_profile(f"memory.prof")
 
-
-
             rng_key, sk = jax.random.split(rng_key)
 
-            inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index_jit
-            if smc_procedure_type == "partial_jit" or print_smc_samples:
-                inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index
-
-            # print(f"Number of Particles: {n_test_smc_samples}")
             list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_fn(
                 sk, prompt, cfg_p, params_p, cfg_twist,
-                params_twist, args.n_vocab,
+                params_twist,
                 output_len, log_true_final_twist,
                 n_test_smc_samples,
                 token_of_interest_as_int, true_posterior_samples,
@@ -1279,14 +1253,12 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 proposal_is_p, prepend_tokens_for_twists=prepend_tokens_for_twists,
                 condition_twist_on_tokens=condition_twist_on_tokens,
                 huggingface_model=huggingface_model,
-                index_of_true_posterior_sample=seed,
+                index_of_true_posterior_sample=truepost_i,
                 params_proposal=params_proposal, tokenizer=tokenizer
             )
-            (_, true_one_post_upper_bound_estimate,
-             true_all_post_upper_bound_estimate,
-             iwae_upper_bound_estimate, iwae_lower_bound_estimate,
+            (iwae_upper_bound_estimate, iwae_lower_bound_estimate,
              smc_upper_bound_estimate, smc_lower_bound_estimate,
-             f_qs, _,
+             f_qs,
              kl_q_sigma_iwae_upper_bound_estimate,
              kl_q_sigma_iwae_lower_bound_estimate,
              kl_q_sigma_smc_upper_bound_estimate,
@@ -1294,7 +1266,7 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 = list_of_things_to_append_for_record_list
 
 
-            list_of_things_to_add_across_seeds_for_largest_n_samples = [
+            list_of_things_to_add_across_trueposts_for_largest_n_samples = [
                 f_qs, kl_q_sigma_iwae_upper_bound_estimate,
                 kl_q_sigma_iwae_lower_bound_estimate, kl_q_sigma_smc_upper_bound_estimate,
                 kl_q_sigma_smc_lower_bound_estimate,
@@ -1317,10 +1289,10 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
             print(
                 f"SMC upper bound estimate: {smc_upper_bound_estimate}")
 
-            logZ_ubs_iwae_across_samples_and_seeds[n].append(iwae_upper_bound_estimate)
-            logZ_lbs_iwae_across_samples_and_seeds[n].append(iwae_lower_bound_estimate)
-            logZ_ubs_smc_across_samples_and_seeds[n].append(smc_upper_bound_estimate)
-            logZ_lbs_smc_across_samples_and_seeds[n].append(smc_lower_bound_estimate)
+            logZ_ubs_iwae_across_samples_and_trueposts[n].append(iwae_upper_bound_estimate)
+            logZ_lbs_iwae_across_samples_and_trueposts[n].append(iwae_lower_bound_estimate)
+            logZ_ubs_smc_across_samples_and_trueposts[n].append(smc_upper_bound_estimate)
+            logZ_lbs_smc_across_samples_and_trueposts[n].append(smc_lower_bound_estimate)
 
             if n_test_smc_samples == n_samples_for_plots[-1]:
                 print(
@@ -1332,15 +1304,9 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 print(
                     f"KL(q||sigma) lower bound (using SMC bound on log Z): {kl_q_sigma_smc_lower_bound_estimate}")
 
-                list_of_stuff_across_seeds_only_largest_n_samples[0].append(f_qs)
-                for i in range(1, len(list_of_stuff_across_seeds_only_largest_n_samples)):
-                    list_of_stuff_across_seeds_only_largest_n_samples[i] += list_of_things_to_add_across_seeds_for_largest_n_samples[i]
-
-                # kl_ub_iwae_across_seeds += kl_q_sigma_iwae_upper_bound_estimate
-                # kl_lb_iwae_across_seeds += kl_q_sigma_iwae_lower_bound_estimate
-                # kl_ub_smc_across_seeds += kl_q_sigma_smc_upper_bound_estimate
-                # kl_lb_smc_across_seeds += kl_q_sigma_smc_lower_bound_estimate
-                # f_q_across_seeds += f_q_estimate
+                list_of_stuff_across_trueposts_only_largest_n_samples[0].append(f_qs)
+                for i in range(1, len(list_of_stuff_across_trueposts_only_largest_n_samples)):
+                    list_of_stuff_across_trueposts_only_largest_n_samples[i] += list_of_things_to_add_across_trueposts_for_largest_n_samples[i]
 
                 iwae_lbs.append(iwae_lower_bound_estimate)
                 iwae_ubs.append(iwae_upper_bound_estimate)
@@ -1357,53 +1323,47 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
                 print(np.stack(smc_ubs).mean())
 
 
-        iwae_lbs_across_seeds.append(np.stack(iwae_lbs))
-        iwae_ubs_across_seeds.append(np.stack(iwae_ubs))
-        smc_lbs_across_seeds.append(np.stack(smc_lbs))
-        smc_ubs_across_seeds.append(np.stack(smc_ubs))
+        iwae_lbs_across_trueposts.append(np.stack(iwae_lbs))
+        iwae_ubs_across_trueposts.append(np.stack(iwae_ubs))
+        smc_lbs_across_trueposts.append(np.stack(smc_lbs))
+        smc_ubs_across_trueposts.append(np.stack(smc_ubs))
 
     print("---")
-    print(logZ_ubs_iwae_across_samples_and_seeds)
+    print(logZ_ubs_iwae_across_samples_and_trueposts)
 
     for n in range(len(n_samples_for_plots)):
-        logZ_ubs_iwae_across_samples_and_seeds[n] = np.stack(logZ_ubs_iwae_across_samples_and_seeds[n])
-        logZ_lbs_iwae_across_samples_and_seeds[n] = np.stack(logZ_lbs_iwae_across_samples_and_seeds[n])
-        logZ_ubs_smc_across_samples_and_seeds[n] = np.stack(logZ_ubs_smc_across_samples_and_seeds[n])
-        logZ_lbs_smc_across_samples_and_seeds[n] = np.stack(logZ_lbs_smc_across_samples_and_seeds[n])
+        logZ_ubs_iwae_across_samples_and_trueposts[n] = np.stack(logZ_ubs_iwae_across_samples_and_trueposts[n])
+        logZ_lbs_iwae_across_samples_and_trueposts[n] = np.stack(logZ_lbs_iwae_across_samples_and_trueposts[n])
+        logZ_ubs_smc_across_samples_and_trueposts[n] = np.stack(logZ_ubs_smc_across_samples_and_trueposts[n])
+        logZ_lbs_smc_across_samples_and_trueposts[n] = np.stack(logZ_lbs_smc_across_samples_and_trueposts[n])
 
     print("---")
-    print(logZ_ubs_iwae_across_samples_and_seeds)
+    print(logZ_ubs_iwae_across_samples_and_trueposts)
 
+    for i in range(1, len(list_of_stuff_across_trueposts_only_largest_n_samples)):
+        list_of_stuff_across_trueposts_only_largest_n_samples[i] /= n_trueposts_for_evals
 
-    for i in range(1, len(list_of_stuff_across_seeds_only_largest_n_samples)):
-        list_of_stuff_across_seeds_only_largest_n_samples[i] /= n_seeds
-    # kl_ub_iwae_across_seeds /= n_seeds
-    # kl_lb_iwae_across_seeds /= n_seeds
-    # kl_ub_smc_across_seeds /= n_seeds
-    # kl_lb_smc_across_seeds /= n_seeds
-    # f_q_across_seeds /= n_seeds
-
-    f_q_list_by_seed, kl_ub_iwae_across_seeds, kl_lb_iwae_across_seeds, kl_ub_smc_across_seeds, kl_lb_smc_across_seeds, \
-    iwae_upper_bound_across_seeds, iwae_lower_bound_across_seeds, smc_upper_bound_across_seeds, smc_lower_bound_across_seeds \
-        = list_of_stuff_across_seeds_only_largest_n_samples
-    print(f_q_list_by_seed)
-    f_q_list_by_seed = jnp.stack(f_q_list_by_seed)
+    f_q_list_by_truepost, kl_ub_iwae_across_trueposts, kl_lb_iwae_across_trueposts, kl_ub_smc_across_trueposts, kl_lb_smc_across_trueposts, \
+    iwae_upper_bound_across_trueposts, iwae_lower_bound_across_trueposts, smc_upper_bound_across_trueposts, smc_lower_bound_across_trueposts \
+        = list_of_stuff_across_trueposts_only_largest_n_samples
+    print(f_q_list_by_truepost)
+    f_q_list_by_truepost = jnp.stack(f_q_list_by_truepost)
     print("f_q_list_shape")
-    print(f_q_list_by_seed.shape)
-    f_q_list_by_seed = f_q_list_by_seed.reshape(f_q_list_by_seed.shape[0] * f_q_list_by_seed.shape[1],)
-    print(f_q_list_by_seed.shape)
+    print(f_q_list_by_truepost.shape)
+    f_q_list_by_truepost = f_q_list_by_truepost.reshape(f_q_list_by_truepost.shape[0] * f_q_list_by_truepost.shape[1],)
+    print(f_q_list_by_truepost.shape)
 
-    avg_f_q_estimate = f_q_list_by_seed.mean()
+    avg_f_q_estimate = f_q_list_by_truepost.mean()
 
 
     print(
-        f"Avg KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_ub_iwae_across_seeds}")
+        f"Avg KL(q||sigma) upper bound (using IWAE bound on log Z): {kl_ub_iwae_across_trueposts}")
     print(
-        f"Avg KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_lb_iwae_across_seeds}")
+        f"Avg KL(q||sigma) lower bound (using IWAE bound on log Z): {kl_lb_iwae_across_trueposts}")
     print(
-        f"Avg KL(q||sigma) upper bound (using SMC bound on log Z): {kl_ub_smc_across_seeds}")
+        f"Avg KL(q||sigma) upper bound (using SMC bound on log Z): {kl_ub_smc_across_trueposts}")
     print(
-        f"Avg KL(q||sigma) lower bound (using SMC bound on log Z): {kl_lb_smc_across_seeds}")
+        f"Avg KL(q||sigma) lower bound (using SMC bound on log Z): {kl_lb_smc_across_trueposts}")
     print(f"Avg F_q estimate: {avg_f_q_estimate}")
 
 
@@ -1416,10 +1376,10 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     print(target_dist_weights)
     num_true_posterior_samples = true_posterior_samples.shape[0]
     print(f"Avg G_q {num_true_posterior_samples} posterior sample(s) estimate: {avg_g_q_estimate}")
-    kl_sigma_q_ub_iwae = avg_g_q_estimate - iwae_lower_bound_across_seeds # Note this is correct, you need LB to get the UB on KL(sigma|q)
-    kl_sigma_q_lb_iwae = avg_g_q_estimate - iwae_upper_bound_across_seeds # and you need UB to get LB on KL(sigma|q)
-    kl_sigma_q_ub_smc = avg_g_q_estimate - smc_lower_bound_across_seeds # Note this is correct, you need LB to get the UB on KL(sigma|q)
-    kl_sigma_q_lb_smc = avg_g_q_estimate - smc_upper_bound_across_seeds # and you need UB to get LB on KL(sigma|q)
+    kl_sigma_q_ub_iwae = avg_g_q_estimate - iwae_lower_bound_across_trueposts # Note this is correct, you need LB to get the UB on KL(sigma|q)
+    kl_sigma_q_lb_iwae = avg_g_q_estimate - iwae_upper_bound_across_trueposts # and you need UB to get LB on KL(sigma|q)
+    kl_sigma_q_ub_smc = avg_g_q_estimate - smc_lower_bound_across_trueposts # Note this is correct, you need LB to get the UB on KL(sigma|q)
+    kl_sigma_q_lb_smc = avg_g_q_estimate - smc_upper_bound_across_trueposts # and you need UB to get LB on KL(sigma|q)
     print(
         f"Avg KL(sigma||q) upper bound (using IWAE bound on log Z and {num_true_posterior_samples} true posterior sample for G(q)): {kl_sigma_q_ub_iwae}")
     print(
@@ -1429,41 +1389,41 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     print(
         f"Avg KL(sigma||q) lower bound (using SMC bound on log Z and {num_true_posterior_samples} true posterior sample for G(q)): {kl_sigma_q_lb_smc}")
 
-    append_list = [avg_f_q_estimate, avg_g_q_estimate, kl_ub_iwae_across_seeds, kl_lb_iwae_across_seeds,
-                   kl_ub_smc_across_seeds, kl_lb_smc_across_seeds,
+    append_list = [avg_f_q_estimate, avg_g_q_estimate, kl_ub_iwae_across_trueposts, kl_lb_iwae_across_trueposts,
+                   kl_ub_smc_across_trueposts, kl_lb_smc_across_trueposts,
                    kl_sigma_q_ub_iwae, kl_sigma_q_lb_iwae, kl_sigma_q_ub_smc, kl_sigma_q_lb_smc]
 
-    iwae_logZ_gap = iwae_upper_bound_across_seeds - iwae_lower_bound_across_seeds
-    smc_logZ_gap = smc_upper_bound_across_seeds - smc_lower_bound_across_seeds
+    iwae_logZ_gap = iwae_upper_bound_across_trueposts - iwae_lower_bound_across_trueposts
+    smc_logZ_gap = smc_upper_bound_across_trueposts - smc_lower_bound_across_trueposts
     print(iwae_logZ_gap)
     print(smc_logZ_gap)
     if smc_logZ_gap < iwae_logZ_gap:
-        logZ_midpoint_estimate = (smc_upper_bound_across_seeds + smc_lower_bound_across_seeds) / 2.
+        logZ_midpoint_estimate = (smc_upper_bound_across_trueposts + smc_lower_bound_across_trueposts) / 2.
         print("SMC Gap better")
     else:
-        logZ_midpoint_estimate = (iwae_upper_bound_across_seeds + iwae_lower_bound_across_seeds) / 2.
+        logZ_midpoint_estimate = (iwae_upper_bound_across_trueposts + iwae_lower_bound_across_trueposts) / 2.
         print("IWAE Gap better")
     # logZ_midpoint_estimate is our current estimate which should be the best estimate we have given our learned twists
     print(f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
 
-    plot_over_time_list[0].append(f_q_list_by_seed)
+    plot_over_time_list[0].append(f_q_list_by_truepost)
     plot_over_time_list[1].append(g_q_all_posts)
 
     for i in range(2, len(append_list)):
         plot_over_time_list[i].append(np.array(append_list[i]))
-    logZ_ubs_iwae_across_samples_time_seeds = plot_over_time_list[len(append_list)]
-    logZ_lbs_iwae_across_samples_time_seeds = plot_over_time_list[len(append_list) + 1]
-    logZ_ubs_smc_across_samples_time_seeds = plot_over_time_list[len(append_list) + 2]
-    logZ_lbs_smc_across_samples_time_seeds = plot_over_time_list[len(append_list) + 3]
+    logZ_ubs_iwae_across_samples_time_trueposts = plot_over_time_list[len(append_list)]
+    logZ_lbs_iwae_across_samples_time_trueposts = plot_over_time_list[len(append_list) + 1]
+    logZ_ubs_smc_across_samples_time_trueposts = plot_over_time_list[len(append_list) + 2]
+    logZ_lbs_smc_across_samples_time_trueposts = plot_over_time_list[len(append_list) + 3]
     for n in range(len(n_samples_for_plots)):
-        logZ_ubs_iwae_across_samples_time_seeds[n].append(logZ_ubs_iwae_across_samples_and_seeds[n])
-        logZ_lbs_iwae_across_samples_time_seeds[n].append(logZ_lbs_iwae_across_samples_and_seeds[n])
-        logZ_ubs_smc_across_samples_time_seeds[n].append(logZ_ubs_smc_across_samples_and_seeds[n])
-        logZ_lbs_smc_across_samples_time_seeds[n].append(logZ_lbs_smc_across_samples_and_seeds[n])
-    plot_over_time_list[len(append_list)] = logZ_ubs_iwae_across_samples_time_seeds
-    plot_over_time_list[len(append_list) + 1] = logZ_lbs_iwae_across_samples_time_seeds
-    plot_over_time_list[len(append_list) + 2] = logZ_ubs_smc_across_samples_time_seeds
-    plot_over_time_list[len(append_list) + 3] = logZ_lbs_smc_across_samples_time_seeds
+        logZ_ubs_iwae_across_samples_time_trueposts[n].append(logZ_ubs_iwae_across_samples_and_trueposts[n])
+        logZ_lbs_iwae_across_samples_time_trueposts[n].append(logZ_lbs_iwae_across_samples_and_trueposts[n])
+        logZ_ubs_smc_across_samples_time_trueposts[n].append(logZ_ubs_smc_across_samples_and_trueposts[n])
+        logZ_lbs_smc_across_samples_time_trueposts[n].append(logZ_lbs_smc_across_samples_and_trueposts[n])
+    plot_over_time_list[len(append_list)] = logZ_ubs_iwae_across_samples_time_trueposts
+    plot_over_time_list[len(append_list) + 1] = logZ_lbs_iwae_across_samples_time_trueposts
+    plot_over_time_list[len(append_list) + 2] = logZ_ubs_smc_across_samples_time_trueposts
+    plot_over_time_list[len(append_list) + 3] = logZ_lbs_smc_across_samples_time_trueposts
 
     f_q_estimates_list_of_arrays = plot_over_time_list[0]
     g_q_estimates_list_of_arrays = plot_over_time_list[1]
@@ -1474,10 +1434,18 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
     print(np.transpose(np.stack(f_q_estimates_list_of_arrays)).shape)
 
     numpost = np.stack(g_q_estimates_list_of_arrays).shape[-1]
-    # print("G_q estimates shape")
-    # print(np.stack(g_q_estimates_list_of_arrays).shape)
-    # if np.stack(g_q_estimates_list_of_arrays).shape[-1] == 1:
-    #     only_one_post = " (Only 1 Post.)"
+
+    print(len(kl_ubs_iwae))
+    print(len(f_q_estimates_list_of_arrays))
+    print(len(g_q_estimates_list_of_arrays))
+    print(len(logZ_ubs_iwae_across_samples_time_trueposts))
+
+    print(np.stack(kl_ubs_iwae).shape)
+    print(np.stack(f_q_estimates_list_of_arrays).shape)
+    print(np.stack(g_q_estimates_list_of_arrays).shape)
+    print(np.stack(logZ_ubs_iwae_across_samples_time_trueposts).shape)
+    if len(kl_ubs_iwae) > 1:
+        2/0
 
     if args.exp_num_twist_updates:
         x_range = np.arange(len(kl_ubs_iwae))
@@ -1486,90 +1454,40 @@ def plot_logZ_bounds(rng_key, true_posterior_samples, token_of_interest_as_int, 
         x_range = np.arange(len(kl_ubs_iwae)) * args.twist_updates_per_epoch
         plt_xlabel_text = f"Number of Twist Updates"
 
-    do_checkpoint_of_plot_info = True
+
+    # TODO remove the dependence on args throughout
+    if rm_type == "p_last_tokens":
+        f_q_estimates_list_of_arrays = f_q_estimates_list # TODO check that this reordering doesn't mess up the plasttokens plots (or does it fix it?)
+
+    step = len(kl_ubs_iwae)
 
     if not proposal_is_p:
         # Save KL DIV Plot, only do this if not proposal_is_p
-        plt.clf()
-        plt.xlabel(plt_xlabel_text)
-
-        plot_with_conf_bounds(logZ_midpoint_estimate - np.transpose(np.stack(f_q_estimates_list_of_arrays)), x_range, label="KL(q||sigma) (Best LogZ Bounds Midpoint)")
-        plot_with_conf_bounds(np.transpose(np.stack(g_q_estimates_list_of_arrays)) - logZ_midpoint_estimate, x_range, label=f"KL(sigma||q) (Best LogZ Bounds Midpoint) ({numpost} True Post.)")
-
-        plt.ylabel(f"KL Divergence")
-        plt.legend()
-        plt.savefig(f"{args.save_dir}/fig_kl_both_ways_epoch{epoch + 1}.pdf")
-
-        if do_checkpoint_of_plot_info:
-
-            assert proposal_scores_list[0] is not None
-            assert kl_to_prior_list[0] is not None
-
-            if args.rm_type == "p_last_tokens":
-                f_q_estimates_list_of_arrays = f_q_estimates_list
-
-            checkpoints.save_checkpoint(
-                ckpt_dir=args.save_dir,
-                target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
-                        np.transpose(np.stack(proposal_scores_list)), logZ_midpoint_estimate, np.transpose(np.stack(kl_to_prior_list))),
-                step=len(kl_ubs_iwae),
-                prefix=f"f_q_g_q_logZbestmidpoint_info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_nsamples")
-
-    plt.clf()
-    # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
-    plt.xlabel(plt_xlabel_text)
-
-    print(logZ_ubs_iwae_across_samples_time_seeds)
-
-    for n in range(len(n_samples_for_plots)):
-        print(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n]).shape)
-        print(x_range.shape)
-
-        plot_with_conf_bounds(
-            np.transpose(np.stack(logZ_ubs_iwae_across_samples_time_seeds[n])),
-            x_range, label=f"Log(Z) IWAE UB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_iwae_ub_plots[n], linestyle=linestyle_list_for_iwae_ub_plots[n]
-        )
-        plot_with_conf_bounds(
-            np.transpose(np.stack(logZ_lbs_iwae_across_samples_time_seeds[n])),
-            x_range, label=f"Log(Z) IWAE LB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_iwae_lb_plots[n], linestyle=linestyle_list_for_iwae_lb_plots[n]
-        )
-        plot_with_conf_bounds(
-            np.transpose(np.stack(logZ_ubs_smc_across_samples_time_seeds[n])),
-            x_range, label=f"Log(Z) SMC UB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_smc_ub_plots[n], linestyle=linestyle_list_for_smc_ub_plots[n]
-        )
-        plot_with_conf_bounds(
-            np.transpose(np.stack(logZ_lbs_smc_across_samples_time_seeds[n])),
-            x_range, label=f"Log(Z) SMC LB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_smc_lb_plots[n], linestyle=linestyle_list_for_smc_lb_plots[n]
+        save_kl_div_plot(
+            plt_xlabel_text, x_range, logZ_midpoint_estimate,
+            f_q_estimates_list_of_arrays,
+            g_q_estimates_list_of_arrays, save_dir, epoch, proposal_scores_list,
+            kl_to_prior_list, rm_type,
+            step, args.seed, twist_learn_type,
+            do_checkpoint_of_plot_info=True
         )
 
-    # plt.xlabel(f"Epoch")
-    plt.ylabel(f"Log(Z) Bound")
+    save_logZ_bounds_plot(
+        plt_xlabel_text, x_range, save_dir, epoch, step, args.seed, twist_learn_type,
+        n_samples_for_plots,
+        logZ_ubs_iwae_across_samples_time_trueposts,
+        logZ_lbs_iwae_across_samples_time_trueposts,
+        logZ_ubs_smc_across_samples_time_trueposts,
+        logZ_lbs_smc_across_samples_time_trueposts,
+        color_list_for_iwae_ub_plots, color_list_for_iwae_lb_plots,
+        color_list_for_smc_ub_plots, color_list_for_smc_lb_plots,
+        linestyle_list_for_iwae_ub_plots, linestyle_list_for_iwae_lb_plots,
+        linestyle_list_for_smc_ub_plots, linestyle_list_for_smc_lb_plots,
+        proposal_is_p,
+        do_checkpoint_of_plot_info=True
+    )
 
-    plt.legend()
 
-    if proposal_is_p:
-        figname = f"{args.save_dir}/fig_pproposal_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf"
-        ckpt_name = f"logZ_bounds_pproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_nsamples"
-    else:
-        figname = f"{args.save_dir}/fig_twistproposal_logZ_bounds_by_samples_over_time_epoch{epoch + 1}.pdf"
-        ckpt_name = f"logZ_bounds_twistproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_nsamples"
-
-    plt.savefig(figname)
-
-    if do_checkpoint_of_plot_info:
-
-        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                    target=(
-                                    logZ_ubs_iwae_across_samples_time_seeds,
-                                    logZ_lbs_iwae_across_samples_time_seeds,
-                                    logZ_ubs_smc_across_samples_time_seeds,
-                                    logZ_lbs_smc_across_samples_time_seeds),
-                                    step=len(kl_ubs_iwae),
-                                    prefix=ckpt_name)
     return plot_over_time_list
 
 
@@ -1989,7 +1907,7 @@ def do_inspection_and_plotting_of_test_info(
     indices_of_continuation, tokenizer, proposal_is_p, huggingface_model,
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
-    prompt_num, plot_over_time_list, plot_over_time_list_p_proposal
+    prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir
 ):
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
@@ -1997,7 +1915,7 @@ def do_inspection_and_plotting_of_test_info(
     proposal_scores = None
     kl_vals = None
     f_qs = None
-    for seed in range(n_seeds_f_q_rew_and_kl):
+    for truepost_i in range(n_trueposts_for_evals):
         # DO inspect samples regardless of whether we plot logZ bounds or not
         rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
             rng_key, prompt, cfg_p, params_p, cfg_twist,
@@ -2069,7 +1987,8 @@ def do_inspection_and_plotting_of_test_info(
             "proposal_scores_list": proposal_scores_list,
             "kl_to_prior_list": kl_to_prior_list,
             "f_q_estimates_list": f_q_estimates_list,
-            "params_proposal": params_proposal
+            "params_proposal": params_proposal,
+            "save_dir": save_dir
         }
 
         if args.proposal_is_p_for_plots and args.hface_model_type in [
@@ -2304,7 +2223,7 @@ def main():
                     indices_of_continuation, tokenizer, args.proposal_is_p, huggingface_model,
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
                     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
-                    prompt_num, plot_over_time_list, plot_over_time_list_p_proposal
+                    prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir
                 )
 
             # ----- DO TWIST UPDATES -----
@@ -2520,7 +2439,7 @@ if __name__ == "__main__":
         assert args.num_last_tokens_to_condition_on > 0
 
     if args.rm_type == "p_last_tokens":
-        n_seeds = 30
+        n_trueposts_for_evals = 30
         assert args.n_true_posterior_samples == 2000
 
 
@@ -2537,8 +2456,8 @@ if __name__ == "__main__":
         assert args.beta_temp == 1 # because of the weird way that paper defines the KL regularized objective and the weird sampling, we only can directly plug it into our framework when our beta=1, corresponding to their beta = 0.5
 
     if args.overwrite_n_plot_seeds:
-        n_seeds = args.n_plot_seeds
-        print(f"Overwriting n plot seeds: {n_seeds}")
+        n_trueposts_for_evals = args.n_plot_seeds
+        print(f"Overwriting n plot seeds: {n_trueposts_for_evals}")
 
     if args.train_on_true_posterior_samples:
         assert args.beta_temp == 1
