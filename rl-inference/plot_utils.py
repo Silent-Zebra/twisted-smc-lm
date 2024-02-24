@@ -34,6 +34,7 @@ def save_kl_div_plot(
     step, seed, twist_learn_type,
     do_checkpoint_of_plot_info=True
 ):
+    numpost = np.stack(g_q_estimates_list_of_arrays).shape[-1]
 
     plt.clf()
     plt.xlabel(plt_xlabel_text)

@@ -1433,7 +1433,6 @@ def plot_logZ_bounds(
     print("F_q_for_plots shape")
     print(np.transpose(np.stack(f_q_estimates_list_of_arrays)).shape)
 
-    numpost = np.stack(g_q_estimates_list_of_arrays).shape[-1]
 
     print(len(kl_ubs_iwae))
     print(len(f_q_estimates_list_of_arrays))
