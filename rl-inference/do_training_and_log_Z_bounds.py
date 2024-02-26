@@ -80,7 +80,7 @@ class ExperimentConfig:
 
         self.train_on_true_posterior_samples = train_on_true_posterior_samples
 
-        self.prepend_tokens_for_twists = False # TODO later remove references to this from everywhere, no longer needed
+        # TODO think about if there's some way to avoid the tons of arguments (params_p, params_twist, etc. that is everywhere - can I have them in one centralized place?)
 
         if self.rm_type == "p_last_tokens":
             assert num_last_tokens_to_condition_on > 0
@@ -264,19 +264,123 @@ class ExperimentConfig:
             raise NotImplementedError
         return dre_grad_fn
 
+    def _get_sigma_samples_and_cond_tokens_infilling(
+        self, rng_key, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model,
+        cfg_twist, params_twist, log_true_final_twist,
+        proposal_is_p, params_proposal
+    ):
+        if self.beta_temp != 1.:
+            assert "ebm" in self.twist_learn_type
+
+        rng_key, sk2 = jax.random.split(rng_key)
+
+        # TODO FEB RENAME EBM TO CTL EVERYWHERE
+        ctl_methods_for_infilling = [
+            "ebm_ml_jit_vmapped_over_condition_tokens", "ebm_vmap_os",
+            "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub",
+            "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub",
+            "ebm_ml_pprop_jit_vmapped_over_condition_tokens",
+            "ebm_ml_jit_vmapped_over_condition_tokens_finalrl",
+            "ebm_ml_vmap_with_one_total_kl"
+        ]
+
+        if (self.twist_learn_type not in ctl_methods_for_infilling) and (
+            "ebm" in self.twist_learn_type):
+
+            # Do one conditioning token set at a time
+            p_samples = stochastic_transformer_sample(
+                sk2, cfg_p, params_p, prompt,
+                output_len + self.num_last_tokens_to_condition_on,
+                1, huggingface_model=huggingface_model
+            )
+
+            true_sigma_samples = p_samples[:,
+                                 :-self.num_last_tokens_to_condition_on]
+            condition_twist_on_tokens = p_samples[:,
+                                        -self.num_last_tokens_to_condition_on:]
+            true_posterior_sample = true_sigma_samples[0]
+            condition_twist_on_tokens_for_chosen_posterior_sample = \
+            condition_twist_on_tokens[0]
+            condition_twist_on_tokens_broadcasted = jnp.full(
+                (n_twist, condition_twist_on_tokens.shape[-1]),
+                condition_twist_on_tokens_for_chosen_posterior_sample
+            )
+
+            rng_key, sk2 = jax.random.split(rng_key)
+
+            if self.beta_temp == 1:
+
+                # Collect approximate true posteriors with the help of the 1 true posterior that we have
+                (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
+                    sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                    log_true_final_twist, output_len, n_twist,
+                    smc_procedure_type=self.smc_procedure_type,
+                    condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+                    resample=True,
+                    posterior_sample=true_posterior_sample,
+                    proposal_is_p=proposal_is_p,
+                    huggingface_model=huggingface_model,
+                    params_proposal=params_proposal
+                )  # Note these are not really true sigma samples, but whatever, I just call them true_sigma_samples
+
+            else:
+                true_sigma_samples = None
+
+            condition_twist_on_tokens = condition_twist_on_tokens_broadcasted
+        else:
+            if self.twist_learn_type in ctl_methods_for_infilling:
+                assert self.beta_temp == 1
+            p_samples = stochastic_transformer_sample(
+                sk2, cfg_p, params_p, prompt,
+                output_len + self.num_last_tokens_to_condition_on,
+                n_twist, huggingface_model=huggingface_model
+            )
+
+            true_sigma_samples = p_samples[:,
+                                 :-self.num_last_tokens_to_condition_on]  # will be used to generate more samples
+            condition_twist_on_tokens = p_samples[:,
+                                        -self.num_last_tokens_to_condition_on:]
+
+        return rng_key, true_sigma_samples, condition_twist_on_tokens
+
+    def _get_sigma_samples_and_cond_tokens_sentcondtwist(
+        self, rng_key, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model
+    ):
+        assert self.beta_temp == 1.
+
+        rng_key, sk2, sk3 = jax.random.split(rng_key, 3)
+        p_samples = stochastic_transformer_sample(
+            sk2, cfg_p, params_p, prompt, output_len, n_twist,
+            huggingface_model=huggingface_model
+        )
+
+        _, stochastic_classes = stochastic_classify(
+            sk3, p_samples, self.rewardModel, self.tokenizer_RM, self.tokenizer,
+            singledimlogit=False
+        )
+
+        # print("STOCHASTIC VS ONE HOT")
+        # print(stochastic_classes)
+        # print(jax.nn.one_hot(stochastic_classes, 5))
+        condition_twist_on_tokens = stochastic_classes
+
+        true_sigma_samples = p_samples
+
+        return rng_key, true_sigma_samples, condition_twist_on_tokens
+
     # TODO clean this up
     def get_grad_params_twist(self, sk, prompt, n_twist, output_len, cfg_p,
-                              params_p, cfg_twist, params_twist, log_true_final_twist, prepend_tokens_for_twists=False,
-                              token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None,
+                              params_p, cfg_twist, params_twist, log_true_final_twist,
+                              proposal_is_p=False, huggingface_model=None,
                               tempered_twist=False, beta_prop=None, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None):
 
         true_sigma_samples = None
         condition_twist_on_tokens = None
 
         if "bce" in self.twist_learn_type:
-            assert self.beta_temp == 1. # because otherwise the Bayesian formulation doesn't work does it? TODO confirm
+            # TODO definitely can move this to another function, but before doing that, remove duplicate code here
+            assert self.beta_temp == 1. # because otherwise the Bayesian formulation doesn't work right? In any case, not considered here
             sk, sk2, sk3 = jax.random.split(sk, 3)
-
 
             if self.rm_type in ["p_last_tokens",]:
                 p_samples = stochastic_transformer_sample(sk2, cfg_p,
@@ -369,9 +473,7 @@ class ExperimentConfig:
                 sk, prompt, cfg_p, params_p, cfg_twist,
                 params_twist, log_true_final_twist, output_len,
                 n_twist, smc_procedure_type=self.smc_procedure_type,
-                prepend_tokens_for_twists=prepend_tokens_for_twists,
                 condition_twist_on_tokens=condition_twist_on_tokens,
-                token_of_interest_as_int=token_of_interest_as_int,
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model,
                 tempered_twist=tempered_twist, beta_prop=beta_prop,
@@ -386,8 +488,7 @@ class ExperimentConfig:
             assert self.rm_type in ["exp_beta_toxicity_class_logprob",
                                     "exp_beta_sentiment_class_logprob"]  # others not yet tested
             sk, combined_true_posterior_samples = collect_true_posterior_samples(
-                sk, self, [prompt], cfg_p, params_p,
-                self.rm_type,
+                sk, self, [prompt], cfg_p, params_p, self.rm_type,
                 None,
                 output_len, n_twist, huggingface_model,
                 None, None, self.rewardModel, self.tokenizer_RM, self.tokenizer, None, None,
@@ -401,95 +502,19 @@ class ExperimentConfig:
 
 
         elif self.rm_type == "p_last_tokens":
-            if self.beta_temp != 1.:
-                assert "ebm" in self.twist_learn_type
-
-            if self.twist_learn_type in ["ebm_ml_jit_vmapped_over_condition_tokens", "ebm_vmap_os", "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub",
-                                         "ebm_ml_pprop_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_finalrl", "ebm_ml_vmap_with_one_total_kl"]:
-                assert self.beta_temp == 1
-                sk, sk2 = jax.random.split(sk)
-                p_samples = stochastic_transformer_sample(sk2, cfg_p,
-                                                          params_p, prompt,
-                                                          output_len + self.num_last_tokens_to_condition_on,
-                                                          n_twist,
-                                                          huggingface_model=huggingface_model)
-
-                true_sigma_samples = p_samples[:,:-self.num_last_tokens_to_condition_on] # will be used to generate more samples
-                condition_twist_on_tokens = p_samples[:,
-                                            -self.num_last_tokens_to_condition_on:]
-
-
-            elif "ebm" in self.twist_learn_type:
-                # Do one conditioning token set at a time
-                sk, sk2 = jax.random.split(sk)
-                p_samples = stochastic_transformer_sample(sk2, cfg_p,
-                                                          params_p, prompt,
-                                                          output_len + self.num_last_tokens_to_condition_on,
-                                                          1,
-                                                          huggingface_model=huggingface_model)
-
-                true_sigma_samples = p_samples[:,
-                                     :-self.num_last_tokens_to_condition_on]
-                condition_twist_on_tokens = p_samples[:,
-                                            -self.num_last_tokens_to_condition_on:]
-                true_posterior_sample = true_sigma_samples[0]
-                condition_twist_on_tokens_for_chosen_posterior_sample = condition_twist_on_tokens[0]
-                condition_twist_on_tokens_broadcasted = jnp.full(
-                    (n_twist, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens_for_chosen_posterior_sample
-                )
-
-                sk, sk2 = jax.random.split(sk)
-
-                if self.beta_temp == 1:
-
-                    # Collect approximate true posteriors with the help of the 1 true posterior that we have
-                    (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
-                        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
-                        log_true_final_twist, output_len, n_twist,
-                        smc_procedure_type=self.smc_procedure_type,
-                        prepend_tokens_for_twists=prepend_tokens_for_twists,
-                        condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
-                        token_of_interest_as_int=token_of_interest_as_int,
-                        resample=True,
-                        posterior_sample=true_posterior_sample,
-                        proposal_is_p=proposal_is_p,
-                        huggingface_model=huggingface_model,
-                        params_proposal=params_proposal
-                    ) # Note these are not really true sigma samples, but whatever, I just call them true_sigma_samples
-
-                else:
-                    true_sigma_samples = None
-
-                condition_twist_on_tokens = condition_twist_on_tokens_broadcasted
-            else:
-                sk, sk2 = jax.random.split(sk)
-                p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt,
-                                              output_len + self.num_last_tokens_to_condition_on, n_twist,
-                                              huggingface_model=huggingface_model)
-                true_sigma_samples = p_samples[:, :-self.num_last_tokens_to_condition_on]
-                condition_twist_on_tokens = p_samples[:, -self.num_last_tokens_to_condition_on:]
+            sk, true_sigma_samples, condition_twist_on_tokens = self._get_sigma_samples_and_cond_tokens_infilling(
+                sk, cfg_p, params_p, prompt, output_len, n_twist,
+                huggingface_model,
+                cfg_twist, params_twist, log_true_final_twist,
+                proposal_is_p, params_proposal
+            )
 
         elif self.rm_type == "sent_cond_twist":
-            assert self.beta_temp == 1.
-
-            sk, sk2, sk3 = jax.random.split(sk, 3)
-            p_samples = stochastic_transformer_sample(sk2, cfg_p,
-                                                      params_p, prompt,
-                                                      output_len,
-                                                      n_twist,
-                                                      huggingface_model=huggingface_model)
-
-            _, stochastic_classes = stochastic_classify(sk3, p_samples, self.rewardModel, self.tokenizer_RM,
-                                self.tokenizer, singledimlogit=False)
-
-            # print("STOCHASTIC VS ONE HOT")
-            # print(stochastic_classes)
-            # print(jax.nn.one_hot(stochastic_classes, 5))
-
-
-            condition_twist_on_tokens = stochastic_classes
-
-            true_sigma_samples = p_samples
+            sk, true_sigma_samples, condition_twist_on_tokens = \
+                self._get_sigma_samples_and_cond_tokens_sentcondtwist(
+                sk, cfg_p, params_p, prompt, output_len, n_twist,
+                huggingface_model
+            )
 
         if self.twist_learn_type == "ebm_vmap_os":
             true_sigma_samples = None
@@ -498,11 +523,11 @@ class ExperimentConfig:
             sk, prompt, cfg_p, params_p, cfg_twist,
             params_twist, log_true_final_twist, output_len,
             n_twist, smc_procedure_type=self.smc_procedure_type,
-            prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-            token_of_interest_as_int=token_of_interest_as_int,
+            condition_twist_on_tokens=condition_twist_on_tokens,
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
             tempered_twist=tempered_twist, beta_prop=beta_prop,
-            true_sigma_samples=true_sigma_samples, replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts,
+            true_sigma_samples=true_sigma_samples, replay_buffer=replay_buffer,
+            replay_buffer_log_w_ts=replay_buffer_log_w_ts,
             params_proposal=params_proposal
         )
         return grad_params_twist
@@ -549,7 +574,6 @@ class ExperimentConfig:
 
         plot_args = {
             "rng_key": sk,
-            "token_of_interest_as_int": None,
             "prompt": prompt,
             "output_len": output_len,
             "cfg_p": cfg_p, "params_p": params_p,
@@ -564,7 +588,6 @@ class ExperimentConfig:
             "kl_to_prior_list": kl_to_prior_list,
             "params_proposal": params_proposal,
             "smc_procedure_type": self.smc_procedure_type,
-            "prepend_tokens_for_twists": self.prepend_tokens_for_twists,
             "condition_twist_on_tokens": None,
             "save_dir": save_dir,
             "twist_learn_type": self.twist_learn_type,
@@ -626,7 +649,7 @@ class ExperimentConfig:
     def inspect_results(
         self, rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
         log_true_final_twist, output_len, n_samples, indices_of_continuation, tokenizer,
-        prepend_tokens_for_twists, token_of_interest_as_int,
+
         proposal_is_p, huggingface_model, params_proposal=None):
 
         rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
@@ -651,8 +674,6 @@ class ExperimentConfig:
             "n_smc_samples": n_samples,
             "smc_procedure_type": self.smc_procedure_type,
             "get_intermediate_sample_history_based_on_learned_twists": True,
-            "prepend_tokens_for_twists": prepend_tokens_for_twists,
-            "token_of_interest_as_int": token_of_interest_as_int,
             "proposal_is_p": proposal_is_p,
             "huggingface_model": huggingface_model,
             "params_proposal": params_proposal
@@ -776,8 +797,8 @@ class ExperimentConfig:
                     true_sigma_samples, proposal_samples, prompt, cfg_p,
                     params_p, cfg_twist,
                     params_twist, output_len, log_true_final_twist,
-                    prepend_tokens_for_twists,
-                    condition_twist_on_tokens, token_of_interest_as_int,
+
+                    condition_twist_on_tokens,
                     proposal_is_p, huggingface_model, params_proposal
                 )
 
@@ -846,8 +867,8 @@ class ExperimentConfig:
             aux_info = print_g_q_f_q_estimates(
                 true_sigma_samples, proposal_samples, prompt, cfg_p, params_p,
                 cfg_twist, params_twist, output_len, log_true_final_twist,
-                prepend_tokens_for_twists,
-                condition_twist_on_tokens, token_of_interest_as_int,
+
+                condition_twist_on_tokens,
                 proposal_is_p, huggingface_model, params_proposal
             )
 
@@ -857,7 +878,7 @@ class ExperimentConfig:
         kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
                               cfg_p, params_p, cfg_twist, params_twist,
                               prompt_len, output_len,
-                              prepend_tokens_for_twists,
+
                               condition_twist_on_tokens=condition_twist_on_tokens,
                               huggingface_model=huggingface_model)
         print(f"KL to prior estimate: {kl_vals.mean()}")
@@ -866,7 +887,7 @@ class ExperimentConfig:
                 no_intermediate_resample_proposal_samples, cfg_p,
                 params_p, cfg_twist, params_twist,
                 prompt_len, output_len,
-                prepend_tokens_for_twists,
+
                 condition_twist_on_tokens=condition_twist_on_tokens,
                 huggingface_model=huggingface_model,
                 params_proposal=params_proposal)
@@ -997,9 +1018,9 @@ print_smc_samples = False
 def inspect_and_record_evidence_setting_for_index(
     rng_key, prompt, cfg_p, params_p, cfg_twist,
     params_twist, output_len, log_true_final_twist,
-    n_test_smc_samples, token_of_interest_as_int, true_posterior_samples,
+    n_test_smc_samples, true_posterior_samples,
     smc_procedure_type,
-    proposal_is_p=False, prepend_tokens_for_twists=False,
+    proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None, tokenizer=None):
 
     assert true_posterior_samples.shape[0] > 0
@@ -1034,8 +1055,8 @@ def inspect_and_record_evidence_setting_for_index(
         params_twist, log_true_final_twist,
         output_len, n_test_smc_samples,
         smc_procedure_type=smc_procedure_type,
-        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
-        token_of_interest_as_int=token_of_interest_as_int,
+         condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
         params_proposal=params_proposal
     )
@@ -1063,8 +1084,8 @@ def inspect_and_record_evidence_setting_for_index(
         output_len,
         n_test_smc_samples,
         smc_procedure_type=smc_procedure_type,
-        prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
-        token_of_interest_as_int=token_of_interest_as_int,
+         condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
         params_proposal=params_proposal, resample=True, get_intermediate_sample_history_based_on_learned_twists=True
     )
@@ -1105,8 +1126,8 @@ def inspect_and_record_evidence_setting_for_index(
                                             output_len,
                                             n_test_smc_samples,
                                             smc_procedure_type=smc_procedure_type,
-                                            prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
-                                            token_of_interest_as_int=token_of_interest_as_int,
+                                             condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+
                                             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                                             params_proposal=params_proposal)
 
@@ -1128,8 +1149,8 @@ def inspect_and_record_evidence_setting_for_index(
 
 inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argnames=[
     "log_true_final_twist", 'output_len', 'n_test_smc_samples',
-    "cfg_p", "cfg_twist", "token_of_interest_as_int", "proposal_is_p",
-    "prepend_tokens_for_twists", "huggingface_model", "smc_procedure_type", "tokenizer"
+    "cfg_p", "cfg_twist", "proposal_is_p",
+    "huggingface_model", "smc_procedure_type", "tokenizer"
 ])(inspect_and_record_evidence_setting_for_index)
 
 
@@ -1139,8 +1160,8 @@ inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argn
 def collect_info_across_trueposts(
     rng_key, start, n_trueposts_for_evals, n_samples_for_plots, inspect_and_record_evidence_setting_fn,
     prompt, cfg_p, params_p, cfg_twist, params_twist,
-    output_len, log_true_final_twist, token_of_interest_as_int, true_posterior_samples,
-    smc_procedure_type, proposal_is_p, prepend_tokens_for_twists,
+    output_len, log_true_final_twist, true_posterior_samples,
+    smc_procedure_type, proposal_is_p,
     condition_twist_on_tokens, huggingface_model,
     params_proposal, tokenizer,
     logZ_ubs_iwae_across_samples_and_trueposts,
@@ -1171,9 +1192,9 @@ def collect_info_across_trueposts(
                 params_twist,
                 output_len, log_true_final_twist,
                 n_test_smc_samples,
-                token_of_interest_as_int, true_posterior_samples,
+                true_posterior_samples,
                 smc_procedure_type,
-                proposal_is_p, prepend_tokens_for_twists=prepend_tokens_for_twists,
+                proposal_is_p,
                 condition_twist_on_tokens=condition_twist_on_tokens,
                 huggingface_model=huggingface_model,
                 index_of_true_posterior_sample=truepost_i,
@@ -1311,11 +1332,11 @@ def collect_and_print_info_over_largest_n_samples(
     return f_q_list_by_truepost, logZ_midpoint_estimate
 
 def get_and_plot_logZ_bounds(
-    rng_key, true_posterior_samples, token_of_interest_as_int, prompt, output_len, cfg_p,
+    rng_key, true_posterior_samples, prompt, output_len, cfg_p,
     params_p, cfg_twist, params_twist, log_true_final_twist, start, epoch,
     plot_over_time_list, smc_procedure_type, save_dir, twist_learn_type, rm_type, seed,
     exp_num_twist_updates, twist_updates_per_epoch,
-    proposal_is_p=False, prepend_tokens_for_twists=False,
+    proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
     proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None,
 ):
@@ -1349,9 +1370,9 @@ def get_and_plot_logZ_bounds(
         rng_key, start, n_trueposts_for_evals, n_samples_for_plots,
         inspect_and_record_evidence_setting_fn,
         prompt, cfg_p, params_p, cfg_twist, params_twist,
-        output_len, log_true_final_twist, token_of_interest_as_int,
+        output_len, log_true_final_twist,
         true_posterior_samples,
-        smc_procedure_type, proposal_is_p, prepend_tokens_for_twists,
+        smc_procedure_type, proposal_is_p,
         condition_twist_on_tokens, huggingface_model,
         params_proposal, tokenizer,
         logZ_ubs_iwae_across_samples_and_trueposts,
@@ -1373,9 +1394,9 @@ def get_and_plot_logZ_bounds(
     target_dist_weights = iwae_backward(true_posterior_samples, prompt, cfg_p,
                                         params_p, cfg_twist, params_twist,
                                         output_len, log_true_final_twist,
-                                        prepend_tokens_for_twists,
+
                                         condition_twist_on_tokens,
-                                        token_of_interest_as_int, proposal_is_p,
+                                        proposal_is_p,
                                         huggingface_model,
                                         params_proposal=params_proposal)
     g_q_all_posts = target_dist_weights
@@ -1873,8 +1894,7 @@ def do_inspection_and_plotting_of_test_info(
             output_len,
             n_samples_for_plots_larger,
             indices_of_continuation, tokenizer,
-            prepend_tokens_for_twists=False,
-            token_of_interest_as_int=None,
+
             proposal_is_p=proposal_is_p,
             huggingface_model=huggingface_model,
             params_proposal=params_proposal

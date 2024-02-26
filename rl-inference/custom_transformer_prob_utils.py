@@ -69,8 +69,8 @@ def get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=None):
 
     return p_logits
 
-def _get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-                          token_of_interest_as_int=None, huggingface_model=None):
+def _get_log_psi_all_vocab(seq, cfg_twist, params_twist, condition_twist_on_tokens,
+                           huggingface_model=None):
     # produces output of size (batch, n_vocab)
     assert huggingface_model is not None
     if isinstance(huggingface_model, HashableDict):
@@ -95,37 +95,27 @@ def _get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twis
             )
 
     else:
-        if prepend_tokens_for_twists:
-            seqs_with_prepended_prompts = jnp.concatenate(
-                (jnp.zeros((seq.shape[0], 1),
-                           dtype=jnp.int32) + token_of_interest_as_int,
-                 seq), axis=1)
-            return huggingface_model(input_ids=seqs_with_prepended_prompts,
-                                     ret="twist",
-                                     params_twist_head=params_twist,
-                                     condition_twist_on_tokens=condition_twist_on_tokens)[
-                   :, 1:, :]
-        else:
-            return huggingface_model(input_ids=seq, ret="twist",
-                                     params_twist_head=params_twist,
-                                     condition_twist_on_tokens=condition_twist_on_tokens)
+
+        return huggingface_model(input_ids=seq, ret="twist",
+                                 params_twist_head=params_twist,
+                                 condition_twist_on_tokens=condition_twist_on_tokens)
 
 
 
-def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-                          token_of_interest_as_int=None, huggingface_model=None, params_proposal=None,
+def get_log_psi_all_vocab(seq, cfg_twist, params_twist, condition_twist_on_tokens,
+                            huggingface_model=None, params_proposal=None,
                           cfg_p=None, params_p=None, prompt_len=None):
 
-    log_psi_all_vocab = _get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-                              token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model)
+    log_psi_all_vocab = _get_log_psi_all_vocab(seq, cfg_twist, params_twist, condition_twist_on_tokens,
+                               huggingface_model=huggingface_model)
     if params_proposal is None:
         return log_psi_all_vocab[:, prompt_len - 1: -1]
     else:
         assert params_p is not None
         normalized_log_q_1_to_t_minus_1_with_t_all_vocab, log_p_1_to_t_minus_1_with_t_all_vocab = evaluate_normalized_log_q_1_to_t(
             seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
-            prepend_tokens_for_twists, condition_twist_on_tokens,
-            token_of_interest_as_int=token_of_interest_as_int,
+            condition_twist_on_tokens,
+
             huggingface_model=huggingface_model, return_cumsum=False,
             return_cumsum_w_last_all=True, params_proposal=params_proposal)
         log_psi_all_vocab = normalized_log_q_1_to_t_minus_1_with_t_all_vocab - log_p_1_to_t_minus_1_with_t_all_vocab + log_psi_all_vocab[:, prompt_len - 1: -1] # This new formulation: psi = (q/p) psi', where psi' is the exp of our parameterized twist model that we're learning - then this makes sure that at the beginning when log psi' is close to 0, then our psi value is close to q/p, so that when we target the intermediate distribution p psi = p q/p = q, we get just the twisted proposal, which was something that we could do a good job of learning in infilling
@@ -133,11 +123,11 @@ def get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twist
 
 def get_p_logits_and_log_psi_all_vocab(
     full_seq, params_p, params_twist, cfg_p, cfg_twist,
-    prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None,
+    condition_twist_on_tokens, huggingface_model=None,
     params_proposal=None, prompt_len=None
 ):
     assert huggingface_model is not None
-    if prepend_tokens_for_twists or isinstance(huggingface_model, HashableDict):
+    if isinstance(huggingface_model, HashableDict):
         p_logits = get_transformer_p_logits(cfg_p, params_p, full_seq, huggingface_model=huggingface_model)
         if huggingface_model['call_type'] == "p_psi_combined":
             assert params_proposal is None  # Not yet implemented/tested
@@ -163,17 +153,15 @@ def get_p_logits_and_log_psi_all_vocab(
             if params_proposal is not None:
                 assert prompt_len is not None
                 log_psi_all_vocab = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist,
-                                      prepend_tokens_for_twists, condition_twist_on_tokens,
-                                      token_of_interest_as_int, huggingface_model, params_proposal=params_proposal,
+                                      condition_twist_on_tokens,
+                                       huggingface_model, params_proposal=params_proposal,
                                                           cfg_p=cfg_p, params_p=params_p, prompt_len=prompt_len)
             else:
                 assert prompt_len is not None
                 log_psi_all_vocab = get_log_psi_all_vocab(full_seq,
                                                           cfg_twist,
                                                           params_twist,
-                                                          prepend_tokens_for_twists,
                                                           condition_twist_on_tokens,
-                                                          token_of_interest_as_int,
                                                           huggingface_model, prompt_len=prompt_len
                                                           )
     else:
@@ -187,10 +175,10 @@ def get_p_logits_and_log_psi_all_vocab(
     return p_logits, log_psi_all_vocab
 
 def get_log_p_plus_log_psi_t(full_seq, params_p, params_twist, prompt_len, t, cfg_p, cfg_twist,
-                           prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
+                           condition_twist_on_tokens,   huggingface_model=None):
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         full_seq, params_p, params_twist, cfg_p, cfg_twist,
-        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
+        condition_twist_on_tokens,
         huggingface_model, prompt_len=prompt_len) # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
 
     # For time step e.g. the first time step, then we want to get the p and psi values e.g. if prompt len is 4, and we want the first time step
@@ -257,10 +245,10 @@ def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, out
 
     return full_seq
 
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "prepend_tokens_for_twists", "token_of_interest_as_int",
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist",
                                    "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop", "prompt_len"])
 def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t,
-                          prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, proposal_is_p=False,
+                          condition_twist_on_tokens, proposal_is_p=False,
                           huggingface_model=None, true_posterior_sample=None, tempered_twist=False, beta_prop=None, params_proposal=None):
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
     # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
@@ -272,8 +260,8 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 
 
     log_p, log_psi = get_log_p_plus_log_psi_t(full_seq, params_p, params_to_use, prompt_len, t,
-                                            cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-                                              token_of_interest_as_int, huggingface_model=huggingface_model)
+                                            cfg_p, cfg_twist, condition_twist_on_tokens,
+                                               huggingface_model=huggingface_model)
 
     if tempered_twist:
         # log_psi = beta_prop * jnp.exp(log_psi) # Now instead of p psi, I will sample from p e^(beta psi)
@@ -327,8 +315,8 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 
     if params_proposal is not None: # do the q/p for the twist value for resampling/reweighting/SMC intermediate distribution only
 
-        log_psi_eval = evaluate_log_psi_selected_tokens(full_seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
-                                     condition_twist_on_tokens, token_of_interest_as_int=token_of_interest_as_int, huggingface_model=huggingface_model,
+        log_psi_eval = evaluate_log_psi_selected_tokens(full_seq, prompt_len, cfg_twist, params_twist,
+                                     condition_twist_on_tokens,  huggingface_model=huggingface_model,
                                      params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p
                                      )
 
@@ -345,11 +333,11 @@ def get_proposal_q_sample(rng_key, full_seq, cfg_p, params_p, cfg_twist, params_
 # Which is equivalent to p(s_1) psi(s_1) / (sum of p(s_1) psi(s_1)) * p(s_2|s_1) psi(s_1:2) / (sum of p(s_2|s_1) psi(s_1:2)) ...
 # which is NOT the same as evaluating p(s_{1:t}) psi(s_{1:t}) / (sum of p(s_{1:t}) psi(s_{1:t})) in general. Only would be the same if "normalization consistency" holds.
 
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int",
+@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "prompt_len",
                                    "huggingface_model", "return_cumsum", "return_cumsum_w_last_all"])
 def evaluate_normalized_log_q_1_to_t(
     full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
-    prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None,
+    condition_twist_on_tokens,
     huggingface_model=None, return_cumsum=False, return_cumsum_w_last_all=False, params_proposal=None):
 
     if params_proposal is None:
@@ -359,7 +347,7 @@ def evaluate_normalized_log_q_1_to_t(
 
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         full_seq, params_p, params_to_use, cfg_p, cfg_twist,
-        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
+        condition_twist_on_tokens,
         huggingface_model, prompt_len=prompt_len)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
 
     log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
@@ -415,12 +403,12 @@ def evaluate_normalized_log_q_1_to_t(
     return normalized_log_q_1_to_t
 
 
-# def evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len_plus_t, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None):
+# def evaluate_unnormalized_log_q_t_full_seq(full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len_plus_t, condition_twist_on_tokens, token_of_interest_as_int=None):
 #     # Assumes 0 based indexing for t
-#     return evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t) + evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int)
+#     return evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t) + evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t, condition_twist_on_tokens, token_of_interest_as_int)
 #
 #
-# def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1(seq, cfg_p, params_p, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None):
+# def evaluate_unnormalized_log_q_t_given_1_to_t_minus_1(seq, cfg_p, params_p, cfg_twist, params_twist, condition_twist_on_tokens, token_of_interest_as_int=None):
 #     # Takes in sequence s_{1:t}
 #     # Right now evaluates UNNORMALIZED log q_t which is not actually what the q_t probability is supposed to be
 #     # Evaluate q (s_t | s_{1:t-1})
@@ -429,13 +417,13 @@ def evaluate_normalized_log_q_1_to_t(
 #     # Or just look at the SMC procedure e.g. in the SIXO paper to see where this is used
 #
 #     # log [p(s) psi(s)] = log p(s) + log psi(s)
-#     return evaluate_log_p_theta_t(seq, cfg_p, params_p) + evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int)
+#     return evaluate_log_p_theta_t(seq, cfg_p, params_p) + evaluate_log_psi_t(seq, cfg_twist, params_twist, condition_twist_on_tokens, token_of_interest_as_int)
 
-def evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
+def evaluate_log_psi_t(seq, cfg_twist, params_twist, condition_twist_on_tokens,   huggingface_model=None):
     # Takes in sequences s_{1:t} of (n_batch, seq_length) shape
     # Evaluate log psi (s_{1:t})
 
-    log_psi = get_log_psi_all_vocab(seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
+    log_psi = get_log_psi_all_vocab(seq, cfg_twist, params_twist, condition_twist_on_tokens,  huggingface_model=huggingface_model)
 
     # If I use a single transformer, essentially I am doing a kind of weight tying between the different psi_t (which should be desirable)
     # I could use a separate transformer for each psi_t but that seems a little inefficient
@@ -455,15 +443,15 @@ def evaluate_log_psi_t(seq, cfg_twist, params_twist, prepend_tokens_for_twists, 
     # return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
     return log_psi[:,-1,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
-@partial(jax.jit, static_argnames = ["cfg_twist", "prompt_len", "prepend_tokens_for_twists", "token_of_interest_as_int", "huggingface_model", "cfg_p"])
+@partial(jax.jit, static_argnames = ["cfg_twist", "prompt_len", "huggingface_model", "cfg_p"])
 # Evaluate log psi_t for every t from 1 to T for the sequence seq (not including the prompt)
-def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist, prepend_tokens_for_twists,
-                                     condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None,
+def evaluate_log_psi_selected_tokens(seq, prompt_len, cfg_twist, params_twist,
+                                     condition_twist_on_tokens,   huggingface_model=None,
                                      params_proposal=None, cfg_p=None, params_p=None
                                      ):
     log_psi = get_log_psi_all_vocab(
-        seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-        token_of_interest_as_int, huggingface_model=huggingface_model,
+        seq, cfg_twist, params_twist, condition_twist_on_tokens,
+         huggingface_model=huggingface_model,
         params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p, prompt_len=prompt_len
     )
     # log_psi_selected = log_psi[:, prompt_len - 1: -1]
@@ -572,16 +560,16 @@ def evaluate_log_p_theta_t_full_seq(full_seq, cfg_p, params_p, prompt_len_plus_t
     return jax.nn.log_softmax(p_logits[:,prompt_len_plus_t-1,:])[jnp.arange(token_indices.shape[0]), token_indices]
 
 # # Assume 0-based indexing for t
-# def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, huggingface_model=None):
+# def evaluate_log_psi_t_full_seq(full_seq, cfg_twist, params_twist, prompt_len_plus_t, condition_twist_on_tokens,   huggingface_model=None):
 #     # see def evaluate_log_psi_t for more comments/detail
 #     # Similar also to evaluate_log_p_theta_t_full_seq, except adapting evaluate_log_psi_t instead of adapting evaluate_log_p_theta_t
-#     log_psi = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, huggingface_model=huggingface_model)
+#     log_psi = get_log_psi_all_vocab(full_seq, cfg_twist, params_twist, condition_twist_on_tokens,  huggingface_model=huggingface_model)
 #     token_indices = full_seq[:,prompt_len_plus_t]
 #     return log_psi[:,prompt_len_plus_t-1,:][jnp.arange(token_indices.shape[0]), token_indices]
 
 
 
-def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, resample=True,
+def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, condition_twist_on_tokens,   resample=True,
                             true_posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False,
                             tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None, resample_criterion="every_step"):
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
@@ -594,7 +582,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
         rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t,
-        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p=proposal_is_p,
+        condition_twist_on_tokens,  proposal_is_p=proposal_is_p,
         huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample,
         tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal
     )
@@ -610,7 +598,7 @@ def smc_scan_iter_non_final(carry, t, cfg_p, cfg_twist, prepend_tokens_for_twist
 
     # log_r_psi_t_eval = evaluate_log_psi_t_full_seq(full_seq, cfg_twist,
     #                                                params_twist,
-    #                                                prompt_len + t, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int)
+    #                                                prompt_len + t, condition_twist_on_tokens, token_of_interest_as_int)
     log_r_psi_t_eval = log_psi_eval_of_new_seqs
 
     log_gamma_1_to_t_eval = log_p_theta_1_to_t_eval + log_r_psi_t_eval
@@ -883,7 +871,7 @@ def smc_scan_iter_final_jitted_part(
 
 def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
                         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
-                         prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None, resample=True,
+                         condition_twist_on_tokens,   resample=True,
                         true_posterior_sample=None, proposal_is_p=False, huggingface_model=None,
                         resample_for_log_psi_t_eval_list=False, tempered_twist=False, beta_prop=None,
                         use_log_true_final_twist_for_final_weight_calc=True, params_proposal=None):
@@ -903,7 +891,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 
     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
         rng_key, full_seq, cfg_p, params_p, cfg_twist, params_twist, prompt_len, t,
-        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p=proposal_is_p,
+        condition_twist_on_tokens,  proposal_is_p=proposal_is_p,
         huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample,
         tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal
     )
@@ -917,7 +905,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     #     else:
     #         normalized_log_q_t_posterior_sample = evaluate_normalized_log_q_t_given_1_to_t_minus_1(
     #             true_posterior_sample[None, :], params_p, params_twist, prompt_len,
-    #             t, cfg_p, cfg_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
+    #             t, cfg_p, cfg_twist, condition_twist_on_tokens,
     #             token_of_interest_as_int)
     #
     #     normalized_log_q_t = normalized_log_q_t.at[0].set(normalized_log_q_t_posterior_sample.squeeze())
@@ -968,7 +956,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
 # Debug version, use only for debugging
 def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
             n_smc_samples, get_intermediate_sample_history_based_on_learned_twists=False,
-            prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
+            condition_twist_on_tokens=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False,
                     no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
@@ -1001,9 +989,9 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
     for t in range(output_len - 1):
         carry, (full_seq, log_w_t, log_psi_t_eval, log_w_t_before_resample, do_resample, ess) =\
             partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist,
-                    prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
+                    condition_twist_on_tokens=condition_twist_on_tokens,
                     resample=resample,
-                    token_of_interest_as_int=token_of_interest_as_int,
+
                     true_posterior_sample=true_posterior_sample,
                     proposal_is_p=proposal_is_p,
                     huggingface_model=huggingface_model,
@@ -1048,7 +1036,7 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
         smc_scan_iter_final(
         rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
-        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, resample_for_final, true_posterior_sample, proposal_is_p,
+        condition_twist_on_tokens,  resample_for_final, true_posterior_sample, proposal_is_p,
         huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
         tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc, params_proposal=params_proposal)
 
@@ -1072,11 +1060,11 @@ def smc_debug(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_tru
 
 
 @partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", 'output_len', 'n_smc_samples',
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p",
+                                   "resample", "proposal_is_p",
                                    "huggingface_model", "resample_for_log_psi_t_eval_list", "tempered_twist", "beta_prop", "prompt_len", "resample_criterion"])
 def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, params_twist, output_len,
             n_smc_samples,
-            prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
+            condition_twist_on_tokens=None,
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False,
                     tempered_twist=False, beta_prop=None, params_proposal=None, resample_criterion="every_step"):
@@ -1096,8 +1084,8 @@ def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, par
     output_len, params_p, params_twist, log_z_hat_t)
 
     carry, (full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list, do_resample_record, ess_record) = jax.lax.scan(
-        partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist, prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens, resample=resample,
-                token_of_interest_as_int=token_of_interest_as_int, true_posterior_sample=true_posterior_sample,
+        partial(smc_scan_iter_non_final, cfg_p=cfg_p, cfg_twist=cfg_twist, condition_twist_on_tokens=condition_twist_on_tokens, resample=resample,
+                 true_posterior_sample=true_posterior_sample,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                 resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
                 tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal, prompt_len=prompt_len,
@@ -1120,7 +1108,7 @@ def smc_jitted_part(rng_key, prompt, prompt_len, cfg_p, params_p, cfg_twist, par
 def smc_partial_jit(
     rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist, output_len,
     n_smc_samples, get_intermediate_sample_history_based_on_learned_twists=False,
-    prepend_tokens_for_twists=False, condition_twist_on_tokens=None, token_of_interest_as_int=None,
+    condition_twist_on_tokens=None,
     resample=True, true_posterior_sample=None, proposal_is_p=False,
     huggingface_model=None, resample_for_log_psi_t_eval_list=False,
     no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
@@ -1136,7 +1124,7 @@ def smc_partial_jit(
                         params_twist,
                         output_len,
                         n_smc_samples,
-                        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
+                        condition_twist_on_tokens,
                         resample, true_posterior_sample, proposal_is_p,
                         huggingface_model, resample_for_log_psi_t_eval_list,
                         tempered_twist, beta_prop, params_proposal=params_proposal, resample_criterion=resample_criterion)
@@ -1155,7 +1143,7 @@ def smc_partial_jit(
         smc_scan_iter_final(
         rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
         output_len, cfg_p, params_p, cfg_twist, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
-        prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int, resample_for_final, true_posterior_sample, proposal_is_p,
+        condition_twist_on_tokens,  resample_for_final, true_posterior_sample, proposal_is_p,
         huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
         tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc, params_proposal=params_proposal)
 
@@ -1185,7 +1173,7 @@ def smc_partial_jit(
 smc_jit = partial(jax.jit,
                   static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", 'output_len', 'n_smc_samples',
                                    "get_intermediate_sample_history_based_on_learned_twists",
-                                   "prepend_tokens_for_twists", "token_of_interest_as_int", "resample", "proposal_is_p",
+                                   "resample", "proposal_is_p",
                                    "huggingface_model", "resample_for_log_psi_t_eval_list", "no_final_resample",
                                    "tempered_twist", "beta_prop", "use_log_true_final_twist_for_final_weight_calc", "prompt_len", "resample_criterion"])(smc_partial_jit)
 
@@ -1195,13 +1183,13 @@ smc_jit = partial(jax.jit,
 # wait... can't I also use this on seqs from q and then this gives me the F(q) estimate???
 # @partial(jax.jit, static_argnames=[
 #     "cfg_p", "cfg_twist", "log_true_final_twist", "output_len",
-#     "prepend_tokens_for_twists", "token_of_interest_as_int", "proposal_is_p",
+#     "proposal_is_p",
 #     "huggingface_model"
 # ])
 def iwae_backward(
     seqs, prompt, cfg_p, params_p, cfg_twist, params_twist, output_len,
-    log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-    token_of_interest_as_int, proposal_is_p=False, huggingface_model=None, params_proposal=None):
+    log_true_final_twist, condition_twist_on_tokens,
+     proposal_is_p=False, huggingface_model=None, params_proposal=None):
 
     prompt_len = prompt.shape[-1]
 
@@ -1226,8 +1214,8 @@ def iwae_backward(
     else:
         log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
             seqs, cfg_p, params_p, cfg_twist, params_twist,
-            prompt_len, prepend_tokens_for_twists, condition_twist_on_tokens,
-            token_of_interest_as_int, huggingface_model=huggingface_model, params_proposal=params_proposal)
+            prompt_len, condition_twist_on_tokens,
+             huggingface_model=huggingface_model, params_proposal=params_proposal)
 
     target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
     return target_dist_weights
@@ -1235,8 +1223,8 @@ def iwae_backward(
 
 def get_f_q_estimate(
     rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-    output_len, n_smc_samples, n_vocab, prepend_tokens_for_twists,
-    condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
+    output_len, n_smc_samples, n_vocab,
+    condition_twist_on_tokens, smc_procedure_type,
     proposal_is_p=False, huggingface_model=None, params_proposal=None
 ):
     (log_w_t, _, _), full_seq_from_twist_since_no_resample = smc_procedure(
@@ -1244,9 +1232,9 @@ def get_f_q_estimate(
         log_true_final_twist, output_len, n_smc_samples,
         smc_procedure_type=smc_procedure_type,
         get_intermediate_sample_history_based_on_learned_twists=False,
-        prepend_tokens_for_twists=prepend_tokens_for_twists,
+
         condition_twist_on_tokens=condition_twist_on_tokens,
-        token_of_interest_as_int=token_of_interest_as_int,
+
         resample=False,  # NO resample is very important here
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, params_proposal=params_proposal)
 
@@ -1256,21 +1244,21 @@ def get_f_q_estimate(
 
 def print_g_q_f_q_estimates(
     true_sigma_samples, proposal_samples, prompt, cfg_p, params_p, cfg_twist,
-    params_twist, output_len, log_true_final_twist, prepend_tokens_for_twists,
-    condition_twist_on_tokens, token_of_interest_as_int,
+    params_twist, output_len, log_true_final_twist,
+    condition_twist_on_tokens,
     proposal_is_p, huggingface_model, params_proposal
 ):
     g_q_estimates = iwae_backward(
         true_sigma_samples, prompt, cfg_p, params_p, cfg_twist, params_twist,
-        output_len, log_true_final_twist, prepend_tokens_for_twists,
+        output_len, log_true_final_twist,
         condition_twist_on_tokens,
-        token_of_interest_as_int, proposal_is_p, huggingface_model,
+         proposal_is_p, huggingface_model,
         params_proposal=params_proposal)
     f_q_estimates = iwae_backward(
         proposal_samples, prompt, cfg_p, params_p, cfg_twist,
         params_twist, output_len, log_true_final_twist,
-        prepend_tokens_for_twists,
-        condition_twist_on_tokens, token_of_interest_as_int, proposal_is_p,
+
+        condition_twist_on_tokens,  proposal_is_p,
         huggingface_model, params_proposal=params_proposal)
     print("G_q estimates")
     print(g_q_estimates)
@@ -1290,8 +1278,8 @@ def print_g_q_f_q_estimates(
 
 def iwae_forward_and_backward(
     rng_key, posterior_sample, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
-    output_len, n_smc_samples, prepend_tokens_for_twists,
-    condition_twist_on_tokens, smc_procedure_type, token_of_interest_as_int=None,
+    output_len, n_smc_samples,
+    condition_twist_on_tokens, smc_procedure_type,
     proposal_is_p=False, huggingface_model=None, params_proposal=None
 ):
 
@@ -1302,9 +1290,9 @@ def iwae_forward_and_backward(
         log_true_final_twist, output_len, n_smc_samples,
         smc_procedure_type=smc_procedure_type,
         get_intermediate_sample_history_based_on_learned_twists=False,
-        prepend_tokens_for_twists=prepend_tokens_for_twists,
+
         condition_twist_on_tokens=condition_twist_on_tokens,
-        token_of_interest_as_int=token_of_interest_as_int,
+
         resample=False, # NO resample is very important here
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
         params_proposal=params_proposal
@@ -1322,24 +1310,23 @@ def iwae_forward_and_backward(
 
     target_dist_weights = iwae_backward(
         combined_seqs, prompt, cfg_p, params_p, cfg_twist, params_twist, output_len,
-        log_true_final_twist, prepend_tokens_for_twists, condition_twist_on_tokens,
-        token_of_interest_as_int, proposal_is_p, huggingface_model, params_proposal=params_proposal
+        log_true_final_twist, condition_twist_on_tokens,
+        proposal_is_p, huggingface_model, params_proposal=params_proposal
     )
 
     return proposal_dist_weights, target_dist_weights, f_q_estimate
 
 def smc_backward(rng_key, true_posterior_sample, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                                   output_len, n_smc_samples,
-                                  prepend_tokens_for_twists, condition_twist_on_tokens, smc_procedure_type,
-                 token_of_interest_as_int=None, proposal_is_p=False, huggingface_model=None, params_proposal=None):
+                                  condition_twist_on_tokens, smc_procedure_type,
+                 proposal_is_p=False, huggingface_model=None, params_proposal=None):
 
     assert len(true_posterior_sample.shape) == 1 # single posterior sample
 
     (log_w_t, log_z_hat_t, _), samples = smc_procedure(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
                                                log_true_final_twist, output_len, n_smc_samples,
                                                smc_procedure_type=smc_procedure_type,
-                                               prepend_tokens_for_twists=prepend_tokens_for_twists, condition_twist_on_tokens=condition_twist_on_tokens,
-                                               token_of_interest_as_int=token_of_interest_as_int,
+                                               condition_twist_on_tokens=condition_twist_on_tokens,
                                                resample=True, true_posterior_sample=true_posterior_sample,
                                                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                                                        params_proposal=params_proposal
@@ -1352,7 +1339,7 @@ def smc_backward(rng_key, true_posterior_sample, prompt, cfg_p, params_p, cfg_tw
 
 def upper_bound_log_Z_sigma_estimate(
     posterior_samples, log_true_final_twist, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
-    output_len, prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int=None,
+    output_len, condition_twist_on_tokens,
     proposal_is_p=False, huggingface_model=None, params_proposal=None
 ):
     log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(posterior_samples, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model) \
@@ -1362,7 +1349,7 @@ def upper_bound_log_Z_sigma_estimate(
     else:
         log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
             posterior_samples, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
-            prepend_tokens_for_twists, condition_twist_on_tokens, token_of_interest_as_int,
+            condition_twist_on_tokens,
             huggingface_model=huggingface_model, params_proposal=params_proposal
         )
 
@@ -1376,10 +1363,10 @@ def upper_bound_log_Z_sigma_estimate(
 
 
 def get_kl_vals(q_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len, output_len,
-                prepend_tokens_for_twists, condition_twist_on_tokens, huggingface_model, params_proposal=None):
+                condition_twist_on_tokens, huggingface_model, params_proposal=None):
     log_q = evaluate_normalized_log_q_1_to_t(
         q_seqs, cfg_p, params_p, cfg_twist, params_twist, prompt_len,
-        prepend_tokens_for_twists, condition_twist_on_tokens, huggingface_model=huggingface_model, params_proposal=params_proposal)
+        condition_twist_on_tokens, huggingface_model=huggingface_model, params_proposal=params_proposal)
     log_p = evaluate_log_p_selected_tokens(q_seqs, prompt_len, cfg_p, params_p, huggingface_model).sum(axis=-1)
     kl_vals = log_q - log_p
     return kl_vals
