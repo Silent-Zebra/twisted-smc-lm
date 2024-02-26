@@ -197,7 +197,7 @@ def get_log_p_plus_log_psi_t(full_seq, params_p, params_twist, prompt_len, t,
     return log_p, log_psi
 
 
-def stochastic_transformer_sample_iter(carry, t, cfg, huggingface_model=None, return_p_eval=False):
+def stochastic_transformer_sample_iter(carry, t, huggingface_model=None, return_p_eval=False):
     # Essentially the way this works is we pass in a full computation (eg full prompt_len + output_len)
     # but we only use the logit for the time step t, and discard the rest of the computation
     # That is, we are computing logits on the full sequence of length prompt_len + output_len
@@ -211,7 +211,7 @@ def stochastic_transformer_sample_iter(carry, t, cfg, huggingface_model=None, re
     # This is the approach that I saw people taking online with transformers.
     # As of May 2023 there did not seem to be a better approach in jax (some discussion of jax.mask didn't end up going anywhere)
     rng_key, params, full_seq, prompt_len = carry
-    p_logits = get_transformer_p_logits(cfg, params, full_seq, huggingface_model=huggingface_model)
+    p_logits = get_transformer_p_logits(params, full_seq, huggingface_model=huggingface_model)
     rng_key, subkey = jax.random.split(rng_key)
     # This below is actually ok without log_softmax because I don't need log prob, and jax categorical uses softmax.
     # I needed log_softmax on the other ones in order to properly combine with the other log term.
@@ -228,8 +228,8 @@ def stochastic_transformer_sample_iter(carry, t, cfg, huggingface_model=None, re
 
 
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
-@partial(jax.jit, static_argnames=["cfg", "output_len", "n_samples", "huggingface_model", "return_p_eval"])
-def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, output_len, n_samples, huggingface_model=None, return_p_eval=False):
+@partial(jax.jit, static_argnames=["output_len", "n_samples", "huggingface_model", "return_p_eval"])
+def stochastic_transformer_sample(rng_key, params, prompt: jnp.ndarray, output_len, n_samples, huggingface_model=None, return_p_eval=False):
     prompt_len = prompt.shape[0]
     # print(prompt_len)
     batch_prompt = jnp.full((n_samples, prompt.shape[0]), prompt)
@@ -237,7 +237,7 @@ def stochastic_transformer_sample(rng_key, cfg, params, prompt: jnp.ndarray, out
     full_seq = jnp.concatenate((batch_prompt, output), axis=1)
 
     carry = (rng_key, params, full_seq, prompt_len)
-    carry, p_evals = jax.lax.scan(partial(stochastic_transformer_sample_iter, cfg=cfg, huggingface_model=huggingface_model, return_p_eval=return_p_eval),
+    carry, p_evals = jax.lax.scan(partial(stochastic_transformer_sample_iter, huggingface_model=huggingface_model, return_p_eval=return_p_eval),
                              carry, jnp.arange(output_len, dtype=jnp.int32), output_len)
 
     rng_key, params, full_seq, _ = carry
@@ -1354,9 +1354,9 @@ def calculate_kl_term(p0_seqs, params_p, prompt_len, output_len):
     kl_term = - log_p_theta_s # has shape (batch, )
     return kl_term.mean() # empirical estimate of expectation
 
-def calculate_rev_kl_term(p_seqs, params_p, cfg_p_0, params_p_0, prompt_len, output_len):
+def calculate_rev_kl_term(p_seqs, params_p, params_p_0, prompt_len, output_len):
     log_p_theta_s = evaluate_log_p_theta_1_to_t(p_seqs, params_p, prompt_len, output_len)
-    log_p_theta_0_s = evaluate_log_p_theta_1_to_t(p_seqs, cfg_p_0, params_p_0, prompt_len, output_len)
+    log_p_theta_0_s = evaluate_log_p_theta_1_to_t(p_seqs, params_p_0, prompt_len, output_len)
     kl_term = log_p_theta_s - log_p_theta_0_s # has shape (batch, )
     return kl_term.mean() # empirical estimate of expectation
 
