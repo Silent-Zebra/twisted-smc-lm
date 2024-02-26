@@ -12,7 +12,7 @@ no_final_resample = True # False # Turn this off (set to false) if you want the 
 resample_for_sigma_samples = False # True # Try true again. # True was what I had before; false to try no resampling (since we use the twist info already) on the approximate sigma samples
 
 
-def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def get_l_dre_sixo(rng_key, prompt, params_p, params_twist, log_true_final_twist,
                    output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
                    proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
                    replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None):
@@ -29,13 +29,13 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
         if mixed_p_q_sample:
             rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _  = \
                 get_mixed_p_q_samples(
-                    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                    rng_key, prompt, params_p, params_twist, log_true_final_twist,
                     output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
                     proposal_is_p, huggingface_model, tempered_twist, beta_prop, params_proposal=params_proposal
                 )
         else:
             (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
-                sk1, prompt, cfg_p, params_p, cfg_twist,
+                sk1, prompt, params_p,
                 params_twist, log_true_final_twist, output_len, n_twist,
                 smc_procedure_type=smc_procedure_type,
                 condition_twist_on_tokens=condition_twist_on_tokens,
@@ -45,14 +45,14 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
             )
             normalized_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
 
-    prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
+    prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
     # l_dre_old = 0.
     #
     # scan_over = jnp.arange(output_len)
     #
     # carry = (l_dre_old, prompt_w_sigma_sample_s_1_to_t, prompt_w_p_sample_s_1_to_t, params_twist, prompt_len, sk3)
     #
-    # carry, _ = jax.lax.scan(partial(get_l_dre_sixo_scan_iter, cfg_twist=cfg_twist,
+    # carry, _ = jax.lax.scan(partial(get_l_dre_sixo_scan_iter,
     #                                  condition_twist_on_tokens=condition_twist_on_tokens,
     #                                 token_of_interest_as_int=token_of_interest_as_int),
     #                         carry, scan_over, output_len)
@@ -62,15 +62,15 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
     # l_dre_old /= output_len
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
-        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, params_twist,
         condition_twist_on_tokens,
         huggingface_model,
-        params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        params_proposal=params_proposal, params_p=params_p)
     log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
-        prompt_w_p_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+        prompt_w_p_sample_s_1_to_t, prompt_len, params_twist,
         condition_twist_on_tokens,
         huggingface_model,
-        params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        params_proposal=params_proposal, params_p=params_p)
 
 
     l_dre = jnp.dot(jax.nn.log_sigmoid(log_psi_on_truncated_sigma_samples).mean(axis=1), normalized_w_t_sigma_samples) \
@@ -82,7 +82,7 @@ def get_l_dre_sixo(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, lo
 
 
 
-get_l_dre_sixo_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+get_l_dre_sixo_jit = partial(jax.jit, static_argnames=["log_true_final_twist", "output_len", "n_twist",
                                    "smc_procedure_type", "proposal_is_p", "huggingface_model",
                                    "tempered_twist", "beta_prop", "mixed_p_q_sample"])(get_l_dre_sixo)
 
@@ -90,7 +90,7 @@ get_l_dre_sixo_jit = partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "lo
 # JITTING IS DONE SEPARATELY BELOW
 # This is the EBM Maximum Likelihood approach (previously called Roger's approach).
 def get_l_ebm_ml_partial_jit(
-    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+    rng_key, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
     proposal_is_p=False, huggingface_model=None,
     tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
@@ -124,7 +124,7 @@ def get_l_ebm_ml_partial_jit(
         (log_w_t_sigma_samples, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
             intermediate_twist_samples_hist,
             intermediate_log_w_t_hist, _) = smc_procedure(
-            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            sk2, prompt, params_p, params_twist,
             log_true_final_twist, output_len, n_twist,
             smc_procedure_type=smc_procedure_type,
             get_intermediate_sample_history_based_on_learned_twists=True,
@@ -144,10 +144,10 @@ def get_l_ebm_ml_partial_jit(
             jax.lax.stop_gradient(log_w_t_sigma_samples))
 
         log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(
-            proposal_samples, prompt_len, cfg_twist, params_twist,
+            proposal_samples, prompt_len, params_twist,
             condition_twist_on_tokens,
             huggingface_model,
-            params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+            params_proposal=params_proposal, params_p=params_p)
 
         ebm_second_term = 0.
 
@@ -183,14 +183,14 @@ def get_l_ebm_ml_partial_jit(
 
             proposal_samples = replay_buffer
 
-            conditional_log_p = evaluate_log_p_theta_1_to_t(proposal_samples, cfg_p, params_p,
+            conditional_log_p = evaluate_log_p_theta_1_to_t(proposal_samples, params_p,
                 prompt_len, output_len, output_log_p_for_each_t=True, huggingface_model=huggingface_model)
             # The above is just p(s_t|s_1:t-1), not p(s_1:t). Needs cumsum for the latter (across all t)
             log_psi_for_each_t = evaluate_log_psi_selected_tokens(
-                proposal_samples, prompt_len, cfg_twist, params_twist,
+                proposal_samples, prompt_len, params_twist,
                 condition_twist_on_tokens,
                 huggingface_model,
-                params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+                params_proposal=params_proposal, params_p=params_p)
 
             log_p_1_to_t_psi_t = jnp.cumsum(conditional_log_p, axis=1) + log_psi_for_each_t
 
@@ -212,17 +212,17 @@ def get_l_ebm_ml_partial_jit(
             proposal_samples = replay_buffer[indices_neg]
 
             conditional_log_p = evaluate_log_p_theta_1_to_t(proposal_samples,
-                                                            cfg_p, params_p,
+                                                            params_p,
                                                             prompt_len,
                                                             output_len,
                                                             output_log_p_for_each_t=True,
                                                             huggingface_model=huggingface_model)
             # The above is just p(s_t|s_1:t-1), not p(s_1:t). Needs cumsum for the latter (across all t)
             log_psi_for_each_t = evaluate_log_psi_selected_tokens(
-                proposal_samples, prompt_len, cfg_twist, params_twist,
+                proposal_samples, prompt_len, params_twist,
                 condition_twist_on_tokens,
 
-                huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+                huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
             log_p_1_to_t_psi_t = jnp.cumsum(conditional_log_p,
                                             axis=1) + log_psi_for_each_t
@@ -233,14 +233,14 @@ def get_l_ebm_ml_partial_jit(
 
         normalized_proposal_samples_log_w_ts = jax.nn.softmax(proposal_samples_log_w_ts, axis=0)
         log_psi_on_proposal_samples = evaluate_log_psi_selected_tokens(
-            proposal_samples, prompt_len, cfg_twist, params_twist,
+            proposal_samples, prompt_len, params_twist,
             condition_twist_on_tokens,
-            huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+            huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
         log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
-            prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+            prompt_w_sigma_sample_s_1_to_t, prompt_len, params_twist,
             condition_twist_on_tokens,
-            huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+            huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
 
         l_ebm_new = 0.
@@ -257,7 +257,7 @@ def get_l_ebm_ml_partial_jit(
     else:
         if mixed_p_q_sample:
             rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _, _ = \
-                get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                get_mixed_p_q_samples(rng_key, prompt, params_p, params_twist, log_true_final_twist,
                             output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
                            proposal_is_p, huggingface_model, tempered_twist, beta_prop, params_proposal=params_proposal)
         else:
@@ -267,7 +267,7 @@ def get_l_ebm_ml_partial_jit(
                 # print(posterior_sample)
                 (log_w_t_sigma_samples, _,
                  _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
-                    sk1, prompt, cfg_p, params_p, cfg_twist,
+                    sk1, prompt, params_p,
                     params_twist, log_true_final_twist, output_len, n_twist,
                     smc_procedure_type=smc_procedure_type,
 
@@ -284,7 +284,7 @@ def get_l_ebm_ml_partial_jit(
                 # print(prompt_w_sigma_sample_s_1_to_t)
             else:
                 (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t = smc_procedure(
-                    sk1, prompt, cfg_p, params_p, cfg_twist,
+                    sk1, prompt, params_p,
                     params_twist, log_true_final_twist, output_len, n_twist,
                     smc_procedure_type=smc_procedure_type,
                      condition_twist_on_tokens=condition_twist_on_tokens,
@@ -299,8 +299,8 @@ def get_l_ebm_ml_partial_jit(
             # print(normalized_w_t_sigma_samples.shape)
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
-        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, params_twist, condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
     # BELOW IS NEGATIVE SAMPLING PART
 
@@ -310,7 +310,7 @@ def get_l_ebm_ml_partial_jit(
         (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
             intermediate_twist_samples_hist,
             intermediate_log_w_t_hist, _) = smc_procedure(
-            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            sk2, prompt, params_p, params_twist,
             log_true_final_twist, output_len, n_twist,
             smc_procedure_type=smc_procedure_type,
             get_intermediate_sample_history_based_on_learned_twists=True,
@@ -345,7 +345,7 @@ def get_l_ebm_ml_partial_jit(
         (_, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
         intermediate_twist_samples_hist,
         intermediate_log_w_t_hist, _) = smc_procedure(
-            sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+            sk2, prompt, params_p, params_twist,
             log_true_final_twist, output_len, n_twist,
             smc_procedure_type=smc_procedure_type,
             get_intermediate_sample_history_based_on_learned_twists=True,
@@ -374,7 +374,7 @@ def get_l_ebm_ml_partial_jit(
 
 
 get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
-    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "log_true_final_twist", "output_len", "n_twist",
     "smc_procedure_type", "proposal_is_p",
     "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
     "reweight_for_second_term", "only_one_sample", "return_proposal_samples"])(get_l_ebm_ml_partial_jit)
@@ -384,7 +384,7 @@ get_l_ebm_ml_jit = partial(jax.jit, static_argnames=[
 
 
 def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
-    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    rng_key, prompt, params_p, params_twist,
     log_true_final_twist,
     output_len, n_twist,
     condition_twist_on_tokens, smc_procedure_type,
@@ -423,7 +423,7 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 None,
             ), out_axes=(0, 0))
             x = vmapped_loss(
-                rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                rng_key, prompt, params_p, params_twist,
                 log_true_final_twist,
                 output_len, n_twist_ebm_vmap,
                 condition_twist_on_tokens, smc_procedure_type,
@@ -456,7 +456,7 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 None
             ))
             loss = vmapped_loss(
-                rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                rng_key, prompt, params_p, params_twist,
                 log_true_final_twist,
                 output_len, n_twist_ebm_vmap,
                 condition_twist_on_tokens, smc_procedure_type,
@@ -499,7 +499,7 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 None, None
             ), out_axes=(0, 0))
             loss, proposal_samples = vmapped_loss(
-                rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                rng_key, prompt, params_p, params_twist,
                 log_true_final_twist,
                 output_len, n_twist_ebm_vmap,
                 condition_twist_on_tokens, smc_procedure_type,
@@ -530,7 +530,7 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
                 None, None
             ))
             loss = vmapped_loss(
-                rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                rng_key, prompt, params_p, params_twist,
                 log_true_final_twist,
                 output_len, n_twist_ebm_vmap,
                 condition_twist_on_tokens, smc_procedure_type,
@@ -562,9 +562,9 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
         target_term = jax.lax.stop_gradient(log_phi_final_eval)
         prompt_len = prompt.shape[-1]
         values = evaluate_log_psi_selected_tokens(
-            samples_to_evaluate_over, prompt_len, cfg_twist, params_twist,
+            samples_to_evaluate_over, prompt_len, params_twist,
             condition_twist_on_tokens,
-            huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+            huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
         values = values[:, -1]
         rl_loss = ((values - target_term) ** 2).mean()
@@ -574,7 +574,7 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
 
 
 get_l_ebm_ml_jit_vmapped_over_condition_tokens = partial(jax.jit, static_argnames=[
-    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "log_true_final_twist", "output_len", "n_twist",
     "smc_procedure_type", "proposal_is_p",
     "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
     "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap",
@@ -584,13 +584,13 @@ get_l_ebm_ml_jit_vmapped_over_condition_tokens = partial(jax.jit, static_argname
 
 
 @partial(jax.jit, static_argnames=[
-    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "log_true_final_twist", "output_len", "n_twist",
     "smc_procedure_type", "proposal_is_p",
     "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
     "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap",
     "use_smc_ub_for_pos_samples", "add_rl_final_twist_loss"])
 def get_l_ebm_ml_os_jit_vmapped_over_condition_tokens(
-    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    rng_key, prompt, params_p, params_twist,
     log_true_final_twist,
     output_len, n_twist,
     condition_twist_on_tokens, smc_procedure_type,
@@ -624,7 +624,7 @@ def get_l_ebm_ml_os_jit_vmapped_over_condition_tokens(
         None
     ))
     loss = vmapped_loss(
-        rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        rng_key, prompt, params_p, params_twist,
         log_true_final_twist,
         output_len, n_twist_ebm_vmap,
         condition_twist_on_tokens, smc_procedure_type,
@@ -648,10 +648,10 @@ def get_l_ebm_ml_os_jit_vmapped_over_condition_tokens(
 
 
 # Don't modify the original sequence; built for use with Rob's update
-def get_proposal_q_sample_in_scan_non_modify(carry, t, original_seq, cfg_p, cfg_twist, condition_twist_on_tokens, proposal_is_p=False, huggingface_model=None, params_proposal=None):
+def get_proposal_q_sample_in_scan_non_modify(carry, t, original_seq, condition_twist_on_tokens, proposal_is_p=False, huggingface_model=None, params_proposal=None):
     rng_key, params_p, params_twist, prompt_len = carry
     rng_key, new_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
-        rng_key, original_seq, cfg_p, params_p, cfg_twist, params_twist,
+        rng_key, original_seq, params_p, params_twist,
         prompt_len, t, condition_twist_on_tokens,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, params_proposal=params_proposal)
     carry = (rng_key, params_p, params_twist, prompt_len)
@@ -660,7 +660,7 @@ def get_proposal_q_sample_in_scan_non_modify(carry, t, original_seq, cfg_p, cfg_
 
 # 50/50 split on samples from q (non-resampled) and p. Also provides weights based on sigma_tilde if you want to either resample
 # or use those weights in some weighted expectation which approximates draws from sigma.
-def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def get_mixed_p_q_samples(rng_key, prompt, params_p, params_twist, log_true_final_twist,
                         output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None, params_proposal=None):
     prompt_len = prompt.shape[-1]
@@ -671,7 +671,7 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
     (log_w_t_sigma_samples, _, _), q_samples, (
         intermediate_twist_samples_hist,
         intermediate_log_w_t_hist, _) = smc_procedure(
-        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        sk2, prompt, params_p, params_twist,
         log_true_final_twist, output_len, n_twist // 2,
         smc_procedure_type=smc_procedure_type,
         get_intermediate_sample_history_based_on_learned_twists=True,
@@ -685,18 +685,18 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
 
 
     p_samples = stochastic_transformer_sample(
-        sk1, cfg_p, params_p, prompt, output_len,
+        sk1, params_p, prompt, output_len,
         n_twist // 2, huggingface_model=huggingface_model)
     # p_evals = jnp.transpose(p_evals)
 
     combined_seqs = jnp.concatenate((p_samples, q_samples), axis=0)
-    # log_p_eval = evaluate_log_p_selected_tokens(combined_seqs, prompt_len, cfg_p, params_p, huggingface_model).sum(axis=1)
-    log_p_eval = evaluate_log_p_theta_1_to_t(combined_seqs, cfg_p, params_p,
+    # log_p_eval = evaluate_log_p_selected_tokens(combined_seqs, prompt_len, params_p, huggingface_model).sum(axis=1)
+    log_p_eval = evaluate_log_p_theta_1_to_t(combined_seqs, params_p,
                                              prompt_len, output_len,
                                              huggingface_model=huggingface_model)
 
-    log_q_eval = evaluate_normalized_log_q_1_to_t(combined_seqs, cfg_p,
-                                                  params_p, cfg_twist,
+    log_q_eval = evaluate_normalized_log_q_1_to_t(combined_seqs,
+                                                  params_p,
                                                   params_twist,
                                                   prompt_len,
                                                   condition_twist_on_tokens,
@@ -727,7 +727,7 @@ def get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_tw
 # Then the code for mixed sampling, etc, can go outside the function and just in one place, and perhaps not be repeated elsewhere
 # This is Rob's approach
 # for t = 1 to T: grad = E_sigma(s_1:t-1) [ E_sigma(s_t|s_1:t-1)[grad log psi (s_1:t)] - E_q(s_t|s_1:t-1)[grad log psi (s_1:t)]  ]
-def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def get_l_one_total_kl(rng_key, prompt, params_p, params_twist, log_true_final_twist,
                         output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None,
                        mixed_p_q_sample=False, exact_expectation=True, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None):
@@ -751,7 +751,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
     else:
         if mixed_p_q_sample:
             rng_key, prompt_w_sigma_sample_s_1_to_t, normalized_w_t_sigma_samples, _, _, _ = \
-                get_mixed_p_q_samples(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                get_mixed_p_q_samples(rng_key, prompt, params_p, params_twist, log_true_final_twist,
                             output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
                            proposal_is_p, huggingface_model, tempered_twist, beta_prop, params_proposal=params_proposal)
 
@@ -760,7 +760,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
             (log_w_t_sigma_samples, _, _), prompt_w_sigma_sample_s_1_to_t, (
             intermediate_twist_samples_hist,
             intermediate_log_w_t_hist, _) = smc_procedure(
-                sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                sk2, prompt, params_p, params_twist,
                 log_true_final_twist, output_len, n_twist,
                 smc_procedure_type=smc_procedure_type,
                 get_intermediate_sample_history_based_on_learned_twists=True,
@@ -775,8 +775,8 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
-        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, params_twist, condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
 
     if exact_expectation:
@@ -788,7 +788,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
         # And then sum them all up, then take the derivative with respect to that sum (p is fixed, we are training the twist, then we have the derivative through all the psi values)
 
         p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
-            prompt_w_sigma_sample_s_1_to_t, params_p, params_twist, cfg_p, cfg_twist,
+            prompt_w_sigma_sample_s_1_to_t, params_p, params_twist,
             condition_twist_on_tokens,
             huggingface_model, params_proposal=params_proposal, prompt_len=prompt_len)
 
@@ -820,7 +820,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
         # Then the second part, we need to truncate the sigma samples to t-1, and then sample from the proposal q for the next time step, then those will be our negative samples
         carry, (new_seqs_array, log_psi_eval_of_new_seqs_array) = jax.lax.scan(
             partial(
-                get_proposal_q_sample_in_scan_non_modify, original_seq=prompt_w_sigma_sample_s_1_to_t, cfg_p=cfg_p, cfg_twist=cfg_twist,
+                get_proposal_q_sample_in_scan_non_modify, original_seq=prompt_w_sigma_sample_s_1_to_t,
                  condition_twist_on_tokens=condition_twist_on_tokens,
                  proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, params_proposal=params_proposal
             ), carry, scan_over, output_len
@@ -831,7 +831,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
         # print(new_seqs_array.shape)
         # for i in range(log_psi_eval_of_new_seqs_array.shape[0]):
         #     x = log_psi_eval_of_new_seqs_array[i]
-        #     y = evaluate_log_psi_selected_tokens(new_seqs_array[i], prompt_len, cfg_twist, params_twist, condition_twist_on_tokens, huggingface_model)[:, i]
+        #     y = evaluate_log_psi_selected_tokens(new_seqs_array[i], prompt_len, params_twist, condition_twist_on_tokens, huggingface_model)[:, i]
         #     print(x-y)
 
         log_psi_eval_of_new_seqs_array = jnp.transpose(log_psi_eval_of_new_seqs_array)
@@ -854,7 +854,7 @@ def get_l_one_total_kl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist
 
 
 get_l_one_total_kl_jit = partial(
-    jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    jax.jit, static_argnames=["log_true_final_twist", "output_len", "n_twist",
     "smc_procedure_type",
     "proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop",
     "mixed_p_q_sample", "exact_expectation"]
@@ -862,7 +862,7 @@ get_l_one_total_kl_jit = partial(
 
 
 def get_l_rl_based_partial_jit(
-    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+    rng_key, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_twist, condition_twist_on_tokens,
     smc_procedure_type, proposal_is_p=False,
     evaluate_over_samples_from="p", huggingface_model=None, loss_type="squared_error_in_log_space", tempered_twist=False, beta_prop=None,
@@ -914,14 +914,14 @@ def get_l_rl_based_partial_jit(
             assert evaluate_over_samples_from == "p"
 
         if evaluate_over_samples_from == "p":
-            samples_to_evaluate_over = stochastic_transformer_sample(sk1, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
+            samples_to_evaluate_over = stochastic_transformer_sample(sk1, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
             log_w_t = jnp.zeros((samples_to_evaluate_over.shape[0]))
 
         elif evaluate_over_samples_from == "q":
             # Get q samples with no resampling anywhere
             (_, _, _), _, (intermediate_twist_samples_hist,
                    intermediate_log_w_t_hist, _) = smc_procedure(
-                sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                sk2, prompt, params_p, params_twist,
                 log_true_final_twist, output_len, n_twist,
                 smc_procedure_type=smc_procedure_type,
                 get_intermediate_sample_history_based_on_learned_twists=True,
@@ -938,7 +938,7 @@ def get_l_rl_based_partial_jit(
             # Get q samples with no resampling anywhere
             (log_w_t, _, _), _, (intermediate_twist_samples_hist,
                    intermediate_log_w_t_hist, _) = smc_procedure(
-                sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                sk2, prompt, params_p, params_twist,
                 log_true_final_twist, output_len, n_twist,
                 smc_procedure_type=smc_procedure_type,
                 get_intermediate_sample_history_based_on_learned_twists=True,
@@ -953,7 +953,7 @@ def get_l_rl_based_partial_jit(
         elif evaluate_over_samples_from == "sigma":
             # Approximate sigma samples
             (log_w_t, _, _), samples_to_evaluate_over = smc_procedure(
-                sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                sk2, prompt, params_p, params_twist,
                 log_true_final_twist, output_len, n_twist,
                 smc_procedure_type=smc_procedure_type,
                  condition_twist_on_tokens=condition_twist_on_tokens,
@@ -964,7 +964,7 @@ def get_l_rl_based_partial_jit(
         elif evaluate_over_samples_from == "mixed_p_q":
             assert n_twist % 2 == 0
             # Mix of 50% p samples and 50% q (twist proposal) samples
-            samples_to_evaluate_over_p = stochastic_transformer_sample(sk1, cfg_p,
+            samples_to_evaluate_over_p = stochastic_transformer_sample(sk1,
                                                                      params_p,
                                                                      prompt,
                                                                      output_len,
@@ -977,7 +977,7 @@ def get_l_rl_based_partial_jit(
 
             (_, _, _), _, (intermediate_twist_samples_hist,
                            intermediate_log_w_t_hist, _) = smc_procedure(
-                sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                sk2, prompt, params_p, params_twist,
                 log_true_final_twist, output_len, n_twist // 2,
                 smc_procedure_type=smc_procedure_type,
                 get_intermediate_sample_history_based_on_learned_twists=True,
@@ -1019,9 +1019,9 @@ def get_l_rl_based_partial_jit(
                                           log_true_final_twist,
                                           condition_twist_on_tokens)
         twist_vals = jnp.exp(evaluate_log_psi_selected_tokens(
-            samples_to_evaluate_over, prompt_len, cfg_twist, params_twist,
+            samples_to_evaluate_over, prompt_len, params_twist,
             condition_twist_on_tokens,
-            huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p))
+            huggingface_model, params_proposal=params_proposal, params_p=params_p))
         # print(phi_vals[:, None].shape)
         # print(twist_vals.shape)
         loss = ((twist_vals - phi_vals[:, None]) ** 2).mean()
@@ -1030,7 +1030,7 @@ def get_l_rl_based_partial_jit(
 
     p_logits, log_psi =\
         get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p, params_twist,
-                                       cfg_p, cfg_twist,
+
                                        condition_twist_on_tokens,
 
                                        huggingface_model=huggingface_model, params_proposal=params_proposal, prompt_len=prompt_len)
@@ -1062,8 +1062,8 @@ def get_l_rl_based_partial_jit(
         target_term = jax.lax.stop_gradient(target_term)
 
     values = evaluate_log_psi_selected_tokens(
-        samples_to_evaluate_over, prompt_len, cfg_twist, params_twist, condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        samples_to_evaluate_over, prompt_len, params_twist, condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
     if train_final_twist_only:
         # print(values.shape)
@@ -1105,7 +1105,7 @@ def get_l_rl_based_partial_jit(
 
 
 get_l_rl_based_jit = partial(jax.jit, static_argnames=[
-    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "log_true_final_twist", "output_len", "n_twist",
     "smc_procedure_type", "proposal_is_p",
     "evaluate_over_samples_from", "huggingface_model", "loss_type", "tempered_twist", "beta_prop",
     "train_final_twist_only", "stop_grad", "append_sigma_samples"])(get_l_rl_based_partial_jit)
@@ -1115,10 +1115,10 @@ get_l_rl_based_jit = partial(jax.jit, static_argnames=[
 def logmeanexp(x, axis=-1):
     return jax.nn.logsumexp(x, axis=axis) - jnp.log(x.shape[axis])
 
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+@partial(jax.jit, static_argnames=["log_true_final_twist", "output_len", "n_twist",
                                    "smc_procedure_type", "proposal_is_p",
                                    "huggingface_model", "tempered_twist", "beta_prop", "append_sigma_samples", "alpha", "rl_loss_type", "rl_stop_grad"])
-def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def get_l_combined_rl_onekl(rng_key, prompt, params_p, params_twist, log_true_final_twist,
                         output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None,
                        mixed_p_q_sample=False, exact_expectation=True, true_sigma_samples=None, replay_buffer=None,
@@ -1138,8 +1138,8 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     normalized_w_t_sigma_samples = jnp.ones((true_sigma_samples.shape[0])) / true_sigma_samples.shape[0]
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
-        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, params_twist, condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
     if exact_expectation:
         # Instead of sampling, just directly calculate the expectation over sigma samples. Basically for every sigma sample truncated at time step t-1 where t = 1 ... T
@@ -1150,7 +1150,7 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
         # And then sum them all up, then take the derivative with respect to that sum (p is fixed, we are training the twist, then we have the derivative through all the psi values)
 
         p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
-            prompt_w_sigma_sample_s_1_to_t, params_p, params_twist, cfg_p, cfg_twist,
+            prompt_w_sigma_sample_s_1_to_t, params_p, params_twist,
             condition_twist_on_tokens,
             huggingface_model, params_proposal=params_proposal, prompt_len=prompt_len)
 
@@ -1182,7 +1182,7 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
         # # Then the second part, we need to truncate the sigma samples to t-1, and then sample from the proposal q for the next time step, then those will be our negative samples
         # carry, (new_seqs_array, log_psi_eval_of_new_seqs_array) = jax.lax.scan(
         #     partial(
-        #         get_proposal_q_sample_in_scan_non_modify, original_seq=prompt_w_sigma_sample_s_1_to_t, cfg_p=cfg_p, cfg_twist=cfg_twist,
+        #         get_proposal_q_sample_in_scan_non_modify, original_seq=prompt_w_sigma_sample_s_1_to_t,
         #          condition_twist_on_tokens=condition_twist_on_tokens,
         #          proposal_is_p=proposal_is_p, huggingface_model=huggingface_model
         #     ), carry, scan_over, output_len
@@ -1213,7 +1213,7 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     # # Get q samples with no resampling anywhere
     # (_, _, _), _, (intermediate_twist_samples_hist,
     #                intermediate_log_w_t_hist, _) = smc_procedure(
-    #     sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    #     sk2, prompt, params_p, params_twist,
     #     log_true_final_twist, output_len, n_twist,
     #     smc_procedure_type=smc_procedure_type,
     #     get_intermediate_sample_history_based_on_learned_twists=True,
@@ -1254,7 +1254,7 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
     # p_logits, log_psi = \
     #     get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p,
     #                                        params_twist,
-    #                                        cfg_p, cfg_twist,
+    #
     #
     #                                        condition_twist_on_tokens,
     #
@@ -1292,9 +1292,9 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
 
 
     values = evaluate_log_psi_selected_tokens(
-        samples_to_evaluate_over, prompt_len, cfg_twist, params_twist,
+        samples_to_evaluate_over, prompt_len, params_twist,
         condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
     if rl_stop_grad == "target":
         target_term = jax.lax.stop_gradient(target_term)
@@ -1330,10 +1330,10 @@ def get_l_combined_rl_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_
 
 
 
-@partial(jax.jit, static_argnames=["cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+@partial(jax.jit, static_argnames=["log_true_final_twist", "output_len", "n_twist",
                                    "smc_procedure_type", "proposal_is_p",
                                    "huggingface_model", "tempered_twist", "beta_prop"])
-def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+def get_l_combined_sixo_onekl(rng_key, prompt, params_p, params_twist, log_true_final_twist,
                         output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
                        proposal_is_p=False, huggingface_model=None, tempered_twist=False, beta_prop=None,
                        mixed_p_q_sample=False, exact_expectation=True, true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None):
@@ -1350,8 +1350,8 @@ def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, param
     normalized_w_t_sigma_samples = jnp.ones((true_sigma_samples.shape[0])) / true_sigma_samples.shape[0]
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
-        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist, condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, params_twist, condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
     if exact_expectation:
         # Instead of sampling, just directly calculate the expectation over sigma samples. Basically for every sigma sample truncated at time step t-1 where t = 1 ... T
@@ -1362,7 +1362,7 @@ def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, param
         # And then sum them all up, then take the derivative with respect to that sum (p is fixed, we are training the twist, then we have the derivative through all the psi values)
 
         p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
-            prompt_w_sigma_sample_s_1_to_t, params_p, params_twist, cfg_p, cfg_twist,
+            prompt_w_sigma_sample_s_1_to_t, params_p, params_twist,
             condition_twist_on_tokens,
             huggingface_model, params_proposal=params_proposal, prompt_len=prompt_len)
 
@@ -1393,9 +1393,9 @@ def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, param
         # Then the second part, we need to truncate the sigma samples to t-1, and then sample from the proposal q for the next time step, then those will be our negative samples
         carry, (new_seqs_array, log_psi_eval_of_new_seqs_array) = jax.lax.scan(
             partial(
-                get_proposal_q_sample_in_scan_non_modify, original_seq=prompt_w_sigma_sample_s_1_to_t, cfg_p=cfg_p, cfg_twist=cfg_twist,
-                 condition_twist_on_tokens=condition_twist_on_tokens,
-                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, params_proposal=params_proposal
+                get_proposal_q_sample_in_scan_non_modify, original_seq=prompt_w_sigma_sample_s_1_to_t,
+                condition_twist_on_tokens=condition_twist_on_tokens,
+                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, params_proposal=params_proposal
             ), carry, scan_over, output_len
         )
 
@@ -1413,16 +1413,16 @@ def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, param
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
 
-    prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
+    prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
-        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, params_twist,
         condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
     log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
-        prompt_w_p_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+        prompt_w_p_sample_s_1_to_t, prompt_len, params_twist,
         condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
     l_dre = jnp.dot(jax.nn.log_sigmoid(log_psi_on_truncated_sigma_samples).mean(axis=1), normalized_w_t_sigma_samples) \
             + jnp.log(1 - jax.nn.sigmoid(log_psi_on_p_samples)).mean()
@@ -1433,12 +1433,12 @@ def get_l_combined_sixo_onekl(rng_key, prompt, cfg_p, params_p, cfg_twist, param
 
 # This is the FUDGE approach
 @partial(jax.jit, static_argnames=[
-    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "log_true_final_twist", "output_len", "n_twist",
     "smc_procedure_type", "rm_type",  "proposal_is_p",
     "beta_temp", "evaluate_over_samples_from", "huggingface_model",  "tempered_twist", "beta_prop",
 ])
 def get_l_bce(
-    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+    rng_key, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_twist, condition_twist_on_tokens,
     smc_procedure_type, rm_type, beta_temp=1., proposal_is_p=False,
     evaluate_over_samples_from="p", huggingface_model=None, tempered_twist=False, beta_prop=None,
@@ -1457,10 +1457,10 @@ def get_l_bce(
     samples_to_evaluate_over = true_sigma_samples
 
     log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
-        samples_to_evaluate_over, prompt.shape[-1], cfg_twist,
+        samples_to_evaluate_over, prompt.shape[-1],
         params_twist,
         condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
 
     class_prob = jnp.exp(log_prob_class)
@@ -1489,12 +1489,12 @@ def binary_cross_entropy(log_prob, labels):
 
 
 @partial(jax.jit, static_argnames=[
-    "cfg_p", "cfg_twist", "log_true_final_twist", "output_len", "n_twist",
+    "log_true_final_twist", "output_len", "n_twist",
     "smc_procedure_type", "proposal_is_p",
     "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
     "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap", "alpha"])
 def get_l_ebm_ml_vmap_with_one_total_kl(
-    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+    rng_key, prompt, params_p, params_twist,
     log_true_final_twist,
     output_len, n_twist,
     condition_twist_on_tokens, smc_procedure_type,
@@ -1506,7 +1506,7 @@ def get_l_ebm_ml_vmap_with_one_total_kl(
     reweight_for_second_term=False, only_one_sample=False, n_twist_ebm_vmap=0, alpha=0.5, params_proposal=None
 ):
     ebm_ml_loss = get_l_ebm_ml_jit_vmapped_over_condition_tokens(
-        rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        rng_key, prompt, params_p, params_twist,
         log_true_final_twist,
         output_len, n_twist,
         condition_twist_on_tokens, smc_procedure_type,
@@ -1518,7 +1518,7 @@ def get_l_ebm_ml_vmap_with_one_total_kl(
         reweight_for_second_term, only_one_sample, n_twist_ebm_vmap, params_proposal=params_proposal
     )
 
-    one_total_kl_loss = get_l_one_total_kl_jit(rng_key, prompt, cfg_p, params_p, cfg_twist,
+    one_total_kl_loss = get_l_one_total_kl_jit(rng_key, prompt, params_p,
                        params_twist, log_true_final_twist,
                        output_len, n_twist,
                        condition_twist_on_tokens, smc_procedure_type,
@@ -1534,7 +1534,7 @@ def get_l_ebm_ml_vmap_with_one_total_kl(
 
 
 def get_l_ebm_ml_combined_objective_partial_jit(
-    rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+    rng_key, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
     proposal_is_p=False, huggingface_model=None,
     tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
@@ -1562,7 +1562,7 @@ def get_l_ebm_ml_combined_objective_partial_jit(
     (log_w_t_sigma_samples, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
         intermediate_twist_samples_hist,
         intermediate_log_w_t_hist, _) = smc_procedure(
-        sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        sk2, prompt, params_p, params_twist,
         log_true_final_twist, output_len, n_twist,
         smc_procedure_type=smc_procedure_type,
         get_intermediate_sample_history_based_on_learned_twists=True,
@@ -1582,9 +1582,9 @@ def get_l_ebm_ml_combined_objective_partial_jit(
         jax.lax.stop_gradient(log_w_t_sigma_samples))
 
     log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(
-        proposal_samples, prompt_len, cfg_twist, params_twist,
+        proposal_samples, prompt_len, params_twist,
         condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
     ebm_second_term = 0.
 
@@ -1604,15 +1604,14 @@ def get_l_ebm_ml_combined_objective_partial_jit(
     prompt_w_sigma_sample_s_1_to_t = proposal_samples
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
-        prompt_w_sigma_sample_s_1_to_t, prompt_len, cfg_twist, params_twist,
+        prompt_w_sigma_sample_s_1_to_t, prompt_len, params_twist,
         condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, cfg_p=cfg_p, params_p=params_p)
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
 
     assert exact_expectation
 
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
-        prompt_w_sigma_sample_s_1_to_t, params_p, params_twist, cfg_p,
-        cfg_twist,
+        prompt_w_sigma_sample_s_1_to_t, params_p, params_twist,
         condition_twist_on_tokens,
         huggingface_model, params_proposal=params_proposal, prompt_len=prompt_len)
 

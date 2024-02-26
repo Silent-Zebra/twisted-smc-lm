@@ -28,7 +28,7 @@ def batch_reward_model(reward_model_fn):
 
 
 
-def reward_model_log_p_of_token(seq, cfg_p, params_p, index_of_fixed_token, huggingface_model=None):
+def reward_model_log_p_of_token(seq, params_p, index_of_fixed_token, huggingface_model=None):
     do_reshape = False
     if len(seq.shape) == 3:
         original_shape = seq.shape
@@ -38,7 +38,7 @@ def reward_model_log_p_of_token(seq, cfg_p, params_p, index_of_fixed_token, hugg
     seq = jnp.concatenate((seq, jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + index_of_fixed_token), axis=1)
     # print(seq.shape)
 
-    log_prob_of_fixed_token = evaluate_log_p_theta_t(seq, cfg_p, params_p, huggingface_model=huggingface_model)
+    log_prob_of_fixed_token = evaluate_log_p_theta_t(seq, params_p, huggingface_model=huggingface_model)
 
     if do_reshape:
         print(log_prob_of_fixed_token.shape)
@@ -48,16 +48,16 @@ def reward_model_log_p_of_token(seq, cfg_p, params_p, index_of_fixed_token, hugg
 
     return log_prob_of_fixed_token
 
-def curried_reward_model_log_p_of_token(cfg_p, params_p, index_of_fixed_token):
+def curried_reward_model_log_p_of_token(params_p, index_of_fixed_token):
     def new_rm(seq):
-        return reward_model_log_p_of_token(seq, cfg_p, params_p, index_of_fixed_token)
+        return reward_model_log_p_of_token(seq, params_p, index_of_fixed_token)
     return new_rm
 
 
 
-@partial(jax.jit, static_argnames=["cfg_p", "beta_temp", "huggingface_model", "return_log_w_no_temp", "divide_by_p", "prompt_len"])
+@partial(jax.jit, static_argnames=["beta_temp", "huggingface_model", "return_log_w_no_temp", "divide_by_p", "prompt_len"])
 def log_reward_model_p_of_continuation(
-    seq, cfg_p, params_p, indices_of_continuation, beta_temp=None,
+    seq, params_p, indices_of_continuation, beta_temp=None,
     huggingface_model=None, return_log_w_no_temp=False, divide_by_p=False, prompt_len=None):
 
     do_reshape = False
@@ -80,7 +80,7 @@ def log_reward_model_p_of_continuation(
         assert not return_log_w_no_temp
         assert beta_temp is not None
         log_p = evaluate_log_p_selected_tokens(
-            seq, prompt_len, cfg_p, params_p, huggingface_model=huggingface_model)
+            seq, prompt_len, params_p, huggingface_model=huggingface_model)
         log_prob_of_continuation = log_p[:, -jnp_continuation.shape[-1]:]
         log_p_output_tokens = log_p[:, :-jnp_continuation.shape[-1]]
 
@@ -91,7 +91,7 @@ def log_reward_model_p_of_continuation(
 
     else:
         # Use original_seq_len_incl_prompt for prompt_len because we only want to evaluate the continuation probability
-        log_prob_of_continuation = evaluate_log_p_selected_tokens(seq, original_seq_len_incl_prompt, cfg_p, params_p, huggingface_model=huggingface_model)
+        log_prob_of_continuation = evaluate_log_p_selected_tokens(seq, original_seq_len_incl_prompt, params_p, huggingface_model=huggingface_model)
         if return_log_w_no_temp:
             return log_prob_of_continuation.sum(axis=-1)
         else:
@@ -99,15 +99,15 @@ def log_reward_model_p_of_continuation(
             return jnp.exp(log_prob_of_continuation.sum(axis=-1)) * beta_temp # in the phi = e^(beta r) formulation, the log phi is going to be just beta * r
 
 
-def curried_log_reward_model_p_of_continuation(cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None, divide_by_p=False, prompt_len=None):
+def curried_log_reward_model_p_of_continuation(params_p, indices_of_continuation, beta_temp, huggingface_model=None, divide_by_p=False, prompt_len=None):
     def new_rm(seq):
-        return log_reward_model_p_of_continuation(seq, cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=huggingface_model, divide_by_p=divide_by_p, prompt_len=prompt_len)
+        return log_reward_model_p_of_continuation(seq, params_p, indices_of_continuation, beta_temp, huggingface_model=huggingface_model, divide_by_p=divide_by_p, prompt_len=prompt_len)
     return new_rm
 
 
-def curried_log_p_of_continuation(cfg_p, params_p, indices_of_continuation, huggingface_model=None):
+def curried_log_p_of_continuation(params_p, indices_of_continuation, huggingface_model=None):
     def new_rm(seq):
-        return log_reward_model_p_of_continuation(seq, cfg_p, params_p, indices_of_continuation, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
+        return log_reward_model_p_of_continuation(seq, params_p, indices_of_continuation, beta_temp=None, huggingface_model=huggingface_model, return_log_w_no_temp=True)
     return new_rm
 
 
@@ -116,15 +116,15 @@ def curried_log_p_of_continuation(cfg_p, params_p, indices_of_continuation, hugg
 
 # Takes in sequences of some length (prompt_len + output_len + continuation_len) and evaluates the probability of the last continuation_len number of tokens in those sequences
 # Essentially: like the p_continuation, except here the indices of interest are determined by whatever is in the last few tokens
-@partial(jax.jit, static_argnames=["cfg_p", "beta_temp", "huggingface_model", "continuation_len"])
+@partial(jax.jit, static_argnames=["beta_temp", "huggingface_model", "continuation_len"])
 def log_reward_model_p_of_last_tokens(
-    seq, cfg_p, params_p, continuation_len, beta_temp=1.,
+    seq, params_p, continuation_len, beta_temp=1.,
     huggingface_model=None):
 
     seq_len_incl_prompt = seq.shape[-1]
 
     # Use original_seq_len_incl_prompt for prompt_len because we only want to evaluate the probability of the last few (continuation_len number of) tokens
-    log_prob_of_continuation = evaluate_log_p_selected_tokens(seq, seq_len_incl_prompt - continuation_len, cfg_p, params_p, huggingface_model=huggingface_model)
+    log_prob_of_continuation = evaluate_log_p_selected_tokens(seq, seq_len_incl_prompt - continuation_len, params_p, huggingface_model=huggingface_model)
 
     return log_prob_of_continuation.sum(axis=-1) * beta_temp
 
@@ -136,11 +136,11 @@ def log_reward_model_p_of_last_tokens(
     # Then you feed those samples (sigma or generated q ones) into the twist model, prepending the twists based on the sigma samples (last few tokens of interest)
     # And then all your other calculations should work
 
-def curried_log_reward_model_p_of_last_tokens(cfg_p, params_p, huggingface_model=None, beta_temp=1.):
+def curried_log_reward_model_p_of_last_tokens(params_p, huggingface_model=None, beta_temp=1.):
     def new_rm(seq, condition_twist_on_tokens):
         continuation_len = condition_twist_on_tokens.shape[-1]
         new_seq = jnp.concatenate((seq, condition_twist_on_tokens), axis=-1)
-        return log_reward_model_p_of_last_tokens(new_seq, cfg_p, params_p, continuation_len, beta_temp=beta_temp, huggingface_model=huggingface_model)
+        return log_reward_model_p_of_last_tokens(new_seq, params_p, continuation_len, beta_temp=beta_temp, huggingface_model=huggingface_model)
     return new_rm
 
 
@@ -371,14 +371,14 @@ def curried_log_sentiment_threshold(rewardModel, tokenizer_RM, tokenizer, thresh
 
 
 
-def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indices_of_continuation, beta_temp, huggingface_model=None, divide_by_p=False):
+def build_rew_p_of_continuation_twists(jnp_prompts, params_p, indices_of_continuation, beta_temp, huggingface_model=None, divide_by_p=False):
     # This here is a reward model in the framework phi = e^(beta r) where r = probability of continuation | prompt, s_{1:T} (r = p(continuation | s_{1:T}, prompt))
     # No posterior samples here
     log_true_final_twists = []
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
         log_true_final_twist = curried_log_reward_model_p_of_continuation(
-            cfg_p, params_p, indices_of_continuation,
+            params_p, indices_of_continuation,
             beta_temp, huggingface_model=huggingface_model, divide_by_p=divide_by_p, prompt_len=prompt_len)
 
         log_true_final_twists.append(log_true_final_twist)
@@ -387,7 +387,7 @@ def build_rew_p_of_continuation_twists(jnp_prompts, cfg_p, params_p, indices_of_
 
 
 def build_exp_beta_twists(
-    rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
+    rng_key, params_p, output_len, n_samples_at_a_time, huggingface_model,
     curried_log_true_final_twist_function, jnp_prompts, rewardModel,
     tokenizer_RM, tokenizer, beta_temp, class_num_zero_index, get_true_posterior_samples=False, singledimlogit=False
 ):
@@ -406,7 +406,7 @@ def build_exp_beta_twists(
             while num_posterior_samples == 0:
                 rng_key, sk = jax.random.split(rng_key)
                 p_samples = stochastic_transformer_sample(
-                    sk, cfg_p, params_p, jnp_prompt, output_len,
+                    sk, params_p, jnp_prompt, output_len,
                     n_samples_at_a_time, huggingface_model=huggingface_model
                 )
                 # Classify the p samples, then draw categorical according to the p(c|s). This then gives you a sample from the joint p(c,s) = p(s|c)p(c). Suppose we want samples from p(s|c=4) = p(s,c=4)/p(c=4) propto p(s,c=4) = p(c=4|s)p(s) which is exactly how we drew these samples - for each class, we drew base samples s, and then proportionally according to p(c|s) drew the class c.
@@ -444,7 +444,7 @@ def build_exp_beta_twists(
 
 
 def build_log_sentclass_cond_twists(
-    rng_key, cfg_p, params_p, output_len, n_samples_at_a_time, huggingface_model,
+    rng_key, params_p, output_len, n_samples_at_a_time, huggingface_model,
     jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp, get_true_posterior_samples=False):
     # This is the setting where we always have 1 true posterior sample every time we draw a sample
     # Draw samples from the base model
@@ -462,7 +462,7 @@ def build_log_sentclass_cond_twists(
 
         if get_true_posterior_samples:
             rng_key, sk = jax.random.split(rng_key)
-            p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+            p_samples = stochastic_transformer_sample(sk, params_p,
                                                       jnp_prompt,
                                                       output_len,
                                                       n_samples_at_a_time,
@@ -507,7 +507,7 @@ def build_log_sentclass_cond_twists(
 
 
 
-def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indices_of_continuation, output_len,
+def build_p_of_continuation_twists(rng_key, jnp_prompts, params_p, indices_of_continuation, output_len,
                                    n_samples_at_a_time, tokenizer=None, huggingface_model=None, get_true_posterior_samples=True):
     # Posterior samples can be gotten here; the way this works is that we generate tokens up to
     # output len + number of tokens in the continuation, and we check that the last tokens match the continuation
@@ -519,7 +519,7 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indice
     true_posterior_samples_by_prompt = []
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
-        log_true_final_twist = curried_log_p_of_continuation(cfg_p, params_p, indices_of_continuation, huggingface_model)
+        log_true_final_twist = curried_log_p_of_continuation(params_p, indices_of_continuation, huggingface_model)
         log_true_final_twists.append(log_true_final_twist)
 
         if get_true_posterior_samples:
@@ -527,7 +527,7 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indice
 
             while num_posterior_samples == 0:
                 rng_key, sk = jax.random.split(rng_key)
-                p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+                p_samples = stochastic_transformer_sample(sk, params_p,
                                                           jnp_prompt,
                                                           output_len + num_tokens_in_continuation,
                                                           n_samples_at_a_time,
@@ -571,7 +571,7 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, cfg_p, params_p, indice
 
 
 
-def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continuation_len, output_len,
+def build_p_of_last_tokens_twists(rng_key, jnp_prompts, params_p, continuation_len, output_len,
                                    n_samples_at_a_time, tokenizer=None, huggingface_model=None, get_true_posterior_samples=True, beta_temp=1.):
     # This is the setting where we always have 1 true posterior sample every time we draw a sample
     # Draw samples from the base model
@@ -586,13 +586,13 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continu
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
         log_true_final_twist = curried_log_reward_model_p_of_last_tokens(
-            cfg_p, params_p, huggingface_model, beta_temp=beta_temp)
+            params_p, huggingface_model, beta_temp=beta_temp)
 
         log_true_final_twists.append(log_true_final_twist)
 
         if get_true_posterior_samples:
             rng_key, sk = jax.random.split(rng_key)
-            p_samples = stochastic_transformer_sample(sk, cfg_p, params_p,
+            p_samples = stochastic_transformer_sample(sk, params_p,
                                                       jnp_prompt,
                                                       output_len + continuation_len,
                                                       n_samples_at_a_time,
@@ -636,7 +636,7 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, cfg_p, params_p, continu
 
 
 
-def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time,
+def build_toxicity_threshold_twists(rng_key, jnp_prompts, params_p, output_len, n_samples_at_a_time,
                                     rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold,
                                     huggingface_model=None, get_true_posterior_samples=True):
     log_true_final_twists = []
@@ -657,7 +657,7 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
 
             while num_samples_satisfying_threshold == 0:
                 rng_key, sk = jax.random.split(rng_key)
-                p_samples = stochastic_transformer_sample(sk, cfg_p, params_p, jnp_prompt,
+                p_samples = stochastic_transformer_sample(sk, params_p, jnp_prompt,
                                                           output_len, n_samples_at_a_time,
                                                           huggingface_model=huggingface_model)
 
@@ -698,7 +698,7 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outpu
     return log_true_final_twists, true_posterior_samples_by_prompt
 
 
-def build_sentiment_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, output_len, n_samples_at_a_time,
+def build_sentiment_threshold_twists(rng_key, jnp_prompts, params_p, output_len, n_samples_at_a_time,
                                     rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold,
                                     huggingface_model=None, get_true_posterior_samples=True):
     log_true_final_twists = []
@@ -717,7 +717,7 @@ def build_sentiment_threshold_twists(rng_key, jnp_prompts, cfg_p, params_p, outp
 
             while num_samples_satisfying_threshold == 0:
                 rng_key, sk = jax.random.split(rng_key)
-                p_samples = stochastic_transformer_sample(sk, cfg_p, params_p, jnp_prompt,
+                p_samples = stochastic_transformer_sample(sk, params_p, jnp_prompt,
                                                           output_len, n_samples_at_a_time,
                                                           huggingface_model=huggingface_model)
 

@@ -265,8 +265,8 @@ class ExperimentConfig:
         return dre_grad_fn
 
     def _get_sigma_samples_and_cond_tokens_infilling(
-        self, rng_key, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model,
-        cfg_twist, params_twist, log_true_final_twist,
+        self, rng_key, params_p, prompt, output_len, n_twist, huggingface_model,
+        params_twist, log_true_final_twist,
         proposal_is_p, params_proposal
     ):
         if self.beta_temp != 1.:
@@ -289,7 +289,7 @@ class ExperimentConfig:
 
             # Do one conditioning token set at a time
             p_samples = stochastic_transformer_sample(
-                sk2, cfg_p, params_p, prompt,
+                sk2, params_p, prompt,
                 output_len + self.num_last_tokens_to_condition_on,
                 1, huggingface_model=huggingface_model
             )
@@ -312,7 +312,7 @@ class ExperimentConfig:
 
                 # Collect approximate true posteriors with the help of the 1 true posterior that we have
                 (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
-                    sk2, prompt, cfg_p, params_p, cfg_twist, params_twist,
+                    sk2, prompt, params_p, params_twist,
                     log_true_final_twist, output_len, n_twist,
                     smc_procedure_type=self.smc_procedure_type,
                     condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
@@ -331,7 +331,7 @@ class ExperimentConfig:
             if self.twist_learn_type in ctl_methods_for_infilling:
                 assert self.beta_temp == 1
             p_samples = stochastic_transformer_sample(
-                sk2, cfg_p, params_p, prompt,
+                sk2, params_p, prompt,
                 output_len + self.num_last_tokens_to_condition_on,
                 n_twist, huggingface_model=huggingface_model
             )
@@ -344,13 +344,13 @@ class ExperimentConfig:
         return rng_key, true_sigma_samples, condition_twist_on_tokens
 
     def _get_sigma_samples_and_cond_tokens_sentcondtwist(
-        self, rng_key, cfg_p, params_p, prompt, output_len, n_twist, huggingface_model
+        self, rng_key, params_p, prompt, output_len, n_twist, huggingface_model
     ):
         assert self.beta_temp == 1.
 
         rng_key, sk2, sk3 = jax.random.split(rng_key, 3)
         p_samples = stochastic_transformer_sample(
-            sk2, cfg_p, params_p, prompt, output_len, n_twist,
+            sk2, params_p, prompt, output_len, n_twist,
             huggingface_model=huggingface_model
         )
 
@@ -369,8 +369,8 @@ class ExperimentConfig:
         return rng_key, true_sigma_samples, condition_twist_on_tokens
 
     # TODO clean this up
-    def get_grad_params_twist(self, sk, prompt, n_twist, output_len, cfg_p,
-                              params_p, cfg_twist, params_twist, log_true_final_twist,
+    def get_grad_params_twist(self, sk, prompt, n_twist, output_len,
+                              params_p, params_twist, log_true_final_twist,
                               proposal_is_p=False, huggingface_model=None,
                               tempered_twist=False, beta_prop=None, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None):
 
@@ -383,7 +383,7 @@ class ExperimentConfig:
             sk, sk2, sk3 = jax.random.split(sk, 3)
 
             if self.rm_type in ["p_last_tokens",]:
-                p_samples = stochastic_transformer_sample(sk2, cfg_p,
+                p_samples = stochastic_transformer_sample(sk2,
                                                           params_p, prompt,
                                                           output_len + self.num_last_tokens_to_condition_on,
                                                           n_twist,
@@ -396,7 +396,7 @@ class ExperimentConfig:
                 if self.twist_learn_type == "bce_sigma":
                     samples_to_evaluate_over = true_sigma_samples
                 elif self.twist_learn_type == "bce_p":
-                    independent_p_samples = stochastic_transformer_sample(sk3, cfg_p,
+                    independent_p_samples = stochastic_transformer_sample(sk3,
                                                               params_p, prompt,
                                                               output_len,
                                                               n_twist,
@@ -404,7 +404,7 @@ class ExperimentConfig:
                     samples_to_evaluate_over = independent_p_samples
                 elif self.twist_learn_type == "bce_psigma":
                     independent_p_samples = stochastic_transformer_sample(sk3,
-                                                                          cfg_p,
+
                                                                           params_p,
                                                                           prompt,
                                                                           output_len,
@@ -427,7 +427,7 @@ class ExperimentConfig:
                     samples_to_evaluate_over, condition_twist_on_tokens)
             elif self.rm_type in ["sent_cond_twist",]:
                 sk2, sk3 = jax.random.split(sk2)
-                p_samples = stochastic_transformer_sample(sk2, cfg_p,
+                p_samples = stochastic_transformer_sample(sk2,
                                                           params_p, prompt,
                                                           output_len,
                                                           n_twist,
@@ -452,7 +452,7 @@ class ExperimentConfig:
 
             else:
                 if self.twist_learn_type == "bce_p":
-                    p_samples = stochastic_transformer_sample(sk2, cfg_p,
+                    p_samples = stochastic_transformer_sample(sk2,
                                                               params_p, prompt,
                                                               output_len,
                                                               n_twist,
@@ -470,7 +470,7 @@ class ExperimentConfig:
 
 
             grad_params_twist = self.dre_grad_fn(
-                sk, prompt, cfg_p, params_p, cfg_twist,
+                sk, prompt, params_p,
                 params_twist, log_true_final_twist, output_len,
                 n_twist, smc_procedure_type=self.smc_procedure_type,
                 condition_twist_on_tokens=condition_twist_on_tokens,
@@ -488,7 +488,7 @@ class ExperimentConfig:
             assert self.rm_type in ["exp_beta_toxicity_class_logprob",
                                     "exp_beta_sentiment_class_logprob"]  # others not yet tested
             sk, combined_true_posterior_samples = collect_true_posterior_samples(
-                sk, self, [prompt], cfg_p, params_p, self.rm_type,
+                sk, self, [prompt], params_p, self.rm_type,
                 None,
                 output_len, n_twist, huggingface_model,
                 None, None, self.rewardModel, self.tokenizer_RM, self.tokenizer, None, None,
@@ -503,16 +503,16 @@ class ExperimentConfig:
 
         elif self.rm_type == "p_last_tokens":
             sk, true_sigma_samples, condition_twist_on_tokens = self._get_sigma_samples_and_cond_tokens_infilling(
-                sk, cfg_p, params_p, prompt, output_len, n_twist,
+                sk, params_p, prompt, output_len, n_twist,
                 huggingface_model,
-                cfg_twist, params_twist, log_true_final_twist,
+                params_twist, log_true_final_twist,
                 proposal_is_p, params_proposal
             )
 
         elif self.rm_type == "sent_cond_twist":
             sk, true_sigma_samples, condition_twist_on_tokens = \
                 self._get_sigma_samples_and_cond_tokens_sentcondtwist(
-                sk, cfg_p, params_p, prompt, output_len, n_twist,
+                sk, params_p, prompt, output_len, n_twist,
                 huggingface_model
             )
 
@@ -520,7 +520,7 @@ class ExperimentConfig:
             true_sigma_samples = None
 
         grad_params_twist = self.dre_grad_fn(
-            sk, prompt, cfg_p, params_p, cfg_twist,
+            sk, prompt, params_p,
             params_twist, log_true_final_twist, output_len,
             n_twist, smc_procedure_type=self.smc_procedure_type,
             condition_twist_on_tokens=condition_twist_on_tokens,
@@ -535,11 +535,10 @@ class ExperimentConfig:
 
     # @partial(jax.jit, static_argnames=[
     #     "self", "n_twist", "output_len",
-    #         "cfg_p", "cfg_twist",
     #         "log_true_final_twist", "proposal_is_p", "huggingface_model",
     #         "optimizer_twist"])
     def update_twist(self, rng_key, prompt, n_twist,
-                     output_len, cfg_p, params_p, cfg_twist, params_twist,
+                     output_len, params_p, params_twist,
                      log_true_final_twist, proposal_is_p, huggingface_model,
                      optimizer_twist, optim_twist_state,
                      tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts, params_proposal=None
@@ -548,7 +547,7 @@ class ExperimentConfig:
         rng_key, sk = jax.random.split(rng_key)
         grad_params_twist = self.get_grad_params_twist(
             sk, prompt, n_twist,
-            output_len, cfg_p, params_p, cfg_twist,
+            output_len, params_p,
             params_twist, log_true_final_twist,
             proposal_is_p=proposal_is_p,
             huggingface_model=huggingface_model,
@@ -562,7 +561,7 @@ class ExperimentConfig:
         return rng_key, params_twist, optim_twist_state
 
     def get_and_plot_logZ_bounds_based_on_cfg(
-        self, rng_key, prompt, output_len, cfg_p, params_p, cfg_twist, params_twist,
+        self, rng_key, prompt, output_len, params_p, params_twist,
         log_true_final_twist, start, epoch, huggingface_model, proposal_is_p,
         true_posterior_samples_by_prompt_and_by_token, prompt_num,
         plot_over_time_list, save_dir, seed, exp_num_twist_updates, twist_updates_per_epoch,
@@ -576,8 +575,8 @@ class ExperimentConfig:
             "rng_key": sk,
             "prompt": prompt,
             "output_len": output_len,
-            "cfg_p": cfg_p, "params_p": params_p,
-            "cfg_twist": cfg_twist, "params_twist": params_twist,
+            "params_p": params_p,
+            "params_twist": params_twist,
             "log_true_final_twist": log_true_final_twist,
             "start": start,
             "epoch": epoch, "huggingface_model": huggingface_model,
@@ -647,7 +646,7 @@ class ExperimentConfig:
 
 
     def inspect_results(
-        self, rng_key, prompt, cfg_p, params_p, cfg_twist, params_twist,
+        self, rng_key, prompt, params_p, params_twist,
         log_true_final_twist, output_len, n_samples, indices_of_continuation, tokenizer,
 
         proposal_is_p, huggingface_model, params_proposal=None):
@@ -667,8 +666,8 @@ class ExperimentConfig:
         smc_args = {
             "rng_key": sk1,
             "prompt": prompt,
-            "cfg_p": cfg_p, "params_p": params_p,
-            "cfg_twist": cfg_twist, "params_twist": params_twist,
+            "params_p": params_p,
+            "params_twist": params_twist,
             "log_true_final_twist": log_true_final_twist,
             "output_len": output_len,
             "n_smc_samples": n_samples,
@@ -691,7 +690,7 @@ class ExperimentConfig:
 
             proposal_samples = intermediate_seq_list[-1]
 
-            p_samples = stochastic_transformer_sample(sk2, cfg_p, params_p,
+            p_samples = stochastic_transformer_sample(sk2, params_p,
                                                       prompt,
                                                       output_len, n_samples,
                                                       huggingface_model=huggingface_model)
@@ -705,7 +704,7 @@ class ExperimentConfig:
                                 "p_continuation", "hard_p_continuation"]:
                 def score_func(samples):
                     return log_reward_model_p_of_continuation(
-                    samples, cfg_p, params_p, indices_of_continuation,
+                    samples, params_p, indices_of_continuation,
                     huggingface_model=huggingface_model, return_log_w_no_temp=True)
                 log_prob_text = True
             else:
@@ -752,7 +751,7 @@ class ExperimentConfig:
 
         elif self.rm_type == "p_last_tokens":
             p_samples = stochastic_transformer_sample(
-                sk2, cfg_p, params_p, prompt,
+                sk2, params_p, prompt,
                 output_len + self.num_last_tokens_to_condition_on, n_samples,
                 huggingface_model=huggingface_model
             )
@@ -765,7 +764,7 @@ class ExperimentConfig:
 
             def score_func(samples):
                 return log_reward_model_p_of_last_tokens(
-                    samples, cfg_p, params_p,
+                    samples, params_p,
                     self.num_last_tokens_to_condition_on,
                     huggingface_model=huggingface_model, beta_temp=1.)
             log_prob_text = True
@@ -794,8 +793,8 @@ class ExperimentConfig:
                 )
 
                 aux_info = print_g_q_f_q_estimates(
-                    true_sigma_samples, proposal_samples, prompt, cfg_p,
-                    params_p, cfg_twist,
+                    true_sigma_samples, proposal_samples, prompt,
+                    params_p,
                     params_twist, output_len, log_true_final_twist,
 
                     condition_twist_on_tokens,
@@ -821,7 +820,7 @@ class ExperimentConfig:
 
         elif self.rm_type == "sent_cond_twist":
             p_samples = stochastic_transformer_sample(
-                sk2, cfg_p, params_p, prompt, output_len, n_samples,
+                sk2, params_p, prompt, output_len, n_samples,
                 huggingface_model=huggingface_model
             )
             if args.set_sent_class_for_post_samples:
@@ -865,8 +864,8 @@ class ExperimentConfig:
                                  name="Proposal")
 
             aux_info = print_g_q_f_q_estimates(
-                true_sigma_samples, proposal_samples, prompt, cfg_p, params_p,
-                cfg_twist, params_twist, output_len, log_true_final_twist,
+                true_sigma_samples, proposal_samples, prompt, params_p,
+                params_twist, output_len, log_true_final_twist,
 
                 condition_twist_on_tokens,
                 proposal_is_p, huggingface_model, params_proposal
@@ -876,7 +875,7 @@ class ExperimentConfig:
             raise NotImplementedError
 
         kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
-                              cfg_p, params_p, cfg_twist, params_twist,
+                              params_p, params_twist,
                               prompt_len, output_len,
 
                               condition_twist_on_tokens=condition_twist_on_tokens,
@@ -884,8 +883,8 @@ class ExperimentConfig:
         print(f"KL to prior estimate: {kl_vals.mean()}")
         if params_proposal is not None:
             kl_vals_prop = get_kl_vals(
-                no_intermediate_resample_proposal_samples, cfg_p,
-                params_p, cfg_twist, params_twist,
+                no_intermediate_resample_proposal_samples,
+                params_p, params_twist,
                 prompt_len, output_len,
 
                 condition_twist_on_tokens=condition_twist_on_tokens,
@@ -899,7 +898,7 @@ class ExperimentConfig:
 
 
     def get_log_true_final_twists(
-        self, rng_key, jnp_prompts, cfg_p, params_p, rm_type, output_len,
+        self, rng_key, jnp_prompts, params_p, rm_type, output_len,
         n_true_posterior_samples, huggingface_model=None,
         indices_of_continuation=None, rewardModel=None, tokenizer_RM=None,
         tokenizer=None, threshold=0, pos_threshold=True, get_true_posterior_samples=True
@@ -909,7 +908,7 @@ class ExperimentConfig:
             assert indices_of_continuation is not None
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_rew_p_of_continuation_twists(
-                jnp_prompts, cfg_p, params_p, indices_of_continuation=indices_of_continuation,
+                jnp_prompts, params_p, indices_of_continuation=indices_of_continuation,
                 beta_temp=self.beta_temp, huggingface_model=huggingface_model
             )
 
@@ -917,7 +916,7 @@ class ExperimentConfig:
             assert indices_of_continuation is not None
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_rew_p_of_continuation_twists(
-                jnp_prompts, cfg_p, params_p,
+                jnp_prompts, params_p,
                 indices_of_continuation=indices_of_continuation,
                 beta_temp=self.beta_temp, huggingface_model=huggingface_model,
                 divide_by_p=True
@@ -942,7 +941,7 @@ class ExperimentConfig:
 
             rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token = \
                 build_exp_beta_twists(
-                    rng_key, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model,
+                    rng_key, params_p, output_len, n_true_posterior_samples, huggingface_model,
                     curried_log_true_final_twist_function, jnp_prompts, rewardModel,
                     tokenizer_RM, tokenizer, self.beta_temp, class_num, get_true_posterior_samples, singledimlogit=True
                 )
@@ -953,7 +952,7 @@ class ExperimentConfig:
             curried_log_true_final_twist_function = curried_log_exp_beta_sentiment_class_logprob
             rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token = \
                 build_exp_beta_twists(
-                    rng_key, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model,
+                    rng_key, params_p, output_len, n_true_posterior_samples, huggingface_model,
                     curried_log_true_final_twist_function, jnp_prompts, rewardModel,
                     tokenizer_RM, tokenizer, self.beta_temp, self.sentiment_class_zero_index, get_true_posterior_samples, singledimlogit=False
                 )
@@ -962,7 +961,7 @@ class ExperimentConfig:
             assert self.beta_temp == 1 # not yet tested for other beta
             rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token =\
                 build_log_sentclass_cond_twists(
-                    rng_key, cfg_p, params_p, output_len, n_true_posterior_samples, huggingface_model,
+                    rng_key, params_p, output_len, n_true_posterior_samples, huggingface_model,
                     jnp_prompts, rewardModel, tokenizer_RM, tokenizer, self.beta_temp, get_true_posterior_samples)
 
         elif rm_type == "p_continuation" or rm_type == "hard_p_continuation":
@@ -970,7 +969,7 @@ class ExperimentConfig:
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_p_of_continuation_twists(
-                sk, jnp_prompts, cfg_p, params_p, indices_of_continuation, output_len,
+                sk, jnp_prompts, params_p, indices_of_continuation, output_len,
                 n_samples_at_a_time=n_true_posterior_samples, tokenizer=tokenizer,
                 huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples)
 
@@ -979,7 +978,7 @@ class ExperimentConfig:
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_p_of_last_tokens_twists(
-                sk, jnp_prompts, cfg_p, params_p,
+                sk, jnp_prompts, params_p,
                 self.num_last_tokens_to_condition_on, output_len,
                 n_samples_at_a_time=n_true_posterior_samples, tokenizer=tokenizer,
                 huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples
@@ -989,7 +988,7 @@ class ExperimentConfig:
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_toxicity_threshold_twists(
-                sk, jnp_prompts, cfg_p, params_p, output_len,
+                sk, jnp_prompts, params_p, output_len,
                 n_true_posterior_samples, rewardModel, tokenizer_RM, tokenizer,
                 threshold, pos_threshold, huggingface_model=huggingface_model,
                 get_true_posterior_samples=get_true_posterior_samples
@@ -999,7 +998,7 @@ class ExperimentConfig:
             rng_key, sk = jax.random.split(rng_key)
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_sentiment_threshold_twists(
-                sk, jnp_prompts, cfg_p, params_p, output_len,
+                sk, jnp_prompts, params_p, output_len,
                 n_true_posterior_samples, rewardModel, tokenizer_RM,
                 tokenizer, threshold, pos_threshold,
                 huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples
@@ -1016,7 +1015,7 @@ class ExperimentConfig:
 print_smc_samples = False
 
 def inspect_and_record_evidence_setting_for_index(
-    rng_key, prompt, cfg_p, params_p, cfg_twist,
+    rng_key, prompt, params_p,
     params_twist, output_len, log_true_final_twist,
     n_test_smc_samples, true_posterior_samples,
     smc_procedure_type,
@@ -1050,8 +1049,8 @@ def inspect_and_record_evidence_setting_for_index(
 
     rng_key, sk_i = jax.random.split(rng_key)
     iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
-        sk_i, posterior_sample, prompt, cfg_p,
-        params_p, cfg_twist,
+        sk_i, posterior_sample, prompt,
+        params_p,
         params_twist, log_true_final_twist,
         output_len, n_test_smc_samples,
         smc_procedure_type=smc_procedure_type,
@@ -1078,8 +1077,8 @@ def inspect_and_record_evidence_setting_for_index(
 
     rng_key, sk_smc = jax.random.split(rng_key)
     (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list, log_w_t_before_resample_list) = smc_procedure(
-        sk_smc, prompt, cfg_p, params_p,
-        cfg_twist, params_twist,
+        sk_smc, prompt, params_p,
+        params_twist,
         log_true_final_twist,
         output_len,
         n_test_smc_samples,
@@ -1120,8 +1119,8 @@ def inspect_and_record_evidence_setting_for_index(
 
     rng_key, sk_smc = jax.random.split(rng_key)
     smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
-                                            prompt, cfg_p, params_p,
-                                            cfg_twist, params_twist,
+                                            prompt, params_p,
+                                            params_twist,
                                             log_true_final_twist,
                                             output_len,
                                             n_test_smc_samples,
@@ -1148,8 +1147,7 @@ def inspect_and_record_evidence_setting_for_index(
     return list_of_things_to_append_for_record_list, smc_samples
 
 inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argnames=[
-    "log_true_final_twist", 'output_len', 'n_test_smc_samples',
-    "cfg_p", "cfg_twist", "proposal_is_p",
+    "log_true_final_twist", 'output_len', 'n_test_smc_samples', "proposal_is_p",
     "huggingface_model", "smc_procedure_type", "tokenizer"
 ])(inspect_and_record_evidence_setting_for_index)
 
@@ -1159,7 +1157,7 @@ inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argn
 
 def collect_info_across_trueposts(
     rng_key, start, n_trueposts_for_evals, n_samples_for_plots, inspect_and_record_evidence_setting_fn,
-    prompt, cfg_p, params_p, cfg_twist, params_twist,
+    prompt, params_p, params_twist,
     output_len, log_true_final_twist, true_posterior_samples,
     smc_procedure_type, proposal_is_p,
     condition_twist_on_tokens, huggingface_model,
@@ -1188,7 +1186,7 @@ def collect_info_across_trueposts(
             rng_key, sk = jax.random.split(rng_key)
 
             list_of_things_to_append_for_record_list, smc_samples = inspect_and_record_evidence_setting_fn(
-                sk, prompt, cfg_p, params_p, cfg_twist,
+                sk, prompt, params_p,
                 params_twist,
                 output_len, log_true_final_twist,
                 n_test_smc_samples,
@@ -1332,8 +1330,8 @@ def collect_and_print_info_over_largest_n_samples(
     return f_q_list_by_truepost, logZ_midpoint_estimate
 
 def get_and_plot_logZ_bounds(
-    rng_key, true_posterior_samples, prompt, output_len, cfg_p,
-    params_p, cfg_twist, params_twist, log_true_final_twist, start, epoch,
+    rng_key, true_posterior_samples, prompt, output_len,
+    params_p, params_twist, log_true_final_twist, start, epoch,
     plot_over_time_list, smc_procedure_type, save_dir, twist_learn_type, rm_type, seed,
     exp_num_twist_updates, twist_updates_per_epoch,
     proposal_is_p=False,
@@ -1369,7 +1367,7 @@ def get_and_plot_logZ_bounds(
         collect_info_across_trueposts(
         rng_key, start, n_trueposts_for_evals, n_samples_for_plots,
         inspect_and_record_evidence_setting_fn,
-        prompt, cfg_p, params_p, cfg_twist, params_twist,
+        prompt, params_p, params_twist,
         output_len, log_true_final_twist,
         true_posterior_samples,
         smc_procedure_type, proposal_is_p,
@@ -1391,8 +1389,8 @@ def get_and_plot_logZ_bounds(
     for i in range(1, len(list_of_stuff_across_trueposts_only_largest_n_samples)):
         list_of_stuff_across_trueposts_only_largest_n_samples[i] /= n_trueposts_for_evals
 
-    target_dist_weights = iwae_backward(true_posterior_samples, prompt, cfg_p,
-                                        params_p, cfg_twist, params_twist,
+    target_dist_weights = iwae_backward(true_posterior_samples, prompt,
+                                        params_p, params_twist,
                                         output_len, log_true_final_twist,
 
                                         condition_twist_on_tokens,
@@ -1462,7 +1460,7 @@ def get_and_plot_logZ_bounds(
 
 
 def collect_true_posterior_samples(
-    rng_key, experiment_cfg, jnp_prompts, cfg_p, params_p, rm_type,
+    rng_key, experiment_cfg, jnp_prompts, params_p, rm_type,
     output_len, n_true_posterior_samples, huggingface_model,
     indices_of_continuation, rewardModel,
     tokenizer_RM, tokenizer, threshold, pos_threshold, num_samples_if_only_collect_true_posterior_samples
@@ -1475,7 +1473,7 @@ def collect_true_posterior_samples(
         rng_key, sk = jax.random.split(rng_key)
         log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
             = experiment_cfg.get_log_true_final_twists(
-            sk, jnp_prompts, cfg_p, params_p, rm_type,
+            sk, jnp_prompts, params_p, rm_type,
             output_len, n_true_posterior_samples, huggingface_model,
             indices_of_continuation, rewardModel,
             tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples=True
@@ -1609,7 +1607,7 @@ def load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model
 
 def get_final_twists_and_posterior_samples(
     load_posterior_samples, experiment_cfg, rng_key,
-    jnp_prompts, cfg_p, params_p, rm_type,
+    jnp_prompts, params_p, rm_type,
     output_len, n_true_posterior_samples, huggingface_model,
     indices_of_continuation, rewardModel,
     tokenizer_RM, tokenizer, threshold, pos_threshold,
@@ -1623,7 +1621,7 @@ def get_final_twists_and_posterior_samples(
     rng_key, sk = jax.random.split(rng_key)
     log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
         = experiment_cfg.get_log_true_final_twists(
-        sk, jnp_prompts, cfg_p, params_p, rm_type,
+        sk, jnp_prompts, params_p, rm_type,
         output_len, n_true_posterior_samples, huggingface_model,
         indices_of_continuation, rewardModel,
         tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples
@@ -1806,8 +1804,6 @@ def setup_cfg(
     if hface_nn_twist:
         print("Using NN for huggingface model twist head", flush=True)
 
-    cfg_p = None
-    cfg_twist = None
     eps = 1e-8
     params_proposal = None
 
@@ -1831,7 +1827,7 @@ def setup_cfg(
 
     if only_collect_true_posterior_samples:
         rng_key, combined_true_posterior_samples = collect_true_posterior_samples(
-            rng_key, experiment_cfg, jnp_prompts, cfg_p, params_p, rm_type,
+            rng_key, experiment_cfg, jnp_prompts, params_p, rm_type,
             output_len, n_true_posterior_samples, huggingface_model,
             indices_of_continuation, rewardModel,
             tokenizer_RM, tokenizer, threshold, pos_threshold,
@@ -1852,7 +1848,7 @@ def setup_cfg(
     rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token = \
         get_final_twists_and_posterior_samples(
         load_posterior_samples, experiment_cfg, rng_key,
-        jnp_prompts, cfg_p, params_p, rm_type,
+        jnp_prompts, params_p, rm_type,
         output_len, n_true_posterior_samples, huggingface_model,
         indices_of_continuation, rewardModel,
         tokenizer_RM, tokenizer, threshold, pos_threshold,
@@ -1864,15 +1860,15 @@ def setup_cfg(
 
     records_list_by_prompt_then_twist = None
 
-    return experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
-           cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
+    return experiment_cfg, rng_key, huggingface_model, params_p, \
+           params_twist, optimizer_twist, optim_twist_state, \
            jnp_prompts, log_true_final_twists, \
            true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
            indices_of_continuation, tokenizer, params_proposal
 
 
 def do_inspection_and_plotting_of_test_info(
-    rng_key, start, experiment_cfg, prompt, cfg_p, params_p, cfg_twist,
+    rng_key, start, experiment_cfg, prompt, params_p,
     params_twist, log_true_final_twist, output_len, n_samples_for_plots_larger,
     indices_of_continuation, tokenizer, proposal_is_p, huggingface_model,
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
@@ -1889,7 +1885,7 @@ def do_inspection_and_plotting_of_test_info(
     for truepost_i in range(n_trueposts_for_evals):
         # DO inspect samples regardless of whether we plot logZ bounds or not
         rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
-            rng_key, prompt, cfg_p, params_p, cfg_twist,
+            rng_key, prompt, params_p,
             params_twist, log_true_final_twist,
             output_len,
             n_samples_for_plots_larger,
@@ -1944,8 +1940,8 @@ def do_inspection_and_plotting_of_test_info(
         plot_args = {
             "rng_key": rng_key,
             "prompt": prompt, "output_len": args.output_len,
-            "cfg_p": cfg_p, "params_p": params_p,
-            "cfg_twist": cfg_twist, "params_twist": params_twist,
+            "params_p": params_p,
+            "params_twist": params_twist,
             "log_true_final_twist": log_true_final_twist,
             "start": start,
             "epoch": epoch, "huggingface_model": huggingface_model,
@@ -1981,7 +1977,7 @@ def do_inspection_and_plotting_of_test_info(
     return rng_key, plot_over_time_list, plot_over_time_list_p_proposal
 
 def do_twist_updates(
-    rng_key, start, experiment_cfg, prompt, cfg_p, params_p, cfg_twist,
+    rng_key, start, experiment_cfg, prompt, params_p,
     params_twist, log_true_final_twist, huggingface_model,
     params_proposal, epoch,
     prompt_num,
@@ -2019,8 +2015,8 @@ def do_twist_updates(
                     rng_key, replay_buffer, replay_buffer_log_w_ts,
                     replay_buffer_log_prob_eval,
                     replay_buffer_log_phi_final_eval,
-                    prompt, cfg_p,
-                    params_p, cfg_twist,
+                    prompt,
+                    params_p,
                     params_twist, log_true_final_twist,
                     experiment_cfg, output_len,
                     n_buffer_samples_at_a_time,
@@ -2048,8 +2044,8 @@ def do_twist_updates(
         update_twist_args = {
             "rng_key": rng_key,
             "prompt": prompt, "n_twist": n_twist,
-            "output_len": output_len, "cfg_p": cfg_p,
-            "params_p": params_p, "cfg_twist": cfg_twist,
+            "output_len": output_len,
+            "params_p": params_p,
             "params_twist": params_twist,
             "log_true_final_twist": log_true_final_twist,
             "proposal_is_p": proposal_is_p,
@@ -2111,8 +2107,8 @@ def main():
                                     prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_nsamples")
         raise SystemExit(0) # Finished
 
-    experiment_cfg, rng_key, huggingface_model, cfg_p, params_p, \
-    cfg_twist, params_twist, optimizer_twist, optim_twist_state, \
+    experiment_cfg, rng_key, huggingface_model, params_p, \
+    params_twist, optimizer_twist, optim_twist_state, \
     jnp_prompts, log_true_final_twists, \
     true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
     indices_of_continuation, tokenizer, params_proposal = setup_cfg(**setup_args)
@@ -2161,7 +2157,7 @@ def main():
             if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
                 rng_key, plot_over_time_list, plot_over_time_list_p_proposal = \
                     do_inspection_and_plotting_of_test_info(
-                    rng_key, start, experiment_cfg, prompt, cfg_p, params_p, cfg_twist,
+                    rng_key, start, experiment_cfg, prompt, params_p,
                     params_twist, log_true_final_twist, args.output_len, args.n_samples_for_plots_larger,
                     indices_of_continuation, tokenizer, args.proposal_is_p, huggingface_model,
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
@@ -2175,8 +2171,8 @@ def main():
             print(f"TIME: {time.time() - start}", flush=True)
             # TODO Jul 17 Consider scan loop and jit these too.
             rng_key, params_twist, optim_twist_state = do_twist_updates(
-                rng_key, start, experiment_cfg, prompt, cfg_p, params_p,
-                cfg_twist,
+                rng_key, start, experiment_cfg, prompt, params_p,
+
                 params_twist, log_true_final_twist, huggingface_model,
                 params_proposal, epoch,
                 prompt_num,
