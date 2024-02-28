@@ -81,6 +81,18 @@ class ExperimentConfig:
         self.train_on_true_posterior_samples = train_on_true_posterior_samples
 
         # TODO think about if there's some way to avoid the tons of arguments (params_p, params_twist, etc. that is everywhere - can I have them in one centralized place?)
+        # TODO I could wrap all of the arguments in a single tuple, sort of like what I did with "carry" before
+        # Or rather, use a dict for that purpose, and then update the arguments/rebuild at the end before you return it
+        # Another possibility is I separate all the static/unchanging arguments and put those in a separate cfg or settings dict, then that gets passed around everywhere
+        # This way, if I need to add a new attribute, I can just directly add it to that dict, and I don't have to add a new argument in 5 million places.
+        # TODO perhaps start with the loss functions, that seems like a natural place where I can reduce repeating the same arguments/text everywhere.
+        # Once I have this dict, I can just pull the arguments/attributes I need from it, and leave the rest untouched. This should simplify my signatures and calls significantly.
+        # TODO try this, and then see if this makes it much easier to modify/add new attributes.
+        # TODO HAVE THIS GO ALL THE WAY DOWN TO THE LOG PSI ALL VOCAB / GET P LOGITS CALLS.
+        # E.g. maybe all of condition_twist_on_tokens, huggingface_model=None,
+        #     params_proposal=None, prompt_len=None goes into one dict and then we can check the various attributes of each.
+        # No but there is a question of what can be jitted. So start with the losses, that's a good place to start.
+
 
         if self.rm_type == "p_last_tokens":
             assert num_last_tokens_to_condition_on > 0
@@ -2073,6 +2085,73 @@ def do_twist_updates(
 
     return rng_key, params_twist, optim_twist_state
 
+def do_test_sampling_time(
+    rng_key, jnp_prompts, params_p, params_twist, log_true_final_twists,
+    huggingface_model, experiment_cfg
+):
+    print("TESTING SAMPLING TIME", flush=True)
+    prompt_num = 0
+    prompt = jnp_prompts[prompt_num]
+    output_len = 10
+    batch_size = 100
+    iters = 5
+
+    rng_key, sk = jax.random.split(rng_key)
+    # Do compilation first
+    p_samples = stochastic_transformer_sample(
+        sk, params_p, prompt, output_len,
+        batch_size, huggingface_model=huggingface_model
+    )
+
+    start = time.time()
+    for i in range(iters):
+        print(f"iter {i}: time {time.time() - start}")
+        rng_key, sk = jax.random.split(rng_key)
+        p_samples = stochastic_transformer_sample(
+            sk, params_p, prompt, output_len,
+            batch_size, huggingface_model=huggingface_model
+        )
+    end = time.time()
+    total_time = end - start
+    num_tokens = output_len * batch_size * iters
+    tokens_per_sec = num_tokens / total_time
+    print(
+        f"Base model sampling: {tokens_per_sec} tokens/s on {batch_size} batch size and {output_len} generated tokens, {iters} iters of generation")
+    print(end - start)
+
+    log_true_final_twist = log_true_final_twists[prompt_num]
+    # Do compilation first
+    rng_key, sk = jax.random.split(rng_key)
+    (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
+        sk, prompt, params_p, params_twist,
+        log_true_final_twist, output_len, batch_size,
+        smc_procedure_type=experiment_cfg.smc_procedure_type,
+        # condition_twist_on_tokens=condition_twist_on_tokens_broadcasted, # TODO Just skip for now, allow for infilling later
+        resample=True,
+        proposal_is_p=False,
+        huggingface_model=huggingface_model,
+    )
+
+    start = time.time()
+    for i in range(iters):
+        print(f"iter {i}: time {time.time() - start}")
+        rng_key, sk = jax.random.split(rng_key)
+        (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
+            sk, prompt, params_p, params_twist,
+            log_true_final_twist, output_len, batch_size,
+            smc_procedure_type=experiment_cfg.smc_procedure_type,
+            # condition_twist_on_tokens=condition_twist_on_tokens_broadcasted, # TODO Just skip for now, allow for infilling later
+            resample=True,
+            proposal_is_p=False,
+            huggingface_model=huggingface_model,
+        )
+    end = time.time()
+    total_time = end - start
+    tokens_per_sec = num_tokens / total_time
+    print(
+        f"SMC sampling: {tokens_per_sec} tokens/s on {batch_size} batch size and {output_len} generated tokens, {iters} iters of generation")
+    print(end - start)
+
 
 def main():
 
@@ -2112,6 +2191,13 @@ def main():
     jnp_prompts, log_true_final_twists, \
     true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
     indices_of_continuation, tokenizer, params_proposal = setup_cfg(**setup_args)
+
+    if args.test_sampling_time:
+        do_test_sampling_time(
+            rng_key, jnp_prompts, params_p, params_twist, log_true_final_twists,
+            huggingface_model, experiment_cfg
+        )
+        raise SystemExit(0)  # Finished
 
     last_ckpt_epoch = -1
 
@@ -2172,7 +2258,6 @@ def main():
             # TODO Jul 17 Consider scan loop and jit these too.
             rng_key, params_twist, optim_twist_state = do_twist_updates(
                 rng_key, start, experiment_cfg, prompt, params_p,
-
                 params_twist, log_true_final_twist, huggingface_model,
                 params_proposal, epoch,
                 prompt_num,
@@ -2367,6 +2452,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--output_p_psi", action="store_true", help="Instead of outputting psi separate from the base model p, keep the base model separate, and then directly output p psi. Ie. we directly parameterize q = p psi rather than psi. If you need psi, you then have to divide by the base model prob")
     parser.add_argument("--separate_proposal_and_twist", action="store_true", help="Load a separate twist model for proposal")
+
+    parser.add_argument("--test_sampling_time", action="store_true")
 
     args = parser.parse_args()
 
