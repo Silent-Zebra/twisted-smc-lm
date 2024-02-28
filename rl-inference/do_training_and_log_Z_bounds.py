@@ -2087,14 +2087,12 @@ def do_twist_updates(
 
 def do_test_sampling_time(
     rng_key, jnp_prompts, params_p, params_twist, log_true_final_twists,
-    huggingface_model, experiment_cfg
+    huggingface_model, experiment_cfg, output_len, batch_size, iters=5
 ):
     print("TESTING SAMPLING TIME", flush=True)
     prompt_num = 0
     prompt = jnp_prompts[prompt_num]
-    output_len = 10
-    batch_size = 100
-    iters = 5
+
 
     rng_key, sk = jax.random.split(rng_key)
     # Do compilation first
@@ -2195,7 +2193,7 @@ def main():
     if args.test_sampling_time:
         do_test_sampling_time(
             rng_key, jnp_prompts, params_p, params_twist, log_true_final_twists,
-            huggingface_model, experiment_cfg
+            huggingface_model, experiment_cfg, args.output_len, args.n_twist,
         )
         raise SystemExit(0)  # Finished
 
