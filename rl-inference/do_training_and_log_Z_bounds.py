@@ -2087,7 +2087,7 @@ def do_twist_updates(
 
 def do_test_sampling_time(
     rng_key, jnp_prompts, params_p, params_twist, log_true_final_twists,
-    huggingface_model, experiment_cfg, output_len, batch_size, iters=10
+    huggingface_model, experiment_cfg, output_len, batch_size, iters=10, num_last_tokens_to_condition_on=0
 ):
     print("TESTING SAMPLING TIME", flush=True)
     print(f"Generating {output_len} tokens")
@@ -2102,14 +2102,33 @@ def do_test_sampling_time(
         batch_size, huggingface_model=huggingface_model
     )
 
+    condition_twist_on_tokens = None
+    if num_last_tokens_to_condition_on > 0:
+        condition_twist_on_tokens = p_samples[:,
+                                    -num_last_tokens_to_condition_on:]
+
+    log_true_final_twist = log_true_final_twists[prompt_num]
+    # Do compilation first
+    rng_key, sk = jax.random.split(rng_key)
+    (log_w_t, log_z_hat_t, _), true_sigma_samples = jax.block_until_ready(smc_procedure(
+        sk, prompt, params_p, params_twist,
+        log_true_final_twist, output_len, batch_size,
+        smc_procedure_type=experiment_cfg.smc_procedure_type,
+        condition_twist_on_tokens=condition_twist_on_tokens,
+        resample=True,
+        proposal_is_p=False,
+        huggingface_model=huggingface_model,
+    ))
+
+
     start = time.time()
     for i in range(iters):
         print(f"iter {i}: time {time.time() - start}")
         rng_key, sk = jax.random.split(rng_key)
-        p_samples = stochastic_transformer_sample(
+        p_samples = jax.block_until_ready(stochastic_transformer_sample(
             sk, params_p, prompt, output_len,
             batch_size, huggingface_model=huggingface_model
-        )
+        ))
     end = time.time()
     total_time_base = end - start
     # num_tokens = output_len * batch_size * iters
@@ -2120,18 +2139,7 @@ def do_test_sampling_time(
 
     print(f"Base model sampling: generated {iters} number of {batch_size} batch size outputs in time: {total_time_base}")
 
-    log_true_final_twist = log_true_final_twists[prompt_num]
-    # Do compilation first
-    rng_key, sk = jax.random.split(rng_key)
-    (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
-        sk, prompt, params_p, params_twist,
-        log_true_final_twist, output_len, batch_size,
-        smc_procedure_type=experiment_cfg.smc_procedure_type,
-        # condition_twist_on_tokens=condition_twist_on_tokens_broadcasted, # TODO Just skip for now, allow for infilling later
-        resample=True,
-        proposal_is_p=False,
-        huggingface_model=huggingface_model,
-    )
+
 
     start = time.time()
     for i in range(iters):
@@ -2141,21 +2149,21 @@ def do_test_sampling_time(
         #     sk, prompt, params_p, params_twist,
         #     log_true_final_twist, output_len, batch_size,
         #     smc_procedure_type=experiment_cfg.smc_procedure_type,
-        #     # condition_twist_on_tokens=condition_twist_on_tokens_broadcasted, # TODO Just skip for now, allow for infilling later
+        #     condition_twist_on_tokens=condition_twist_on_tokens,
         #     resample=True,
         #     proposal_is_p=False,
         #     huggingface_model=huggingface_model,
         # )
-        (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
+        (log_w_t, log_z_hat_t, _), true_sigma_samples = jax.block_until_ready(smc_procedure(
             sk, prompt, params_p, params_twist,
             log_true_final_twist, output_len, batch_size,
             smc_procedure_type=experiment_cfg.smc_procedure_type,
-            # condition_twist_on_tokens=condition_twist_on_tokens_broadcasted, # TODO Just skip for now, allow for infilling later
+            condition_twist_on_tokens=condition_twist_on_tokens,
             resample=False,
             proposal_is_p=False,
             huggingface_model=huggingface_model,
             use_log_true_final_twist_for_final_weight_calc=False, # Just sampling from twisted proposal, no true final twist eval at end which is costly
-        )
+        ))
     end = time.time()
     total_time_twisted_prop = end - start
     # tokens_per_sec = num_tokens / total_time
@@ -2209,7 +2217,7 @@ def main():
     if args.test_sampling_time:
         do_test_sampling_time(
             rng_key, jnp_prompts, params_p, params_twist, log_true_final_twists,
-            huggingface_model, experiment_cfg, args.output_len, args.n_twist, args.test_sampling_time_iters
+            huggingface_model, experiment_cfg, args.output_len, args.n_twist, args.test_sampling_time_iters, args.num_last_tokens_to_condition_on
         )
         raise SystemExit(0)  # Finished
 
