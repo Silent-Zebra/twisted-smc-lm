@@ -2111,7 +2111,7 @@ def do_test_sampling_time(
     # Do compilation first
     smc_proc_args = {"rng_key": sk, "prompt": prompt, "params_p": params_p, "params_twist": params_twist,
             "log_true_final_twist": log_true_final_twist, "output_len": output_len, "n_smc_samples": batch_size,
-            "smc_procedure_type": experiment_cfg.smc_procedure_type,
+            "smc_procedure_type": "jit",
             "condition_twist_on_tokens": condition_twist_on_tokens,
             "resample": False,
             "proposal_is_p": False,
