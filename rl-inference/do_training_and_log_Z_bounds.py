@@ -2087,9 +2087,10 @@ def do_twist_updates(
 
 def do_test_sampling_time(
     rng_key, jnp_prompts, params_p, params_twist, log_true_final_twists,
-    huggingface_model, experiment_cfg, output_len, batch_size, iters=5
+    huggingface_model, experiment_cfg, output_len, batch_size, iters=10
 ):
     print("TESTING SAMPLING TIME", flush=True)
+    print(f"Generating {output_len} tokens")
     prompt_num = 0
     prompt = jnp_prompts[prompt_num]
 
@@ -2110,12 +2111,14 @@ def do_test_sampling_time(
             batch_size, huggingface_model=huggingface_model
         )
     end = time.time()
-    total_time = end - start
-    num_tokens = output_len * batch_size * iters
-    tokens_per_sec = num_tokens / total_time
-    print(
-        f"Base model sampling: {tokens_per_sec} tokens/s on {batch_size} batch size and {output_len} generated tokens, {iters} iters of generation")
-    print(end - start)
+    total_time_base = end - start
+    # num_tokens = output_len * batch_size * iters
+    # tokens_per_sec = num_tokens / total_time
+    # print(
+    #     f"Base model sampling: {tokens_per_sec} tokens/s on {batch_size} batch size and {output_len} generated tokens, {iters} iters of generation")
+    print(total_time_base)
+
+    print(f"Base model sampling: generated {iters} number of {batch_size} batch size outputs in time: {total_time_base}")
 
     log_true_final_twist = log_true_final_twists[prompt_num]
     # Do compilation first
@@ -2134,22 +2137,35 @@ def do_test_sampling_time(
     for i in range(iters):
         print(f"iter {i}: time {time.time() - start}")
         rng_key, sk = jax.random.split(rng_key)
+        # (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
+        #     sk, prompt, params_p, params_twist,
+        #     log_true_final_twist, output_len, batch_size,
+        #     smc_procedure_type=experiment_cfg.smc_procedure_type,
+        #     # condition_twist_on_tokens=condition_twist_on_tokens_broadcasted, # TODO Just skip for now, allow for infilling later
+        #     resample=True,
+        #     proposal_is_p=False,
+        #     huggingface_model=huggingface_model,
+        # )
         (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
             sk, prompt, params_p, params_twist,
             log_true_final_twist, output_len, batch_size,
             smc_procedure_type=experiment_cfg.smc_procedure_type,
             # condition_twist_on_tokens=condition_twist_on_tokens_broadcasted, # TODO Just skip for now, allow for infilling later
-            resample=True,
+            resample=False,
             proposal_is_p=False,
             huggingface_model=huggingface_model,
+            use_log_true_final_twist_for_final_weight_calc=False, # Just sampling from twisted proposal, no true final twist eval at end which is costly
         )
     end = time.time()
-    total_time = end - start
-    tokens_per_sec = num_tokens / total_time
-    print(
-        f"SMC sampling: {tokens_per_sec} tokens/s on {batch_size} batch size and {output_len} generated tokens, {iters} iters of generation")
+    total_time_twisted_prop = end - start
+    # tokens_per_sec = num_tokens / total_time
+    # print(
+    #     f"SMC sampling: {tokens_per_sec} tokens/s on {batch_size} batch size and {output_len} generated tokens, {iters} iters of generation")
     print(end - start)
+    print(f"Twisted Proposal sampling: generated {iters} number of {batch_size} batch size outputs in time: {total_time_twisted_prop}")
 
+    increase_in_time_cost = total_time_twisted_prop / total_time_base
+    print(f"Factor of increase in time cost of twisted proposal vs. base model: {increase_in_time_cost}")
 
 def main():
 
@@ -2193,7 +2209,7 @@ def main():
     if args.test_sampling_time:
         do_test_sampling_time(
             rng_key, jnp_prompts, params_p, params_twist, log_true_final_twists,
-            huggingface_model, experiment_cfg, args.output_len, args.n_twist,
+            huggingface_model, experiment_cfg, args.output_len, args.n_twist, args.test_sampling_time_iters
         )
         raise SystemExit(0)  # Finished
 
@@ -2452,6 +2468,8 @@ if __name__ == "__main__":
     parser.add_argument("--separate_proposal_and_twist", action="store_true", help="Load a separate twist model for proposal")
 
     parser.add_argument("--test_sampling_time", action="store_true")
+    parser.add_argument("--test_sampling_time_iters", type=int, default=10, help="Only used in conjunction with --test_sampling_time: how many times to repeat sampling")
+
 
     args = parser.parse_args()
 
