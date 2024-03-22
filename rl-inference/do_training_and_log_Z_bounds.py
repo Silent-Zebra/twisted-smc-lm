@@ -2134,6 +2134,9 @@ def do_test_sampling_time(
         twisted_proposal_sample(**twist_prop_args)
     )
 
+    print("twist prop samples")
+    print(twisted_proposal_samples)
+
 
 
     start = time.time()
@@ -2178,6 +2181,8 @@ def do_test_sampling_time(
         twisted_proposal_samples = jax.block_until_ready(
             twisted_proposal_sample(**twist_prop_args)
         )
+        print("twist prop samples")
+        print(twisted_proposal_samples)
     end = time.time()
     total_time_twisted_prop = end - start
     # tokens_per_sec = num_tokens / total_time
