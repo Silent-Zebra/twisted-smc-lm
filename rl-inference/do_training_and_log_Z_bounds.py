@@ -2127,8 +2127,10 @@ def do_test_sampling_time(
                      # Just sampling from twisted proposal, no true final twist eval at end which is costly
                      }
     rng_key, sk = jax.random.split(rng_key)
-    (log_w_t, log_z_hat_t, _), true_sigma_samples = jax.block_until_ready(
-        # smc_procedure(**smc_proc_args)
+    # (log_w_t, log_z_hat_t, _), samples = jax.block_until_ready(
+    #     smc_procedure(**smc_proc_args)
+    # )
+    twisted_proposal_samples = jax.block_until_ready(
         twisted_proposal_sample(**twist_prop_args)
     )
 
@@ -2170,8 +2172,10 @@ def do_test_sampling_time(
         # smc_proc_args["rng_key"] = sk
         twist_prop_args["rng_key"] = sk
 
-        (log_w_t, log_z_hat_t, _), true_sigma_samples = jax.block_until_ready(
-            # smc_procedure(**smc_proc_args)
+        # (log_w_t, log_z_hat_t, _), true_sigma_samples = jax.block_until_ready(
+        #     smc_procedure(**smc_proc_args)
+        # )
+        twisted_proposal_samples = jax.block_until_ready(
             twisted_proposal_sample(**twist_prop_args)
         )
     end = time.time()
