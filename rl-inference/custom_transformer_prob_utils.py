@@ -555,7 +555,7 @@ def evaluate_log_p_theta_t_full_seq(full_seq, params_p, prompt_len_plus_t, huggi
 
 
 
-def smc_scan_iter_non_final(carry, t, condition_twist_on_tokens,   resample=True,
+def smc_scan_iter_non_final(carry, t, condition_twist_on_tokens, resample=True,
                             true_posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False,
                             tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None, resample_criterion="every_step"):
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
@@ -1079,6 +1079,56 @@ def smc_jitted_part(rng_key, prompt, prompt_len, params_p, params_twist, output_
     return rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
            prompt_len, log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list, \
            do_resample_record, ess_record
+
+
+
+def twisted_proposal_sample_scan_iter(
+    carry, t, condition_twist_on_tokens, params_p, params_twist, prompt_len,
+    huggingface_model, tempered_twist, beta_prop, params_proposal
+):
+    rng_key, full_seq = carry
+
+    rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
+        rng_key, full_seq, params_p, params_twist, prompt_len, t,
+        condition_twist_on_tokens, proposal_is_p=False,
+        huggingface_model=huggingface_model,
+        true_posterior_sample=None,
+        tempered_twist=tempered_twist, beta_prop=beta_prop,
+        params_proposal=params_proposal
+    )
+
+    carry = (rng_key, full_seq)
+
+    return carry, None
+
+
+@partial(jax.jit, static_argnames=[
+    'output_len', 'n_smc_samples',
+    "huggingface_model", "tempered_twist", "beta_prop", "prompt_len"])
+def twisted_proposal_sample(
+    rng_key, prompt, params_p, params_twist, output_len,
+    n_samples, condition_twist_on_tokens=None,
+    huggingface_model=None, tempered_twist=False, beta_prop=None,
+    params_proposal=None, prompt_len=None
+):
+    resample = False # No SMC supported in this call
+
+    batch_prompt = jnp.full((n_samples, prompt.shape[0]), prompt)
+    output = jnp.zeros((n_samples, output_len), dtype=jnp.int32)
+    full_seq = jnp.concatenate((batch_prompt, output), axis=1)
+    carry = (rng_key, full_seq)
+
+    carry, _ = jax.lax.scan(partial(
+        twisted_proposal_sample_scan_iter,
+        params_p=params_p, params_twist=params_twist, prompt_len=prompt_len,
+        condition_twist_on_tokens=condition_twist_on_tokens,
+        huggingface_model=huggingface_model,
+        tempered_twist=tempered_twist, beta_prop=beta_prop,
+        params_proposal=params_proposal
+    ), carry, jnp.arange(output_len, dtype=jnp.int32), output_len
+    )
+
+    return full_seq
 
 
 def smc_partial_jit(

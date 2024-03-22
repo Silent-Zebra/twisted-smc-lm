@@ -2109,19 +2109,28 @@ def do_test_sampling_time(
 
     log_true_final_twist = log_true_final_twists[prompt_num]
     # Do compilation first
-    smc_proc_args = {"rng_key": sk, "prompt": prompt, "params_p": params_p, "params_twist": params_twist,
-            "log_true_final_twist": log_true_final_twist, "output_len": output_len, "n_smc_samples": batch_size,
-            "smc_procedure_type": "jit",
-            "condition_twist_on_tokens": condition_twist_on_tokens,
-            "resample": False,
-            "proposal_is_p": False,
-            "huggingface_model": huggingface_model,
-            "use_log_true_final_twist_for_final_weight_calc": False, # Just sampling from twisted proposal, no true final twist eval at end which is costly
+    # smc_proc_args = {"rng_key": sk, "prompt": prompt, "params_p": params_p, "params_twist": params_twist,
+    #         "log_true_final_twist": log_true_final_twist, "output_len": output_len, "n_smc_samples": batch_size,
+    #         "smc_procedure_type": "jit",
+    #         "condition_twist_on_tokens": condition_twist_on_tokens,
+    #         "resample": False,
+    #         "proposal_is_p": False,
+    #         "huggingface_model": huggingface_model,
+    #         "use_log_true_final_twist_for_final_weight_calc": False, # Just sampling from twisted proposal, no true final twist eval at end which is costly
+    #                  }
+    twist_prop_args = {"rng_key": sk, "prompt": prompt, "params_p": params_p,
+                     "params_twist": params_twist,
+                     "output_len": output_len, "n_samples": batch_size,
+                     "condition_twist_on_tokens": condition_twist_on_tokens,
+                     "huggingface_model": huggingface_model,
+                     # Just sampling from twisted proposal, no true final twist eval at end which is costly
                      }
     rng_key, sk = jax.random.split(rng_key)
     (log_w_t, log_z_hat_t, _), true_sigma_samples = jax.block_until_ready(
-        smc_procedure(**smc_proc_args)
+        # smc_procedure(**smc_proc_args)
+        twisted_proposal_sample(**twist_prop_args)
     )
+
 
 
     start = time.time()
@@ -2157,8 +2166,13 @@ def do_test_sampling_time(
         #     proposal_is_p=False,
         #     huggingface_model=huggingface_model,
         # )
-        smc_proc_args["rng_key"] = sk
-        (log_w_t, log_z_hat_t, _), true_sigma_samples = jax.block_until_ready(smc_procedure(**smc_proc_args))
+        # smc_proc_args["rng_key"] = sk
+        twist_prop_args["rng_key"] = sk
+
+        (log_w_t, log_z_hat_t, _), true_sigma_samples = jax.block_until_ready(
+            # smc_procedure(**smc_proc_args)
+            twisted_proposal_sample(**twist_prop_args)
+        )
     end = time.time()
     total_time_twisted_prop = end - start
     # tokens_per_sec = num_tokens / total_time
