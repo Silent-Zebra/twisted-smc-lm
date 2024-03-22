@@ -1103,7 +1103,7 @@ def twisted_proposal_sample_scan_iter(
 
 
 @partial(jax.jit, static_argnames=[
-    'output_len', 'n_smc_samples',
+    'output_len', 'n_samples',
     "huggingface_model", "tempered_twist", "beta_prop", "prompt_len"])
 def twisted_proposal_sample(
     rng_key, prompt, params_p, params_twist, output_len,
