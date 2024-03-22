@@ -2123,6 +2123,7 @@ def do_test_sampling_time(
                      "output_len": output_len, "n_samples": batch_size,
                      "condition_twist_on_tokens": condition_twist_on_tokens,
                      "huggingface_model": huggingface_model,
+                        "prompt_len": prompt.shape[-1]
                      # Just sampling from twisted proposal, no true final twist eval at end which is costly
                      }
     rng_key, sk = jax.random.split(rng_key)
