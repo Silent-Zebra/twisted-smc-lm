@@ -1128,6 +1128,8 @@ def twisted_proposal_sample(
     ), carry, jnp.arange(output_len, dtype=jnp.int32), output_len
     )
 
+    rng_key, full_seq = carry
+
     return full_seq
 
 
