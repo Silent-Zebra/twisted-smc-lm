@@ -1093,6 +1093,7 @@ def smc_partial_jit(
     # print("SMC TIME")
     # start = time.time()
 
+    print_ess_stats = False
 
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, _, \
     log_z_hat_t, full_seq_list, log_w_t_list, log_psi_t_eval_list, log_w_t_before_resample_list, do_resample_record, ess_record = \
@@ -1105,11 +1106,10 @@ def smc_partial_jit(
                         huggingface_model, resample_for_log_psi_t_eval_list,
                         tempered_twist, beta_prop, params_proposal=params_proposal, resample_criterion=resample_criterion)
 
-    # TODO FEB Remove/comment out later
-    print("ESS STATS")
-    print(do_resample_record)
-    print(ess_record)
-
+    if print_ess_stats:
+        print("ESS STATS")
+        print(do_resample_record)
+        print(ess_record)
 
     resample_for_final = resample
     if no_final_resample:
