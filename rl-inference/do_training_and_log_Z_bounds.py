@@ -2135,32 +2135,35 @@ def do_test_sampling_time(
     # print("twist prop samples")
     # print(twisted_proposal_samples)
 
+    base_sampling_times = []
 
-
-    start = time.time()
     for i in range(iters):
-        print(f"iter {i}: time {time.time() - start}")
+        # print(f"iter {i}: time {time.time() - start}")
         rng_key, sk = jax.random.split(rng_key)
+        start = time.time()
         p_samples = stochastic_transformer_sample(
             sk, params_p, prompt, output_len,
             batch_size, huggingface_model=huggingface_model
         )
         p_samples.block_until_ready()
-    end = time.time()
-    total_time_base = end - start
+        end = time.time()
+        time_base = end - start
+        base_sampling_times.append(time_base)
     # num_tokens = output_len * batch_size * iters
     # tokens_per_sec = num_tokens / total_time
     # print(
     #     f"Base model sampling: {tokens_per_sec} tokens/s on {batch_size} batch size and {output_len} generated tokens, {iters} iters of generation")
-    print(total_time_base)
+    print(base_sampling_times)
 
-    print(f"Base model sampling: generated {iters} number of {batch_size} batch size outputs in time: {total_time_base}")
+    median_base_sampling_time = np.median(np.array(base_sampling_times))
+
+    print(f"Base model sampling: generated {iters} number of {batch_size} batch size outputs with median time: {median_base_sampling_time}")
 
 
+    twist_prop_sampling_times = []
 
-    start = time.time()
     for i in range(iters):
-        print(f"iter {i}: time {time.time() - start}")
+        # print(f"iter {i}: time {time.time() - start}")
         rng_key, sk = jax.random.split(rng_key)
         # (log_w_t, log_z_hat_t, _), true_sigma_samples = smc_procedure(
         #     sk, prompt, params_p, params_twist,
@@ -2173,20 +2176,21 @@ def do_test_sampling_time(
         # )
         # smc_proc_args["rng_key"] = sk
         twist_prop_args["rng_key"] = sk
-
-
+        start = time.time()
         twisted_proposal_samples = twisted_proposal_sample(**twist_prop_args)
         twisted_proposal_samples.block_until_ready()
+        end = time.time()
+        time_twisted_prop = end - start
+        twist_prop_sampling_times.append(time_twisted_prop)
 
-    end = time.time()
-    total_time_twisted_prop = end - start
     # tokens_per_sec = num_tokens / total_time
     # print(
     #     f"SMC sampling: {tokens_per_sec} tokens/s on {batch_size} batch size and {output_len} generated tokens, {iters} iters of generation")
-    print(end - start)
-    print(f"Twisted Proposal sampling: generated {iters} number of {batch_size} batch size outputs in time: {total_time_twisted_prop}")
+    median_twisted_prop_sampling_time = np.median(np.array(twist_prop_sampling_times))
 
-    increase_in_time_cost = total_time_twisted_prop / total_time_base
+    print(f"Twisted Proposal sampling: generated {iters} number of {batch_size} batch size outputs with median time: {median_twisted_prop_sampling_time}")
+
+    increase_in_time_cost = median_twisted_prop_sampling_time / median_base_sampling_time
     print(f"Factor of increase in time cost of twisted proposal vs. base model: {increase_in_time_cost}")
 
 def main():
