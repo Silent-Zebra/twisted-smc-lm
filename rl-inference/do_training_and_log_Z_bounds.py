@@ -2097,9 +2097,10 @@ def do_test_sampling_time(
 
     rng_key, sk = jax.random.split(rng_key)
     # Do compilation first
-    p_samples = stochastic_transformer_sample(
+    p_samples = jax.block_until_ready(stochastic_transformer_sample(
         sk, params_p, prompt, output_len,
         batch_size, huggingface_model=huggingface_model
+    )
     )
 
     condition_twist_on_tokens = None
@@ -2107,7 +2108,6 @@ def do_test_sampling_time(
         condition_twist_on_tokens = p_samples[:,
                                     -num_last_tokens_to_condition_on:]
 
-    log_true_final_twist = log_true_final_twists[prompt_num]
     # Do compilation first
     # smc_proc_args = {"rng_key": sk, "prompt": prompt, "params_p": params_p, "params_twist": params_twist,
     #         "log_true_final_twist": log_true_final_twist, "output_len": output_len, "n_smc_samples": batch_size,
