@@ -2097,11 +2097,12 @@ def do_test_sampling_time(
 
     rng_key, sk = jax.random.split(rng_key)
     # Do compilation first
-    p_samples = jax.block_until_ready(stochastic_transformer_sample(
+    p_samples = stochastic_transformer_sample(
         sk, params_p, prompt, output_len,
         batch_size, huggingface_model=huggingface_model
     )
-    )
+
+    p_samples.block_until_ready()
 
     condition_twist_on_tokens = None
     if num_last_tokens_to_condition_on > 0:
@@ -2127,12 +2128,9 @@ def do_test_sampling_time(
                      # Just sampling from twisted proposal, no true final twist eval at end which is costly
                      }
     rng_key, sk = jax.random.split(rng_key)
-    # (log_w_t, log_z_hat_t, _), samples = jax.block_until_ready(
-    #     smc_procedure(**smc_proc_args)
-    # )
-    twisted_proposal_samples = jax.block_until_ready(
-        twisted_proposal_sample(**twist_prop_args)
-    )
+
+    twisted_proposal_samples = twisted_proposal_sample(**twist_prop_args)
+    twisted_proposal_samples.block_until_ready()
 
     # print("twist prop samples")
     # print(twisted_proposal_samples)
@@ -2143,10 +2141,11 @@ def do_test_sampling_time(
     for i in range(iters):
         print(f"iter {i}: time {time.time() - start}")
         rng_key, sk = jax.random.split(rng_key)
-        p_samples = jax.block_until_ready(stochastic_transformer_sample(
+        p_samples = stochastic_transformer_sample(
             sk, params_p, prompt, output_len,
             batch_size, huggingface_model=huggingface_model
-        ))
+        )
+        p_samples.block_until_ready()
     end = time.time()
     total_time_base = end - start
     # num_tokens = output_len * batch_size * iters
@@ -2175,12 +2174,10 @@ def do_test_sampling_time(
         # smc_proc_args["rng_key"] = sk
         twist_prop_args["rng_key"] = sk
 
-        # (log_w_t, log_z_hat_t, _), true_sigma_samples = jax.block_until_ready(
-        #     smc_procedure(**smc_proc_args)
-        # )
-        twisted_proposal_samples = jax.block_until_ready(
-            twisted_proposal_sample(**twist_prop_args)
-        )
+
+        twisted_proposal_samples = twisted_proposal_sample(**twist_prop_args)
+        twisted_proposal_samples.block_until_ready()
+
     end = time.time()
     total_time_twisted_prop = end - start
     # tokens_per_sec = num_tokens / total_time
