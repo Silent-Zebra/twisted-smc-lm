@@ -10,8 +10,9 @@ import matplotlib.pyplot as plt
 
 from plot_utils import plot_with_conf_bounds
 
-
-load_pref_twist_32_512 = "logZ_bounds_twistproposal_2024-01-15_12-52_seed1_ebm_one_sample_nsamples1_1"
+load_pref_twist_1_8 = "logZ_bounds_twistproposal_2024-03-24_18-44_seed1_ebm_one_sample_nsamples1"
+load_pref_p_1_8 = "logZ_bounds_pproposal_2024-03-24_18-48_seed1_ebm_one_sample_nsamples1"
+load_pref_twist_32_8 = "logZ_bounds_twistproposal_2024-01-15_12-52_seed1_ebm_one_sample_nsamples1_1"
 load_pref_p_32_512 = "logZ_bounds_pproposal_2024-01-15_12-58_seed1_ebm_one_sample_nsamples1_1"
 load_pref_twist_128_2048 = "logZ_bounds_twistproposal_2024-01-15_12-59_seed1_ebm_one_sample_nsamples1_2"
 load_pref_p_128_2048 = "logZ_bounds_pproposal_2024-01-15_13-10_seed1_ebm_one_sample_nsamples1_2"
@@ -46,6 +47,16 @@ def load_ckpt(load_prefix):
            logZ_ubs_smc_across_samples_time_seeds_smaller[0], logZ_ubs_smc_across_samples_time_seeds_larger[0], \
            logZ_lbs_smc_across_samples_time_seeds_smaller[0], logZ_lbs_smc_across_samples_time_seeds_larger[0]
 
+t_iwae_ubs_1, t_iwae_ubs_8, t_iwae_lbs_1, t_iwae_lbs_8, t_smc_ubs_1, t_smc_ubs_8, t_smc_lbs_1, t_smc_lbs_8 = load_ckpt(load_pref_twist_1_8)
+p_iwae_ubs_1, p_iwae_ubs_8, p_iwae_lbs_1, p_iwae_lbs_8, p_smc_ubs_1, p_smc_ubs_8, p_smc_lbs_1, p_smc_lbs_8 = load_ckpt(load_pref_p_1_8)
+
+print("---")
+for x in [t_iwae_ubs_1, t_iwae_ubs_8, t_iwae_lbs_1, t_iwae_lbs_8, t_smc_ubs_1, t_smc_ubs_8, t_smc_lbs_1, t_smc_lbs_8]:
+    print(x)
+print("---")
+for x in [p_iwae_ubs_1, p_iwae_ubs_8, p_iwae_lbs_1, p_iwae_lbs_8, p_smc_ubs_1, p_smc_ubs_8, p_smc_lbs_1, p_smc_lbs_8]:
+    print(x)
+1/0
 
 t_iwae_ubs_32, t_iwae_ubs_512, t_iwae_lbs_32, t_iwae_lbs_512, t_smc_ubs_32, t_smc_ubs_512, t_smc_lbs_32, t_smc_lbs_512 = load_ckpt(load_pref_twist_32_512)
 p_iwae_ubs_32, p_iwae_ubs_512, p_iwae_lbs_32, p_iwae_lbs_512, p_smc_ubs_32, p_smc_ubs_512, p_smc_lbs_32, p_smc_lbs_512 = load_ckpt(load_pref_p_32_512)
@@ -54,21 +65,21 @@ t_iwae_ubs_128, t_iwae_ubs_2048, t_iwae_lbs_128, t_iwae_lbs_2048, t_smc_ubs_128,
 p_iwae_ubs_128, p_iwae_ubs_2048, p_iwae_lbs_128, p_iwae_lbs_2048, p_smc_ubs_128, p_smc_ubs_2048, p_smc_lbs_128, p_smc_lbs_2048 = load_ckpt(load_pref_p_128_2048)
 
 
-t_iwae_ubs = np.transpose(np.stack([t_iwae_ubs_32, t_iwae_ubs_128, t_iwae_ubs_512, t_iwae_ubs_2048]))
-t_iwae_lbs = np.transpose(np.stack([t_iwae_lbs_32, t_iwae_lbs_128, t_iwae_lbs_512, t_iwae_lbs_2048]))
+t_iwae_ubs = np.transpose(np.stack([t_iwae_ubs_1, t_iwae_ubs_8, t_iwae_ubs_32, t_iwae_ubs_128, t_iwae_ubs_512, t_iwae_ubs_2048]))
+t_iwae_lbs = np.transpose(np.stack([t_iwae_lbs_1, t_iwae_lbs_8, t_iwae_lbs_32, t_iwae_lbs_128, t_iwae_lbs_512, t_iwae_lbs_2048]))
 
-t_smc_ubs = np.transpose(np.stack([t_smc_ubs_32, t_smc_ubs_128, t_smc_ubs_512, t_smc_ubs_2048]))
-t_smc_lbs = np.transpose(np.stack([t_smc_lbs_32, t_smc_lbs_128, t_smc_lbs_512, t_smc_lbs_2048]))
+t_smc_ubs = np.transpose(np.stack([t_smc_ubs_1, t_smc_ubs_8, t_smc_ubs_32, t_smc_ubs_128, t_smc_ubs_512, t_smc_ubs_2048]))
+t_smc_lbs = np.transpose(np.stack([t_smc_lbs_1, t_smc_lbs_8, t_smc_lbs_32, t_smc_lbs_128, t_smc_lbs_512, t_smc_lbs_2048]))
 
-p_iwae_ubs = np.transpose(np.stack([p_iwae_ubs_32, p_iwae_ubs_128, p_iwae_ubs_512, p_iwae_ubs_2048]))
-p_iwae_lbs = np.transpose(np.stack([p_iwae_lbs_32, p_iwae_lbs_128, p_iwae_lbs_512, p_iwae_lbs_2048]))
+p_iwae_ubs = np.transpose(np.stack([p_iwae_ubs_1, p_iwae_ubs_8, p_iwae_ubs_32, p_iwae_ubs_128, p_iwae_ubs_512, p_iwae_ubs_2048]))
+p_iwae_lbs = np.transpose(np.stack([p_iwae_lbs_1, p_iwae_lbs_8, p_iwae_lbs_32, p_iwae_lbs_128, p_iwae_lbs_512, p_iwae_lbs_2048]))
 
-p_smc_ubs = np.transpose(np.stack([p_smc_ubs_32, p_smc_ubs_128, p_smc_ubs_512, p_smc_ubs_2048]))
-p_smc_lbs = np.transpose(np.stack([p_smc_lbs_32, p_smc_lbs_128, p_smc_lbs_512, p_smc_lbs_2048]))
+p_smc_ubs = np.transpose(np.stack([p_smc_ubs_1, p_smc_ubs_8, p_smc_ubs_32, p_smc_ubs_128, p_smc_ubs_512, p_smc_ubs_2048]))
+p_smc_lbs = np.transpose(np.stack([p_smc_lbs_1, p_smc_lbs_8, p_smc_lbs_32, p_smc_lbs_128, p_smc_lbs_512, p_smc_lbs_2048]))
 
 plt.clf()
 plt.xlabel(f"Number of Samples")
-x_range = np.array([5,7,9,11])
+x_range = np.array([0,3,5,7,9,11])
 xticks_range = x_range
 xticks_labels = 2 ** xticks_range
 plt.ylabel(f"Log Z Bound")
@@ -126,8 +137,9 @@ last, conf_bound = plot_with_conf_bounds(
 plt.xticks(xticks_range, xticks_labels)
 
 plt.legend(loc="lower right")
-plt.savefig(f"./fig_bounds_toxt_-5_01-14.pdf")
+# plt.savefig(f"./fig_bounds_toxt_-5_01-14.pdf")
 # plt.savefig(f"./fig_bounds_ess_toxt_-5_02-13.pdf")
+plt.savefig(f"./fig_bounds_toxt_-5_03-24.pdf")
 
 
 #

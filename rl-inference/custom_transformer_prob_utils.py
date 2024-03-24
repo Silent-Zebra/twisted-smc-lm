@@ -1214,6 +1214,7 @@ smc_jit = partial(jax.jit,
 #     "proposal_is_p",
 #     "huggingface_model"
 # ])
+# All this does is calc log(tilde sigma/q) (or /p), so we can do this on whatever distribution of seqs we want...
 def iwae_backward(
     seqs, prompt, params_p, params_twist, output_len,
     log_true_final_twist, condition_twist_on_tokens,
@@ -1341,6 +1342,16 @@ def iwae_forward_and_backward(
         log_true_final_twist, condition_twist_on_tokens,
         proposal_is_p, huggingface_model, params_proposal=params_proposal
     )
+
+    alternate_f_q_calc = iwae_backward(full_seq_from_twist_since_no_resample, prompt, params_p, params_twist, output_len,
+        log_true_final_twist, condition_twist_on_tokens,
+        proposal_is_p, huggingface_model, params_proposal=params_proposal)
+
+    print("F_Q INSPECTION")
+    print(log_w_t)
+    print(alternate_f_q_calc)
+    print("-----")
+    # TODO MAR reset this later
 
     return proposal_dist_weights, target_dist_weights, f_q_estimate
 

@@ -1024,7 +1024,7 @@ class ExperimentConfig:
 
 # TODO: make into separate files, training of twists vs plotting code??
 
-print_smc_samples = False
+print_smc_samples = True #False # TODO MAR RESET THIS LATER
 
 def inspect_and_record_evidence_setting_for_index(
     rng_key, prompt, params_p,
@@ -1079,6 +1079,8 @@ def inspect_and_record_evidence_setting_for_index(
         iwae_log_w_upper.shape[0])
 
     f_qs = iwae_log_w_lower
+
+
 
     # kl_q_sigma_estimate = true_all_post_upper_bound_estimate - lower_bound_estimate
     # print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
