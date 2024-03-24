@@ -1024,7 +1024,7 @@ class ExperimentConfig:
 
 # TODO: make into separate files, training of twists vs plotting code??
 
-print_smc_samples = True #False # TODO MAR RESET THIS LATER
+print_smc_samples = False
 
 def inspect_and_record_evidence_setting_for_index(
     rng_key, prompt, params_p,
