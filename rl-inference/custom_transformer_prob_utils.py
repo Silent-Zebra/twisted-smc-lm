@@ -555,9 +555,11 @@ def evaluate_log_p_theta_t_full_seq(full_seq, params_p, prompt_len_plus_t, huggi
 
 
 
-def smc_scan_iter_non_final(carry, t, condition_twist_on_tokens, resample=True,
-                            true_posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-                            tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None, resample_criterion="every_step"):
+def smc_scan_iter_non_final(
+    carry, t, condition_twist_on_tokens, resample=True,
+    true_posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False,
+    tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None, resample_criterion="every_step"
+):
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     output_len, params_p, params_twist, \
     log_z_hat_t = carry
@@ -1040,9 +1042,10 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
 
 
 
-@partial(jax.jit, static_argnames=['output_len', 'n_smc_samples',
-                                   "resample", "proposal_is_p",
-                                   "huggingface_model", "resample_for_log_psi_t_eval_list", "tempered_twist", "beta_prop", "prompt_len", "resample_criterion"])
+@partial(jax.jit, static_argnames=[
+    'output_len', 'n_smc_samples', "resample", "proposal_is_p",
+    "huggingface_model", "resample_for_log_psi_t_eval_list",
+    "tempered_twist", "beta_prop", "prompt_len", "resample_criterion"])
 def smc_jitted_part(rng_key, prompt, prompt_len, params_p, params_twist, output_len,
             n_smc_samples,
             condition_twist_on_tokens=None,
@@ -1431,13 +1434,15 @@ def calculate_entropy_gradient_term(seqs_p, params_p, prompt_len, output_len):
 
 
 def smc_procedure(rng_key, prompt, *args, smc_procedure_type="jit", **kwargs):
+    # resample_criterion = "every_step"
+    resample_criterion = "ESS"
     prompt_len = prompt.shape[-1]
     if smc_procedure_type == "jit":
-        return smc_jit(rng_key, prompt, *args, **kwargs, prompt_len=prompt_len)
+        return smc_jit(rng_key, prompt, *args, **kwargs, prompt_len=prompt_len, resample_criterion=resample_criterion)
     elif smc_procedure_type == "partial_jit":
-        return smc_partial_jit(rng_key, prompt, *args, **kwargs, prompt_len=prompt_len)
+        return smc_partial_jit(rng_key, prompt, *args, **kwargs, prompt_len=prompt_len, resample_criterion=resample_criterion)
     elif smc_procedure_type == "debug":
-        return smc_debug(rng_key, prompt, *args, **kwargs, prompt_len=prompt_len)
+        return smc_debug(rng_key, prompt, *args, **kwargs, prompt_len=prompt_len, resample_criterion=resample_criterion)
     else:
         raise NotImplementedError
 
