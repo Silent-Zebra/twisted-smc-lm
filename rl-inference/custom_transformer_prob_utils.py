@@ -1041,11 +1041,10 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
 
 
 
-
-# @partial(jax.jit, static_argnames=[
-#     'output_len', 'n_smc_samples', "resample", "proposal_is_p",
-#     "huggingface_model", "resample_for_log_psi_t_eval_list",
-#     "tempered_twist", "beta_prop", "prompt_len", "resample_criterion"])
+@partial(jax.jit, static_argnames=[
+    'output_len', 'n_smc_samples', "resample", "proposal_is_p",
+    "huggingface_model", "resample_for_log_psi_t_eval_list",
+    "tempered_twist", "beta_prop", "prompt_len", "resample_criterion"])
 def smc_jitted_part(rng_key, prompt, prompt_len, params_p, params_twist, output_len,
             n_smc_samples,
             condition_twist_on_tokens=None,
@@ -1436,6 +1435,9 @@ def calculate_entropy_gradient_term(seqs_p, params_p, prompt_len, output_len):
 def smc_procedure(rng_key, prompt, *args, smc_procedure_type="jit", **kwargs):
     # resample_criterion = "every_step"
     resample_criterion = "ESS" # TODO Mar figure out a way to make this into a flag nicely. Of course can go as an argument, but then I have to pass this everywhere like I pass in smc_procedure_type everywhere
+    if resample_criterion == "ESS":
+        smc_procedure_type = "debug"
+
     prompt_len = prompt.shape[-1]
     if smc_procedure_type == "jit":
         return smc_jit(rng_key, prompt, *args, **kwargs, prompt_len=prompt_len, resample_criterion=resample_criterion)
