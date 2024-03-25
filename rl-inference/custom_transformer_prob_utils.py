@@ -1433,10 +1433,11 @@ def calculate_entropy_gradient_term(seqs_p, params_p, prompt_len, output_len):
 
 
 def smc_procedure(rng_key, prompt, *args, smc_procedure_type="jit", **kwargs):
-    # resample_criterion = "every_step"
-    resample_criterion = "ESS" # TODO Mar figure out a way to make this into a flag nicely. Of course can go as an argument, but then I have to pass this everywhere like I pass in smc_procedure_type everywhere
+    resample_criterion = "every_step"
+    # resample_criterion = "ESS" # TODO Mar figure out a way to make this into a flag nicely. Of course can go as an argument, but then I have to pass this everywhere like I pass in smc_procedure_type everywhere
+
     if resample_criterion == "ESS":
-        smc_procedure_type = "debug"
+        smc_procedure_type = "debug" # Because right now the ESS calculation doesn't work with traced arrays e.g. in jax.lax.scan
 
     prompt_len = prompt.shape[-1]
     if smc_procedure_type == "jit":
