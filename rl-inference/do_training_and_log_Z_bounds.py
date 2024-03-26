@@ -1594,7 +1594,7 @@ def load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model
 
     loaded_params_twist = x['0']
 
-    if separate_hface_twist_model and hface_nn_twist:
+    if separate_hface_twist_model: # and hface_nn_twist:
         loaded_params_twist = [x['0']['0'], x['0']['1']]
 
         if 'linear_layers' in loaded_params_twist[1]:
