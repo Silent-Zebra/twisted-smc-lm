@@ -647,6 +647,104 @@ def get_l_ebm_ml_os_jit_vmapped_over_condition_tokens(
 
 
 
+# JITTING IS DONE SEPARATELY BELOW
+# NVI paper approach, alternatively can be seen as a TD style version of CTL/EBM update
+def get_l_nvi_partial_jit(
+    rng_key, prompt, params_p, params_twist, log_true_final_twist,
+    output_len, n_twist, condition_twist_on_tokens, smc_procedure_type,
+    proposal_is_p=False, huggingface_model=None,
+    tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
+    replay_buffer=None, replay_buffer_log_w_ts=None, reweight_for_second_term=False, only_one_sample=False,
+    posterior_sample=None, return_proposal_samples=False, params_proposal=None
+):
+
+    if condition_twist_on_tokens is not None and len(condition_twist_on_tokens.shape) == 1:
+        condition_twist_on_tokens = jnp.full(
+            (n_twist, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens
+        )
+    elif condition_twist_on_tokens is not None and len(condition_twist_on_tokens.shape) == 0:
+        condition_twist_on_tokens = jnp.full(
+            (n_twist,), condition_twist_on_tokens
+        )
+
+    # prompt_len = prompt.shape[-1]
+
+    rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
+
+    assert true_sigma_samples is None
+    assert replay_buffer is None
+    assert posterior_sample is None
+    # assert not p_neg_sample
+    (log_w_t_sigma_samples, _, log_psi_t_eval_list_proposal_samples), proposal_samples, (
+        intermediate_twist_samples_hist,
+        intermediate_log_w_t_hist, _) = smc_procedure(
+        sk2, prompt, params_p, params_twist,
+        log_true_final_twist, output_len, n_twist,
+        smc_procedure_type=smc_procedure_type,
+        get_intermediate_sample_history_based_on_learned_twists=True,
+        condition_twist_on_tokens=condition_twist_on_tokens,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+        resample=False,
+        # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
+        # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
+        resample_for_log_psi_t_eval_list=False,  # NOTE THE FALSE HERE
+        tempered_twist=False,
+        params_proposal=params_proposal
+        # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
+    )
+
+    normalized_w_t_sigma_samples = jax.nn.softmax(
+        jax.lax.stop_gradient(log_w_t_sigma_samples))
+
+    # # TODO seems like I don't need this in the EBM/CTL loss?
+    # log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(
+    #     proposal_samples, prompt_len, params_twist,
+    #     condition_twist_on_tokens,
+    #     huggingface_model,
+    #     params_proposal=params_proposal, params_p=params_p)
+
+    ebm_first_term = 0.
+    ebm_second_term = 0.
+
+    for i in range(intermediate_log_w_t_hist.shape[0]):
+
+        if i == intermediate_log_w_t_hist.shape[0] - 1:
+            first_term_weights = normalized_w_t_sigma_samples
+        else:
+            first_term_weights = jax.lax.stop_gradient(
+                intermediate_log_w_t_hist[i + 1])
+
+        second_term_weights = jax.lax.stop_gradient(intermediate_log_w_t_hist[i])
+
+        ebm_first_term += jnp.dot(
+            jax.nn.softmax(first_term_weights), # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
+            log_psi_t_eval_list_proposal_samples[i])
+        ebm_second_term += jnp.dot(
+            jax.nn.softmax(second_term_weights), # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
+            log_psi_t_eval_list_proposal_samples[i])
+
+    ebm_first_term /= intermediate_log_w_t_hist.shape[0]
+    ebm_second_term /= intermediate_log_w_t_hist.shape[0]
+
+    l_ebm_new = -(ebm_first_term - ebm_second_term)
+
+    if return_proposal_samples:
+        return l_ebm_new, proposal_samples
+
+    return l_ebm_new
+
+
+get_l_nvi_jit = partial(jax.jit, static_argnames=[
+    "log_true_final_twist", "output_len", "n_twist",
+    "smc_procedure_type", "proposal_is_p",
+    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
+    "reweight_for_second_term", "only_one_sample", "return_proposal_samples"])(get_l_nvi_partial_jit)
+
+
+
+
+
+
 # Don't modify the original sequence; built for use with Rob's update
 def get_proposal_q_sample_in_scan_non_modify(carry, t, original_seq, condition_twist_on_tokens, proposal_is_p=False, huggingface_model=None, params_proposal=None):
     rng_key, params_p, params_twist, prompt_len = carry

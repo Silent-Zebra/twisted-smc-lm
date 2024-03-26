@@ -164,6 +164,14 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap, alpha=self.alpha), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_combined":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_combined_objective_partial_jit, alpha=self.alpha), argnums=standard_argnum)
+        elif self.twist_learn_type == "nvi_ali_partial_jit":
+            dre_grad_fn = jax.grad(get_l_nvi_partial_jit , argnums=standard_argnum)
+        elif self.twist_learn_type == "nvi_ali_jit":
+            dre_grad_fn = jax.grad(get_l_nvi_jit,
+                                   argnums=standard_argnum)
+        elif self.twist_learn_type == "nvi_rob":
+            raise NotImplementedError
+
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl_jit, argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
@@ -2386,9 +2394,8 @@ if __name__ == "__main__":
             "ebm_reweight", "ebm_mixed_p_q_reweight", "ebm_ml_jit_vmapped_over_condition_tokens", "ebm_ml_jit_vmapped_over_condition_tokens_finalrl",
             "ebm_ml_partial_jit_vmapped_over_condition_tokens", "ebm_ml_pprop_jit_vmapped_over_condition_tokens",
             "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub",
-            "ebm_vmap_os",
-            "ebm_combined",
-            "ebm_ml_vmap_with_one_total_kl",
+            "ebm_vmap_os", "ebm_combined", "ebm_ml_vmap_with_one_total_kl",
+            "nvi_ali", "nvi_rob",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "one_total_kl_with_rl_lsq_sgtarget", "one_total_kl_with_rl_lsq_sgvalue",

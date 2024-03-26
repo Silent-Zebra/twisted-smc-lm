@@ -10,6 +10,18 @@ import matplotlib.pyplot as plt
 
 from plot_utils import plot_with_conf_bounds
 
+
+plot_type = "toxclass" # "toxthresh"
+
+
+# TOX CLASS
+load_pref_twist_1_8 = "logZ_bounds_twistproposal_2024-03-24_18-44_seed1_ebm_one_sample_nsamples1"
+load_pref_p_1_8 = "logZ_bounds_pproposal_2024-03-24_18-48_seed1_ebm_one_sample_nsamples1"
+load_pref_twist_4_16 = "logZ_bounds_twistproposal_2024-03-25_14-23_seed1_ebm_one_sample_nsamples1"
+load_pref_p_4_16 = "logZ_bounds_pproposal_2024-03-25_14-27_seed1_ebm_one_sample_nsamples1"
+
+
+# TOX THRESH
 load_pref_twist_1_8 = "logZ_bounds_twistproposal_2024-03-24_18-44_seed1_ebm_one_sample_nsamples1"
 load_pref_p_1_8 = "logZ_bounds_pproposal_2024-03-24_18-48_seed1_ebm_one_sample_nsamples1"
 load_pref_twist_4_16 = "logZ_bounds_twistproposal_2024-03-25_14-23_seed1_ebm_one_sample_nsamples1"
@@ -20,10 +32,8 @@ load_pref_p_32_512 = "logZ_bounds_pproposal_2024-01-15_12-58_seed1_ebm_one_sampl
 load_pref_twist_128_2048 = "logZ_bounds_twistproposal_2024-01-15_12-59_seed1_ebm_one_sample_nsamples1_2"
 load_pref_p_128_2048 = "logZ_bounds_pproposal_2024-01-15_13-10_seed1_ebm_one_sample_nsamples1_2"
 
-# load_pref_twist_32_512_ess = "logZ_bounds_twistproposal_2024-02-12_23-36_seed1_ebm_one_sample_nsamples1_1"
-# load_pref_p_32_512_ess = "logZ_bounds_pproposal_2024-02-12_23-43_seed1_ebm_one_sample_nsamples1_1"
-# load_pref_twist_128_2048_ess = "logZ_bounds_twistproposal_2024-02-12_23-41_seed1_ebm_one_sample_nsamples1_2"
-# load_pref_p_128_2048_ess = "logZ_bounds_pproposal_2024-02-12_23-52_seed1_ebm_one_sample_nsamples1_2"
+
+
 
 color_list_for_lbs = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey']
 color_list_for_ubs = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkcd:purple', 'xkcd:black']
@@ -57,6 +67,16 @@ p_iwae_ubs_1, p_iwae_ubs_8, p_iwae_lbs_1, p_iwae_lbs_8, p_smc_ubs_1, p_smc_ubs_8
 t_iwae_ubs_4, t_iwae_ubs_16, t_iwae_lbs_4, t_iwae_lbs_16, t_smc_ubs_4, t_smc_ubs_16, t_smc_lbs_4, t_smc_lbs_16 = load_ckpt(load_pref_twist_4_16)
 p_iwae_ubs_4, p_iwae_ubs_16, p_iwae_lbs_4, p_iwae_lbs_16, p_smc_ubs_4, p_smc_ubs_16, p_smc_lbs_4, p_smc_lbs_16 = load_ckpt(load_pref_p_4_16)
 
+
+if plot_type == "toxclass":
+    x_range = np.array([0,2,3,4])
+    p_iwae_ubs = np.transpose(np.stack([p_iwae_ubs_1, p_iwae_ubs_4, p_iwae_ubs_8, p_iwae_ubs_16]))
+    p_iwae_lbs = np.transpose(np.stack([p_iwae_lbs_1, p_iwae_lbs_4, p_iwae_lbs_8, p_iwae_lbs_16]))
+
+    p_smc_ubs = np.transpose(np.stack([p_smc_ubs_1, p_smc_ubs_4, p_smc_ubs_8, p_smc_ubs_16]))
+    p_smc_lbs = np.transpose(np.stack([p_smc_lbs_1, p_smc_lbs_4, p_smc_lbs_8, p_smc_lbs_16]))
+
+
 # print("---")
 # for x in [t_iwae_ubs_1, t_iwae_ubs_8, t_iwae_lbs_1, t_iwae_lbs_8, t_smc_ubs_1, t_smc_ubs_8, t_smc_lbs_1, t_smc_lbs_8]:
 #     print(x)
@@ -67,28 +87,31 @@ p_iwae_ubs_4, p_iwae_ubs_16, p_iwae_lbs_4, p_iwae_lbs_16, p_smc_ubs_4, p_smc_ubs
 #     print(jnp.stack(x).mean())
 # 1/0
 
-t_iwae_ubs_32, t_iwae_ubs_512, t_iwae_lbs_32, t_iwae_lbs_512, t_smc_ubs_32, t_smc_ubs_512, t_smc_lbs_32, t_smc_lbs_512 = load_ckpt(load_pref_twist_32_512)
-p_iwae_ubs_32, p_iwae_ubs_512, p_iwae_lbs_32, p_iwae_lbs_512, p_smc_ubs_32, p_smc_ubs_512, p_smc_lbs_32, p_smc_lbs_512 = load_ckpt(load_pref_p_32_512)
 
-t_iwae_ubs_128, t_iwae_ubs_2048, t_iwae_lbs_128, t_iwae_lbs_2048, t_smc_ubs_128, t_smc_ubs_2048, t_smc_lbs_128, t_smc_lbs_2048 = load_ckpt(load_pref_twist_128_2048)
-p_iwae_ubs_128, p_iwae_ubs_2048, p_iwae_lbs_128, p_iwae_lbs_2048, p_smc_ubs_128, p_smc_ubs_2048, p_smc_lbs_128, p_smc_lbs_2048 = load_ckpt(load_pref_p_128_2048)
+if plot_type == "toxthresh":
+    x_range = np.array([0, 2, 3, 4, 5, 7, 9, 11])
+
+    t_iwae_ubs_32, t_iwae_ubs_512, t_iwae_lbs_32, t_iwae_lbs_512, t_smc_ubs_32, t_smc_ubs_512, t_smc_lbs_32, t_smc_lbs_512 = load_ckpt(load_pref_twist_32_512)
+    p_iwae_ubs_32, p_iwae_ubs_512, p_iwae_lbs_32, p_iwae_lbs_512, p_smc_ubs_32, p_smc_ubs_512, p_smc_lbs_32, p_smc_lbs_512 = load_ckpt(load_pref_p_32_512)
+
+    t_iwae_ubs_128, t_iwae_ubs_2048, t_iwae_lbs_128, t_iwae_lbs_2048, t_smc_ubs_128, t_smc_ubs_2048, t_smc_lbs_128, t_smc_lbs_2048 = load_ckpt(load_pref_twist_128_2048)
+    p_iwae_ubs_128, p_iwae_ubs_2048, p_iwae_lbs_128, p_iwae_lbs_2048, p_smc_ubs_128, p_smc_ubs_2048, p_smc_lbs_128, p_smc_lbs_2048 = load_ckpt(load_pref_p_128_2048)
 
 
-t_iwae_ubs = np.transpose(np.stack([t_iwae_ubs_1, t_iwae_ubs_4, t_iwae_ubs_8, t_iwae_ubs_16, t_iwae_ubs_32, t_iwae_ubs_128, t_iwae_ubs_512, t_iwae_ubs_2048]))
-t_iwae_lbs = np.transpose(np.stack([t_iwae_lbs_1, t_iwae_lbs_4, t_iwae_lbs_8, t_iwae_lbs_16, t_iwae_lbs_32, t_iwae_lbs_128, t_iwae_lbs_512, t_iwae_lbs_2048]))
+    t_iwae_ubs = np.transpose(np.stack([t_iwae_ubs_1, t_iwae_ubs_4, t_iwae_ubs_8, t_iwae_ubs_16, t_iwae_ubs_32, t_iwae_ubs_128, t_iwae_ubs_512, t_iwae_ubs_2048]))
+    t_iwae_lbs = np.transpose(np.stack([t_iwae_lbs_1, t_iwae_lbs_4, t_iwae_lbs_8, t_iwae_lbs_16, t_iwae_lbs_32, t_iwae_lbs_128, t_iwae_lbs_512, t_iwae_lbs_2048]))
 
-t_smc_ubs = np.transpose(np.stack([t_smc_ubs_1, t_smc_ubs_4, t_smc_ubs_8, t_smc_ubs_16, t_smc_ubs_32, t_smc_ubs_128, t_smc_ubs_512, t_smc_ubs_2048]))
-t_smc_lbs = np.transpose(np.stack([t_smc_lbs_1, t_smc_lbs_4, t_smc_lbs_8, t_smc_lbs_16, t_smc_lbs_32, t_smc_lbs_128, t_smc_lbs_512, t_smc_lbs_2048]))
+    t_smc_ubs = np.transpose(np.stack([t_smc_ubs_1, t_smc_ubs_4, t_smc_ubs_8, t_smc_ubs_16, t_smc_ubs_32, t_smc_ubs_128, t_smc_ubs_512, t_smc_ubs_2048]))
+    t_smc_lbs = np.transpose(np.stack([t_smc_lbs_1, t_smc_lbs_4, t_smc_lbs_8, t_smc_lbs_16, t_smc_lbs_32, t_smc_lbs_128, t_smc_lbs_512, t_smc_lbs_2048]))
 
-p_iwae_ubs = np.transpose(np.stack([p_iwae_ubs_1, p_iwae_ubs_4, p_iwae_ubs_8, p_iwae_ubs_16, p_iwae_ubs_32, p_iwae_ubs_128, p_iwae_ubs_512, p_iwae_ubs_2048]))
-p_iwae_lbs = np.transpose(np.stack([p_iwae_lbs_1, p_iwae_lbs_4, p_iwae_lbs_8, p_iwae_lbs_16, p_iwae_lbs_32, p_iwae_lbs_128, p_iwae_lbs_512, p_iwae_lbs_2048]))
+    p_iwae_ubs = np.transpose(np.stack([p_iwae_ubs_1, p_iwae_ubs_4, p_iwae_ubs_8, p_iwae_ubs_16, p_iwae_ubs_32, p_iwae_ubs_128, p_iwae_ubs_512, p_iwae_ubs_2048]))
+    p_iwae_lbs = np.transpose(np.stack([p_iwae_lbs_1, p_iwae_lbs_4, p_iwae_lbs_8, p_iwae_lbs_16, p_iwae_lbs_32, p_iwae_lbs_128, p_iwae_lbs_512, p_iwae_lbs_2048]))
 
-p_smc_ubs = np.transpose(np.stack([p_smc_ubs_1, p_smc_ubs_4, p_smc_ubs_8, p_smc_ubs_16, p_smc_ubs_32, p_smc_ubs_128, p_smc_ubs_512, p_smc_ubs_2048]))
-p_smc_lbs = np.transpose(np.stack([p_smc_lbs_1, p_smc_lbs_4, p_smc_lbs_8, p_smc_lbs_16, p_smc_lbs_32, p_smc_lbs_128, p_smc_lbs_512, p_smc_lbs_2048]))
+    p_smc_ubs = np.transpose(np.stack([p_smc_ubs_1, p_smc_ubs_4, p_smc_ubs_8, p_smc_ubs_16, p_smc_ubs_32, p_smc_ubs_128, p_smc_ubs_512, p_smc_ubs_2048]))
+    p_smc_lbs = np.transpose(np.stack([p_smc_lbs_1, p_smc_lbs_4, p_smc_lbs_8, p_smc_lbs_16, p_smc_lbs_32, p_smc_lbs_128, p_smc_lbs_512, p_smc_lbs_2048]))
 
 plt.clf()
 plt.xlabel(f"Number of Samples")
-x_range = np.array([0,2,3,4,5,7,9,11])
 xticks_range = x_range
 xticks_labels = 2 ** xticks_range
 plt.ylabel(f"Log Z Bound")
