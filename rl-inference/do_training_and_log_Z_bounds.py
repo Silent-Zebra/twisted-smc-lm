@@ -2395,7 +2395,7 @@ if __name__ == "__main__":
             "ebm_ml_partial_jit_vmapped_over_condition_tokens", "ebm_ml_pprop_jit_vmapped_over_condition_tokens",
             "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub",
             "ebm_vmap_os", "ebm_combined", "ebm_ml_vmap_with_one_total_kl",
-            "nvi_ali", "nvi_rob",
+            "nvi_ali_partial_jit", "nvi_ali_jit", "nvi_rob_partial_jit", "nvi_rob_jit",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "one_total_kl_with_rl_lsq_sgtarget", "one_total_kl_with_rl_lsq_sgvalue",
