@@ -1585,7 +1585,7 @@ def get_jnp_prompts(hface_model_type, rm_type, tokenizer):
     return indices_of_continuation, jnp_prompts
 
 
-def load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model, hface_nn_twist, separate_proposal_and_twist,
+def load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model, separate_proposal_and_twist,
                           params_twist, params_proposal):
 
     x = checkpoints.restore_checkpoint(ckpt_dir=load_dir_ckpt, target=None,
@@ -1594,7 +1594,7 @@ def load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model
 
     loaded_params_twist = x['0']
 
-    if separate_hface_twist_model: # and hface_nn_twist:
+    if separate_hface_twist_model:
         loaded_params_twist = [x['0']['0'], x['0']['1']]
 
         if 'linear_layers' in loaded_params_twist[1]:
@@ -1856,7 +1856,7 @@ def setup_cfg(
 
     if load_ckpt:
         params_twist, params_proposal = load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model,
-                  hface_nn_twist, separate_proposal_and_twist, params_twist, params_proposal)
+                  separate_proposal_and_twist, params_twist, params_proposal)
 
     print("Starting building final twists and getting posterior samples", flush=True)
     print(f"TIME: {time.time()}", flush=True)
