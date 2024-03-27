@@ -169,6 +169,12 @@ class ExperimentConfig:
         elif self.twist_learn_type == "nvi_ali_jit":
             dre_grad_fn = jax.grad(get_l_nvi_jit,
                                    argnums=standard_argnum)
+        elif self.twist_learn_type == "nvi_ali_vmapped_over_condition_tokens":
+            dre_grad_fn = jax.grad(
+                partial(get_l_nvi_jit_vmapped_over_condition_tokens,
+                        n_twist_ebm_vmap=self.n_twist_ebm_vmap),
+                argnums=standard_argnum
+            )
         elif self.twist_learn_type == "nvi_rob":
             raise NotImplementedError
 
@@ -2395,7 +2401,7 @@ if __name__ == "__main__":
             "ebm_ml_partial_jit_vmapped_over_condition_tokens", "ebm_ml_pprop_jit_vmapped_over_condition_tokens",
             "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub",
             "ebm_vmap_os", "ebm_combined", "ebm_ml_vmap_with_one_total_kl",
-            "nvi_ali_partial_jit", "nvi_ali_jit", "nvi_rob_partial_jit", "nvi_rob_jit",
+            "nvi_ali_partial_jit", "nvi_ali_jit", "nvi_ali_vmapped_over_condition_tokens", "nvi_rob_partial_jit", "nvi_rob_jit",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "one_total_kl_with_rl_lsq_sgtarget", "one_total_kl_with_rl_lsq_sgvalue",

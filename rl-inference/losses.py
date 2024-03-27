@@ -745,6 +745,72 @@ get_l_nvi_jit = partial(jax.jit, static_argnames=[
 
 
 
+@partial(jax.jit, static_argnames=[
+    "log_true_final_twist", "output_len", "n_twist",
+    "smc_procedure_type", "proposal_is_p",
+    "huggingface_model", "tempered_twist", "beta_prop", "mixed_p_q_sample",
+    "reweight_for_second_term", "only_one_sample", "n_twist_ebm_vmap",
+    ])
+def get_l_nvi_jit_vmapped_over_condition_tokens(
+    rng_key, prompt, params_p, params_twist,
+    log_true_final_twist,
+    output_len, n_twist,
+    condition_twist_on_tokens, smc_procedure_type,
+    proposal_is_p=False,
+    huggingface_model=None,
+    tempered_twist=False, beta_prop=None, mixed_p_q_sample=False,
+    true_sigma_samples=None,
+    replay_buffer=None, replay_buffer_log_w_ts=None,
+    reweight_for_second_term=False, only_one_sample=True, n_twist_ebm_vmap=0,
+    params_proposal=None
+):
+    assert condition_twist_on_tokens is not None
+    assert true_sigma_samples is None
+    assert only_one_sample
+
+    assert n_twist_ebm_vmap > 0
+
+    vmapped_loss = jax.vmap(get_l_nvi_jit, in_axes=(
+        None, None, None, None, None, None,
+        None,
+        None, None, None,
+        0, None,
+        None, None,
+        None,
+        None, None, None,
+        None,
+        None, None,
+        None, None,
+        None,
+        None,
+        None
+    ))
+
+    loss = vmapped_loss(
+        rng_key, prompt, params_p, params_twist,
+        log_true_final_twist,
+        output_len, n_twist_ebm_vmap,
+        condition_twist_on_tokens, smc_procedure_type,
+        proposal_is_p,
+        huggingface_model,
+        tempered_twist, beta_prop, mixed_p_q_sample,
+        None, # IMPORTANT - do not pass in true sigma samples here
+        replay_buffer, replay_buffer_log_w_ts,
+        reweight_for_second_term, only_one_sample,
+        None,
+        False,
+        params_proposal
+    )
+
+    ebm_loss = loss.mean()
+
+
+    return ebm_loss
+
+
+
+
+
 # Don't modify the original sequence; built for use with Rob's update
 def get_proposal_q_sample_in_scan_non_modify(carry, t, original_seq, condition_twist_on_tokens, proposal_is_p=False, huggingface_model=None, params_proposal=None):
     rng_key, params_p, params_twist, prompt_len = carry
