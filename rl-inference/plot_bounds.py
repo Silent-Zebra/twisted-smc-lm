@@ -11,28 +11,40 @@ import matplotlib.pyplot as plt
 from plot_utils import plot_with_conf_bounds
 
 
-plot_type = "toxclass" # "toxthresh"
+plot_type = "sent" #"toxclass" # "toxthresh"
 
 
-# TOX CLASS
-load_pref_twist_1_8 = "logZ_bounds_twistproposal_2024-03-24_18-44_seed1_ebm_one_sample_nsamples1"
-load_pref_p_1_8 = "logZ_bounds_pproposal_2024-03-24_18-48_seed1_ebm_one_sample_nsamples1"
-load_pref_twist_4_16 = "logZ_bounds_twistproposal_2024-03-25_14-23_seed1_ebm_one_sample_nsamples1"
-load_pref_p_4_16 = "logZ_bounds_pproposal_2024-03-25_14-27_seed1_ebm_one_sample_nsamples1"
+if plot_type == "toxclass":
+    # TOX CLASS
+    load_pref_twist_1_8 = "logZ_bounds_twistproposal_2024-03-26_15-33_seed1_ebm_one_sample_nsamples1"
+    load_pref_p_1_8 = "logZ_bounds_pproposal_2024-03-26_15-37_seed1_ebm_one_sample_nsamples1"
+    load_pref_twist_4_16 = "logZ_bounds_twistproposal_2024-03-26_15-33_seed1_ebm_one_sample_nsamples1"
+    load_pref_p_4_16 = "logZ_bounds_pproposal_2024-03-26_15-38_seed1_ebm_one_sample_nsamples1"
 
+    figname = f"./fig_bounds_toxclass_03-26.pdf"
 
-# TOX THRESH
-load_pref_twist_1_8 = "logZ_bounds_twistproposal_2024-03-24_18-44_seed1_ebm_one_sample_nsamples1"
-load_pref_p_1_8 = "logZ_bounds_pproposal_2024-03-24_18-48_seed1_ebm_one_sample_nsamples1"
-load_pref_twist_4_16 = "logZ_bounds_twistproposal_2024-03-25_14-23_seed1_ebm_one_sample_nsamples1"
-load_pref_p_4_16 = "logZ_bounds_pproposal_2024-03-25_14-27_seed1_ebm_one_sample_nsamples1"
+elif plot_type == "sent":
+    load_pref_twist_1_8 = "logZ_bounds_twistproposal_2024-03-26_16-00_seed1_ebm_one_sample_nsamples1"
+    load_pref_p_1_8 = "logZ_bounds_pproposal_2024-03-26_22-12_seed1_ebm_one_sample_nsamples1"
+    load_pref_twist_4_16 = "logZ_bounds_twistproposal_2024-03-26_15-53_seed1_ebm_one_sample_nsamples1"
+    load_pref_p_4_16 = "logZ_bounds_pproposal_2024-03-26_22-10_seed1_ebm_one_sample_nsamples1"
 
-load_pref_twist_32_512 = "logZ_bounds_twistproposal_2024-01-15_12-52_seed1_ebm_one_sample_nsamples1_1"
-load_pref_p_32_512 = "logZ_bounds_pproposal_2024-01-15_12-58_seed1_ebm_one_sample_nsamples1_1"
-load_pref_twist_128_2048 = "logZ_bounds_twistproposal_2024-01-15_12-59_seed1_ebm_one_sample_nsamples1_2"
-load_pref_p_128_2048 = "logZ_bounds_pproposal_2024-01-15_13-10_seed1_ebm_one_sample_nsamples1_2"
+    figname = f"./fig_bounds_sent_03-26.pdf"
 
+elif plot_type == "toxthresh":
+    # TOX THRESH
+    load_pref_twist_1_8 = "logZ_bounds_twistproposal_2024-03-24_18-44_seed1_ebm_one_sample_nsamples1"
+    load_pref_p_1_8 = "logZ_bounds_pproposal_2024-03-24_18-48_seed1_ebm_one_sample_nsamples1"
+    load_pref_twist_4_16 = "logZ_bounds_twistproposal_2024-03-25_14-23_seed1_ebm_one_sample_nsamples1"
+    load_pref_p_4_16 = "logZ_bounds_pproposal_2024-03-25_14-27_seed1_ebm_one_sample_nsamples1"
 
+    load_pref_twist_32_512 = "logZ_bounds_twistproposal_2024-01-15_12-52_seed1_ebm_one_sample_nsamples1_1"
+    load_pref_p_32_512 = "logZ_bounds_pproposal_2024-01-15_12-58_seed1_ebm_one_sample_nsamples1_1"
+    load_pref_twist_128_2048 = "logZ_bounds_twistproposal_2024-01-15_12-59_seed1_ebm_one_sample_nsamples1_2"
+    load_pref_p_128_2048 = "logZ_bounds_pproposal_2024-01-15_13-10_seed1_ebm_one_sample_nsamples1_2"
+
+    # figname = f"./fig_bounds_ess_toxt_-5_02-13.pdf"
+    figname = f"./fig_bounds_toxt_-5_03-24.pdf"
 
 
 color_list_for_lbs = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey']
@@ -68,8 +80,14 @@ t_iwae_ubs_4, t_iwae_ubs_16, t_iwae_lbs_4, t_iwae_lbs_16, t_smc_ubs_4, t_smc_ubs
 p_iwae_ubs_4, p_iwae_ubs_16, p_iwae_lbs_4, p_iwae_lbs_16, p_smc_ubs_4, p_smc_ubs_16, p_smc_lbs_4, p_smc_lbs_16 = load_ckpt(load_pref_p_4_16)
 
 
-if plot_type == "toxclass":
+if plot_type in ["toxclass", "sent"]:
     x_range = np.array([0,2,3,4])
+    t_iwae_ubs = np.transpose(np.stack([t_iwae_ubs_1, t_iwae_ubs_4, t_iwae_ubs_8, t_iwae_ubs_16]))
+    t_iwae_lbs = np.transpose(np.stack([t_iwae_lbs_1, t_iwae_lbs_4, t_iwae_lbs_8, t_iwae_lbs_16]))
+
+    t_smc_ubs = np.transpose(np.stack([t_smc_ubs_1, t_smc_ubs_4, t_smc_ubs_8, t_smc_ubs_16]))
+    t_smc_lbs = np.transpose(np.stack([t_smc_lbs_1, t_smc_lbs_4, t_smc_lbs_8, t_smc_lbs_16]))
+
     p_iwae_ubs = np.transpose(np.stack([p_iwae_ubs_1, p_iwae_ubs_4, p_iwae_ubs_8, p_iwae_ubs_16]))
     p_iwae_lbs = np.transpose(np.stack([p_iwae_lbs_1, p_iwae_lbs_4, p_iwae_lbs_8, p_iwae_lbs_16]))
 
@@ -88,7 +106,7 @@ if plot_type == "toxclass":
 # 1/0
 
 
-if plot_type == "toxthresh":
+elif plot_type == "toxthresh":
     x_range = np.array([0, 2, 3, 4, 5, 7, 9, 11])
 
     t_iwae_ubs_32, t_iwae_ubs_512, t_iwae_lbs_32, t_iwae_lbs_512, t_smc_ubs_32, t_smc_ubs_512, t_smc_lbs_32, t_smc_lbs_512 = load_ckpt(load_pref_twist_32_512)
@@ -169,9 +187,8 @@ last, conf_bound = plot_with_conf_bounds(
 plt.xticks(xticks_range, xticks_labels)
 
 plt.legend(loc="lower right")
-# plt.savefig(f"./fig_bounds_toxt_-5_01-14.pdf")
-# plt.savefig(f"./fig_bounds_ess_toxt_-5_02-13.pdf")
-plt.savefig(f"./fig_bounds_toxt_-5_03-24.pdf")
+
+plt.savefig(figname)
 
 
 #

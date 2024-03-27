@@ -789,6 +789,7 @@ class ExperimentConfig:
             smc_args["condition_twist_on_tokens"] = condition_twist_on_tokens
             _, _, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
             proposal_samples = intermediate_seq_list[-1]
+            no_intermediate_resample_proposal_samples = proposal_samples
 
             def score_func(samples):
                 return log_reward_model_p_of_last_tokens(
