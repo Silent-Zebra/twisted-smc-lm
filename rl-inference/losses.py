@@ -1721,7 +1721,7 @@ def get_l_bce_p_sigma(
                                                           n_twist,
                                                           huggingface_model=huggingface_model)
 
-    log_prob_class = log_true_final_twist(independent_p_samples)
+    log_prob_class = log_true_final_twist(independent_p_samples, condition_twist_on_tokens)
 
     # inefficient because 2x eval of twist, but whatever, this is easy to implement and test
     l_bce_p = get_l_bce(
