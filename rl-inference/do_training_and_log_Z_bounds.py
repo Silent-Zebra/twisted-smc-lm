@@ -286,6 +286,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=standard_argnum)
         elif self.twist_learn_type == "sixo_mixed_p_q_partial_jit":
             dre_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=standard_argnum)
+        elif self.twist_learn_type == "bce_sigma":
+            dre_grad_fn = jax.grad(partial(get_l_bce_sigma, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
         elif "bce" in self.twist_learn_type: # in ["bce_p", "bce_q"]:
             dre_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
         else:

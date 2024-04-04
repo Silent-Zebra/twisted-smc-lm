@@ -52,6 +52,20 @@ load_prefixes_sent_rl_comparison = [
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-02_seed1_rl_q_gcd_partial_jit_nsamples12_sent1_00001",
 ]
 
+
+load_prefixes_sent_ctl_comparison = [
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-03-26_21-41_seed1_nvi_ali_partial_jit_nsamples12_sent1_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-03-26_21-58_seed1_nvi_ali_partial_jit_nsamples12_sent1_00003"
+]
+
+load_prefixes_tox_ctl_comparison = [
+    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-03-26_23-31_seed1_nvi_ali_partial_jit_nsamples12_toxc_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-03-26_23-31_seed1_nvi_ali_partial_jit_nsamples12_toxc_00003",
+]
+
+
 load_prefixes_sent_truepost_comparison = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-14_00-54_seed1_ebm_reweight_nsamples10_sent1_trainontruepost_0001",
@@ -186,7 +200,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
     # print(logZ_midpoint_estimates)
     median_logZ_midpoint = np.median(np.stack(logZ_midpoint_estimates))
     print(f"MEDIAN: {median_logZ_midpoint}")
-    if "sent_rl_comp" in fig_name_modifier:
+    if "sent_rl_comp" in fig_name_modifier or len(load_prefixes) <= 3:
         median_logZ_midpoint = logZ_midpoint_estimates[0] # Needed when you have a bunch of unstable estimates.
         print(f"USING ONE LOG Z MIDPOINT ESTIMATE: {median_logZ_midpoint}")
     # 1/0
@@ -406,8 +420,9 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
         for x in output_latex:
             print(x)
 
-make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_02-17")
-make_combined_plot(load_prefixes_tox, "tox_02-17")
+# make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_02-17")
+# make_combined_plot(load_prefixes_tox, "tox_02-17")
+
 
 # make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_02-17")
 # make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_02-17")
@@ -456,8 +471,31 @@ proposal_names = [
     "DPG",
     "DPG, Exact $\sigma$",
 ]
+
+
+
+
+plot_names = [
+    r"Twisted Proposal (Contrastive)",
+    r"Twisted Proposal (NVI)",
+    r"Twisted Proposal (NVI)",
+]
+twist_learn_method_names = [
+    r"Contrastive",
+    r"NVI",
+    r"NVI",
+]
+proposal_names = [
+    "Twisted",
+    "Twisted",
+    "Twisted",
+]
+
 linestyle_list_for_f_q = ['solid'] * len(twist_learn_method_names)
 linestyle_list_for_g_q = ['dashed'] * len(twist_learn_method_names)
 
 # make_combined_plot(load_prefixes_sent_truepost_comparison, "sent_truep_comp_01-30", exact_num_epochs=9, legendsize=6)
 # make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-30", exact_num_epochs=6, legendsize=6)
+
+make_combined_plot(load_prefixes_sent_ctl_comparison, "sent_ctl_comp_03-26")
+make_combined_plot(load_prefixes_tox_ctl_comparison, "toxc_ctl_comp_03-26")

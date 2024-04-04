@@ -1638,6 +1638,60 @@ def get_l_bce(
     return loss.mean()
 
 
+# Correct version
+@partial(jax.jit, static_argnames=[
+    "log_true_final_twist", "output_len", "n_twist",
+    "smc_procedure_type", "rm_type",  "proposal_is_p",
+    "beta_temp", "evaluate_over_samples_from", "huggingface_model",  "tempered_twist", "beta_prop",
+])
+def get_l_bce_sigma(
+    rng_key, prompt, params_p, params_twist, log_true_final_twist,
+    output_len, n_twist, condition_twist_on_tokens,
+    smc_procedure_type, rm_type, beta_temp=1., proposal_is_p=False,
+    evaluate_over_samples_from="p", huggingface_model=None, tempered_twist=False, beta_prop=None,
+    true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None, log_prob_class=None, params_proposal=None
+):
+
+    prompt_len = prompt.shape[-1]
+    assert true_sigma_samples is not None # Not really true_sigma_samples, just the samples we run this loss on.
+
+    # Do the regular loss for the p samples, and deal with the sigma samples separately
+
+    samples_to_evaluate_over = true_sigma_samples
+
+    log_psi_on_p_samples = evaluate_log_psi_selected_tokens(
+        samples_to_evaluate_over, prompt.shape[-1],
+        params_twist,
+        condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
+
+    # The only thing that needs to changes is the evaluation of the log_prob_class
+
+    class_prob_across_t = None
+    for i in range(output_len):
+        rng_key, sk = jax.random.split(rng_key)
+        sigma_1_to_t_with_p_tplus1_to_T = stochastic_transformer_sample(sk, params_p, true_sigma_samples[:, :prompt_len+i], output_len - i, samples_to_evaluate_over.shape[0], huggingface_model, prompt_is_already_batch=True )
+        # print(sigma_1_to_t_with_p_tplus1_to_T.shape)
+        log_prob_class = log_true_final_twist(sigma_1_to_t_with_p_tplus1_to_T, condition_twist_on_tokens)
+        class_prob = jnp.exp(log_prob_class)[:, None]
+        # print(class_prob.shape)
+        if class_prob_across_t is None:
+            class_prob_across_t = class_prob
+        else:
+            class_prob_across_t = jnp.concatenate((class_prob_across_t, class_prob), axis=-1)
+
+    # print(log_psi_on_p_samples.shape)
+    # print(class_prob_across_t.shape)
+    # TODO CHECK THAT THESE SHAPES MATCH
+    # TODO TRY JUST SIGMA FIRST, just to debug and get it working, then try p + sigma after
+
+    loss = binary_cross_entropy(log_psi_on_p_samples, class_prob_across_t)
+
+    # loss = optax.sigmoid_binary_cross_entropy(log_psi_on_p_samples, class_prob_broadcasted)
+
+    return loss.mean()
+
+
 def binary_cross_entropy(log_prob, labels):
     # Adapted from https://github.com/google-deepmind/optax/blob/main/optax/losses/_classification.py#L24#L59
     # labels = labels.astype(logits.dtype)
