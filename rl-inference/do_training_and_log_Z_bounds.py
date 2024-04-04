@@ -288,6 +288,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=standard_argnum)
         elif self.twist_learn_type == "bce_sigma":
             dre_grad_fn = jax.grad(partial(get_l_bce_sigma, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
+        elif self.twist_learn_type == "bce_psigma":
+            dre_grad_fn = jax.grad(partial(get_l_bce_p_sigma, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
         elif "bce" in self.twist_learn_type: # in ["bce_p", "bce_q"]:
             dre_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
         else:
@@ -423,7 +425,7 @@ class ExperimentConfig:
                                      :-self.num_last_tokens_to_condition_on]
                 condition_twist_on_tokens = p_samples[:,
                                             -self.num_last_tokens_to_condition_on:]
-                if self.twist_learn_type == "bce_sigma":
+                if self.twist_learn_type in ["bce_sigma", "bce_psigma"]:
                     samples_to_evaluate_over = true_sigma_samples
                 elif self.twist_learn_type == "bce_p":
                     independent_p_samples = stochastic_transformer_sample(sk3,
@@ -432,22 +434,22 @@ class ExperimentConfig:
                                                               n_twist,
                                                               huggingface_model=huggingface_model)
                     samples_to_evaluate_over = independent_p_samples
-                elif self.twist_learn_type == "bce_psigma":
-                    independent_p_samples = stochastic_transformer_sample(sk3,
-
-                                                                          params_p,
-                                                                          prompt,
-                                                                          output_len,
-                                                                          n_twist,
-                                                                          huggingface_model=huggingface_model)
-                    samples_to_evaluate_over = independent_p_samples
-                    samples_to_evaluate_over = jnp.concatenate(
-                        (samples_to_evaluate_over, true_sigma_samples), axis=0)
-                    if condition_twist_on_tokens is not None:
-                        condition_twist_on_tokens = jnp.concatenate((
-                                                                    condition_twist_on_tokens,
-                                                                    condition_twist_on_tokens),
-                                                                    axis=0)
+                # elif self.twist_learn_type == "bce_psigma":
+                #     independent_p_samples = stochastic_transformer_sample(sk3,
+                #
+                #                                                           params_p,
+                #                                                           prompt,
+                #                                                           output_len,
+                #                                                           n_twist,
+                #                                                           huggingface_model=huggingface_model)
+                #     samples_to_evaluate_over = independent_p_samples
+                #     samples_to_evaluate_over = jnp.concatenate(
+                #         (samples_to_evaluate_over, true_sigma_samples), axis=0)
+                #     if condition_twist_on_tokens is not None:
+                #         condition_twist_on_tokens = jnp.concatenate((
+                #                                                     condition_twist_on_tokens,
+                #                                                     condition_twist_on_tokens),
+                #                                                     axis=0)
                 else:
                     raise NotImplementedError
 

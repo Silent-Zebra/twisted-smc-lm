@@ -1692,6 +1692,52 @@ def get_l_bce_sigma(
     return loss.mean()
 
 
+@partial(jax.jit, static_argnames=[
+    "log_true_final_twist", "output_len", "n_twist",
+    "smc_procedure_type", "rm_type",  "proposal_is_p",
+    "beta_temp", "evaluate_over_samples_from", "huggingface_model",  "tempered_twist", "beta_prop",
+])
+def get_l_bce_p_sigma(
+    rng_key, prompt, params_p, params_twist, log_true_final_twist,
+    output_len, n_twist, condition_twist_on_tokens,
+    smc_procedure_type, rm_type, beta_temp=1., proposal_is_p=False,
+    evaluate_over_samples_from="p", huggingface_model=None, tempered_twist=False, beta_prop=None,
+    true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None, log_prob_class=None, params_proposal=None
+):
+    rng_key, sk, sk2 = jax.random.split(rng_key, 3)
+    l_bce_sigma = get_l_bce_sigma(
+        sk, prompt, params_p, params_twist, log_true_final_twist,
+        output_len, n_twist, condition_twist_on_tokens,
+        smc_procedure_type, rm_type, beta_temp, proposal_is_p,
+        evaluate_over_samples_from, huggingface_model, tempered_twist, beta_prop,
+        true_sigma_samples, replay_buffer, replay_buffer_log_w_ts,
+        log_prob_class, params_proposal
+    )
+
+    independent_p_samples = stochastic_transformer_sample(sk2,
+                                                          params_p,
+                                                          prompt,
+                                                          output_len,
+                                                          n_twist,
+                                                          huggingface_model=huggingface_model)
+
+    log_prob_class = log_true_final_twist(independent_p_samples)
+
+    # inefficient because 2x eval of twist, but whatever, this is easy to implement and test
+    l_bce_p = get_l_bce(
+        rng_key, prompt, params_p, params_twist, log_true_final_twist,
+        output_len, n_twist, condition_twist_on_tokens,
+        smc_procedure_type, rm_type, beta_temp, proposal_is_p,
+        evaluate_over_samples_from, huggingface_model, tempered_twist,
+        beta_prop,
+        independent_p_samples, replay_buffer, replay_buffer_log_w_ts, # pass in p samples for the evaluation here
+        log_prob_class, params_proposal
+    )
+
+    return (l_bce_sigma + l_bce_p) / 2.
+
+
+
 def binary_cross_entropy(log_prob, labels):
     # Adapted from https://github.com/google-deepmind/optax/blob/main/optax/losses/_classification.py#L24#L59
     # labels = labels.astype(logits.dtype)
