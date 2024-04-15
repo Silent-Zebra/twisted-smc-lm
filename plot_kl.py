@@ -99,7 +99,8 @@ load_prefixes_plasttok2_1 = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_22-45_seed1_rl_qsigma_lsq_nsamples14_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_18-33_seed1_rl_q_lsq_nsamples14_00001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-29_seed1_sixo_nsamples14_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-02-16_22-31_seed1_bce_psigma_nsamples14_plast2_1_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-02-16_22-31_seed1_bce_psigma_nsamples14_plast2_1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-04_17-33_seed1_bce_psigma_nsamples14_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples14_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-10_05-46_seed1_one_total_kl_nsamples14_0001",
     # "f_q_g_q_estimates_2024-01-09_20-11_seed0_nsamples14_00003",
@@ -114,7 +115,9 @@ load_prefixes_plasttok15_10 = [
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_00003",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_08-54_seed1_bce_q_nsamples12_plast15_10_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-10_07-14_seed1_bce_q_nsamples12_plast15_10_00003",
-    "f_q_g_q_logZbestmidpoint_info_2024-02-18_03-47_seed1_bce_psigma_nsamples12_plast15_10_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-02-18_03-47_seed1_bce_psigma_nsamples12_plast15_10_0001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-05_16-31_seed1_bce_psigma_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-05_00-01_seed1_bce_psigma_nsamples12",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_05-11_seed1_one_total_kl_nsamples12_plast15_10_0001",
     "f_q_g_q_estimates_2024-02-01_22-13_ppo_seed0_nsamples12_00003",
     # "f_q_g_q_estimates_2024-01-09_21-38_seed0_nsamples12_ppo_plast15_10_000001",
@@ -424,8 +427,8 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
 # make_combined_plot(load_prefixes_tox, "tox_02-17")
 
 
-# make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_02-17")
-# make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_02-17")
+# make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_04-11")
+make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_04-11")
 
 
 
@@ -497,5 +500,5 @@ linestyle_list_for_g_q = ['dashed'] * len(twist_learn_method_names)
 # make_combined_plot(load_prefixes_sent_truepost_comparison, "sent_truep_comp_01-30", exact_num_epochs=9, legendsize=6)
 # make_combined_plot(load_prefixes_tox_truepost_comparison, "tox_truep_comp_01-30", exact_num_epochs=6, legendsize=6)
 
-make_combined_plot(load_prefixes_sent_ctl_comparison, "sent_ctl_comp_03-26")
-make_combined_plot(load_prefixes_tox_ctl_comparison, "toxc_ctl_comp_03-26")
+# make_combined_plot(load_prefixes_sent_ctl_comparison, "sent_ctl_comp_03-26")
+# make_combined_plot(load_prefixes_tox_ctl_comparison, "toxc_ctl_comp_03-26")
