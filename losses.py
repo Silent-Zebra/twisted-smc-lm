@@ -405,14 +405,13 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
     if use_smc_ub_for_pos_samples:
         # TODO later replace with jit instead of partial jit (well it's ok, outside jit makes this fine)
 
-
         if add_rl_final_twist_loss:
             vmapped_loss = jax.vmap(get_l_ebm_ml_partial_jit, in_axes=(
-                None, None, None, None, None, None,
+                None, None, None, None,
                 None,
-                None, None, None,
-                0, None,
                 None, None,
+                0, None,
+                None,
                 None,
                 None, None, None,
                 None,
@@ -441,11 +440,11 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
             loss, proposal_samples = x
         else:
             vmapped_loss = jax.vmap(get_l_ebm_ml_partial_jit, in_axes=(
-                None, None, None, None, None, None,
+                None, None, None, None,
                 None,
-                None, None, None,
-                0, None,
                 None, None,
+                0, None,
+                None,
                 None,
                 None, None, None,
                 None,
@@ -472,9 +471,6 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
             )
 
     else:
-
-
-
         # print("vmap shapes")
         # print(true_sigma_samples)
         # print(true_sigma_samples.shape)
@@ -485,11 +481,11 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
 
         if add_rl_final_twist_loss:
             vmapped_loss = jax.vmap(get_l_ebm_ml_partial_jit, in_axes=(
-                None, None, None, None, None, None,
+                None, None, None, None,
                 None,
-                None, None, None,
-                0, None,
                 None, None,
+                0, None,
+                None,
                 None,
                 None, None, None,
                 0,
@@ -516,11 +512,11 @@ def get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens(
 
         else:
             vmapped_loss = jax.vmap(get_l_ebm_ml_partial_jit, in_axes=(
-                None, None, None, None, None, None,
+                None, None, None, None,
                 None,
-                None, None, None,
-                0, None,
                 None, None,
+                0, None,
+                None,
                 None,
                 None, None, None,
                 0,
