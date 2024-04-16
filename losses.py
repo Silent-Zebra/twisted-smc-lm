@@ -270,15 +270,13 @@ def get_l_ebm_ml_partial_jit(
                     sk1, prompt, params_p,
                     params_twist, log_true_final_twist, output_len, n_twist,
                     smc_procedure_type=smc_procedure_type,
-
                     condition_twist_on_tokens=condition_twist_on_tokens,
-
                     proposal_is_p=proposal_is_p,
                     huggingface_model=huggingface_model,
                     resample=True,
                     no_final_resample=no_final_resample,
                     tempered_twist=tempered_twist, beta_prop=beta_prop,
-                    posterior_sample=posterior_sample, params_proposal=params_proposal
+                    true_posterior_sample=posterior_sample, params_proposal=params_proposal
                 )
                 # print(prompt_w_sigma_sample_s_1_to_t.shape)
                 # print(prompt_w_sigma_sample_s_1_to_t)
@@ -287,11 +285,10 @@ def get_l_ebm_ml_partial_jit(
                     sk1, prompt, params_p,
                     params_twist, log_true_final_twist, output_len, n_twist,
                     smc_procedure_type=smc_procedure_type,
-                     condition_twist_on_tokens=condition_twist_on_tokens,
-
+                    condition_twist_on_tokens=condition_twist_on_tokens,
                     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                     resample=resample_for_sigma_samples, no_final_resample=no_final_resample,
-                    tempered_twist=tempered_twist, beta_prop=beta_prop, posterior_sample=posterior_sample, params_proposal=params_proposal
+                    tempered_twist=tempered_twist, beta_prop=beta_prop, true_posterior_sample=posterior_sample, params_proposal=params_proposal
                 )
 
             normalized_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
