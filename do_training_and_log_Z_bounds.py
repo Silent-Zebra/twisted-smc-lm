@@ -2224,7 +2224,7 @@ def main():
         "n_vocab": args.n_vocab, "twist_learn_type": args.twist_learn_type, "rm_type": args.rm_type,
         "seed": args.seed, "hface_model_type": args.hface_model_type, "lr_twist": args.lr_twist,
         "beta1": args.beta1, "beta2": args.beta2, "weight_decay": args.weight_decay,
-        "n_layers_twist": args.n_layers_twist, "output_len": args.output_len, "n_samples_at_a_time": args.n_samples_at_a_time,
+        "n_layers_twist": args.n_layers_twist, "output_len": args.output_len, "n_samples_at_a_time": args.n_samples_at_a_time_for_true_post,
         "beta_temp": args.beta_temp, "threshold": args.threshold, "pos_threshold": args.pos_threshold, "load_ckpt": args.load_ckpt,
         "load_dirs": (args.load_dir_ckpt, args.load_dir_posterior_samples),
         "load_prefix": args.load_prefix_ckpt, "hface_nn_twist": args.hface_nn_twist, "separate_hface_twist_model": args.separate_hface_twist_model,
@@ -2458,7 +2458,7 @@ if __name__ == "__main__":
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='.')
 
 
-    parser.add_argument("--n_samples_at_a_time", type=int, default=500, help="This is the batch size used in collecting true posterior samples; we repeat drawing n_samples_at_a_time from the base model and then accept whatever number of exact target dist samples. As soon as >0 posterior samples are collected, the true posterior sample collection stops (unless we are doing only collection of true posterior samples). This is the num true posterior samples for infilling where every draw is a true posterior") # TODO possible refactor of this
+    parser.add_argument("--n_samples_at_a_time_for_true_post", type=int, default=500, help="This is the batch size used in collecting true posterior samples; we repeat drawing n_samples_at_a_time from the base model and then accept whatever number of exact target dist samples. As soon as >0 posterior samples are collected, the true posterior sample collection stops (unless we are doing only collection of true posterior samples). This is the num true posterior samples for infilling where every draw is a true posterior") # TODO possible refactor of this
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
     parser.add_argument("--proposal_is_p_for_plots", action="store_true", help="Use q = p for the proposal, ONLY FOR THE PLOTS AND ONLY IN MEMORY CONSTRAINED SETTINGS DOES THIS DO ANYTHING (otherwise I do both p and q for the plots)")
 
@@ -2531,7 +2531,7 @@ if __name__ == "__main__":
 
     if args.rm_type == "p_last_tokens":
         n_trueposts_for_evals = 30
-        assert args.n_samples_at_a_time == 2000 # Just to allow for consistent evaluation, compared to the non-infilling settings (always 2000 sigma samples)... but we could debate that the conditional twist setting is different so keeping 2000 constant is meaningless anyway...
+        assert args.n_samples_at_a_time_for_true_post == 2000 # Just to allow for consistent evaluation, compared to the non-infilling settings (always 2000 sigma samples)... but we could debate that the conditional twist setting is different so keeping 2000 constant is meaningless anyway...
 
 
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
