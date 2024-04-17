@@ -2458,7 +2458,7 @@ if __name__ == "__main__":
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='.')
 
 
-    parser.add_argument("--n_true_posterior_samples", type=int, default=10, help="NOTE: this is misleading. This is actually the batch size used in collecting true posterior samples. As soon as >0 posterior samples are collected, the true posterior sample collection stops.") # TODO possible refactor of this
+    parser.add_argument("--n_true_posterior_samples", type=int, default=500, help="NOTE: this is misleading. This is actually the batch size used in collecting true posterior samples. As soon as >0 posterior samples are collected, the true posterior sample collection stops.") # TODO possible refactor of this
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
     parser.add_argument("--proposal_is_p_for_plots", action="store_true", help="Use q = p for the proposal, ONLY FOR THE PLOTS AND ONLY IN MEMORY CONSTRAINED SETTINGS DOES THIS DO ANYTHING (otherwise I do both p and q for the plots)")
 
