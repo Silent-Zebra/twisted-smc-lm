@@ -932,7 +932,7 @@ class ExperimentConfig:
 
     def get_log_true_final_twists(
         self, rng_key, jnp_prompts, params_p, rm_type, output_len,
-        n_true_posterior_samples, huggingface_model=None,
+        n_samples_at_a_time, huggingface_model=None,
         indices_of_continuation=None, rewardModel=None, tokenizer_RM=None,
         tokenizer=None, threshold=0, pos_threshold=True, get_true_posterior_samples=True
     ):
@@ -974,7 +974,7 @@ class ExperimentConfig:
 
             rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token = \
                 build_exp_beta_twists(
-                    rng_key, params_p, output_len, n_true_posterior_samples, huggingface_model,
+                    rng_key, params_p, output_len, n_samples_at_a_time, huggingface_model,
                     curried_log_true_final_twist_function, jnp_prompts, rewardModel,
                     tokenizer_RM, tokenizer, self.beta_temp, class_num, get_true_posterior_samples, singledimlogit=True
                 )
@@ -985,7 +985,7 @@ class ExperimentConfig:
             curried_log_true_final_twist_function = curried_log_exp_beta_sentiment_class_logprob
             rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token = \
                 build_exp_beta_twists(
-                    rng_key, params_p, output_len, n_true_posterior_samples, huggingface_model,
+                    rng_key, params_p, output_len, n_samples_at_a_time, huggingface_model,
                     curried_log_true_final_twist_function, jnp_prompts, rewardModel,
                     tokenizer_RM, tokenizer, self.beta_temp, self.sentiment_class_zero_index, get_true_posterior_samples, singledimlogit=False
                 )
@@ -994,7 +994,7 @@ class ExperimentConfig:
             assert self.beta_temp == 1 # not yet tested for other beta
             rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token =\
                 build_log_sentclass_cond_twists(
-                    rng_key, params_p, output_len, n_true_posterior_samples, huggingface_model,
+                    rng_key, params_p, output_len, n_samples_at_a_time, huggingface_model,
                     jnp_prompts, rewardModel, tokenizer_RM, tokenizer, self.beta_temp, get_true_posterior_samples)
 
         elif rm_type == "p_continuation" or rm_type == "hard_p_continuation":
@@ -1003,7 +1003,7 @@ class ExperimentConfig:
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_p_of_continuation_twists(
                 sk, jnp_prompts, params_p, indices_of_continuation, output_len,
-                n_samples_at_a_time=n_true_posterior_samples, tokenizer=tokenizer,
+                n_samples_at_a_time=n_samples_at_a_time, tokenizer=tokenizer,
                 huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples)
 
 
@@ -1013,7 +1013,7 @@ class ExperimentConfig:
                 = build_p_of_last_tokens_twists(
                 sk, jnp_prompts, params_p,
                 self.num_last_tokens_to_condition_on, output_len,
-                n_samples_at_a_time=n_true_posterior_samples, tokenizer=tokenizer,
+                n_samples_at_a_time=n_samples_at_a_time, tokenizer=tokenizer,
                 huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples
             )
 
@@ -1022,7 +1022,7 @@ class ExperimentConfig:
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_toxicity_threshold_twists(
                 sk, jnp_prompts, params_p, output_len,
-                n_true_posterior_samples, rewardModel, tokenizer_RM, tokenizer,
+                n_samples_at_a_time, rewardModel, tokenizer_RM, tokenizer,
                 threshold, pos_threshold, huggingface_model=huggingface_model,
                 get_true_posterior_samples=get_true_posterior_samples
             )
@@ -1032,7 +1032,7 @@ class ExperimentConfig:
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_sentiment_threshold_twists(
                 sk, jnp_prompts, params_p, output_len,
-                n_true_posterior_samples, rewardModel, tokenizer_RM,
+                n_samples_at_a_time, rewardModel, tokenizer_RM,
                 tokenizer, threshold, pos_threshold,
                 huggingface_model=huggingface_model, get_true_posterior_samples=get_true_posterior_samples
             )
@@ -1496,7 +1496,7 @@ def get_and_plot_logZ_bounds(
 
 def collect_true_posterior_samples(
     rng_key, experiment_cfg, jnp_prompts, params_p, rm_type,
-    output_len, n_true_posterior_samples, huggingface_model,
+    output_len, n_samples_at_a_time, huggingface_model,
     indices_of_continuation, rewardModel,
     tokenizer_RM, tokenizer, threshold, pos_threshold, num_samples_if_only_collect_true_posterior_samples
 ):
@@ -1509,7 +1509,7 @@ def collect_true_posterior_samples(
         log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
             = experiment_cfg.get_log_true_final_twists(
             sk, jnp_prompts, params_p, rm_type,
-            output_len, n_true_posterior_samples, huggingface_model,
+            output_len, n_samples_at_a_time, huggingface_model,
             indices_of_continuation, rewardModel,
             tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples=True
         )
@@ -1643,7 +1643,7 @@ def load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model
 def get_final_twists_and_posterior_samples(
     load_posterior_samples, experiment_cfg, rng_key,
     jnp_prompts, params_p, rm_type,
-    output_len, n_true_posterior_samples, huggingface_model,
+    output_len, n_samples_at_a_time, huggingface_model,
     indices_of_continuation, rewardModel,
     tokenizer_RM, tokenizer, threshold, pos_threshold,
     load_dir_posterior_samples, load_prefix_posterior_samples
@@ -1657,7 +1657,7 @@ def get_final_twists_and_posterior_samples(
     log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
         = experiment_cfg.get_log_true_final_twists(
         sk, jnp_prompts, params_p, rm_type,
-        output_len, n_true_posterior_samples, huggingface_model,
+        output_len, n_samples_at_a_time, huggingface_model,
         indices_of_continuation, rewardModel,
         tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples
     )
@@ -1806,7 +1806,7 @@ def setup_model_and_params(
 def setup_cfg(
     n_vocab, twist_learn_type, rm_type, seed, hface_model_type, lr_twist,
     beta1, beta2, weight_decay, n_layers_twist,
-    output_len, n_true_posterior_samples,
+    output_len, n_samples_at_a_time,
     beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dirs=None,
     load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
     num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
@@ -1863,7 +1863,7 @@ def setup_cfg(
     if only_collect_true_posterior_samples:
         rng_key, combined_true_posterior_samples = collect_true_posterior_samples(
             rng_key, experiment_cfg, jnp_prompts, params_p, rm_type,
-            output_len, n_true_posterior_samples, huggingface_model,
+            output_len, n_samples_at_a_time, huggingface_model,
             indices_of_continuation, rewardModel,
             tokenizer_RM, tokenizer, threshold, pos_threshold,
             num_samples_if_only_collect_true_posterior_samples
@@ -1884,7 +1884,7 @@ def setup_cfg(
         get_final_twists_and_posterior_samples(
         load_posterior_samples, experiment_cfg, rng_key,
         jnp_prompts, params_p, rm_type,
-        output_len, n_true_posterior_samples, huggingface_model,
+        output_len, n_samples_at_a_time, huggingface_model,
         indices_of_continuation, rewardModel,
         tokenizer_RM, tokenizer, threshold, pos_threshold,
         load_dir_posterior_samples, load_prefix_posterior_samples
@@ -2224,7 +2224,7 @@ def main():
         "n_vocab": args.n_vocab, "twist_learn_type": args.twist_learn_type, "rm_type": args.rm_type,
         "seed": args.seed, "hface_model_type": args.hface_model_type, "lr_twist": args.lr_twist,
         "beta1": args.beta1, "beta2": args.beta2, "weight_decay": args.weight_decay,
-        "n_layers_twist": args.n_layers_twist, "output_len": args.output_len, "n_true_posterior_samples": args.n_true_posterior_samples,
+        "n_layers_twist": args.n_layers_twist, "output_len": args.output_len, "n_samples_at_a_time": args.n_samples_at_a_time,
         "beta_temp": args.beta_temp, "threshold": args.threshold, "pos_threshold": args.pos_threshold, "load_ckpt": args.load_ckpt,
         "load_dirs": (args.load_dir_ckpt, args.load_dir_posterior_samples),
         "load_prefix": args.load_prefix_ckpt, "hface_nn_twist": args.hface_nn_twist, "separate_hface_twist_model": args.separate_hface_twist_model,
@@ -2458,7 +2458,7 @@ if __name__ == "__main__":
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='.')
 
 
-    parser.add_argument("--n_true_posterior_samples", type=int, default=500, help="NOTE: this is misleading. This is actually the batch size used in collecting true posterior samples. As soon as >0 posterior samples are collected, the true posterior sample collection stops.") # TODO possible refactor of this
+    parser.add_argument("--n_samples_at_a_time", type=int, default=500, help="This is the batch size used in collecting true posterior samples; we repeat drawing n_samples_at_a_time from the base model and then accept whatever number of exact target dist samples. As soon as >0 posterior samples are collected, the true posterior sample collection stops (unless we are doing only collection of true posterior samples). This is the num true posterior samples for infilling where every draw is a true posterior") # TODO possible refactor of this
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
     parser.add_argument("--proposal_is_p_for_plots", action="store_true", help="Use q = p for the proposal, ONLY FOR THE PLOTS AND ONLY IN MEMORY CONSTRAINED SETTINGS DOES THIS DO ANYTHING (otherwise I do both p and q for the plots)")
 
@@ -2531,7 +2531,7 @@ if __name__ == "__main__":
 
     if args.rm_type == "p_last_tokens":
         n_trueposts_for_evals = 30
-        assert args.n_true_posterior_samples == 2000
+        assert args.n_samples_at_a_time == 2000 # Just to allow for consistent evaluation, compared to the non-infilling settings (always 2000 sigma samples)... but we could debate that the conditional twist setting is different so keeping 2000 constant is meaningless anyway...
 
 
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
