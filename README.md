@@ -14,7 +14,7 @@ python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for
 
 This command will save the samples in --save_dir. Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names:
 
-``
+```
 python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000  --epochs 10 --twist_updates_per_epoch 500 --hface_nn_twist --lr_twist 0.0001 --n_twist 1000 --n_vocab 50257 --hface_model_type TinyStories --ckpt_every 10 --rm_type toxicity_threshold --twist_learn_type ebm_one_sample  --seed 1 --threshold=-5.  --load_dir_posterior_samples  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt   --load_posterior_samples --load_prefix_posterior_samples true_posterior_samples_2024-04-17_18-03_len10_seed1_nsamples100 --save_dir  /h/zhaostep/twisted-smc-lm/checkpoints/apr/50
 ```
 
