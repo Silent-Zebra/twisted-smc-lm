@@ -4,7 +4,7 @@ First start by running the below commands, making sure to specify --save_dir whe
 ## Commands for Toxicity Classifier Experiments (KL Divergence Evaluation)
 
 ### Collecting Exact Samples for Evaluation
-First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well.
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well.
 
 python do_training_and_log_Z_bounds.py --output_len 20 --n_twist 500 --n_samples_at_a_time_for_true_post 4000 --n_vocab 50257 --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --seed 1 --beta_temp=1. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/post/toxc  --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
 
