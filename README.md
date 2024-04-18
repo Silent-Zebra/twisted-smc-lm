@@ -8,7 +8,7 @@ First run the following to collect a constant set of exact posterior (target) di
 
 python do_training_and_log_Z_bounds.py --output_len 20 --n_twist 500 --n_samples_at_a_time_for_true_post 4000 --n_vocab 50257 --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --seed 1 --beta_temp=1. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/post/toxc  --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
 
-This command will save the samples in --save_dir. Use the name of the saved samples in the --load_prefix_posterior_samples command in the following. I leave examples below; change those to your folder and file names.
+This command will save the samples in --save_dir. Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names.
 
 ### CTL
 python do_training_and_log_Z_bounds.py --output_len 20 --n_samples_at_a_time_for_true_post 4000  --epochs 12 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --separate_hface_twist_model --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --seed 1 --beta_temp=1.  --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxc --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-18_len20_seed1_nsamples2000 --twist_learn_type ebm_one_sample
