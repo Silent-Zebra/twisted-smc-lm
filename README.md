@@ -4,6 +4,28 @@ This README is still under construction. The repo is still being refactored also
 
 Some of these commands may result in slightly different results when you run them (compared to when I ran them, or what is in the paper), because I have been refactoring code, and sometimes that results in changes to the RNG calls, which means there may be different RNG for the run you use versus when I initially ran them. I have generally tried to update the quantitative results in the paper to be consistent with the current version of the codebase, but generally I find there isn't much of a difference even among different seeds. Qualitative results may be more different depending on RNG.
 
+## Commands for Toxicity Threshold (Log Z Bounds) Experiments
+
+First run this command to collect a set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well: 
+
+```
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000 --n_vocab 50257 --hface_model_type TinyStories --rm_type toxicity_threshold --seed 1 --threshold=-5. --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 100 --save_dir  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt
+```
+
+This command will save the samples in --save_dir. Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names:
+
+``
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000  --epochs 10 --twist_updates_per_epoch 500 --hface_nn_twist --lr_twist 0.0001 --n_twist 1000 --n_vocab 50257 --hface_model_type TinyStories --ckpt_every 10 --rm_type toxicity_threshold --twist_learn_type ebm_one_sample  --seed 1 --threshold=-5.  --load_dir_posterior_samples  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt   --load_posterior_samples --load_prefix_posterior_samples true_posterior_samples_2024-04-17_18-03_len10_seed1_nsamples100 --save_dir  /h/zhaostep/twisted-smc-lm/checkpoints/apr/50
+```
+
+Next, use the below command to setup info for plotting/results: due to memory constraints I only do 2 values of n_samples_for_plots at a time; repeat command for different values to fill out the plot.
+
+```
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000  --epochs 1 --twist_updates_per_epoch 0 --hface_nn_twist --lr_twist 0.0001 --n_twist 1000 --n_vocab 50257 --hface_model_type TinyStories --rm_type toxicity_threshold --twist_learn_type ebm_one_sample  --seed 1 --threshold=-5.   --load_dir_posterior_samples  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt  --load_posterior_samples --load_prefix_posterior_samples true_posterior_samples_2024-04-17_18-03_len10_seed1_nsamples100 --load_ckpt --load_dir_ckpt  /h/zhaostep/twisted-smc-lm/checkpoints/apr/50 --load_prefix_ckpt checkpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10 --overwrite_n_plot_seeds --n_plot_seeds 20 --n_samples_for_plots_smaller 32 --n_samples_for_plots_larger 512 --save_dir  /h/zhaostep/twisted-smc-lm/checkpoints/apr/51
+```
+
+Finally, in the plot_bounds.py file, navigate to the plot_type == "toxthresh" section, and replace the filenames with the saved ones. Also change load_dir in the file to wherever you saved the stuff. Then run python plot_bounds.py.
+
 ## General Notes on Workflow for Getting KL Divergence Estimates
 First start by optionally collecting exact samples for evaluation. Then, run the below commands for the desired learning method, making sure to specify --save_dir where you want files to be saved. After running the commands, you will have a bunch of files starting with "f_q_g_q_logZbestmidpoint_info" in the specified --save_dir. Change the load_dir = "./f_q_g_q_logZ_info" line in the plot_kl.py file to wherever these are saved, and then change load_prefixes_plasttok15_10 (or accordingly for the experiment setting) in the plot_kl.py file, and then add a line for make_combined_plot() based on the load_prefixes_plasttok15_10. Then run python plot_kl.py.
 
