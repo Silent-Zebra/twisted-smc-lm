@@ -48,8 +48,22 @@ python do_training_and_log_Z_bounds.py --output_len 20 --n_samples_at_a_time_for
 python test_ppo.py --epochs 12 --output_len 20 --exp_num_twist_updates --rm_type exp_beta_toxicity_class_logprob --beta_temp=1. --batch_size 100 --lr 0.000001 --load_posterior_samples  --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxc --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-18_len20_seed1_nsamples2000
 ```
 
+### Qualitative Results
+```
+python do_training_and_log_Z_bounds.py --output_len 200 --n_samples_at_a_time_for_true_post 1000  --epochs 10 --twist_updates_per_epoch 250 --lr_twist 0.0003 --n_twist 32 --n_vocab 50257 --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --twist_learn_type ebm_one_sample  --seed 1 --beta_temp=10. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/apr/48  --n_samples_for_plots_smaller 8 --n_samples_for_plots_larger 32
+```
 
-## Commands for Sentiment Classifier Experiments (KL Divergence Evaluation)
+As in the opening comment/disclaimer, since I've changed the RNG in refactoring code, I couldn't get exactly the same results as I had in the paper (even though the command and seed are the same). But here's an example of a story from this comment which I think is qualitatively similar:
+
+>Once upon a time, there was a little boy named Timmy. Timmy loved to play outside with his friends. One day, Timmy and his friends went to the park to play. They played on the swings and the slide.
+>
+>Suddenly, Timmy saw a big dog running towards them. Timmy got scared and tried to run away, but the dog was too fast. The dog bit Timmy's leg and he fell down.
+>
+>Timmy's friends tried to help him, but it was too late. Timmy had to go to the hospital and get a big bandage on his leg. From that day on, Timmy was scared of dogs and never went to the park again.
+
+
+
+## Commands for Sentiment Classifier Experiments
 
 ### Collecting Exact Samples for Evaluation
 First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well.
