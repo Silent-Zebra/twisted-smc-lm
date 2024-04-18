@@ -29,6 +29,34 @@ python do_training_and_log_Z_bounds.py --output_len 20 --n_samples_at_a_time_for
 python test_ppo.py --epochs 12 --output_len 20 --exp_num_twist_updates --rm_type exp_beta_toxicity_class_logprob --beta_temp=1. --batch_size 100 --lr 0.000001 --load_posterior_samples  --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxc --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-18_len20_seed1_nsamples2000
 
 
+## Commands for Sentiment Classifier Experiments (KL Divergence Evaluation)
+
+### Collecting Exact Samples for Evaluation
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well.
+
+python do_training_and_log_Z_bounds.py --output_len 10 --n_twist 500 --n_samples_at_a_time_for_true_post 2000 --n_vocab 50257 --rm_type exp_beta_sentiment_class_logprob --seed 1 --beta_temp=1. --sentiment_class 1 --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/post/sent --hface_model_type gpt2medium --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
+
+This command will save the samples in --save_dir. Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names.
+
+### CTL
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 500  --epochs 12 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --seed 1 --beta_temp=1. --sentiment_class 1 --hface_model_type gpt2medium --hface_nn_twist --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000 --twist_learn_type ebm_one_sample
+
+### RL
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 500  --epochs 12 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --seed 1 --beta_temp=1. --sentiment_class 1 --hface_model_type gpt2medium --hface_nn_twist --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000 --twist_learn_type rl_q_lsq_partial_jit
+
+### SIXO
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 500  --epochs 12 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --seed 1 --beta_temp=1. --sentiment_class 1 --hface_model_type gpt2medium --hface_nn_twist --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000 --twist_learn_type sixo_partial_jit
+
+### FUDGE
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 500  --epochs 12 --lr_twist 0.001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --seed 1 --beta_temp=1. --sentiment_class 1 --hface_model_type gpt2medium --hface_nn_twist --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000 --twist_learn_type bce_p
+
+### DPG
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 500  --epochs 12 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --seed 1 --beta_temp=1. --sentiment_class 1 --hface_model_type gpt2medium --hface_nn_twist --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000 --twist_learn_type one_total_kl_partial_jit
+
+### PPO
+python test_ppo.py --epochs 12 --output_len 10 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --hface_nn_twist --only_train_nn_head --sentiment_class 1 --beta_temp=1. --batch_size 100 --lr 0.00001 --load_posterior_samples  --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000
+
+
 ## Commands for Infilling Experiments with T=15, c=10
 
 ### CTL
