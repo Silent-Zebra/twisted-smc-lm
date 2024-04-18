@@ -12,16 +12,16 @@ First run this command to collect a set of exact posterior (target) distribution
 python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000 --n_vocab 50257 --hface_model_type TinyStories --rm_type toxicity_threshold --seed 1 --threshold=-5. --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 100 --save_dir  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt
 ```
 
-This command will save the samples in --save_dir. Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names:
+This command will save the samples in --save_dir. Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names. Also set --save_dir where you want to save the results:
 
 ```
-python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000  --epochs 10 --twist_updates_per_epoch 500 --hface_nn_twist --lr_twist 0.0001 --n_twist 1000 --n_vocab 50257 --hface_model_type TinyStories --ckpt_every 10 --rm_type toxicity_threshold --twist_learn_type ebm_one_sample  --seed 1 --threshold=-5.  --load_dir_posterior_samples  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt   --load_posterior_samples --load_prefix_posterior_samples true_posterior_samples_2024-04-17_18-03_len10_seed1_nsamples100 --save_dir  /h/zhaostep/twisted-smc-lm/checkpoints/apr/50
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000  --epochs 10 --twist_updates_per_epoch 500 --hface_nn_twist --lr_twist 0.0001 --n_twist 1000 --n_vocab 50257 --hface_model_type TinyStories --ckpt_every 10 --rm_type toxicity_threshold --twist_learn_type ebm_one_sample  --seed 1 --threshold=-5.  --load_dir_posterior_samples  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt   --load_posterior_samples --load_prefix_posterior_samples true_posterior_samples_2024-04-17_18-03_len10_seed1_nsamples100
 ```
 
-Next, use the below command to setup info for plotting/results: due to memory constraints I only do 2 values of n_samples_for_plots at a time; repeat command for different values to fill out the plot.
+Next, use the below command to setup info for plotting/results: due to memory constraints I only do 2 values of n_samples_for_plots at a time; repeat command for different values to fill out the plot. Again set --save_dir where you want.
 
 ```
-python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000  --epochs 1 --twist_updates_per_epoch 0 --hface_nn_twist --lr_twist 0.0001 --n_twist 1000 --n_vocab 50257 --hface_model_type TinyStories --rm_type toxicity_threshold --twist_learn_type ebm_one_sample  --seed 1 --threshold=-5.   --load_dir_posterior_samples  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt  --load_posterior_samples --load_prefix_posterior_samples true_posterior_samples_2024-04-17_18-03_len10_seed1_nsamples100 --load_ckpt --load_dir_ckpt  /h/zhaostep/twisted-smc-lm/checkpoints/apr/50 --load_prefix_ckpt checkpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10 --overwrite_n_plot_seeds --n_plot_seeds 20 --n_samples_for_plots_smaller 32 --n_samples_for_plots_larger 512 --save_dir  /h/zhaostep/twisted-smc-lm/checkpoints/apr/51
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000  --epochs 1 --twist_updates_per_epoch 0 --hface_nn_twist --lr_twist 0.0001 --n_twist 1000 --n_vocab 50257 --hface_model_type TinyStories --rm_type toxicity_threshold --twist_learn_type ebm_one_sample  --seed 1 --threshold=-5.   --load_dir_posterior_samples  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt  --load_posterior_samples --load_prefix_posterior_samples true_posterior_samples_2024-04-17_18-03_len10_seed1_nsamples100 --load_ckpt --load_dir_ckpt  /h/zhaostep/twisted-smc-lm/checkpoints/apr/50 --load_prefix_ckpt checkpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10 --overwrite_n_plot_seeds --n_plot_seeds 20 --n_samples_for_plots_smaller 32 --n_samples_for_plots_larger 512 
 ```
 
 Finally, in the plot_bounds.py file, navigate to the plot_type == "toxthresh" section, and replace the filenames with the saved ones. Also change load_dir in the file to wherever you saved the stuff. Then run python plot_bounds.py.
@@ -32,13 +32,13 @@ First start by optionally collecting exact samples for evaluation. Then, run the
 ## Commands for Toxicity Classifier Experiments (KL Divergence Evaluation)
 
 ### Collecting Exact Samples for Evaluation
-First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well.
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
 
 ```
 python do_training_and_log_Z_bounds.py --output_len 20 --n_twist 500 --n_samples_at_a_time_for_true_post 4000 --n_vocab 50257 --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --seed 1 --beta_temp=1. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/post/toxc  --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
 ```
 
-This command will save the samples in --save_dir. Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names.
+Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names.
 
 ### CTL
 ```
@@ -88,13 +88,13 @@ As in the opening comment/disclaimer, since I've changed the RNG in refactoring 
 ## Commands for Sentiment Classifier Experiments
 
 ### Collecting Exact Samples for Evaluation
-First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well.
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
 
 ```
 python do_training_and_log_Z_bounds.py --output_len 10 --n_twist 500 --n_samples_at_a_time_for_true_post 2000 --n_vocab 50257 --rm_type exp_beta_sentiment_class_logprob --seed 1 --beta_temp=1. --sentiment_class 1 --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/post/sent --hface_model_type gpt2medium --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
 ```
 
-This command will save the samples in --save_dir. Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names.
+Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names.
 
 ### CTL
 ```
