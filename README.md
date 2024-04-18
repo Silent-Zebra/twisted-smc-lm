@@ -53,7 +53,7 @@ python test_ppo.py --epochs 12 --output_len 20 --exp_num_twist_updates --rm_type
 python do_training_and_log_Z_bounds.py --output_len 200 --n_samples_at_a_time_for_true_post 1000  --epochs 10 --twist_updates_per_epoch 250 --lr_twist 0.0003 --n_twist 32 --n_vocab 50257 --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --twist_learn_type ebm_one_sample  --seed 1 --beta_temp=10. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/apr/48  --n_samples_for_plots_smaller 8 --n_samples_for_plots_larger 32
 ```
 
-As in the opening comment/disclaimer, since I've changed the RNG in refactoring code, I couldn't get exactly the same results as I had in the paper (even though the command and seed are the same). But here's an example of a story from this comment which I think is qualitatively similar:
+As in the opening comment/disclaimer, since I've changed the RNG in refactoring code, I couldn't get exactly the same results as I had in the paper (even though the command and seed are the same). But here's an example of a story from this comment which I think is qualitatively similar (taken from inspecting the printed output for SMC samples):
 
 >Once upon a time, there was a little boy named Timmy. Timmy loved to play outside with his friends. One day, Timmy and his friends went to the park to play. They played on the swings and the slide.
 >
