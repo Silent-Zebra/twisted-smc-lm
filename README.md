@@ -1,3 +1,9 @@
+## General Notes/Comments/Disclaimer
+
+This README is still under construction. The repo is still being refactored also, but these commands should all work.
+
+Some of these commands may result in slightly different results when you run them (compared to when I ran them, or what is in the paper), because I have been refactoring code, and sometimes that results in changes to the RNG calls, which means there may be different RNG for the run you use versus when I initially ran them. I have generally tried to update the quantitative results in the paper to be consistent with the current version of the codebase, but generally I find there isn't much of a difference even among different seeds. Qualitative results may be more different depending on RNG.
+
 ## General Notes on Workflow for Getting KL Divergence Estimates
 First start by running the below commands, making sure to specify --save_dir where you want files to be saved. After running the commands, you will have a bunch of files starting with "f_q_g_q_logZbestmidpoint_info" in the specified --save_dir. Change the load_dir = "./f_q_g_q_logZ_info" line in the plot_kl.py file to wherever these are saved, and then change load_prefixes_plasttok15_10 (or accordingly for the experiment setting) in the plot_kl.py file, and then add a line for make_combined_plot() based on the load_prefixes_plasttok15_10. Then run python plot_kl.py.
 
@@ -161,6 +167,4 @@ python test_ppo.py --epochs 14 --output_len 2 --num_last_tokens_to_condition_on 
 ```
 
 
-## General Notes/Comments/Disclaimer
 
-Some of these commands may result in slightly different results when you run them (compared to when I ran them, or what is in the paper), because I have been refactoring code, and sometimes that results in changes to the RNG calls, which means there may be different RNG for the run you use versus when I initially ran them. I have generally tried to update the quantitative results in the paper to be consistent with the current version of the codebase, but generally I find there isn't much of a difference even among different seeds. Qualitative results may be more different depending on RNG.
