@@ -644,13 +644,11 @@ def setup_cfg(n_vocab, twist_learn_type, rm_type, seed, huggingface, hface_model
     # print(x)
     # 1/0
 
-
     if only_collect_true_posterior_samples:
         rng_key, combined_true_posterior_samples = collect_true_posterior_samples(
-            rng_key, experiment_cfg, jnp_prompts, cfg_p, params_p, rm_type,
-            indicator_pos_zero_index,
+            rng_key, experiment_cfg, jnp_prompts, params_p, rm_type,
             output_len, n_true_posterior_samples, huggingface_model,
-            index_of_token_contained, indices_of_continuation, rewardModel,
+            indices_of_continuation, rewardModel,
             tokenizer_RM, tokenizer, threshold, pos_threshold,
             num_samples_if_only_collect_true_posterior_samples
         )

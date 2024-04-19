@@ -519,11 +519,11 @@ class ExperimentConfig:
         if self.train_on_true_posterior_samples:
             assert self.rm_type in ["exp_beta_toxicity_class_logprob",
                                     "exp_beta_sentiment_class_logprob"]  # others not yet tested
+
             sk, combined_true_posterior_samples = collect_true_posterior_samples(
                 sk, self, [prompt], params_p, self.rm_type,
-                None,
                 output_len, n_twist, huggingface_model,
-                None, None, self.rewardModel, self.tokenizer_RM, self.tokenizer, None, None,
+                None, self.rewardModel, self.tokenizer_RM, self.tokenizer, None, None,
                 n_twist
             )
             true_sigma_samples = combined_true_posterior_samples[0]

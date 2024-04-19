@@ -12,29 +12,34 @@ from plot_utils import plot_with_conf_bounds
 
 
 load_prefixes_sent1_nnonly = [
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples12_sent1_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-02-16_21-50_seed1_bce_p_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-02-17_21-26_seed1_bce_p_nsamples12_sent_001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
-    # "f_q_g_q_estimates_2024-01-09_00-49_seed0_nsamples12_sent1_ppo_00001",
-    # "f_q_g_q_estimates_2024-01-09_01-21_seed0_nsamples12_sent1_ppo_000003",
-    "f_q_g_q_estimates_2024-01-19_06-11_ppo_seed0_nsamples12_sent1_newnnonly",
-    # "f_q_g_q_estimates_2024-01-09_00-37_seed0_nsamples12_sent1_ppo_000001"
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_17-13_seed1_ebm_one_sample_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-43_seed1_rl_q_lsq_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_03-25_seed1_sixo_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-02-17_21-26_seed1_bce_p_nsamples12_sent_001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_03-06_seed1_bce_p_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-11_seed1_one_total_kl_partial_jit_nsamples12",
+    # "f_q_g_q_estimates_2024-01-19_06-11_ppo_seed0_nsamples12_sent1_newnnonly",
+    "f_q_g_q_estimates_2024-04-17_21-22_ppo_seed0_nsamples12",
 ]
 
 
-load_prefixes_tox = [
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-22_seed1_sixo_partial_jit_nsamples12_toxc_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-54_seed1_bce_q_nsamples12_toxc_00005",
-    "f_q_g_q_logZbestmidpoint_info_2024-02-16_22-17_seed1_bce_p_nsamples12_toxc_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
-    "f_q_g_q_estimates_2024-01-08_06-40_seed0_nsamples12_toxc_ppo_000001",
+load_prefixes_toxc = [
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-31_seed1_ebm_one_sample_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_05-03_seed1_rl_q_lsq_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-17_seed1_sixo_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-02-16_22-17_seed1_bce_p_nsamples12_toxc_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_03-14_seed1_bce_p_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_05-04_seed1_one_total_kl_partial_jit_nsamples12",
+    # "f_q_g_q_estimates_2024-01-08_06-40_seed0_nsamples12_toxc_ppo_000001",
+    "f_q_g_q_estimates_2024-04-17_21-56_ppo_seed0_nsamples12",
 ]
 
 
@@ -69,58 +74,55 @@ load_prefixes_tox_ctl_comparison = [
 load_prefixes_sent_truepost_comparison = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-14_00-54_seed1_ebm_reweight_nsamples10_sent1_trainontruepost_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-13_22-51_seed1_ebm_reweight_nsamples9_sent1_trainontruepost_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-26_07-03_seed1_rl_qsigma_lsq_partial_jit_nsamples10_trainontruepost_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-26_02-18_seed1_sixo_partial_jit_nsamples10_trainontruepost_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-13_08-32_seed1_one_total_kl_partial_jit_nsamples10_sent1_trainontruepost_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-14_01-36_seed1_one_total_kl_partial_jit_nsamples10_sent1_trainontruepost_00003",
 ]
 
 load_prefixes_tox_truepost_comparison = [
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-01-13_23-09_seed1_ebm_reweight_nsamples7_toxc_trainontruepost_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-14_00-12_seed1_ebm_reweight_nsamples7_toxc_trainontruepost_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-02-01_07-11_seed1_rl_qsigma_lsq_partial_jit_nsamples7_trainontruepost_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-27_05-15_seed1_sixo_partial_jit_nsamples7_trainontruepost_00003",
     "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-13_23-27_seed1_one_total_kl_partial_jit_nsamples7_toxc_trainontruepost_0001", # This does even better. But I guess lower lr with approx sampling is more stable
     "f_q_g_q_logZbestmidpoint_info_2024-01-13_06-16_seed1_one_total_kl_partial_jit_nsamples7_toxc_trainontruepost_00003",
 ]
 
 
 
 load_prefixes_plasttok2_1 = [
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_07-12_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples14_10_10_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-10_22-45_seed1_rl_qsigma_lsq_nsamples14_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_18-33_seed1_rl_q_lsq_nsamples14_00001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-29_seed1_sixo_nsamples14_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-02-16_22-31_seed1_bce_psigma_nsamples14_plast2_1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-04_17-33_seed1_bce_psigma_nsamples14_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-12_seed1_bce_q_nsamples14_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-10_05-46_seed1_one_total_kl_nsamples14_0001",
-    # "f_q_g_q_estimates_2024-01-09_20-11_seed0_nsamples14_00003",
-    # "f_q_g_q_estimates_2024-01-09_20-04_seed0_nsamples14_00001",
-    "f_q_g_q_estimates_2024-02-01_19-30_ppo_seed0_nsamples14_00003",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_07-12_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples14_10_10_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-16_06-01_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples14",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_22-45_seed1_rl_qsigma_lsq_nsamples14_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-16_04-29_seed1_rl_qsigma_lsq_nsamples14",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_03-29_seed1_sixo_nsamples14_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-16_04-27_seed1_sixo_nsamples14",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-04_17-33_seed1_bce_psigma_nsamples14_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-16_04-22_seed1_bce_psigma_nsamples14",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_05-46_seed1_one_total_kl_nsamples14_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-16_04-16_seed1_one_total_kl_nsamples14",
+    # "f_q_g_q_estimates_2024-02-01_19-30_ppo_seed0_nsamples14_00003",
+    "f_q_g_q_estimates_2024-04-16_03-32_ppo_seed0_nsamples14",
 ]
 
 load_prefixes_plasttok15_10 = [
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_08-36_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples12_plast15_10_25_4_000003",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-11_01-27_seed1_rl_qsigma_lsq_nsamples12_plast15_10_00003",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_08-54_seed1_bce_q_nsamples12_plast15_10_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-01-10_07-14_seed1_bce_q_nsamples12_plast15_10_00003",
-    # "f_q_g_q_logZbestmidpoint_info_2024-02-18_03-47_seed1_bce_psigma_nsamples12_plast15_10_0001",
-    # "f_q_g_q_logZbestmidpoint_info_2024-04-05_16-31_seed1_bce_psigma_nsamples12",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-05_00-01_seed1_bce_psigma_nsamples12",
-    "f_q_g_q_logZbestmidpoint_info_2024-01-08_05-11_seed1_one_total_kl_nsamples12_plast15_10_0001",
-    "f_q_g_q_estimates_2024-02-01_22-13_ppo_seed0_nsamples12_00003",
-    # "f_q_g_q_estimates_2024-01-09_21-38_seed0_nsamples12_ppo_plast15_10_000001",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_08-36_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples12_plast15_10_25_4_000003",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-16_10-37_seed1_ebm_ml_jit_vmapped_over_condition_tokens_nsamples12", # setting1
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-11_01-27_seed1_rl_qsigma_lsq_nsamples12_plast15_10_00003",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-16_06-22_seed1_rl_qsigma_lsq_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_16-34_seed1_sixo_nsamples12_plast15_10_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-16_05-59_seed1_sixo_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-05_00-01_seed1_bce_psigma_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-17_10-02_seed1_bce_psigma_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-01-08_05-11_seed1_one_total_kl_nsamples12_plast15_10_0001",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-16_05-35_seed1_one_total_kl_nsamples12",
+    # "f_q_g_q_estimates_2024-02-01_22-13_ppo_seed0_nsamples12_00003",
+    "f_q_g_q_estimates_2024-04-16_04-36_ppo_seed0_nsamples12"
 ]
 
 twist_learn_method_names = [
@@ -263,9 +265,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
 
     plt.clf()
     if "15_10" in fig_name_modifier:
-        logZ_midpoint_to_use = -20.708 # Estimate from thousands of IWAE bounds on the best model (EBM One-KL). Should be pretty accurate.
-
-
+        logZ_midpoint_to_use = -20.708 # Estimate from thousands of IWAE bounds on the best model (One-Total-KL (DPG)). Should be pretty accurate.
         plt.xlabel(f"Number of Gradient Updates")
     else:
         plt.xlabel(f"Number of Gradient Updates")
@@ -423,12 +423,12 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
         for x in output_latex:
             print(x)
 
-# make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_02-17")
-# make_combined_plot(load_prefixes_tox, "tox_02-17")
+make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_04-17")
+make_combined_plot(load_prefixes_toxc, "toxc_04-17")
 
 
-# make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_04-11")
-make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_04-11")
+# make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_04-16")
+# make_combined_plot(load_prefixes_plasttok15_10, "plast15_10_04-16")
 
 
 
