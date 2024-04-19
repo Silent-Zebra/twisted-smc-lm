@@ -31,7 +31,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96, **kwargs):
 def save_kl_div_plot(
     plt_xlabel_text, x_range, logZ_midpoint_estimate, f_q_estimates_list_of_arrays,
     g_q_estimates_list_of_arrays, save_dir, proposal_scores_list, kl_to_prior_list, rm_type,
-    epoch_starting_from_1, seed, twist_learn_type,
+    epoch_starting_from_0, seed, twist_learn_type,
     do_checkpoint_of_plot_info=True
 ):
     numpost = np.stack(g_q_estimates_list_of_arrays).shape[-1]
@@ -44,7 +44,7 @@ def save_kl_div_plot(
 
     plt.ylabel(f"KL Divergence")
     plt.legend()
-    plt.savefig(f"{save_dir}/fig_kl_both_ways_epoch{epoch_starting_from_1}.pdf")
+    plt.savefig(f"{save_dir}/fig_kl_both_ways_epoch{epoch_starting_from_0}.pdf")
 
 
 
@@ -57,7 +57,7 @@ def save_kl_div_plot(
             ckpt_dir=save_dir,
             target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
                     np.transpose(np.stack(proposal_scores_list)), logZ_midpoint_estimate, np.transpose(np.stack(kl_to_prior_list))),
-            step=epoch_starting_from_1,
+            step=epoch_starting_from_0,
             prefix=f"f_q_g_q_logZbestmidpoint_info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_nsamples")
 
     return f_q_estimates_list_of_arrays
@@ -75,7 +75,7 @@ def get_xrange_and_xlabel(epoch_starting_from_1, exp_num_twist_updates, twist_up
 
 
 def save_logZ_bounds_plot(
-    plt_xlabel_text, x_range, save_dir, epoch_starting_from_1, seed, twist_learn_type,
+    plt_xlabel_text, x_range, save_dir, epoch_starting_from_0, seed, twist_learn_type,
     n_samples_for_plots,
     logZ_ubs_iwae_across_samples_time_trueposts,
     logZ_lbs_iwae_across_samples_time_trueposts,
@@ -135,10 +135,10 @@ def save_logZ_bounds_plot(
     plt.legend()
 
     if proposal_is_p:
-        figname = f"{save_dir}/fig_pproposal_logZ_bounds_by_samples_over_time_epoch{epoch_starting_from_1}.pdf"
+        figname = f"{save_dir}/fig_pproposal_logZ_bounds_by_samples_over_time_epoch{epoch_starting_from_0}.pdf"
         ckpt_name = f"logZ_bounds_pproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_nsamples"
     else:
-        figname = f"{save_dir}/fig_twistproposal_logZ_bounds_by_samples_over_time_epoch{epoch_starting_from_1}.pdf"
+        figname = f"{save_dir}/fig_twistproposal_logZ_bounds_by_samples_over_time_epoch{epoch_starting_from_0}.pdf"
         ckpt_name = f"logZ_bounds_twistproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_nsamples"
 
     plt.savefig(figname)
@@ -151,7 +151,7 @@ def save_logZ_bounds_plot(
                                         logZ_lbs_iwae_across_samples_time_trueposts,
                                         logZ_ubs_smc_across_samples_time_trueposts,
                                         logZ_lbs_smc_across_samples_time_trueposts),
-                                    step=epoch_starting_from_1,
+                                    step=epoch_starting_from_0,
                                     prefix=ckpt_name)
 
 

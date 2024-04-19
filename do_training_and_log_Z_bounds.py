@@ -1456,12 +1456,7 @@ def get_and_plot_logZ_bounds(
     logZ_lbs_smc_across_samples_time_trueposts = plot_over_time_list[5]
 
     epoch_starting_from_1 = len(f_q_estimates_list_of_arrays)
-
-    # print(np.stack(kl_ubs_iwae).shape) # (epoch_starting_from_1,)
-    # print(np.stack(f_q_estimates_list_of_arrays).shape) # (epoch_starting_from_1, 2000)
-    # print(np.stack(g_q_estimates_list_of_arrays).shape) # (epoch_starting_from_1, 2000)
-    # print(np.stack(logZ_ubs_iwae_across_samples_time_trueposts).shape) #(2, epoch_starting_from_1, 4)
-    # print(epoch) # epoch_starting_from_1 - 1
+    epoch_starting_from_0 = epoch_starting_from_1 - 1
 
     x_range, plt_xlabel_text = get_xrange_and_xlabel(epoch_starting_from_1, exp_num_twist_updates, twist_updates_per_epoch)
 
@@ -1475,12 +1470,12 @@ def get_and_plot_logZ_bounds(
             f_q_estimates_list_of_arrays,
             g_q_estimates_list_of_arrays, save_dir, proposal_scores_list,
             kl_to_prior_list, rm_type,
-            epoch_starting_from_1, seed, twist_learn_type,
+            epoch_starting_from_0, seed, twist_learn_type,
             do_checkpoint_of_plot_info=True
         )
 
     save_logZ_bounds_plot(
-        plt_xlabel_text, x_range, save_dir, epoch_starting_from_1, seed, twist_learn_type,
+        plt_xlabel_text, x_range, save_dir, epoch_starting_from_0, seed, twist_learn_type,
         n_samples_for_plots,
         logZ_ubs_iwae_across_samples_time_trueposts,
         logZ_lbs_iwae_across_samples_time_trueposts,
