@@ -126,6 +126,13 @@ python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for
 python test_ppo.py --epochs 12 --output_len 10 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --hface_nn_twist --only_train_nn_head --sentiment_class 1 --beta_temp=1. --batch_size 100 --lr 0.00001 --load_posterior_samples  --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000
 ```
 
+### Qualitative Results
+```
+python do_training_and_log_Z_bounds.py --output_len 20 --epochs 14 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --twist_learn_type ebm_one_sample  --seed 1 --beta_temp=100. --sentiment_class 1 --hface_model_type gpt2medium
+```
+
+Replace --sentiment_class with 2,3,4,5 in the above for the other results.
+
 
 ## Commands for Infilling Experiments with T=15, c=10
 
