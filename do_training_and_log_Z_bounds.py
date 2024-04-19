@@ -2339,15 +2339,36 @@ def main():
                 args.n_twist, optimizer_twist, optim_twist_state
             )
 
-            prompt_num += 1
-            if (epoch + 1) % args.ckpt_every == 0:
-                checkpoints.save_checkpoint(
-                    ckpt_dir=args.save_dir,
-                    target=(params_twist, optim_twist_state), step=epoch + 1,
-                    prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_epoch"
-                )
+            plot_and_print_at_end = True
+            if plot_and_print_at_end and (epoch + 1 == args.epochs) and (not args.no_test_info):
+                rng_key, plot_over_time_list, plot_over_time_list_p_proposal = \
+                    do_inspection_and_plotting_of_test_info(
+                        rng_key, start, experiment_cfg, prompt, params_p,
+                        params_twist, log_true_final_twist, args.output_len,
+                        args.n_samples_for_plots_larger,
+                        indices_of_continuation, tokenizer,
+                        args.proposal_is_p, huggingface_model,
+                        params_proposal, f_q_estimates_list,
+                        proposal_scores_list, kl_to_prior_list,
+                        true_posterior_samples_by_token, epoch,
+                        true_posterior_samples_by_prompt_and_by_token,
+                        prompt_num, plot_over_time_list,
+                        plot_over_time_list_p_proposal, args.save_dir,
+                        args.seed,
+                        args.exp_num_twist_updates,
+                        args.twist_updates_per_epoch
+                    )
 
-                last_ckpt_epoch = epoch
+            prompt_num += 1
+
+        if (epoch + 1) % args.ckpt_every == 0:
+            checkpoints.save_checkpoint(
+                ckpt_dir=args.save_dir,
+                target=(params_twist, optim_twist_state), step=epoch + 1,
+                prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_epoch"
+            )
+
+            last_ckpt_epoch = epoch
 
 
     save_ckpt_at_end = False
