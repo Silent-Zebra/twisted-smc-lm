@@ -1,6 +1,6 @@
 ## General Notes/Comments/Disclaimer
 
-This README is still under construction. The repo is still being refactored also, but these commands should all work.
+I am planning on refactoring/improving functionality of various parts of the repo, which may result in changes to these commands (which hopefully make this codebase easier to use and run experiments with). As of April 19, 2024, the below commands should all run properly.
 
 Some of these commands may result in slightly different results when you run them (compared to when I ran them, or what is in the paper), because I have been refactoring code, and sometimes that results in changes to the RNG calls, which means there may be different RNG for the run you use versus when I initially ran them. I have generally tried to update the quantitative results in the paper to be consistent with the current version of the codebase, but generally I find there isn't much of a difference even among different seeds. Qualitative results may be more different depending on RNG.
 
