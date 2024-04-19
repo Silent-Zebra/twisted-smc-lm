@@ -70,7 +70,31 @@ python do_training_and_log_Z_bounds.py --output_len 20 --n_samples_at_a_time_for
 python test_ppo.py --epochs 12 --output_len 20 --exp_num_twist_updates --rm_type exp_beta_toxicity_class_logprob --beta_temp=1. --batch_size 100 --lr 0.000001 --load_posterior_samples  --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxc --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-18_len20_seed1_nsamples2000
 ```
 
-### Qualitative Results
+## Toxicity Classifier Experiments Training on Exact Target (Posterior) Samples (Appendix Ablation)
+
+Workflow is similar for above. Modify load_prefixes_tox_truepost_comparison in the plot_kl.py file, as well as plot_names, twist_learn_method_names, proposal_names, and the make_combined_plot() call before running python plot_kl.py. 
+
+### CTL
+```
+python do_training_and_log_Z_bounds.py --output_len 20 --n_samples_at_a_time_for_true_post 4000  --epochs 7 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --separate_hface_twist_model --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --seed 1 --beta_temp=1.  --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxc --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-18_len20_seed1_nsamples2000 --twist_learn_type ebm_reweight --train_on_true_posterior_samples 
+```
+
+### RL
+```
+python do_training_and_log_Z_bounds.py --output_len 20 --n_samples_at_a_time_for_true_post 4000  --epochs 7 --lr_twist 0.00003 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --separate_hface_twist_model --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --seed 1 --beta_temp=1.  --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxc --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-18_len20_seed1_nsamples2000 --twist_learn_type rl_qsigma_lsq_partial_jit --train_on_true_posterior_samples
+```
+
+### DPG
+```
+python do_training_and_log_Z_bounds.py --output_len 20 --n_samples_at_a_time_for_true_post 4000  --epochs 7 --lr_twist 0.00003 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --separate_hface_twist_model --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --seed 1 --beta_temp=1.  --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxc --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-18_len20_seed1_nsamples2000 --twist_learn_type one_total_kl_partial_jit --train_on_true_posterior_samples
+```
+
+### SIXO
+```
+python do_training_and_log_Z_bounds.py --output_len 20 --n_samples_at_a_time_for_true_post 4000  --epochs 7 --lr_twist 0.00003 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --separate_hface_twist_model --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --seed 1 --beta_temp=1.  --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxc --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-18_len20_seed1_nsamples2000 --twist_learn_type sixo_partial_jit --train_on_true_posterior_samples
+```
+
+## Toxicity Classifier Qualitative Results
 ```
 python do_training_and_log_Z_bounds.py --output_len 200 --n_samples_at_a_time_for_true_post 1000  --epochs 10 --twist_updates_per_epoch 250 --lr_twist 0.0003 --n_twist 32 --n_vocab 50257 --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --twist_learn_type ebm_one_sample  --seed 1 --beta_temp=10. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/apr/48  --n_samples_for_plots_smaller 8 --n_samples_for_plots_larger 32
 ```
@@ -85,7 +109,7 @@ As in the opening comment/disclaimer, since I've changed the RNG in refactoring 
 
 
 
-## Commands for Sentiment Classifier Experiments
+## Commands for Sentiment Classifier Experiments (KL Divergence Evaluation)
 
 ### Collecting Exact Samples for Evaluation
 First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
@@ -126,7 +150,32 @@ python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for
 python test_ppo.py --epochs 12 --output_len 10 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --hface_nn_twist --only_train_nn_head --sentiment_class 1 --beta_temp=1. --batch_size 100 --lr 0.00001 --load_posterior_samples  --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000
 ```
 
-### Qualitative Results
+
+## Sentiment Classifier Experiments Training on Exact Target (Posterior) Samples (Appendix Ablation)
+
+Workflow is similar for above. Modify load_prefixes_sent_truepost_comparison in the plot_kl.py file, as well as plot_names, twist_learn_method_names, proposal_names, and the make_combined_plot() call before running python plot_kl.py. 
+
+### CTL
+```
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 500  --epochs 10 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --twist_learn_type ebm_reweight  --seed 1 --beta_temp=1. --sentiment_class 1 --hface_model_type gpt2medium --hface_nn_twist --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000 --train_on_true_posterior_samples
+```
+
+### RL
+```
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 500  --epochs 10 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --twist_learn_type rl_qsigma_lsq_partial_jit  --seed 1 --beta_temp=1. --sentiment_class 1 --hface_model_type gpt2medium --hface_nn_twist --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000 --train_on_true_posterior_samples
+```
+
+### DPG
+```
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 500  --epochs 10 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --twist_learn_type one_total_kl_partial_jit  --seed 1 --beta_temp=1. --sentiment_class 1 --hface_model_type gpt2medium --hface_nn_twist --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000 --train_on_true_posterior_samples
+```
+
+### SIXO
+```
+python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 500  --epochs 10 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --twist_learn_type sixo_partial_jit  --seed 1 --beta_temp=1. --sentiment_class 1 --hface_model_type gpt2medium --hface_nn_twist --load_posterior_samples --load_dir_posterior_samples /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/sent/ --load_prefix_posterior_samples true_posterior_samples_2024-04-16_22-08_len10_seed1_nsamples2000 --train_on_true_posterior_samples
+```
+
+## Sentiment Classifier Qualitative Results
 ```
 python do_training_and_log_Z_bounds.py --output_len 20 --epochs 14 --lr_twist 0.0001 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type exp_beta_sentiment_class_logprob --twist_learn_type ebm_one_sample  --seed 1 --beta_temp=100. --sentiment_class 1 --hface_model_type gpt2medium
 ```
@@ -174,7 +223,7 @@ Regarding the magic number -20.708 in the plot_kl.py file, this was obtained as 
 python do_training_and_log_Z_bounds.py --output_len 15 --n_samples_at_a_time_for_true_post 2000 --epochs 1 --twist_updates_per_epoch 0 --n_twist 100 --n_vocab 50257 --exp_num_twist_updates --rm_type p_last_tokens --num_last_tokens_to_condition_on 10 --hface_model_type TinyStories --twist_learn_type one_total_kl  --seed 1  --ckpt_every 20 --separate_hface_twist_model --hface_nn_twist --overwrite_n_plot_seeds --n_plot_seeds 2000 --load_ckpt
 ```
 
-### Qualitative Results
+## Infilling (T=15, c=10) Qualitative Results
 First, run the above commands for DPG, SIXO, and CTL, adding --ckpt_every 12. Then see the Infillling_Qualitative_Results.ipynb file, and replace the checkpoints in the notebook with the saved ones (if using Colab, I suggest saving checkpoints on Google Drive and mounting it, since directly uploading checkpoints takes forever).
 
 ## Commands for Infilling Experiments with T=2, c=1
