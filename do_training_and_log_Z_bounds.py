@@ -2295,8 +2295,6 @@ def main():
             else:
                 true_posterior_samples_by_token = None
 
-            rng_key, sk = jax.random.split(rng_key) # TODO remove, seems unnecessary. I leave it here just for consistency in RNG
-
             # ----- DO plotting and inspection of test info before the twist updates -----
             if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
                 rng_key, plot_over_time_list, plot_over_time_list_p_proposal = \

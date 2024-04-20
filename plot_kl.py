@@ -13,7 +13,8 @@ from plot_utils import plot_with_conf_bounds
 
 load_prefixes_sent1_nnonly = [
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_17-13_seed1_ebm_one_sample_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_17-13_seed1_ebm_one_sample_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-19_18-18_seed1_ebm_one_sample_nsamples11",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
     "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-43_seed1_rl_q_lsq_partial_jit_nsamples12",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
@@ -424,7 +425,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
             print(x)
 
 make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_04-17")
-make_combined_plot(load_prefixes_toxc, "toxc_04-17")
+# make_combined_plot(load_prefixes_toxc, "toxc_04-17")
 
 
 # make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_04-16")
