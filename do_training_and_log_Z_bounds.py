@@ -400,8 +400,9 @@ class ExperimentConfig:
 
         return rng_key, true_sigma_samples, condition_twist_on_tokens
 
+    # TODO Apr SHOULD really make the rng consistent... either always only pass in rng, or always split outside and pass in sk only...
     # TODO clean this up
-    def get_grad_params_twist(self, sk, prompt, n_twist, output_len,
+    def get_grad_params_twist(self, rng_key, prompt, n_twist, output_len,
                               params_p, params_twist, log_true_final_twist,
                               proposal_is_p=False, huggingface_model=None,
                               tempered_twist=False, beta_prop=None, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None):
@@ -412,7 +413,7 @@ class ExperimentConfig:
         if "bce" in self.twist_learn_type:
             # TODO definitely can move this to another function, but before doing that, remove duplicate code here
             assert self.beta_temp == 1. # because otherwise the Bayesian formulation doesn't work right? In any case, not considered here
-            sk, sk2, sk3 = jax.random.split(sk, 3)
+            rng_key, sk2, sk3 = jax.random.split(rng_key, 3)
 
             if self.rm_type in ["p_last_tokens",]:
                 p_samples = stochastic_transformer_sample(sk2,
@@ -500,7 +501,7 @@ class ExperimentConfig:
 
                 true_sigma_samples = samples_to_evaluate_over # Yeah I know these are not true sigma samples, I just didn't rename. Check the BCE loss, it just needs a set of samples passed in. Kind of like the set of samples we evaluate RL loss over
 
-
+            rng_key, sk = jax.random.split(rng_key)
             grad_params_twist = self.dre_grad_fn(
                 sk, prompt, params_p,
                 params_twist, log_true_final_twist, output_len,
@@ -514,14 +515,14 @@ class ExperimentConfig:
                 replay_buffer_log_w_ts=replay_buffer_log_w_ts, log_prob_class=log_prob_class,
                 params_proposal=params_proposal
             )
-            return grad_params_twist
+            return rng_key, grad_params_twist
 
         if self.train_on_true_posterior_samples:
             assert self.rm_type in ["exp_beta_toxicity_class_logprob",
                                     "exp_beta_sentiment_class_logprob"]  # others not yet tested
 
-            sk, combined_true_posterior_samples = collect_true_posterior_samples(
-                sk, self, [prompt], params_p, self.rm_type,
+            rng_key, combined_true_posterior_samples = collect_true_posterior_samples(
+                rng_key, self, [prompt], params_p, self.rm_type,
                 output_len, n_twist, huggingface_model,
                 None, self.rewardModel, self.tokenizer_RM, self.tokenizer, None, None,
                 n_twist
@@ -534,23 +535,24 @@ class ExperimentConfig:
 
 
         elif self.rm_type == "p_last_tokens":
-            sk, true_sigma_samples, condition_twist_on_tokens = self._get_sigma_samples_and_cond_tokens_infilling(
-                sk, params_p, prompt, output_len, n_twist,
+            rng_key, true_sigma_samples, condition_twist_on_tokens = self._get_sigma_samples_and_cond_tokens_infilling(
+                rng_key, params_p, prompt, output_len, n_twist,
                 huggingface_model,
                 params_twist, log_true_final_twist,
                 proposal_is_p, params_proposal
             )
 
         elif self.rm_type == "sent_cond_twist":
-            sk, true_sigma_samples, condition_twist_on_tokens = \
+            rng_key, true_sigma_samples, condition_twist_on_tokens = \
                 self._get_sigma_samples_and_cond_tokens_sentcondtwist(
-                sk, params_p, prompt, output_len, n_twist,
+                rng_key, params_p, prompt, output_len, n_twist,
                 huggingface_model
             )
 
         if self.twist_learn_type == "ebm_vmap_os":
             true_sigma_samples = None
 
+        rng_key, sk = jax.random.split(rng_key)
         grad_params_twist = self.dre_grad_fn(
             sk, prompt, params_p,
             params_twist, log_true_final_twist, output_len,
@@ -562,7 +564,7 @@ class ExperimentConfig:
             replay_buffer_log_w_ts=replay_buffer_log_w_ts,
             params_proposal=params_proposal
         )
-        return grad_params_twist
+        return rng_key, grad_params_twist
 
 
     # @partial(jax.jit, static_argnames=[
@@ -576,9 +578,8 @@ class ExperimentConfig:
                      tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts, params_proposal=None
                      ):
 
-        rng_key, sk = jax.random.split(rng_key)
-        grad_params_twist = self.get_grad_params_twist(
-            sk, prompt, n_twist,
+        rng_key, grad_params_twist = self.get_grad_params_twist(
+            rng_key, prompt, n_twist,
             output_len, params_p,
             params_twist, log_true_final_twist,
             proposal_is_p=proposal_is_p,
@@ -2145,8 +2146,6 @@ def do_test_sampling_time(
                         "prompt_len": prompt.shape[-1]
                      # Just sampling from twisted proposal, no true final twist eval at end which is costly
                      }
-    rng_key, sk = jax.random.split(rng_key)
-
     twisted_proposal_samples = twisted_proposal_sample(**twist_prop_args)
     twisted_proposal_samples.block_until_ready()
 
