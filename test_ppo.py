@@ -313,6 +313,162 @@ def main():
         model.train()
         return log_tilde_sigma - log_q
 
+    def do_test_info(
+        new_start, condition_twist_on_tokens_all, n_samples_f_q, model, ref_model,
+        true_posterior_samples, f_q_estimates_list, g_q_estimates_list, rewards_list, kl_vals_list
+    ):
+        logZ_midpoint_estimate = None
+
+        iwae_lbs_list = []
+        iwae_ubs_list = []
+
+        total_f_qs = None
+        total_g_qs = None
+        total_rewards = None
+        total_kl_vals = None
+
+        for i in range(n_seeds_f_q):
+            print(f"TIME: {time.time() - new_start}", flush=True)
+
+            if args.rm_type == "p_last_tokens":
+                condition_twist_on_tokens = condition_twist_on_tokens_all[
+                                            i * n_samples_f_q: (i + 1) * n_samples_f_q]
+
+                f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(
+                    model, ref_model, n_samples_f_q,
+                    condition_twist_on_tokens=condition_twist_on_tokens)
+
+            else:
+                f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(
+                    model, ref_model, n_samples_f_q)
+                condition_twist_on_tokens = None
+
+            print("Reward")
+            print(rewards)
+            print("Avg reward")
+            print(rewards.mean())
+            print(f"KL to prior estimate: {kl_vals.mean()}")
+            print("F_q Estimates Learned Model", flush=True)
+            print(f_qs)
+            print("Avg F_q Estimate (Learned Model)")
+            print(f_qs.mean())
+            if args.rm_type != "p_last_tokens":
+                print("IWAE Lower Bound Estimate (Learned Model)")
+                iwae_lower_bound_estimate = torch.logsumexp(f_qs,
+                                                            dim=0) - np.log(
+                    f_qs.shape[0])
+                print(iwae_lower_bound_estimate)
+                iwae_lbs_list.append(iwae_lower_bound_estimate)
+            if total_f_qs is None:
+                total_f_qs = f_qs
+                total_rewards = rewards
+                total_kl_vals = kl_vals
+            else:
+                total_f_qs = torch.cat((total_f_qs, f_qs), axis=0)
+                print(total_f_qs.shape)
+                total_rewards = torch.cat((total_rewards, rewards), axis=0)
+                print(total_rewards.shape)
+                total_kl_vals = torch.cat((total_kl_vals, kl_vals), axis=0)
+                print(total_kl_vals.shape)
+
+            if true_posterior_samples is not None:
+                iwae_mixture_with_one_post = q_result.detach().clone()
+                iwae_mixture_with_one_post[i] = true_posterior_samples[
+                    i]  # To keep the conditioning tokens constant
+                iwae_ub_weights = g_q_estimate(model, ref_model,
+                                               iwae_mixture_with_one_post,
+                                               condition_twist_on_tokens=condition_twist_on_tokens)  # All this does is evaluate log (tilde sigma / q). I just do it on the iwae mixture here
+                print("IWAE Upper Bound Estimate (Learned Model)")
+                iwae_upper_bound_estimate = torch.logsumexp(
+                    iwae_ub_weights, dim=0) - np.log(iwae_ub_weights.shape[0])
+                print(iwae_upper_bound_estimate)
+                iwae_ubs_list.append(iwae_upper_bound_estimate)
+
+            if i == 0:
+                # we have a fixed set of true posterior samples, so only need to do the G_q once.
+
+                if true_posterior_samples is not None:
+
+                    range_val = (math.ceil(
+                        true_posterior_samples.shape[0] / n_samples_f_q))
+                    print(range_val)
+                    for j in range(range_val):
+                        samples = true_posterior_samples[
+                                  j * n_samples_f_q: (j + 1) * n_samples_f_q]
+                        if samples.shape[0] != 0:
+                            print(f"TIME: {time.time() - new_start}",
+                                  flush=True)
+                            print("G_q Estimates Learned Model")
+                            # print(samples.shape)
+                            # print(condition_twist_on_tokens.shape)
+                            # print(condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q].shape)
+                            if condition_twist_on_tokens is not None:
+                                g_qs = g_q_estimate(model, ref_model, samples,
+                                                    condition_twist_on_tokens=condition_twist_on_tokens_all[j * n_samples_f_q: (j + 1) * n_samples_f_q])
+                            else:
+                                g_qs = g_q_estimate(model, ref_model, samples)
+
+                            print(g_qs)
+                            print("Avg G_q Estimate (Learned Model)")
+                            print(g_qs.mean())
+
+                            if total_g_qs is None:
+                                total_g_qs = g_qs
+                            else:
+                                total_g_qs = torch.cat((total_g_qs, g_qs),
+                                                       axis=0)
+                                print("Total G_qs shape")
+                                print(total_g_qs.shape)
+
+                    if args.rm_type == "p_last_tokens":
+                        print(
+                            "IWAE bounds not accurate for plasttokens. This is because you cannot just logsumexp over different conditioning tokens. Need to pick a set of conditioning tokens and go from there. The F_q and G_q are still fine though")
+                    else:
+                        avg_iwae_ub_estimate = torch.stack(iwae_ubs_list).mean()
+                        avg_iwae_lb_estimate = torch.stack(iwae_lbs_list).mean()
+
+                        print(f"Avg IWAE UB Estimate: {avg_iwae_ub_estimate}")
+                        print(f"Avg IWAE LB Estimate: {avg_iwae_lb_estimate}")
+
+                        logZ_midpoint_estimate = (avg_iwae_ub_estimate + avg_iwae_lb_estimate) / 2.
+                        print(
+                            f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
+                    print(f"TIME: {time.time() - new_start}", flush=True)
+
+        print("Shapes")
+        print(total_g_qs.shape)
+        print(total_f_qs.shape)
+        print(total_rewards.shape)
+        print(total_kl_vals.shape)
+
+        if total_g_qs is not None:
+            g_q_estimates_list.append(
+                total_g_qs.cpu().numpy())  # Only one G_q estimate (over all the posterior samples)
+
+        f_q_estimates_list.append(total_f_qs.cpu().numpy())
+        rewards_list.append(total_rewards.cpu().numpy())
+        kl_vals_list.append(total_kl_vals.cpu().numpy())
+
+        g_q_np = []
+        if len(g_q_estimates_list) > 0:
+            g_q_np = np.transpose(np.stack(g_q_estimates_list))
+        f_q_np = np.transpose(np.stack(f_q_estimates_list))
+
+        if logZ_midpoint_estimate is not None:
+            target_to_save = (
+            f_q_np, g_q_np, np.transpose(np.stack(rewards_list)),
+            logZ_midpoint_estimate, np.transpose(np.stack(kl_vals_list)))
+        else:
+            target_to_save = (
+            f_q_np, g_q_np, np.transpose(np.stack(rewards_list)),
+            np.transpose(np.stack(kl_vals_list)))
+
+        checkpoints.save_checkpoint(
+            ckpt_dir=args.save_dir,
+            target=target_to_save,
+            step=len(g_q_estimates_list) - 1,
+            prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_ppo_seed{args.seed}_nsamples"
+        )
 
     f_q_estimates_list = []
     g_q_estimates_list = []
@@ -322,7 +478,6 @@ def main():
 
     new_start = time.time()
 
-    logZ_midpoint_estimate = None
 
     true_posterior_samples = None
 
@@ -332,6 +487,9 @@ def main():
                                            dtype=torch.int64,
                                            device=device)
     n_seeds_f_q = 4  # 5 reduce time spent on this
+
+    condition_twist_on_tokens_all = None
+
 
     if args.load_posterior_samples:
 
@@ -355,9 +513,9 @@ def main():
         true_posterior_samples = torch.tensor(true_posterior_samples,
                                               dtype=torch.int64, device=device)
 
+
     elif args.rm_type == "p_last_tokens":
         true_posterior_samples = None
-        condition_twist_on_tokens_all = None
         for i in range(n_seeds_f_q):
             base_model_seqs = ref_model.generate(batch_prompt_for_f_q_pt,
                                                  max_length=prompt_len + args.output_len + args.num_last_tokens_to_condition_on,
@@ -388,156 +546,13 @@ def main():
 
 
         if not args.no_test_info:
-            iwae_lbs_list = []
-            iwae_ubs_list = []
+            do_test_info(
+                new_start, condition_twist_on_tokens_all, n_samples_f_q, model,
+                ref_model,
+                true_posterior_samples, f_q_estimates_list, g_q_estimates_list,
+                rewards_list, kl_vals_list
+            )
 
-            total_f_qs = None
-            total_g_qs = None
-            total_rewards = None
-            total_kl_vals = None
-
-            for i in range(n_seeds_f_q):
-                print(f"TIME: {time.time() - new_start}", flush=True)
-
-                if args.rm_type == "p_last_tokens":
-                    condition_twist_on_tokens = condition_twist_on_tokens_all[
-                                                i * n_samples_f_q: (i + 1) * n_samples_f_q]
-
-                    f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(
-                        model, ref_model, n_samples_f_q,
-                        condition_twist_on_tokens=condition_twist_on_tokens)
-
-                else:
-                    f_qs, rewards, q_result, kl_vals = f_q_estimate_and_reward_and_klprior(model, ref_model, n_samples_f_q)
-                    condition_twist_on_tokens = None
-
-                print("Reward")
-                print(rewards)
-                print("Avg reward")
-                print(rewards.mean())
-                print(f"KL to prior estimate: {kl_vals.mean()}")
-                print("F_q Estimates Learned Model", flush=True)
-                print(f_qs)
-                print("Avg F_q Estimate (Learned Model)")
-                print(f_qs.mean())
-                if args.rm_type != "p_last_tokens":
-                    print("IWAE Lower Bound Estimate (Learned Model)")
-                    iwae_lower_bound_estimate = torch.logsumexp(f_qs, dim=0) - np.log(f_qs.shape[0])
-                    print(iwae_lower_bound_estimate)
-                    iwae_lbs_list.append(iwae_lower_bound_estimate)
-                if total_f_qs is None:
-                    total_f_qs = f_qs
-                    total_rewards = rewards
-                    total_kl_vals = kl_vals
-                else:
-                    total_f_qs = torch.cat((total_f_qs, f_qs), axis=0)
-                    print(total_f_qs.shape)
-                    total_rewards = torch.cat((total_rewards, rewards), axis=0)
-                    print(total_rewards.shape)
-                    total_kl_vals = torch.cat((total_kl_vals, kl_vals), axis=0)
-                    print(total_kl_vals.shape)
-
-
-                if true_posterior_samples is not None:
-                    iwae_mixture_with_one_post = q_result.detach().clone()
-                    iwae_mixture_with_one_post[i] = true_posterior_samples[i] # To keep the conditioning tokens constant
-                    iwae_ub_weights = g_q_estimate(model, ref_model, iwae_mixture_with_one_post, condition_twist_on_tokens=condition_twist_on_tokens) # All this does is evaluate log (tilde sigma / q). I just do it on the iwae mixture here
-                    print("IWAE Upper Bound Estimate (Learned Model)")
-                    iwae_upper_bound_estimate = torch.logsumexp(
-                        iwae_ub_weights, dim=0) - np.log(iwae_ub_weights.shape[0])
-                    print(iwae_upper_bound_estimate)
-                    iwae_ubs_list.append(iwae_upper_bound_estimate)
-
-
-
-                # print("F_q Estimates Base Model")
-                # f_qs = f_q_estimate(ref_model, ref_model, n_samples_f_q)
-                # print(f_qs)
-                # print("Avg F_q Estimate (Base Model)")
-                # print(f_qs.mean())
-
-                if i == 0:
-                    # we have a fixed set of true posterior samples, so only need to do the G_q once.
-
-                    if true_posterior_samples is not None:
-                        # if true_posterior_samples.shape[0] == n_samples_f_q:
-                        #     range_val = 1
-                        # else:
-                        #     range_val = true_posterior_samples.shape[0] // n_samples_f_q + 1
-                        range_val = (math.ceil(true_posterior_samples.shape[0] / n_samples_f_q))
-                        print(range_val)
-                        for j in range(range_val):
-                            samples = true_posterior_samples[j * n_samples_f_q: (j+1) * n_samples_f_q]
-                            if samples.shape[0] != 0:
-                                print(f"TIME: {time.time() - new_start}", flush=True)
-                                print("G_q Estimates Learned Model")
-                                # print(samples.shape)
-                                # print(condition_twist_on_tokens.shape)
-                                # print(condition_twist_on_tokens[i * n_samples_f_q: (i+1) * n_samples_f_q].shape)
-                                if condition_twist_on_tokens is not None:
-                                    g_qs = g_q_estimate(model, ref_model, samples, condition_twist_on_tokens=condition_twist_on_tokens_all[j * n_samples_f_q: (j + 1) * n_samples_f_q])
-                                else:
-                                    g_qs = g_q_estimate(model, ref_model, samples)
-
-                                print(g_qs)
-                                print("Avg G_q Estimate (Learned Model)")
-                                print(g_qs.mean())
-
-                                if total_g_qs is None:
-                                    total_g_qs = g_qs
-                                else:
-                                    total_g_qs = torch.cat((total_g_qs, g_qs), axis=0)
-                                    print("Total G_qs shape")
-                                    print(total_g_qs.shape)
-
-                        if args.rm_type == "p_last_tokens":
-                            print("IWAE bounds not accurate for plasttokens. This is because you cannot just logsumexp over different conditioning tokens. Need to pick a set of conditioning tokens and go from there. The F_q and G_q are still fine though")
-                        else:
-                            avg_iwae_ub_estimate = torch.stack(iwae_ubs_list).mean()
-                            avg_iwae_lb_estimate = torch.stack(iwae_lbs_list).mean()
-
-                            print(f"Avg IWAE UB Estimate: {avg_iwae_ub_estimate}")
-                            print(f"Avg IWAE LB Estimate: {avg_iwae_lb_estimate}")
-
-                            logZ_midpoint_estimate = (avg_iwae_ub_estimate + avg_iwae_lb_estimate) / 2.
-                            print(f"Log Z Midpoint Estimate: {logZ_midpoint_estimate}")
-                        print(f"TIME: {time.time() - new_start}", flush=True)
-
-
-            print("Shapes")
-            print(total_g_qs.shape)
-            print(total_f_qs.shape)
-            print(total_rewards.shape)
-            print(total_kl_vals.shape)
-
-            if total_g_qs is not None:
-                g_q_estimates_list.append(total_g_qs.cpu().numpy()) # Only one G_q estimate (over all the posterior samples)
-
-            f_q_estimates_list.append(total_f_qs.cpu().numpy())
-            rewards_list.append(total_rewards.cpu().numpy())
-            kl_vals_list.append(total_kl_vals.cpu().numpy())
-
-            g_q_np = []
-            if len(g_q_estimates_list) > 0:
-                g_q_np = np.transpose(np.stack(g_q_estimates_list))
-            f_q_np = np.transpose(np.stack(f_q_estimates_list))
-
-            if logZ_midpoint_estimate is not None:
-                checkpoints.save_checkpoint(
-                    ckpt_dir=args.save_dir,
-                    target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list)), logZ_midpoint_estimate, np.transpose(np.stack(kl_vals_list))
-                            ),
-                    step=len(g_q_estimates_list),
-                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_ppo_seed{args.seed}_nsamples"
-                )
-            else:
-                checkpoints.save_checkpoint(
-                    ckpt_dir=args.save_dir,
-                    target=(f_q_np, g_q_np, np.transpose(np.stack(rewards_list)), np.transpose(np.stack(kl_vals_list))
-                                                    ),
-                    step=len(g_q_estimates_list),
-                    prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_ppo_seed{args.seed}_nsamples"
-                )
 
         print("Starting twist updates:", flush=True)
 
@@ -572,15 +587,7 @@ def main():
                                           **gen_kwargs)
 
                 full_seq = q_tokens
-
-
                 # full_seq = torch.cat((q_tokens, condition_twist_on_tokens), dim=-1)
-
-
-                # print("hihi")
-                # print(q_tokens.shape)
-                # print(condition_twist_on_tokens.shape)
-                # print(full_seq.shape)
 
 
             else:
@@ -600,6 +607,13 @@ def main():
             # print(stats)
 
 
+        if not args.no_test_info:
+            do_test_info(
+                new_start, condition_twist_on_tokens_all, n_samples_f_q, model,
+                ref_model,
+                true_posterior_samples, f_q_estimates_list, g_q_estimates_list,
+                rewards_list, kl_vals_list
+            )
 
 
 
