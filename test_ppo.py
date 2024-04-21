@@ -589,7 +589,6 @@ def main():
                 full_seq = q_tokens
                 # full_seq = torch.cat((q_tokens, condition_twist_on_tokens), dim=-1)
 
-
             else:
                 full_seq = model.generate(batch_prompt_pt, max_length=prompt_len+args.output_len, **gen_kwargs)
 
@@ -607,7 +606,8 @@ def main():
             # print(stats)
 
 
-        if not args.no_test_info:
+
+        if not args.no_test_info and (epoch + 1 == args.epochs):
             do_test_info(
                 new_start, condition_twist_on_tokens_all, n_samples_f_q, model,
                 ref_model,
