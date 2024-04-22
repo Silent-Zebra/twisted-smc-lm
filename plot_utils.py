@@ -13,7 +13,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96, **kwargs):
 
     avg = record.mean(axis=0)
 
-    stdev = jnp.std(record, axis=0)
+    stdev = jnp.std(record, axis=0, ddof=1)
 
     conf_bound = z_score * stdev / np.sqrt(record.shape[0])
 
