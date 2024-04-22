@@ -514,25 +514,33 @@ def main():
                                               dtype=torch.int64, device=device)
 
 
-    elif args.rm_type == "p_last_tokens":
-        true_posterior_samples = None
-        for i in range(n_seeds_f_q):
-            base_model_seqs = ref_model.generate(batch_prompt_for_f_q_pt,
-                                                 max_length=prompt_len + args.output_len + args.num_last_tokens_to_condition_on,
-                                                 **gen_kwargs)
+    if args.rm_type == "p_last_tokens":
+        if args.load_posterior_samples:
+            condition_tokens = true_posterior_samples[:,
+                                            prompt_len + args.output_len:]
+            true_posterior_samples = true_posterior_samples[:,
+                                         :prompt_len + args.output_len]
 
-            condition_tokens = base_model_seqs[:,
-                                        prompt_len + args.output_len:]
+            condition_twist_on_tokens_all = condition_tokens
 
-            true_posts = base_model_seqs[:,
-                                     :prompt_len + args.output_len]
+        else:
+            for i in range(n_seeds_f_q):
+                base_model_seqs = ref_model.generate(batch_prompt_for_f_q_pt,
+                                                     max_length=prompt_len + args.output_len + args.num_last_tokens_to_condition_on,
+                                                     **gen_kwargs)
 
-            if condition_twist_on_tokens_all is None:
-                condition_twist_on_tokens_all = condition_tokens
-                true_posterior_samples = true_posts
-            else:
-                condition_twist_on_tokens_all = torch.cat((condition_twist_on_tokens_all, condition_tokens), axis=0)
-                true_posterior_samples = torch.cat((true_posterior_samples, true_posts), axis=0)
+                condition_tokens = base_model_seqs[:,
+                                            prompt_len + args.output_len:]
+
+                true_posts = base_model_seqs[:,
+                                         :prompt_len + args.output_len]
+
+                if condition_twist_on_tokens_all is None:
+                    condition_twist_on_tokens_all = condition_tokens
+                    true_posterior_samples = true_posts
+                else:
+                    condition_twist_on_tokens_all = torch.cat((condition_twist_on_tokens_all, condition_tokens), axis=0)
+                    true_posterior_samples = torch.cat((true_posterior_samples, true_posts), axis=0)
 
 
     for epoch in range(args.epochs):
