@@ -14,33 +14,44 @@ from plot_utils import plot_with_conf_bounds
 load_prefixes_sent1_nnonly = [
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_02-45_seed1_ebm_one_sample_nsamples12_sent1_0001",
     # "f_q_g_q_logZbestmidpoint_info_2024-04-17_17-13_seed1_ebm_one_sample_nsamples12",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-19_18-18_seed1_ebm_one_sample_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_15-20_seed1_ebm_one_sample_nsamples11",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-23_seed1_rl_q_lsq_partial_jit_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-43_seed1_rl_q_lsq_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-43_seed1_rl_q_lsq_partial_jit_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_16-35_seed1_rl_q_lsq_partial_jit_nsamples11",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_06-11_seed1_sixo_partial_jit_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_03-25_seed1_sixo_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_03-25_seed1_sixo_partial_jit_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_15-31_seed1_sixo_partial_jit_nsamples11",
     # "f_q_g_q_logZbestmidpoint_info_2024-02-17_21-26_seed1_bce_p_nsamples12_sent_001",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_03-06_seed1_bce_p_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_03-06_seed1_bce_p_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_15-08_seed1_bce_p_nsamples11",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-45_seed1_one_total_kl_partial_jit_nsamples12_sent1_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-11_seed1_one_total_kl_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-11_seed1_one_total_kl_partial_jit_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_16-08_seed1_one_total_kl_partial_jit_nsamples11",
     # "f_q_g_q_estimates_2024-01-19_06-11_ppo_seed0_nsamples12_sent1_newnnonly",
     "f_q_g_q_estimates_2024-04-17_21-22_ppo_seed0_nsamples12",
+    # ""
 ]
 
 
 load_prefixes_toxc = [
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-46_seed1_ebm_one_sample_nsamples12_toxc_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-31_seed1_ebm_one_sample_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-31_seed1_ebm_one_sample_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_16-55_seed1_ebm_one_sample_nsamples11",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-17_seed1_rl_q_lsq_partial_jit_nsamples12_toxc_00003",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_05-03_seed1_rl_q_lsq_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_05-03_seed1_rl_q_lsq_partial_jit_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_17-39_seed1_rl_q_lsq_partial_jit_nsamples11",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_03-32_seed1_sixo_partial_jit_nsamples12_toxc_00003",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-17_seed1_sixo_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_04-17_seed1_sixo_partial_jit_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_16-45_seed1_sixo_partial_jit_nsamples11",
     # "f_q_g_q_logZbestmidpoint_info_2024-02-16_22-17_seed1_bce_p_nsamples12_toxc_0001",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_03-14_seed1_bce_p_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_03-14_seed1_bce_p_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_15-33_seed1_bce_p_nsamples11",
     # "f_q_g_q_logZbestmidpoint_info_2024-01-08_04-01_seed1_one_total_kl_partial_jit_nsamples12_toxc_00003",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-17_05-04_seed1_one_total_kl_partial_jit_nsamples12",
+    # "f_q_g_q_logZbestmidpoint_info_2024-04-17_05-04_seed1_one_total_kl_partial_jit_nsamples12",
+    "f_q_g_q_logZbestmidpoint_info_2024-04-20_17-22_seed1_one_total_kl_partial_jit_nsamples11",
     # "f_q_g_q_estimates_2024-01-08_06-40_seed0_nsamples12_toxc_ppo_000001",
-    "f_q_g_q_estimates_2024-04-17_21-56_ppo_seed0_nsamples12",
+    # "f_q_g_q_estimates_2024-04-17_21-56_ppo_seed0_nsamples12",
+    "f_q_g_q_estimates_2024-04-21_08-37_ppo_seed0_nsamples11",
 ]
 
 
@@ -182,7 +193,7 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
                                            prefix="checkpoint"
                                            )
 
-
+        print(prefix)
 
         if len(x) > 4:
             if x[3] is not None:
@@ -351,14 +362,14 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
             z_score = 1.96
             record = logZ_midpoint_estimate - f_q_estimates
             avg = record.mean(axis=0)
-            stdev = jnp.std(record, axis=0)
+            stdev = jnp.std(record, axis=0, ddof=1)
             conf_bound = z_score * stdev / np.sqrt(record.shape[0])
             avg_kl_q_sigma = avg[exact_num_epochs - 1]
             conf_bound_q_sigma = conf_bound[exact_num_epochs - 1]
 
             record = g_q_estimates - logZ_midpoint_estimate
             avg = record.mean(axis=0)
-            stdev = jnp.std(record, axis=0)
+            stdev = jnp.std(record, axis=0, ddof=1)
             conf_bound = z_score * stdev / np.sqrt(record.shape[0])
             avg_kl_sigma_q = avg[exact_num_epochs - 1]
             conf_bound_sigma_q = conf_bound[exact_num_epochs - 1]
@@ -424,8 +435,8 @@ def make_combined_plot(load_prefixes, fig_name_modifier, exact_num_epochs=None, 
         for x in output_latex:
             print(x)
 
-make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_04-17")
-# make_combined_plot(load_prefixes_toxc, "toxc_04-17")
+make_combined_plot(load_prefixes_sent1_nnonly, "sent1_nnonly_04-20")
+make_combined_plot(load_prefixes_toxc, "toxc_04-20")
 
 
 # make_combined_plot(load_prefixes_plasttok2_1, "plast2_1_04-16")
