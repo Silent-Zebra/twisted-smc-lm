@@ -6,7 +6,7 @@ Some of these commands may result in slightly different results when you run the
 
 ## Commands for Toxicity Threshold (Log Z Bounds) Experiments
 
-First run this command to collect a set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well: 
+First run this command to collect a set of exact posterior (target) distribution samples for evaluation. This command can take quite a while to run because of the difficulty in collecting samples satisfying the toxicity threshold. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well: 
 
 ```
 python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000 --n_vocab 50257 --hface_model_type TinyStories --rm_type toxicity_threshold --seed 1 --threshold=-5. --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 100 --save_dir  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt
@@ -185,6 +185,16 @@ Replace --sentiment_class with 2,3,4,5 in the above for the other results.
 
 ## Commands for Infilling Experiments with T=15, c=10
 
+### Collecting Exact Samples for Evaluation
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
+
+```
+python do_training_and_log_Z_bounds.py --output_len 15 --n_samples_at_a_time_for_true_post 2000 --n_vocab 50257 --hface_model_type TinyStories --separate_hface_twist_model --hface_nn_twist --rm_type p_last_tokens --num_last_tokens_to_condition_on 10 --seed 1 --beta_temp=1. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/infilling/15 --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
+```
+
+Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names. Change also the --seed argument depending on your run.
+
+
 ### CTL
 ```
 python do_training_and_log_Z_bounds.py --output_len 15 --n_samples_at_a_time_for_true_post 2000  --epochs 11 --twist_updates_per_epoch 500 --lr_twist 0.000003 --n_twist 25 --n_twist_ebm_vmap 4 --n_vocab 50257 --rm_type p_last_tokens --num_last_tokens_to_condition_on 10 --hface_model_type TinyStories --twist_learn_type ebm_ml_jit_vmapped_over_condition_tokens  --seed 1 --separate_hface_twist_model --hface_nn_twist
@@ -227,6 +237,15 @@ python do_training_and_log_Z_bounds.py --output_len 15 --n_samples_at_a_time_for
 First, run the above commands for DPG, SIXO, and CTL, adding --ckpt_every 12. Then see the Infillling_Qualitative_Results.ipynb file, and replace the checkpoints in the notebook with the saved ones (if using Colab, I suggest saving checkpoints on Google Drive and mounting it, since directly uploading checkpoints takes forever).
 
 ## Commands for Infilling Experiments with T=2, c=1
+
+### Collecting Exact Samples for Evaluation
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
+
+```
+python do_training_and_log_Z_bounds.py --output_len 2 --n_samples_at_a_time_for_true_post 2000 --n_vocab 50257 --hface_model_type TinyStories --separate_hface_twist_model --hface_nn_twist --rm_type p_last_tokens --num_last_tokens_to_condition_on 1 --seed 0 --beta_temp=1. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/apr/infilling/2/post/infilling/2 --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
+```
+
+Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names. Change also the --seed argument depending on your run.
 
 ### CTL
 ```
