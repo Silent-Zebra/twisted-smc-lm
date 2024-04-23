@@ -2,11 +2,11 @@
 
 I am planning on refactoring/improving functionality of various parts of the repo, which may result in changes to these commands (which hopefully make this codebase easier to use and run experiments with). As of April 22, 2024, the below commands should all run properly.
 
-Some of these commands may result in slightly different results when you run them (compared to when I ran them, or what is in the paper), because I have been refactoring code, and sometimes that results in changes to the RNG calls, which means there may be different RNG for the run you use versus when I initially ran them. I have generally tried to update the quantitative results in the paper to be consistent with the current version of the codebase. Qualitative results may be more different depending on RNG.
+Some of these commands may result in slightly different results when you run them (compared to when I ran them, or what is in the paper), because I have been refactoring code, and sometimes that results in changes to the RNG calls, which means there may be different RNG for the run you use versus when I initially ran them (however, now that I take results over 5 seeds, this shouldn't result in too much of a difference for the quantitative results). I have generally tried to update the quantitative results in the paper to be consistent with the current version of the codebase. Qualitative results may be more different depending on RNG.
 
 ## Commands for Toxicity Threshold (Log Z Bounds) Experiments
 
-First run this command to collect a set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well: 
+First run this command to collect a set of exact posterior (target) distribution samples for evaluation. This command can take quite a while to run because of the difficulty in collecting samples satisfying the toxicity threshold. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well: 
 
 ```
 python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for_true_post 1000 --n_vocab 50257 --hface_model_type TinyStories --rm_type toxicity_threshold --seed 1 --threshold=-5. --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 100 --save_dir  /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/toxt
@@ -27,18 +27,18 @@ python do_training_and_log_Z_bounds.py --output_len 10 --n_samples_at_a_time_for
 Finally, in the plot_bounds.py file, navigate to the plot_type == "toxthresh" section, and replace the filenames with the saved ones. Also change load_dir in the file to wherever you saved the stuff. Then run python plot_bounds.py.
 
 ## General Notes on Workflow for Getting KL Divergence Estimates
-First start by optionally collecting exact samples for evaluation. Then, run the below commands for the desired learning method, making sure to specify --save_dir where you want files to be saved. After running the commands, you will have a bunch of files starting with "f_q_g_q_logZbestmidpoint_info" in the specified --save_dir. Change the load_dir = "./f_q_g_q_logZ_info" line in the plot_kl.py file to wherever these are saved, and then change load_prefixes_plasttok15_10 (or accordingly for the experiment setting) in the plot_kl.py file, and then add a line for make_combined_plot() based on the load_prefixes_plasttok15_10. Then run python plot_kl.py.
+First start by collecting exact samples for evaluation; this is not strictly necessary but helps provide consistency in evaluation, removing one source of randomness. Then, run the below commands for the desired learning method, making sure to specify --save_dir where you want files to be saved. Also change --seed for various runs; I use seeds of 0,1,2,3,4 throughout all experiments. After running the commands, you will have a bunch of files starting with "f_q_g_q_logZbestmidpoint_info" in the specified --save_dir. Change the load_dir = "./f_q_g_q_logZ_info" line in the get_kl_table.py file to wherever these are saved, and then change load_prefixes_plasttok15_10 (or accordingly for the experiment setting) in the get_kl_table.py file, and then add a line for make_table() based on the load_prefixes_plasttok15_10. Then run python get_kl_table.py.
 
 ## Commands for Toxicity Classifier Experiments (KL Divergence Evaluation)
 
 ### Collecting Exact Samples for Evaluation
-First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
 
 ```
 python do_training_and_log_Z_bounds.py --output_len 20 --n_twist 500 --n_samples_at_a_time_for_true_post 4000 --n_vocab 50257 --hface_model_type TinyStories --rm_type exp_beta_toxicity_class_logprob --seed 1 --beta_temp=1. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/post/toxc  --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
 ```
 
-Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names.
+Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names. Change also the --seed argument depending on your run.
 
 ### CTL
 ```
@@ -72,7 +72,7 @@ python test_ppo.py --epochs 11 --output_len 20 --exp_num_twist_updates --rm_type
 
 ## Toxicity Classifier Experiments Training on Exact Target (Posterior) Samples (Appendix Ablation)
 
-Workflow is similar for above. Modify load_prefixes_tox_truepost_comparison in the plot_kl.py file, as well as plot_names, twist_learn_method_names, proposal_names, and the make_combined_plot() call before running python plot_kl.py. 
+Workflow is similar for above. Modify load_prefixes_tox_truepost_comparison in the get_kl_table.py file, as well as the make_table() call before running python get_kl_table.py. 
 
 ### CTL
 ```
@@ -112,13 +112,13 @@ As in the opening comment/disclaimer, since I've changed the RNG in refactoring 
 ## Commands for Sentiment Classifier Experiments (KL Divergence Evaluation)
 
 ### Collecting Exact Samples for Evaluation
-First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. This is not strictly necessary but is helpful if you want to have a less noisy evaluation of KL divergence during training. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
 
 ```
 python do_training_and_log_Z_bounds.py --output_len 10 --n_twist 500 --n_samples_at_a_time_for_true_post 2000 --n_vocab 50257 --rm_type exp_beta_sentiment_class_logprob --seed 1 --beta_temp=1. --sentiment_class 1 --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/post/sent --hface_model_type gpt2medium --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
 ```
 
-Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names.
+Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names. Change also the --seed argument depending on your run.
 
 ### CTL
 ```
@@ -153,7 +153,7 @@ python test_ppo.py --epochs 11 --output_len 10 --exp_num_twist_updates --rm_type
 
 ## Sentiment Classifier Experiments Training on Exact Target (Posterior) Samples (Appendix Ablation)
 
-Workflow is similar for above. Modify load_prefixes_sent_truepost_comparison in the plot_kl.py file, as well as plot_names, twist_learn_method_names, proposal_names, and the make_combined_plot() call before running python plot_kl.py. 
+Workflow is similar for above. Modify load_prefixes_sent_truepost_comparison in the get_kl_table.py file, as well as the make_table() call before running python get_kl_table.py. 
 
 ### CTL
 ```
@@ -184,6 +184,16 @@ Replace --sentiment_class with 2,3,4,5 in the above for the other results.
 
 
 ## Commands for Infilling Experiments with T=15, c=10
+
+### Collecting Exact Samples for Evaluation
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
+
+```
+python do_training_and_log_Z_bounds.py --output_len 15 --n_samples_at_a_time_for_true_post 2000 --n_vocab 50257 --hface_model_type TinyStories --separate_hface_twist_model --hface_nn_twist --rm_type p_last_tokens --num_last_tokens_to_condition_on 10 --seed 1 --beta_temp=1. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/apr/post/infilling/15 --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
+```
+
+Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names. Change also the --seed argument depending on your run.
+
 
 ### CTL
 ```
@@ -227,6 +237,15 @@ python do_training_and_log_Z_bounds.py --output_len 15 --n_samples_at_a_time_for
 First, run the above commands for DPG, SIXO, and CTL, adding --ckpt_every 12. Then see the Infillling_Qualitative_Results.ipynb file, and replace the checkpoints in the notebook with the saved ones (if using Colab, I suggest saving checkpoints on Google Drive and mounting it, since directly uploading checkpoints takes forever).
 
 ## Commands for Infilling Experiments with T=2, c=1
+
+### Collecting Exact Samples for Evaluation
+First run the following to collect a constant set of exact posterior (target) distribution samples for evaluation. Change --save_dir to your desired directory (samples will be saved there), and change that in --load_dir_posterior_samples in the following learning procedures as well.
+
+```
+python do_training_and_log_Z_bounds.py --output_len 2 --n_samples_at_a_time_for_true_post 2000 --n_vocab 50257 --hface_model_type TinyStories --separate_hface_twist_model --hface_nn_twist --rm_type p_last_tokens --num_last_tokens_to_condition_on 1 --seed 0 --beta_temp=1. --save_dir /h/zhaostep/twisted-smc-lm/checkpoints/apr/infilling/2/post/infilling/2 --only_collect_true_posterior_samples --num_samples_if_only_collect_true_posterior_samples 2000
+```
+
+Use the name of the saved samples in the --load_prefix_posterior_samples command in the following, and change --load_dir_posterior_samples to match the previous --save_dir. Change those arguments below to your folder and file names. Change also the --seed argument depending on your run.
 
 ### CTL
 ```
