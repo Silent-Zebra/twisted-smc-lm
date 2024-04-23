@@ -14,7 +14,7 @@ from plot_utils import plot_with_conf_bounds
 load_prefixes_sent1_nnonly = [
     ["f_q_g_q_logZbestmidpoint_info_2024-04-22_01-34_seed0_ebm_one_sample_nsamples11",
     "f_q_g_q_logZbestmidpoint_info_2024-04-22_01-57_seed2_ebm_one_sample_nsamples11",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-22_01-57_seed2_ebm_one_sample_nsamples11", # TODO REPLACE
+    "f_q_g_q_logZbestmidpoint_info_2024-04-22_16-40_seed3_ebm_one_sample_nsamples11",
     "f_q_g_q_logZbestmidpoint_info_2024-04-22_01-48_seed1_ebm_one_sample_nsamples11",
     "f_q_g_q_logZbestmidpoint_info_2024-04-22_02-02_seed4_ebm_one_sample_nsamples11",
     ],
@@ -39,7 +39,7 @@ load_prefixes_sent1_nnonly = [
     ["f_q_g_q_logZbestmidpoint_info_2024-04-22_02-09_seed0_one_total_kl_partial_jit_nsamples11",
     "f_q_g_q_logZbestmidpoint_info_2024-04-22_02-09_seed3_one_total_kl_partial_jit_nsamples11",
     "f_q_g_q_logZbestmidpoint_info_2024-04-22_02-16_seed4_one_total_kl_partial_jit_nsamples11",
-    "f_q_g_q_logZbestmidpoint_info_2024-04-22_02-16_seed4_one_total_kl_partial_jit_nsamples11", # TODO REPLACE
+    "f_q_g_q_logZbestmidpoint_info_2024-04-22_17-25_seed1_one_total_kl_partial_jit_nsamples11",
     "f_q_g_q_logZbestmidpoint_info_2024-04-22_02-11_seed2_one_total_kl_partial_jit_nsamples11",
     ],
     ["f_q_g_q_estimates_2024-04-22_05-39_ppo_seed3_nsamples11",
@@ -219,8 +219,19 @@ proposal_names = [
 
 load_dir = "./f_q_g_q_logZ_info"
 
+
+
+color_list_for_f_q = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey', 'xkcd:light grey', 'xkcd:light brown']
+color_list_for_g_q = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkcd:purple', 'xkcd:black', 'xkcd:grey', 'xkcd:brown' ]
+
+
+
+
 def make_table(load_prefixes, twist_learn_method_names, proposal_names, fig_name_modifier, exact_num_epochs=None, legendsize=8):
     print(f"----------Making table for {fig_name_modifier}----------")
+
+    linestyle_list_for_f_q = ['solid'] * len(load_prefixes)
+    linestyle_list_for_g_q = ['dashed'] * len(load_prefixes)
 
     logZ_midpoint_estimates = []
     for i in range(len(load_prefixes)):
@@ -303,13 +314,14 @@ def make_table(load_prefixes, twist_learn_method_names, proposal_names, fig_name
 
     output_latex = []
     if exact_num_epochs is not None:
-        output_latex_names = []
-        output_latex_exact = []
-        # output_latex_approx_samewallclock = []
-        output_latex_approx_samesamples = []
-
+        # Do plotting
+        plt.clf()
+        plt.xlabel(f"Number of Gradient Updates")
+        plt.ylabel(f"KL Divergence")
 
     logZ_midpoint_estimate = logZ_midpoint_to_use
+
+
 
     for i in range(len(load_prefixes)):
 
@@ -373,6 +385,37 @@ def make_table(load_prefixes, twist_learn_method_names, proposal_names, fig_name
             f"{prop_and_twist} & ${last_avg_kl_q_sigma:.2f} \pm {conf_bound_q_sigma:.2f}$ & ${last_avg_kl_sigma_q:.2f} \pm {conf_bound_sigma_q:.2f}$ {tabularnewline} {midrule}")
 
 
+        # print(f_q_estimates.shape[0])
+        # print(g_q_estimates.shape[0])
+
+
+        if (exact_num_epochs is not None):
+            # DO the truepost comparison and plot it
+            x_range = np.arange(f_q_estimates.shape[-1])
+
+            plot_name = plot_names[i]
+
+            if i == 0:
+                xticks_range = np.arange(0, f_q_estimates.shape[-1], 2)
+                xticks_labels = 2 ** xticks_range
+                xticks_labels[0] = 0
+                plt.xticks(xticks_range, xticks_labels)
+
+            last_avg_kl_q_sigma, conf_bound_q_sigma = plot_with_conf_bounds(
+                logZ_midpoint_estimate - f_q_estimates, x_range,
+                label=f"{plot_name} " + r"$D_{KL} (q||\sigma)$",
+                # Best logZ meaning using the midpoint of the tightest LogZ bounds that we had.
+                color=color_list_for_f_q[i],
+                linestyle=linestyle_list_for_f_q[i],
+            )
+            last_avg_kl_sigma_q, conf_bound_sigma_q = plot_with_conf_bounds(
+                g_q_estimates - logZ_midpoint_estimate, x_range,
+                label=f"{plot_name} " + r"$D_{KL} (\sigma||q)$",
+                color=color_list_for_g_q[i],
+                linestyle=linestyle_list_for_g_q[i],
+            )
+
+
 
         if exact_num_epochs is not None:
             pass
@@ -398,8 +441,15 @@ def make_table(load_prefixes, twist_learn_method_names, proposal_names, fig_name
             #     output_latex_exact.append(
             #         f" & ${avg_kl_q_sigma:.2f} \pm {conf_bound_q_sigma:.2f}$ & ${avg_kl_sigma_q:.2f} \pm {conf_bound_sigma_q:.2f}$ {midrule}")
 
+    for x in output_latex:
+        print(x)
 
-    # if exact_num_epochs is not None:
+
+    if exact_num_epochs is not None:
+
+        plt.legend(prop={'size': legendsize})
+        plt.savefig(
+            f"./fig_kl_{fig_name_modifier}_{f_q_estimates.shape[-1]}.pdf")
     #     for i in range(len(output_latex_names)):
     #         print(output_latex_names[i])
     #         print(output_latex_exact[i])
@@ -413,15 +463,14 @@ def make_table(load_prefixes, twist_learn_method_names, proposal_names, fig_name
     #             print(r" \midrule")
     #
     # else:
-    for x in output_latex:
-        print(x)
 
 
-make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_04-22")
+
+# make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_04-22")
 # make_table(load_prefixes_sent1_nnonly, twist_learn_method_names, proposal_names, "sent1_nnonly_04-20")
 
-make_table(load_prefixes_plasttok15_10, twist_learn_method_names, proposal_names, "plast15_10_04-22")
-make_table(load_prefixes_plasttok2_1, twist_learn_method_names, proposal_names, "plast2_1_04-22")
+# make_table(load_prefixes_plasttok15_10, twist_learn_method_names, proposal_names, "plast15_10_04-22")
+# make_table(load_prefixes_plasttok2_1, twist_learn_method_names, proposal_names, "plast2_1_04-22")
 # NOTE THE FIG NAME MATTERS FOR INFILLING
 
 
@@ -446,5 +495,16 @@ proposal_names = [
     "DPG",
 ]
 
+plot_names = [
+    r"Twisted Proposal (Contrastive)",
+    r"Twisted Proposal (Contrastive, Exact $\sigma$)",
+    r"Twisted Proposal (RL)",
+    r"Twisted Proposal (RL, Exact $\sigma$)",
+    r"Twisted Proposal (SIXO)",
+    r"Twisted Proposal (SIXO, Exact $\sigma$)",
+    r"DPG Proposal",
+    r"DPG Proposal (Exact $\sigma$)",
+]
 
-# make_table(load_prefixes_tox_truepost_comparison, twist_learn_method_names, proposal_names, "toxc_truepost_04-22", exact_num_epochs=6, legendsize=6)
+
+make_table(load_prefixes_tox_truepost_comparison, twist_learn_method_names, proposal_names, "toxc_truepost_04-22", exact_num_epochs=6, legendsize=6)
