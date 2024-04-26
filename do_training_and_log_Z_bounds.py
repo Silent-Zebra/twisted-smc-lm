@@ -1920,7 +1920,6 @@ def do_inspection_and_plotting_of_test_info(
             output_len,
             n_samples_for_plots_larger,
             indices_of_continuation, tokenizer,
-
             proposal_is_p=proposal_is_p,
             huggingface_model=huggingface_model,
             params_proposal=params_proposal

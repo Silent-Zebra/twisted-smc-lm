@@ -8,9 +8,8 @@ import copy
 
 def plot_with_conf_bounds(record, x_range, label, z_score=1.96, **kwargs):
 
-    print("RECORD")
-    print(record.shape)
-
+    # print("RECORD")
+    # print(record.shape)
     avg = record.mean(axis=0)
 
     stdev = jnp.std(record, axis=0, ddof=1)
