@@ -1,3 +1,9 @@
+# Code for "Probabilistic Inference in Language Models via Twisted Sequential Monte Carlo"
+Paper link: [arxiv.org/abs/2404.17546](arxiv.org/abs/2404.17546)
+
+Twitter threads:
+- [Stephen](https://twitter.com/ZhaoStep/status/1785404707076247578)
+
 ## General Notes/Comments/Disclaimer
 
 I am planning on refactoring/improving functionality of various parts of the repo, which may result in changes to these commands (which hopefully make this codebase easier to use and run experiments with). As of April 22, 2024, the below commands should all run properly.
