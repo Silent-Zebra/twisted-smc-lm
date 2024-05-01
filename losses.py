@@ -46,20 +46,6 @@ def get_l_dre_sixo(rng_key, prompt, params_p, params_twist, log_true_final_twist
             normalized_w_t_sigma_samples = jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples))
 
     prompt_w_p_sample_s_1_to_t = stochastic_transformer_sample(sk2, params_p, prompt, output_len, n_twist, huggingface_model=huggingface_model)
-    # l_dre_old = 0.
-    #
-    # scan_over = jnp.arange(output_len)
-    #
-    # carry = (l_dre_old, prompt_w_sigma_sample_s_1_to_t, prompt_w_p_sample_s_1_to_t, params_twist, prompt_len, sk3)
-    #
-    # carry, _ = jax.lax.scan(partial(get_l_dre_sixo_scan_iter,
-    #                                  condition_twist_on_tokens=condition_twist_on_tokens,
-    #                                 token_of_interest_as_int=token_of_interest_as_int),
-    #                         carry, scan_over, output_len)
-    #
-    # l_dre_old, _, _, _, _, _ = carry
-    #
-    # l_dre_old /= output_len
 
     log_psi_on_truncated_sigma_samples = evaluate_log_psi_selected_tokens(
         prompt_w_sigma_sample_s_1_to_t, prompt_len, params_twist,
@@ -130,7 +116,6 @@ def get_l_ebm_ml_partial_jit(
             get_intermediate_sample_history_based_on_learned_twists=True,
 
             condition_twist_on_tokens=condition_twist_on_tokens,
-
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
             resample=False,
             # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
@@ -1231,15 +1216,7 @@ def get_l_rl_based_partial_jit(
 
     # print(values.shape) # shape is [batch, output_len]
     # print(target_term.shape) # shape is [batch, output_len]
-    # print(((jnp.exp(values) - jnp.exp(target_term)) ** 2).mean(axis=-1).shape)
     # print(log_w_t.shape) # shape is [batch, ]
-    # print(jax.lax.stop_gradient(log_w_t))
-
-    # print(normalized_log_w_t_on_samples)
-    # loss = jnp.dot(((values - target_term) ** 2).mean(axis=-1), normalized_log_w_t_on_samples)
-    # print(jax.lax.stop_gradient(loss))
-    # print(jax.lax.stop_gradient(((values - target_term) ** 2).mean()))
-    # 1/0
 
     if loss_type == "squared_error":
         # DO the exp version for squared error - this might help with stability with indicator func (avoid targeting really large negative value, when indicator is 0 everywhere)
@@ -1255,8 +1232,6 @@ def get_l_rl_based_partial_jit(
 
     else:
         raise NotImplementedError
-
-    # TODO afterwards: logsumexp or whatever the other RL formulation was.
 
     return loss
 
@@ -1321,10 +1296,6 @@ def get_l_combined_rl_onekl(rng_key, prompt, params_p, params_twist, log_true_fi
         normalized_p_psi_all_vocab_for_expectation = jax.nn.softmax(log_p_plus_log_psi_all_vocab_for_expectation, axis=-1)
         # normalized_p_psi_all_vocab_for_expectation is going to be the q values that we're taking the expectation over (the q(s_t | s_1:t-1))
 
-        # print((normalized_p_psi_all_vocab_for_expectation).shape)
-        # print((log_psi).shape)
-        # print(jax.lax.stop_gradient(normalized_p_psi_all_vocab_for_expectation.sum(axis=-1)))
-        # print(jax.lax.stop_gradient(normalized_p_psi_all_vocab_for_expectation))
 
         # print((normalized_p_psi_all_vocab_for_expectation * log_psi).shape) # has shape (batch, output_len, n_vocab)
 
@@ -1334,19 +1305,6 @@ def get_l_combined_rl_onekl(rng_key, prompt, params_p, params_twist, log_true_fi
     else:
         raise NotImplementedError
         # # TODO NOV 3 IF USING THIS, SHOULD TRY TO MAKE MORE EFFICIENT. But may as well just use the exact version.
-        # scan_over = jnp.arange(output_len)
-        # carry = (rng_key, params_p, params_twist, prompt_len)
-        # # Then the second part, we need to truncate the sigma samples to t-1, and then sample from the proposal q for the next time step, then those will be our negative samples
-        # carry, (new_seqs_array, log_psi_eval_of_new_seqs_array) = jax.lax.scan(
-        #     partial(
-        #         get_proposal_q_sample_in_scan_non_modify, original_seq=prompt_w_sigma_sample_s_1_to_t,
-        #          condition_twist_on_tokens=condition_twist_on_tokens,
-        #          proposal_is_p=proposal_is_p, huggingface_model=huggingface_model
-        #     ), carry, scan_over, output_len
-        # )
-        #
-        # log_psi_eval_of_new_seqs_array = jnp.transpose(log_psi_eval_of_new_seqs_array)
-        # l_kl_second_term = log_psi_eval_of_new_seqs_array
 
 
     l_kl_first_term = log_psi_on_truncated_sigma_samples # mean along the time dimension; we can debate if we want to use sum. Ultimately doesn't really matter because of the learning rate, is just a question of what's more convenient to avoid scaling lr with output_len. Mean means that the earlier twists get constant-ish scale of signal, but sum means the later twists get constant-ish scale of signal
@@ -1356,79 +1314,20 @@ def get_l_combined_rl_onekl(rng_key, prompt, params_p, params_twist, log_true_fi
     l_kl = -l_kl  # negative because now we have a loss
 
 
-    # TODO JAN 22
-    # TRY JUST SIGMA SAMPLES ON normalization consistency, since that's what we're training the One total KL on!
-    # The softmax term appears twice - once in RL loss and once in the Rob loss. Can we combine these somehow?
-    # Also, does this suggest perhaps that the stop grad is on the wrong thing?
-    # SHould I maybe do stop grad on the V on the previous time step instead of over the softmax? Because the softmax thing is what's being trained by Rob update!
-    # And if that works, should I also redo the RL update like that?
-    # Maybe I should have no stop grads anywhere???
-    # Geez... a lot to try here...
-
-
-    # # Use Q samples and sigma samples for RL
-    # # Get q samples with no resampling anywhere
-    # (_, _, _), _, (intermediate_twist_samples_hist,
-    #                intermediate_log_w_t_hist, _) = smc_procedure(
-    #     sk2, prompt, params_p, params_twist,
-    #     log_true_final_twist, output_len, n_twist,
-    #     smc_procedure_type=smc_procedure_type,
-    #     get_intermediate_sample_history_based_on_learned_twists=True,
-    #
-    #     condition_twist_on_tokens=condition_twist_on_tokens,
-    #
-    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-    #     resample=False, tempered_twist=tempered_twist, beta_prop=beta_prop
-    # )
-    # samples_to_evaluate_over = intermediate_twist_samples_hist[-1]
-    # print(samples_to_evaluate_over.shape)
-    # log_w_t = jnp.zeros((samples_to_evaluate_over.shape[
-    #     0]))  # Do this because with the no resample case, we already have samples from the q distribution, reweighting again would do nothing, just increase variance/redundancy in samples
-    #
-    # normalized_log_w_t_on_samples = jax.nn.softmax(
-    #     jax.lax.stop_gradient(log_w_t))
-    #
-    #
-    # assert append_sigma_samples # Add the sigma samples to our data/batch we're training on
     assert true_sigma_samples is not None
     samples_to_evaluate_over = true_sigma_samples
-    # samples_to_evaluate_over = jnp.concatenate(
-    #     (samples_to_evaluate_over, true_sigma_samples), axis=0)
-    # if condition_twist_on_tokens is not None:
-    #     condition_twist_on_tokens = jnp.concatenate((condition_twist_on_tokens, condition_twist_on_tokens), axis=0)
-    # print("Appending sigma samples")
-    # print(samples_to_evaluate_over.shape)
-    # print(condition_twist_on_tokens.shape)
 
     log_w_t_sigma_samples = jnp.zeros((true_sigma_samples.shape[0]))
     normalized_log_w_t_on_sigma_samples = jax.nn.softmax(
         jax.lax.stop_gradient(log_w_t_sigma_samples))
 
-    # normalized_log_w_t_on_samples = jnp.concatenate((normalized_log_w_t_on_samples, normalized_log_w_t_on_sigma_samples), axis=0)
-    # The above is basically summing up the gradient on both sets of samples. If we want an average... once crude way is just halve the learning rate.
 
-
-    # p_logits, log_psi = \
-    #     get_p_logits_and_log_psi_all_vocab(samples_to_evaluate_over, params_p,
-    #                                        params_twist,
-    #
-    #
-    #                                        condition_twist_on_tokens,
-    #
-    #                                        huggingface_model=huggingface_model)
     log_psi = log_psi_all_vocab[:, prompt_len:]
 
     log_p = jax.nn.log_softmax(p_logits,
                                axis=-1)  # gives you the normalized p values, since the regular output is the unnormalized log p values
     log_p = log_p[:, prompt_len:]
 
-    # log_p = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
-    # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
-    # log_p_plus_log_psi_all_vocab_for_expectation = jax.lax.stop_gradient(
-    #     log_p + log_psi)  # stop gradient, no gradient on this
-    # # p_psi_all_vocab_for_expectation = jnp.exp(log_p_plus_log_psi_all_vocab_for_expectation)
-    # normalized_p_psi_all_vocab_for_expectation = jax.nn.softmax(
-    #     log_p_plus_log_psi_all_vocab_for_expectation, axis=-1)
 
     target_term = jax.nn.logsumexp((log_p + log_psi),
                                    axis=-1)  # first we get log(p psi), then we do exp, so we have p psi (psi = e^V), then we sum all the (p psi), then we log again. Therefore logsumexp. We use axis = -1 because we want to preserve the different values across different time steps. Essentially doing all the different time steps in one go
@@ -1477,8 +1376,6 @@ def get_l_combined_rl_onekl(rng_key, prompt, params_p, params_twist, log_true_fi
                            - jnp.expm1( 2 * logmeanexp( target_term - values, axis=0) )).mean()
         assert true_sigma_samples is not None # Above outer mean only works if equal weights
         rl_loss = variance
-        # rl_loss = jnp.dot((((jnp.exp(values - target_term)) - 1) ** 2).mean(axis=-1),
-        #                   normalized_log_w_t_on_sigma_samples)
     else:
         raise NotImplementedError
 
@@ -1532,11 +1429,6 @@ def get_l_combined_sixo_onekl(rng_key, prompt, params_p, params_twist, log_true_
         # p_psi_all_vocab_for_expectation = jnp.exp(log_p_plus_log_psi_all_vocab_for_expectation)
         normalized_p_psi_all_vocab_for_expectation = jax.nn.softmax(log_p_plus_log_psi_all_vocab_for_expectation, axis=-1)
         # normalized_p_psi_all_vocab_for_expectation is going to be the q values that we're taking the expectation over (the q(s_t | s_1:t-1))
-
-        # print((normalized_p_psi_all_vocab_for_expectation).shape)
-        # print((log_psi).shape)
-        # print(jax.lax.stop_gradient(normalized_p_psi_all_vocab_for_expectation.sum(axis=-1)))
-        # print(jax.lax.stop_gradient(normalized_p_psi_all_vocab_for_expectation))
 
         # print((normalized_p_psi_all_vocab_for_expectation * log_psi).shape) # has shape (batch, output_len, n_vocab)
 
@@ -1601,11 +1493,6 @@ def get_l_bce(
     evaluate_over_samples_from="p", huggingface_model=None, tempered_twist=False, beta_prop=None,
     true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None, log_prob_class=None, params_proposal=None
 ):
-    # prompt_len = prompt.shape[-1]
-    #
-    # rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
-    #
-    # log_phi_final_eval = None
 
     assert true_sigma_samples is not None # Not really true_sigma_samples, just the samples we run this loss on.
 
@@ -1802,12 +1689,6 @@ def get_l_ebm_ml_combined_objective_partial_jit(
     if condition_twist_on_tokens is not None:
         raise NotImplementedError  # Use the vmap version of ebm if using conditioning tokens
 
-    # if condition_twist_on_tokens is not None and len(condition_twist_on_tokens.shape) == 1:
-    #     # print(condition_twist_on_tokens.shape)
-    #     condition_twist_on_tokens = jnp.full(
-    #         (n_twist, condition_twist_on_tokens.shape[-1]), condition_twist_on_tokens
-    #     )
-
     prompt_len = prompt.shape[-1]
 
     rng_key, sk1, sk2, sk3 = jax.random.split(rng_key, 4)
@@ -1854,9 +1735,6 @@ def get_l_ebm_ml_combined_objective_partial_jit(
 
     l_ebm_new = -(jnp.dot(log_psi_on_truncated_proposal_samples.mean(axis=-1),
                           normalized_w_t_sigma_samples) - ebm_second_term)
-
-
-
 
     prompt_w_sigma_sample_s_1_to_t = proposal_samples
 

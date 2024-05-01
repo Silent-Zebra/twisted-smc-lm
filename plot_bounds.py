@@ -61,7 +61,11 @@ elif plot_type == "toxthresh":
     load_pref_p_32_512_ess = "logZ_bounds_pproposal_2024-02-12_23-43_seed1_ebm_one_sample_nsamples1_1"
     load_pref_p_128_2048_ess = "logZ_bounds_pproposal_2024-02-12_23-52_seed1_ebm_one_sample_nsamples1_2"
 
-    figname = f"./fig_bounds_with_ess_toxt_-5_04-03.pdf"
+    plot_ess = True
+    # figname = f"./fig_bounds_with_ess_toxt_-5_04-03.pdf"
+
+    plot_ess = False
+    figname = f"./fig_bounds_no_ess_toxt_-5_04-03.pdf"
     # figname = f"./fig_bounds_toxt_-5_03-24.pdf"
 
 
@@ -304,19 +308,21 @@ else:
     )
 
     if plot_type == "toxthresh":
-        last, conf_bound = plot_with_conf_bounds(
-            p_smc_ubs_ess[:, start_from:], x_range, label=f"SMC ESS UB ($p_0$ Proposal)",
-            color=color_list_for_ubs[4],
-            linestyle=linestyle_list_for_ubs[4],
-        )
+        plt.ylim([-36, 1])
 
-        last, conf_bound = plot_with_conf_bounds(
-            p_smc_lbs_ess[:, start_from:], x_range, label=f"SMC ESS LB ($p_0$ Proposal)",
-            color=color_list_for_lbs[4],
-            linestyle=linestyle_list_for_lbs[4],
-        )
+        if plot_ess:
+            last, conf_bound = plot_with_conf_bounds(
+                p_smc_ubs_ess[:, start_from:], x_range, label=f"SMC ESS UB ($p_0$ Proposal)",
+                color=color_list_for_ubs[4],
+                linestyle=linestyle_list_for_ubs[4],
+            )
 
-        plt.ylim([-35, 1])
+            last, conf_bound = plot_with_conf_bounds(
+                p_smc_lbs_ess[:, start_from:], x_range, label=f"SMC ESS LB ($p_0$ Proposal)",
+                color=color_list_for_lbs[4],
+                linestyle=linestyle_list_for_lbs[4],
+            )
+
 
 plt.xticks(xticks_range, xticks_labels)
 
