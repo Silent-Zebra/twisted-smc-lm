@@ -62,10 +62,10 @@ elif plot_type == "toxthresh":
     load_pref_p_128_2048_ess = "logZ_bounds_pproposal_2024-02-12_23-52_seed1_ebm_one_sample_nsamples1_2"
 
     plot_ess = True
-    # figname = f"./fig_bounds_with_ess_toxt_-5_04-03.pdf"
+    figname = f"./fig_bounds_with_ess_toxt_-5_04-03.pdf"
 
-    plot_ess = False
-    figname = f"./fig_bounds_no_ess_toxt_-5_04-03.pdf"
+    # plot_ess = False
+    # figname = f"./fig_bounds_no_ess_toxt_-5_04-03.pdf"
     # figname = f"./fig_bounds_toxt_-5_03-24.pdf"
 
 
