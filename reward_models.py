@@ -36,14 +36,13 @@ def reward_model_log_p_of_token(seq, params_p, index_of_fixed_token, huggingface
         seq = seq.reshape(-1, seq.shape[-1])
 
     seq = jnp.concatenate((seq, jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + index_of_fixed_token), axis=1)
-    # print(seq.shape)
 
     log_prob_of_fixed_token = evaluate_log_p_theta_t(seq, params_p, huggingface_model=huggingface_model)
 
     if do_reshape:
         print(log_prob_of_fixed_token.shape)
         print(log_prob_of_fixed_token.reshape(original_shape[0], original_shape[1]).reshape)
-        1/0
+        raise NotImplementedError # Not tested
         return log_prob_of_fixed_token.reshape(original_shape[0], original_shape[1])
 
     return log_prob_of_fixed_token
@@ -63,9 +62,6 @@ def log_reward_model_p_of_continuation(
     do_reshape = False
     if len(seq.shape) == 3:
         raise NotImplementedError
-        # original_shape = seq.shape
-        # do_reshape = True
-        # seq = seq.reshape(-1, seq.shape[-1])
 
     original_seq_len_incl_prompt = seq.shape[-1]
 
@@ -73,7 +69,6 @@ def log_reward_model_p_of_continuation(
     batch_continuation = jnp.full((seq.shape[0], jnp_continuation.shape[-1]), jnp_continuation)
 
     seq = jnp.concatenate((seq, batch_continuation), axis=1)
-    # print(seq.shape)
 
     if divide_by_p:
         assert prompt_len is not None
@@ -83,9 +78,6 @@ def log_reward_model_p_of_continuation(
             seq, prompt_len, params_p, huggingface_model=huggingface_model)
         log_prob_of_continuation = log_p[:, -jnp_continuation.shape[-1]:]
         log_p_output_tokens = log_p[:, :-jnp_continuation.shape[-1]]
-
-        # print(log_p.shape)
-        # print(log_prob_of_continuation.shape)
 
         return beta_temp * log_prob_of_continuation.sum(axis=-1) - log_p_output_tokens.sum(axis=-1) # e^(beta r) / p. Log of that is just beta r - log p where r = log p(continuation). Then when you do sigma = p phi, you get sigma = p e^(beta r) / p = e^(beta r)
 
@@ -173,9 +165,6 @@ def get_toxicity_score(tokens, rewardModel):
 def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
     if len(seq.shape) == 3:
         raise NotImplementedError
-        # original_shape = seq.shape
-        # do_reshape = True
-        # seq = seq.reshape(-1, seq.shape[-1])
 
     seq = jax.lax.stop_gradient(seq)
     text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
@@ -397,7 +386,6 @@ def build_exp_beta_twists(
     for jnp_prompt in jnp_prompts:
         log_true_final_twist = curried_log_true_final_twist_function(rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index)
         log_true_final_twists.append(log_true_final_twist)
-        # prompt_len = jnp.prompt.shape[-1]
 
         if get_true_posterior_samples:
             assert beta_temp == 1.
@@ -486,22 +474,12 @@ def build_log_sentclass_cond_twists(
             print(log_true_final_twist(posterior_samples, classes))
             print(log_true_final_twist(posterior_samples[:10], classes[:10]))
             if tokenizer is not None:
-                # text_outputs = tokenizer.batch_decode(
-                #     p_samples,
-                #     skip_special_tokens=True)
-                # print(text_outputs)
                 text_outputs = tokenizer.batch_decode(posterior_samples[:10],
                                                       skip_special_tokens=True)
                 print(text_outputs)
 
-            # token = ordered_token_list[i]
-            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
-            # assert extracted_true_posterior_samples.shape[0] != 0
-
             true_posterior_samples_by_prompt.append(
                 posterior_samples)
-
-    # print(true_posterior_samples_by_prompt_and_by_token)
 
     return rng_key, log_true_final_twists, true_posterior_samples_by_prompt
 
@@ -534,8 +512,6 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, params_p, indices_of_co
                                                           huggingface_model=huggingface_model)
 
                 check_satisfies_posterior = (batch_check_array_contained_in_other_array(p_samples[:, prompt_len + output_len:], indices_of_continuation) == 1)
-                # print(check_satisfies_posterior)
-                # print(p_samples[check_satisfies_posterior])
 
                 posterior_samples = p_samples[check_satisfies_posterior][:, :prompt_len + output_len]
 
@@ -557,14 +533,8 @@ def build_p_of_continuation_twists(rng_key, jnp_prompts, params_p, indices_of_co
                                                       skip_special_tokens=True)
                 print(text_outputs)
 
-            # token = ordered_token_list[i]
-            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
-            # assert extracted_true_posterior_samples.shape[0] != 0
-
             true_posterior_samples_by_prompt.append(
                 posterior_samples)
-
-    # print(true_posterior_samples_by_prompt_and_by_token)
 
     return log_true_final_twists, true_posterior_samples_by_prompt
 
@@ -581,7 +551,6 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, params_p, continuation_l
 
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
-    # true_posterior_samples_condition_on_tokens_by_prompt = []
 
     for jnp_prompt in jnp_prompts:
         prompt_len = jnp_prompt.shape[-1]
@@ -599,7 +568,6 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, params_p, continuation_l
                                                       huggingface_model=huggingface_model)
 
             posterior_samples_w_condition_tokens = p_samples
-            # posterior_samples = posterior_samples_w_condition_tokens
             posterior_samples = p_samples[:, :prompt_len + output_len]
             posterior_samples_condition_on_tokens = p_samples[:, prompt_len + output_len:]
 
@@ -613,22 +581,12 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, params_p, continuation_l
             print(log_true_final_twist(posterior_samples, posterior_samples_condition_on_tokens))
             print(log_true_final_twist(posterior_samples[:10], posterior_samples_condition_on_tokens[:10]))
             if tokenizer is not None:
-                # text_outputs = tokenizer.batch_decode(
-                #     p_samples,
-                #     skip_special_tokens=True)
-                # print(text_outputs)
                 text_outputs = tokenizer.batch_decode(posterior_samples_w_condition_tokens[:10],
                                                       skip_special_tokens=True)
                 print(text_outputs)
 
-            # token = ordered_token_list[i]
-            # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
-            # assert extracted_true_posterior_samples.shape[0] != 0
-
             true_posterior_samples_by_prompt.append(
                 posterior_samples_w_condition_tokens)
-
-    # print(true_posterior_samples_by_prompt_and_by_token)
 
     return log_true_final_twists, true_posterior_samples_by_prompt
 
@@ -642,11 +600,9 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, params_p, output_len, 
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
     for jnp_prompt in jnp_prompts:
-        # prompt_len = jnp_prompt.shape[-1]
 
         curried_rm = curried_log_toxicity_threshold(rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
         log_true_final_twist = curried_rm
-        # log_true_final_twist = reward_model_toxicity_threshold_w_callback(curried_rm)
 
         log_true_final_twists.append(log_true_final_twist)
 
@@ -661,15 +617,8 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, params_p, output_len, 
                                                           output_len, n_samples_at_a_time,
                                                           huggingface_model=huggingface_model)
 
-                # print(batch_check_array_contained_in_other_array(true_posterior_samples, indices_of_continuation))
-
-                # posterior_samples_satisfying_threshold = p_samples[
-                #     (log_true_final_twist(p_samples))]
-
                 posterior_samples_satisfying_threshold = p_samples[
                     reward_model_toxicity_threshold(p_samples, rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold)]
-
-
 
                 num_samples_satisfying_threshold = posterior_samples_satisfying_threshold.shape[0]
                 print("NUM samples", flush=True)
@@ -687,13 +636,8 @@ def build_toxicity_threshold_twists(rng_key, jnp_prompts, params_p, output_len, 
                                                   skip_special_tokens=True)
             print(text_outputs)
 
-        # token = ordered_token_list[i]
-        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
-        # assert extracted_true_posterior_samples.shape[0] != 0
-
         true_posterior_samples_by_prompt.append(posterior_samples_satisfying_threshold)
 
-    # print(true_posterior_samples_by_prompt_and_by_token)
 
     return log_true_final_twists, true_posterior_samples_by_prompt
 
@@ -704,7 +648,6 @@ def build_sentiment_threshold_twists(rng_key, jnp_prompts, params_p, output_len,
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
     for jnp_prompt in jnp_prompts:
-        # prompt_len = jnp_prompt.shape[-1]
         posterior_samples_satisfying_threshold = None
 
         curried_rm = curried_log_sentiment_threshold(rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
@@ -720,11 +663,6 @@ def build_sentiment_threshold_twists(rng_key, jnp_prompts, params_p, output_len,
                 p_samples = stochastic_transformer_sample(sk, params_p, jnp_prompt,
                                                           output_len, n_samples_at_a_time,
                                                           huggingface_model=huggingface_model)
-
-                # print(batch_check_array_contained_in_other_array(true_posterior_samples, indices_of_continuation))
-
-                # posterior_samples_satisfying_threshold = p_samples[
-                #     (log_true_final_twist(p_samples))]
 
                 posterior_samples_satisfying_threshold = p_samples[
                     reward_model_sentiment_threshold(p_samples, rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold)]
@@ -747,13 +685,8 @@ def build_sentiment_threshold_twists(rng_key, jnp_prompts, params_p, output_len,
                                                   skip_special_tokens=True)
             print(text_outputs)
 
-        # token = ordered_token_list[i]
-        # extracted_true_posterior_samples = posterior_samples_containing_continuation[:, :-len(indices_of_continuation)]
-        # assert extracted_true_posterior_samples.shape[0] != 0
-
         true_posterior_samples_by_prompt.append(posterior_samples_satisfying_threshold)
 
-    # print(true_posterior_samples_by_prompt_and_by_token)
 
     return log_true_final_twists, true_posterior_samples_by_prompt
 
