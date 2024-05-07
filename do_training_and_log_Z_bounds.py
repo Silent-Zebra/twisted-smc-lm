@@ -528,9 +528,10 @@ class ExperimentConfig:
                                                       n_twist,
                                                       huggingface_model=huggingface_model)
 
+            print("P samples shape")
             print(p_samples.shape)
             assert p_samples.shape[0] % 2 == 0 # even number of samples
-            1/0
+
             half_n_samples = p_samples.shape[0] // 2
 
             p_samples_1 = p_samples[:half_n_samples]
@@ -538,13 +539,13 @@ class ExperimentConfig:
 
             stacked_p_samples = jnp.stack((p_samples_1, p_samples_2), axis=-1)
 
-            samples_to_evaluate_over = p_samples
-
             log_true_final_twist_eval_1 = log_true_final_twist(p_samples_1)
             log_true_final_twist_eval_2 = log_true_final_twist(p_samples_2)
 
             probs = jnp.stack((log_true_final_twist_eval_1, log_true_final_twist_eval_2), axis=-1)
 
+            print(stacked_p_samples)
+            print(probs)
             print(probs.shape)
             1/0
             rng_key, sk = jax.random.split(rng_key)
