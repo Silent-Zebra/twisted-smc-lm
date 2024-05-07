@@ -520,54 +520,75 @@ class ExperimentConfig:
             return rng_key, grad_params_twist
 
         elif "dpo" in self.twist_learn_type:
-            if self.rm_type in ["p_last_tokens", "sent_cond_twist" ]:
+            if self.rm_type in ["p_last_tokens", ]:
+                rng_key, sk, sk2 = jax.random.split(rng_key, 3)
+                p_samples = stochastic_transformer_sample(sk,
+                                                          params_p, prompt,
+                                                          output_len + self.num_last_tokens_to_condition_on,
+                                                          n_twist // 2,
+                                                          huggingface_model=huggingface_model)
+
+                true_sigma_samples = p_samples[:,
+                                     :-self.num_last_tokens_to_condition_on]
+                condition_twist_on_tokens = p_samples[:,
+                                            -self.num_last_tokens_to_condition_on:]
+
+                p_samples_independent = stochastic_transformer_sample(sk2,
+                                                          params_p, prompt,
+                                                          output_len,
+                                                          n_twist // 2,
+                                                          huggingface_model=huggingface_model)
+                preferred_seqs = true_sigma_samples
+                dispreferred_seqs = p_samples_independent
+
+            elif self.rm_type in ["sent_cond_twist" ]:
                 raise NotImplementedError
 
-            rng_key, sk, = jax.random.split(rng_key)
+            else:
+                rng_key, sk, = jax.random.split(rng_key)
 
-            p_samples = stochastic_transformer_sample(sk,
-                                                      params_p, prompt,
-                                                      output_len,
-                                                      n_twist,
-                                                      huggingface_model=huggingface_model)
+                p_samples = stochastic_transformer_sample(sk,
+                                                          params_p, prompt,
+                                                          output_len,
+                                                          n_twist,
+                                                          huggingface_model=huggingface_model)
 
-            # print("P samples shape")
-            # print(p_samples.shape)
-            assert p_samples.shape[0] % 2 == 0 # even number of samples
+                # print("P samples shape")
+                # print(p_samples.shape)
+                assert p_samples.shape[0] % 2 == 0 # even number of samples
 
-            half_n_samples = p_samples.shape[0] // 2
+                half_n_samples = p_samples.shape[0] // 2
 
-            p_samples_1 = p_samples[:half_n_samples]
-            p_samples_2 = p_samples[half_n_samples:]
+                p_samples_1 = p_samples[:half_n_samples]
+                p_samples_2 = p_samples[half_n_samples:]
 
-            stacked_p_samples = jnp.stack((p_samples_1, p_samples_2), axis=-1)
+                stacked_p_samples = jnp.stack((p_samples_1, p_samples_2), axis=-1)
 
-            log_true_final_twist_eval_1 = log_true_final_twist(p_samples_1)
-            log_true_final_twist_eval_2 = log_true_final_twist(p_samples_2)
+                log_true_final_twist_eval_1 = log_true_final_twist(p_samples_1)
+                log_true_final_twist_eval_2 = log_true_final_twist(p_samples_2)
 
-            # IMPORTANT: we are going to use 1 exp on the below, because the Bradley Terry model assumes we pick according to e^r
-            prob_logits = jnp.exp(jnp.stack((log_true_final_twist_eval_1, log_true_final_twist_eval_2), axis=-1))
-            # We only use one exp and not two, because passing into categorical, jax expects a log already
-            # Once jax applies the softmax on r, then we get exactly the samples from the Bradley Terry model
+                # IMPORTANT: we are going to use 1 exp on the below, because the Bradley Terry model assumes we pick according to e^r
+                prob_logits = jnp.exp(jnp.stack((log_true_final_twist_eval_1, log_true_final_twist_eval_2), axis=-1))
+                # We only use one exp and not two, because passing into categorical, jax expects a log already
+                # Once jax applies the softmax on r, then we get exactly the samples from the Bradley Terry model
 
-            # print(stacked_p_samples)
-            # print(stacked_p_samples.shape)
-            # print(prob_logits)
-            # print(prob_logits.shape)
+                # print(stacked_p_samples)
+                # print(stacked_p_samples.shape)
+                # print(prob_logits)
+                # print(prob_logits.shape)
 
-            rng_key, sk = jax.random.split(rng_key)
+                rng_key, sk = jax.random.split(rng_key)
 
-            preferred_indices = jax.random.categorical(sk, prob_logits, axis=-1)
+                preferred_indices = jax.random.categorical(sk, prob_logits, axis=-1)
 
-            preferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, preferred_indices]
-            dispreferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, 1 - preferred_indices]
+                preferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, preferred_indices]
+                dispreferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, 1 - preferred_indices]
 
-            # print(preferred_indices)
-            # print(preferred_seqs)
-            # print(dispreferred_seqs)
-            # print(preferred_seqs.shape)
+                # print(preferred_indices)
+                # print(preferred_seqs)
+                # print(dispreferred_seqs)
+                # print(preferred_seqs.shape)
 
-            rng_key, sk = jax.random.split(rng_key)
             grad_params_twist = self.dre_grad_fn(
                 sk, prompt, params_p,
                 params_twist, log_true_final_twist, output_len,
