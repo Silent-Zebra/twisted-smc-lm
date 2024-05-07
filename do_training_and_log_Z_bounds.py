@@ -528,8 +528,8 @@ class ExperimentConfig:
                                                       n_twist,
                                                       huggingface_model=huggingface_model)
 
-            print("P samples shape")
-            print(p_samples.shape)
+            # print("P samples shape")
+            # print(p_samples.shape)
             assert p_samples.shape[0] % 2 == 0 # even number of samples
 
             half_n_samples = p_samples.shape[0] // 2
@@ -547,9 +547,10 @@ class ExperimentConfig:
             # We only use one exp and not two, because passing into categorical, jax expects a log already
             # Once jax applies the softmax on r, then we get exactly the samples from the Bradley Terry model
 
-            print(stacked_p_samples.shape)
-            print(prob_logits)
-            print(prob_logits.shape)
+            # print(stacked_p_samples)
+            # print(stacked_p_samples.shape)
+            # print(prob_logits)
+            # print(prob_logits.shape)
 
             rng_key, sk = jax.random.split(rng_key)
 
@@ -558,11 +559,10 @@ class ExperimentConfig:
             preferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, preferred_indices]
             dispreferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, 1 - preferred_indices]
 
-            print(preferred_indices)
-            print(preferred_seqs)
-            print(dispreferred_seqs)
-            print(preferred_seqs.shape)
-            1/0
+            # print(preferred_indices)
+            # print(preferred_seqs)
+            # print(dispreferred_seqs)
+            # print(preferred_seqs.shape)
 
             rng_key, sk = jax.random.split(rng_key)
             grad_params_twist = self.dre_grad_fn(

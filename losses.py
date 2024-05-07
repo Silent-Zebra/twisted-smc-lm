@@ -1554,9 +1554,6 @@ def get_l_seq_dpo(
 
     loss = - (V_pos - (1 / (sg_exp_V_pos + sg_exp_V_neg)) * (sg_exp_V_pos * V_pos + sg_exp_V_neg * V_neg))
 
-    print(loss.shape)
-    1/0
-
     return loss.mean()
 
 
