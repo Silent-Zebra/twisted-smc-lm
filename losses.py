@@ -1518,6 +1518,48 @@ def get_l_bce(
     return loss.mean()
 
 
+@partial(jax.jit, static_argnames=[
+    "log_true_final_twist", "output_len", "n_twist",
+    "smc_procedure_type", "rm_type",  "proposal_is_p",
+    "beta_temp", "evaluate_over_samples_from", "huggingface_model",  "tempered_twist", "beta_prop",
+])
+def get_l_seq_dpo(
+    rng_key, prompt, params_p, params_twist, log_true_final_twist,
+    output_len, n_twist, condition_twist_on_tokens,
+    smc_procedure_type, rm_type, beta_temp=1., proposal_is_p=False,
+    evaluate_over_samples_from="p", huggingface_model=None, tempered_twist=False, beta_prop=None,
+    true_sigma_samples=None, replay_buffer=None, replay_buffer_log_w_ts=None, log_prob_class=None, params_proposal=None,
+    positive_samples=None, negative_samples=None,
+):
+
+    assert positive_samples is not None
+    assert negative_samples is not None
+
+    log_psi_on_pos_samples = evaluate_log_psi_selected_tokens(
+        positive_samples, prompt.shape[-1],
+        params_twist,
+        condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
+    log_psi_on_neg_samples = evaluate_log_psi_selected_tokens(
+        negative_samples, prompt.shape[-1],
+        params_twist,
+        condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, params_p=params_p)
+
+    V_pos = 1 / beta_temp * log_psi_on_pos_samples
+    V_neg = 1 / beta_temp * log_psi_on_neg_samples
+
+    sg_exp_V_pos = jnp.exp(jax.lax.stop_gradient(V_pos))
+    sg_exp_V_neg = jnp.exp(jax.lax.stop_gradient(V_neg))
+
+    loss = - (V_pos - (1 / (sg_exp_V_pos + sg_exp_V_neg)) * (sg_exp_V_pos * V_pos + sg_exp_V_neg * V_neg))
+
+    print(loss.shape)
+    1/0
+
+    return loss.mean()
+
+
 # Correct version
 @partial(jax.jit, static_argnames=[
     "log_true_final_twist", "output_len", "n_twist",

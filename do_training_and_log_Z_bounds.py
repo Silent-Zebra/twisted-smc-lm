@@ -292,6 +292,8 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_bce_p_sigma, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
         elif "bce" in self.twist_learn_type: # in ["bce_p", "bce_q"]:
             dre_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
+        elif self.twist_learn_type == "seq_dpo":
+            dre_grad_fn = jax.grad(partial(get_l_seq_dpo, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
         else:
             raise NotImplementedError
         return dre_grad_fn
@@ -514,6 +516,62 @@ class ExperimentConfig:
                 replay_buffer=replay_buffer,
                 replay_buffer_log_w_ts=replay_buffer_log_w_ts, log_prob_class=log_prob_class,
                 params_proposal=params_proposal
+            )
+            return rng_key, grad_params_twist
+
+        elif "dpo" in self.twist_learn_type:
+            rng_key, sk, = jax.random.split(rng_key)
+
+            p_samples = stochastic_transformer_sample(sk,
+                                                      params_p, prompt,
+                                                      output_len,
+                                                      n_twist,
+                                                      huggingface_model=huggingface_model)
+
+            print(p_samples.shape)
+            assert p_samples.shape[0] % 2 == 0 # even number of samples
+            1/0
+            half_n_samples = p_samples.shape[0] // 2
+
+            p_samples_1 = p_samples[:half_n_samples]
+            p_samples_2 = p_samples[half_n_samples:]
+
+            stacked_p_samples = jnp.stack((p_samples_1, p_samples_2), axis=-1)
+
+            samples_to_evaluate_over = p_samples
+
+            log_true_final_twist_eval_1 = log_true_final_twist(p_samples_1)
+            log_true_final_twist_eval_2 = log_true_final_twist(p_samples_2)
+
+            probs = jnp.stack((log_true_final_twist_eval_1, log_true_final_twist_eval_2), axis=-1)
+
+            print(probs.shape)
+            1/0
+            rng_key, sk = jax.random.split(rng_key)
+
+            preferred_indices = jax.random.categorical(sk, probs, axis=-1)
+
+            preferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), preferred_indices]
+            dispreferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), 1 - preferred_indices]
+
+            print(preferred_seqs)
+            print(dispreferred_seqs)
+            1/0
+
+            rng_key, sk = jax.random.split(rng_key)
+            grad_params_twist = self.dre_grad_fn(
+                sk, prompt, params_p,
+                params_twist, log_true_final_twist, output_len,
+                n_twist, smc_procedure_type=self.smc_procedure_type,
+                condition_twist_on_tokens=condition_twist_on_tokens,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                replay_buffer=replay_buffer,
+                replay_buffer_log_w_ts=replay_buffer_log_w_ts,
+                params_proposal=params_proposal,
+                positive_samples=preferred_seqs,
+                negative_samples=dispreferred_seqs
             )
             return rng_key, grad_params_twist
 
@@ -2432,7 +2490,7 @@ if __name__ == "__main__":
             "rl_q_lsq_nostopgrad", "rl_q_lsq_partial_jit_nostopgrad", "rl_qrsmp_lsq", "rl_q_multistep", "rl_q_multistep_partial_jit",
             "rl_sigma_lsq", "rl_mixed_p_q_lsq", "rl_mixed_p_q_lsq_partial_jit", "rl_mc", "rl_mc_partial_jit",
             "sixo", "sixo_mixed_p_q", "sixo_mixed_p_q_partial_jit", "sixo_partial_jit",
-            "bce_p", "bce_sigma", "bce_psigma",
+            "bce_p", "bce_sigma", "bce_psigma", "seq_dpo"
             # "bce_q", "bce_qsigma", Don't use these, not principled. Should need p for t+1:T anyways, regardless of the prefix
         ]
     )
