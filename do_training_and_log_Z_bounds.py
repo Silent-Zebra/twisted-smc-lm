@@ -520,6 +520,9 @@ class ExperimentConfig:
             return rng_key, grad_params_twist
 
         elif "dpo" in self.twist_learn_type:
+            if self.rm_type in ["p_last_tokens", "sent_cond_twist" ]:
+                raise NotImplementedError
+
             rng_key, sk, = jax.random.split(rng_key)
 
             p_samples = stochastic_transformer_sample(sk,
