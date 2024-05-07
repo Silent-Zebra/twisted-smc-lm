@@ -1518,11 +1518,11 @@ def get_l_bce(
     return loss.mean()
 
 
-@partial(jax.jit, static_argnames=[
-    "log_true_final_twist", "output_len", "n_twist",
-    "smc_procedure_type", "rm_type",  "proposal_is_p",
-    "beta_temp", "evaluate_over_samples_from", "huggingface_model",  "tempered_twist", "beta_prop",
-])
+# @partial(jax.jit, static_argnames=[
+#     "log_true_final_twist", "output_len", "n_twist",
+#     "smc_procedure_type", "rm_type",  "proposal_is_p",
+#     "beta_temp", "evaluate_over_samples_from", "huggingface_model",  "tempered_twist", "beta_prop",
+# ])
 def get_l_seq_dpo(
     rng_key, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_twist, condition_twist_on_tokens,
@@ -1552,7 +1552,8 @@ def get_l_seq_dpo(
     sg_exp_V_pos = jnp.exp(jax.lax.stop_gradient(V_pos))
     sg_exp_V_neg = jnp.exp(jax.lax.stop_gradient(V_neg))
 
-    loss = - (V_pos - (1 / (sg_exp_V_pos + sg_exp_V_neg)) * (sg_exp_V_pos * V_pos + sg_exp_V_neg * V_neg))
+    # loss = - (V_pos - (1 / (sg_exp_V_pos + sg_exp_V_neg)) * (sg_exp_V_pos * V_pos + sg_exp_V_neg * V_neg))
+    loss = - (sg_exp_V_neg / (sg_exp_V_pos + sg_exp_V_neg)) * (V_pos - V_neg)
 
     return loss.mean()
 
