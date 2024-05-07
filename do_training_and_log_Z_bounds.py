@@ -542,21 +542,26 @@ class ExperimentConfig:
             log_true_final_twist_eval_1 = log_true_final_twist(p_samples_1)
             log_true_final_twist_eval_2 = log_true_final_twist(p_samples_2)
 
-            probs = jnp.stack((log_true_final_twist_eval_1, log_true_final_twist_eval_2), axis=-1)
+            # IMPORTANT: we are going to use 1 exp on the below, because the Bradley Terry model assumes we pick according to e^r
+            prob_logits = jnp.exp(jnp.stack((log_true_final_twist_eval_1, log_true_final_twist_eval_2), axis=-1))
+            # We only use one exp and not two, because passing into categorical, jax expects a log already
+            # Once jax applies the softmax on r, then we get exactly the samples from the Bradley Terry model
 
-            print(stacked_p_samples)
-            print(probs)
-            print(probs.shape)
-            1/0
+            print(stacked_p_samples.shape)
+            print(prob_logits)
+            print(prob_logits.shape)
+
             rng_key, sk = jax.random.split(rng_key)
 
-            preferred_indices = jax.random.categorical(sk, probs, axis=-1)
+            preferred_indices = jax.random.categorical(sk, prob_logits, axis=-1)
 
-            preferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), preferred_indices]
-            dispreferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), 1 - preferred_indices]
+            preferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, preferred_indices]
+            dispreferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, 1 - preferred_indices]
 
+            print(preferred_indices)
             print(preferred_seqs)
             print(dispreferred_seqs)
+            print(preferred_seqs.shape)
             1/0
 
             rng_key, sk = jax.random.split(rng_key)
