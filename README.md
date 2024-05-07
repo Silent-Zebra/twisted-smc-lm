@@ -3,6 +3,9 @@ Paper link: [arxiv.org/abs/2404.17546](arxiv.org/abs/2404.17546)
 
 Twitter threads:
 - [Stephen](https://twitter.com/ZhaoStep/status/1785404707076247578)
+- [Rob](https://twitter.com/brekelmaniac/status/1785648823202676984)
+- [Alireza](https://twitter.com/AliMakhzani/status/1785409236568076557)
+- [Roger](https://twitter.com/RogerGrosse/status/1785415600946459120)
 
 ## General Notes/Comments/Disclaimer
 
