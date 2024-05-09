@@ -1549,11 +1549,13 @@ def get_l_seq_dpo(
     V_pos = 1 / beta_temp * log_psi_on_pos_samples
     V_neg = 1 / beta_temp * log_psi_on_neg_samples
 
-    sg_exp_V_pos = jnp.exp(jax.lax.stop_gradient(V_pos))
-    sg_exp_V_neg = jnp.exp(jax.lax.stop_gradient(V_neg))
+    # sg_exp_V_pos = jnp.exp(jax.lax.stop_gradient(V_pos))
+    # sg_exp_V_neg = jnp.exp(jax.lax.stop_gradient(V_neg))
 
+    # All equivalent mathematical formulations, but the first is probably worse from a numerical precision standpoint
     # loss = - (V_pos - (1 / (sg_exp_V_pos + sg_exp_V_neg)) * (sg_exp_V_pos * V_pos + sg_exp_V_neg * V_neg))
-    loss = - (sg_exp_V_neg / (sg_exp_V_pos + sg_exp_V_neg)) * (V_pos - V_neg)
+    # loss = - (sg_exp_V_neg / (sg_exp_V_pos + sg_exp_V_neg)) * (V_pos - V_neg)
+    loss = - (jax.nn.sigmoid(jax.lax.stop_gradient(V_neg - V_pos))) * (V_pos - V_neg)
 
     return loss.mean()
 

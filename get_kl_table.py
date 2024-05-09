@@ -48,7 +48,14 @@ load_prefixes_toxc = [
      "f_q_g_q_estimates_2024-04-22_22-29_ppo_seed1_nsamples11",
      "f_q_g_q_estimates_2024-04-22_17-53_ppo_seed2_nsamples11",
      "f_q_g_q_estimates_2024-04-21_08-37_ppo_seed0_nsamples11",
-     "f_q_g_q_estimates_2024-04-22_16-35_ppo_seed3_nsamples11",]
+     "f_q_g_q_estimates_2024-04-22_16-35_ppo_seed3_nsamples11",
+    ],
+    ["f_q_g_q_logZbestmidpoint_info_2024-05-08_05-40_seed0_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_05-45_seed1_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_06-00_seed4_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_05-50_seed3_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_05-45_seed2_seq_dpo_nsamples11",
+    ],
 ]
 
 load_prefixes_sent1_nnonly = [
@@ -87,7 +94,14 @@ load_prefixes_sent1_nnonly = [
      "f_q_g_q_estimates_2024-04-22_14-57_ppo_seed4_nsamples11",
      "f_q_g_q_estimates_2024-04-22_14-54_ppo_seed0_nsamples11",
      "f_q_g_q_estimates_2024-04-23_10-29_ppo_seed1_nsamples11",
-    ]
+    ],
+    [
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_04-34_seed2_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_04-38_seed1_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_02-51_seed0_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_05-11_seed4_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_04-42_seed3_seq_dpo_nsamples11",
+    ],
 ]
 
 load_prefixes_plasttok15_10 = [
@@ -126,7 +140,13 @@ load_prefixes_plasttok15_10 = [
     "f_q_g_q_estimates_2024-04-22_20-51_ppo_seed2_nsamples11",
     "f_q_g_q_estimates_2024-04-22_20-34_ppo_seed0_nsamples11",
     "f_q_g_q_estimates_2024-04-22_20-46_ppo_seed3_nsamples11",
-    ]
+    ],
+    ["f_q_g_q_logZbestmidpoint_info_2024-05-08_07-07_seed4_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_03-39_seed2_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_03-15_seed0_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_03-44_seed3_seq_dpo_nsamples11",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_03-20_seed1_seq_dpo_nsamples11",
+    ],
 ]
 
 load_prefixes_plasttok2_1 = [
@@ -165,6 +185,12 @@ load_prefixes_plasttok2_1 = [
     "f_q_g_q_estimates_2024-04-22_19-11_ppo_seed1_nsamples13",
     "f_q_g_q_estimates_2024-04-22_20-56_ppo_seed3_nsamples13",
     "f_q_g_q_estimates_2024-04-22_21-00_ppo_seed2_nsamples13",
+    ],
+    ["f_q_g_q_logZbestmidpoint_info_2024-05-08_02-44_seed3_seq_dpo_nsamples13",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_02-47_seed4_seq_dpo_nsamples13",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-07_21-23_seed0_seq_dpo_nsamples13",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_02-45_seed1_seq_dpo_nsamples13",
+    "f_q_g_q_logZbestmidpoint_info_2024-05-08_02-50_seed2_seq_dpo_nsamples13",
     ]
 ]
 load_prefixes_tox_truepost_comparison = [
@@ -241,6 +267,7 @@ twist_learn_method_names = [
     "FUDGE",
     "--",
     "--",
+    "Seq-DPO",
 ]
 
 proposal_names = [
@@ -250,6 +277,7 @@ proposal_names = [
     "Twisted",
     "DPG",
     "PPO",
+    "Twisted",
 ]
 
 
@@ -327,7 +355,7 @@ def make_table(load_prefixes, twist_learn_method_names, proposal_names, fig_name
         proposal_name = proposal_names[i]
 
         midrule = " \midrule"
-        if (i == 3 and exact_num_epochs is None):
+        if (exact_num_epochs is None) and (i == 3 or i == 5):
             midrule = " \midrule \midrule"
         elif i == len(load_prefixes) - 1:
             midrule = ""
@@ -507,5 +535,5 @@ plot_names = [
 ]
 
 
-make_table(load_prefixes_tox_truepost_comparison, twist_learn_method_names, proposal_names, "toxc_truepost_04-22", exact_num_epochs=6, legendsize=6)
-make_table(load_prefixes_sent_truepost_comparison, twist_learn_method_names, proposal_names, "sent_truepost_04-22", exact_num_epochs=9, legendsize=6)
+# make_table(load_prefixes_tox_truepost_comparison, twist_learn_method_names, proposal_names, "toxc_truepost_04-22", exact_num_epochs=6, legendsize=6)
+# make_table(load_prefixes_sent_truepost_comparison, twist_learn_method_names, proposal_names, "sent_truepost_04-22", exact_num_epochs=9, legendsize=6)
