@@ -99,7 +99,9 @@ class ExperimentConfig:
         self.num_last_tokens_to_condition_on = num_last_tokens_to_condition_on
 
 
-        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob", "sentiment_threshold", "exp_beta_sentiment_class_logprob", "sent_cond_twist"]:
+        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob",
+                            "sentiment_threshold", "exp_beta_sentiment_class_logprob",
+                            "exp_beta_sentiment_class_logprob_4_or_5", "sent_cond_twist"]:
             self.smc_procedure_type = "partial_jit"
         else:
             self.smc_procedure_type = "jit"
@@ -113,7 +115,8 @@ class ExperimentConfig:
         standard_argnum = 3 # For the params_twist argument
 
         get_l_ebm_fn = get_l_ebm_ml_jit
-        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob", "sentiment_threshold", "exp_beta_sentiment_class_logprob", "sent_cond_twist"]:
+        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob", "sentiment_threshold",
+                            "exp_beta_sentiment_class_logprob", "exp_beta_sentiment_class_logprob_4_or_5", "sent_cond_twist"]:
             get_l_ebm_fn = get_l_ebm_ml_partial_jit
 
         if self.twist_learn_type == "ebm_old":
@@ -545,49 +548,9 @@ class ExperimentConfig:
                 raise NotImplementedError
 
             else:
-                rng_key, sk, = jax.random.split(rng_key)
-
-                p_samples = stochastic_transformer_sample(sk,
-                                                          params_p, prompt,
-                                                          output_len,
-                                                          n_twist,
-                                                          huggingface_model=huggingface_model)
-
-                # print("P samples shape")
-                # print(p_samples.shape)
-                assert p_samples.shape[0] % 2 == 0 # even number of samples
-
-                half_n_samples = p_samples.shape[0] // 2
-
-                p_samples_1 = p_samples[:half_n_samples]
-                p_samples_2 = p_samples[half_n_samples:]
-
-                stacked_p_samples = jnp.stack((p_samples_1, p_samples_2), axis=-1)
-
-                log_true_final_twist_eval_1 = log_true_final_twist(p_samples_1)
-                log_true_final_twist_eval_2 = log_true_final_twist(p_samples_2)
-
-                # IMPORTANT: we are going to use 1 exp on the below, because the Bradley Terry model assumes we pick according to e^r
-                prob_logits = jnp.exp(jnp.stack((log_true_final_twist_eval_1, log_true_final_twist_eval_2), axis=-1))
-                # We only use one exp and not two, because passing into categorical, jax expects a log already
-                # Once jax applies the softmax on r, then we get exactly the samples from the Bradley Terry model
-
-                # print(stacked_p_samples)
-                # print(stacked_p_samples.shape)
-                # print(prob_logits)
-                # print(prob_logits.shape)
-
-                rng_key, sk = jax.random.split(rng_key)
-
-                preferred_indices = jax.random.categorical(sk, prob_logits, axis=-1)
-
-                preferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, preferred_indices]
-                dispreferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :, 1 - preferred_indices]
-
-                # print(preferred_indices)
-                # print(preferred_seqs)
-                # print(dispreferred_seqs)
-                # print(preferred_seqs.shape)
+                rng_key, sk, preferred_seqs, dispreferred_seqs = self.get_pref_data(
+                    huggingface_model, log_true_final_twist, n_twist,
+                    output_len, params_p, prompt, rng_key)
 
             grad_params_twist = self.dre_grad_fn(
                 sk, prompt, params_p,
@@ -654,6 +617,44 @@ class ExperimentConfig:
         )
         return rng_key, grad_params_twist
 
+    def get_pref_data(self, huggingface_model, log_true_final_twist, n_twist,
+                      output_len, params_p, prompt, rng_key):
+        rng_key, sk, = jax.random.split(rng_key)
+        p_samples = stochastic_transformer_sample(sk,
+                                                  params_p, prompt,
+                                                  output_len,
+                                                  n_twist,
+                                                  huggingface_model=huggingface_model)
+        # print("P samples shape")
+        # print(p_samples.shape)
+        assert p_samples.shape[0] % 2 == 0  # even number of samples
+        half_n_samples = p_samples.shape[0] // 2
+        p_samples_1 = p_samples[:half_n_samples]
+        p_samples_2 = p_samples[half_n_samples:]
+        stacked_p_samples = jnp.stack((p_samples_1, p_samples_2), axis=-1)
+        log_true_final_twist_eval_1 = log_true_final_twist(p_samples_1)
+        log_true_final_twist_eval_2 = log_true_final_twist(p_samples_2)
+        # IMPORTANT: we are going to use 1 exp on the below, because the Bradley Terry model assumes we pick according to e^r
+        prob_logits = jnp.exp(jnp.stack(
+            (log_true_final_twist_eval_1, log_true_final_twist_eval_2),
+            axis=-1))
+        # We only use one exp and not two, because passing into categorical, jax expects a log already
+        # Once jax applies the softmax on r, then we get exactly the samples from the Bradley Terry model
+        # print(stacked_p_samples)
+        # print(stacked_p_samples.shape)
+        # print(prob_logits)
+        # print(prob_logits.shape)
+        rng_key, sk = jax.random.split(rng_key)
+        preferred_indices = jax.random.categorical(sk, prob_logits, axis=-1)
+        preferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :,
+                         preferred_indices]
+        dispreferred_seqs = stacked_p_samples[jnp.arange(half_n_samples), :,
+                            1 - preferred_indices]
+        # print(preferred_indices)
+        # print(preferred_seqs)
+        # print(dispreferred_seqs)
+        # print(preferred_seqs.shape)
+        return rng_key, sk, preferred_seqs, dispreferred_seqs
 
     # @partial(jax.jit, static_argnames=[
     #     "self", "n_twist", "output_len",
@@ -720,7 +721,7 @@ class ExperimentConfig:
 
         if args.rm_type in ["toxicity_threshold", "sentiment_threshold",
                             "p_continuation", "hard_p_continuation",
-                            "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"]:
+                            "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob", "exp_beta_sentiment_class_logprob_4_or_5"]:
             true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
                 prompt_num]
 
@@ -803,7 +804,7 @@ class ExperimentConfig:
             "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
             "p_continuation", "hard_p_continuation",
             "exp_beta_toxicity_class_logprob",
-            "exp_beta_sentiment_class_logprob",
+            "exp_beta_sentiment_class_logprob", "exp_beta_sentiment_class_logprob_4_or_5",
             "toxicity_threshold", "sentiment_threshold"
         ]: # TODO consider set up a set of final twist classes, sort them into classes, and then do if/else/switch based on those
 
@@ -1072,6 +1073,17 @@ class ExperimentConfig:
             if self.beta_temp != 1:
                 get_true_posterior_samples = False
             curried_log_true_final_twist_function = curried_log_exp_beta_sentiment_class_logprob
+            rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token = \
+                build_exp_beta_twists(
+                    rng_key, params_p, output_len, n_samples_at_a_time, huggingface_model,
+                    curried_log_true_final_twist_function, jnp_prompts, rewardModel,
+                    tokenizer_RM, tokenizer, self.beta_temp, self.sentiment_class_zero_index, get_true_posterior_samples, singledimlogit=False
+                )
+
+        elif rm_type == "exp_beta_sentiment_class_logprob_4_or_5":
+            if self.beta_temp != 1:
+                get_true_posterior_samples = False
+            curried_log_true_final_twist_function = curried_log_exp_beta_sentiment_class_logprob_4_or_5
             rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token = \
                 build_exp_beta_twists(
                     rng_key, params_p, output_len, n_samples_at_a_time, huggingface_model,
@@ -1623,12 +1635,50 @@ def collect_true_posterior_samples(
     return rng_key, combined_true_posterior_samples
 
 
+def collect_pref_data(
+    rng_key, experiment_cfg, prompt, params_p,
+    output_len, n_samples_at_a_time, huggingface_model,
+    log_true_final_twist,
+    num_samples_if_only_collect_pref_data
+):
+    new_start = time.time()
+    enough_samples = False
+    combined_preferred_seqs = None
+    combined_dispreferred_seqs = None
+
+    while not enough_samples:
+        rng_key, sk, preferred_seqs, dispreferred_seqs = experiment_cfg.get_pref_data(
+            huggingface_model, log_true_final_twist, n_samples_at_a_time,
+            output_len, params_p, prompt, rng_key)
+
+        if combined_preferred_seqs is None:
+            combined_preferred_seqs = preferred_seqs
+            combined_dispreferred_seqs = dispreferred_seqs
+        else:
+            combined_preferred_seqs = jnp.concatenate((combined_preferred_seqs, preferred_seqs))
+            combined_dispreferred_seqs = jnp.concatenate((combined_dispreferred_seqs, dispreferred_seqs))
+
+        enough_samples = True
+        if combined_preferred_seqs.shape[0] < num_samples_if_only_collect_pref_data:
+            enough_samples = False
+
+        print(f"TIME: {time.time() - new_start}", flush=True)
+
+    print(combined_preferred_seqs.shape)
+    if combined_preferred_seqs.shape[0] > num_samples_if_only_collect_pref_data:
+        combined_preferred_seqs = combined_preferred_seqs[:num_samples_if_only_collect_pref_data]
+        combined_dispreferred_seqs = combined_dispreferred_seqs[:num_samples_if_only_collect_pref_data]
+        print("reduce to n true post samples size")
+        print(combined_preferred_seqs.shape)
+
+    return rng_key, combined_preferred_seqs, combined_dispreferred_seqs
+
 def get_tokenizer_and_rewardModel(rm_type):
     if rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob"]:
         model_name = "nicholasKluge/ToxicityModel"
     elif rm_type == "sentiment_threshold":
         model_name = "m-aamir95/finetuning-sentiment-classification-model-with-amazon-appliances-data"
-    elif rm_type in ["exp_beta_sentiment_class_logprob", "sent_cond_twist"]:
+    elif rm_type in ["exp_beta_sentiment_class_logprob", "exp_beta_sentiment_class_logprob_4_or_5", "sent_cond_twist"]:
         model_name = "LiYuan/amazon-review-sentiment-analysis"
     else:
         return None, None # e.g. for stuff like infilling where you don't need a separate reward model
@@ -1669,7 +1719,7 @@ def get_jnp_prompts(hface_model_type, rm_type, tokenizer):
         elif rm_type in ["p_last_tokens"]:
             prompts = ["How can I steal from a store"]
         elif rm_type in ["sentiment_threshold",
-                         "exp_beta_sentiment_class_logprob", "sent_cond_twist"]:
+                         "exp_beta_sentiment_class_logprob", "exp_beta_sentiment_class_logprob_4_or_5", "sent_cond_twist"]:
             prompts = [
                 "I bought this"
                 # "This product is"
@@ -1897,7 +1947,7 @@ def setup_cfg(
     load_posterior_samples=False, load_prefix_posterior_samples=None,
     sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
-    output_p_psi=False, separate_proposal_and_twist=False
+    output_p_psi=False, separate_proposal_and_twist=False, only_collect_pref_data=False, num_samples_if_only_collect_pref_data=100
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1953,6 +2003,8 @@ def setup_cfg(
         )
         return combined_true_posterior_samples
 
+
+
     if separate_proposal_and_twist:
         assert load_ckpt # must load the proposal, as we are not training it.
 
@@ -1972,6 +2024,17 @@ def setup_cfg(
         tokenizer_RM, tokenizer, threshold, pos_threshold,
         load_dir_posterior_samples, load_prefix_posterior_samples
     )
+
+    if only_collect_pref_data:
+        print(jnp_prompts.shape)
+        assert jnp_prompts.shape[0] == 1 # not yet done for multiple prompts
+        rng_key, combined_preferred_seqs, combined_dispreferred_seqs = collect_pref_data(
+            rng_key, experiment_cfg, jnp_prompts[0], params_p,
+            output_len, n_samples_at_a_time, huggingface_model,
+            log_true_final_twists[0],
+            num_samples_if_only_collect_pref_data
+        )
+        return tokenizer, combined_preferred_seqs, combined_dispreferred_seqs
 
     print("Finished building final twists and getting posterior samples", flush=True)
     print(f"TIME: {time.time()}", flush=True)
@@ -2317,6 +2380,7 @@ def main():
     }
 
     if args.only_collect_true_posterior_samples:
+        assert not args.only_collect_pref_data # Can't do both at the same time
         setup_args["only_collect_true_posterior_samples"] = True
         setup_args["num_samples_if_only_collect_true_posterior_samples"] = args.num_samples_if_only_collect_true_posterior_samples
         setup_args["load_posterior_samples"] = False
@@ -2327,6 +2391,21 @@ def main():
                                     target=(true_posterior_samples_by_prompt,),
                                     step=true_posterior_samples_by_prompt[0].shape[0],
                                     prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_nsamples")
+        raise SystemExit(0) # Finished
+    elif args.only_collect_pref_data:
+        setup_args["only_collect_pref_data"] = True
+        setup_args["num_samples_if_only_collect_pref_data"] = args.num_samples_if_only_collect_pref_data
+        setup_args["load_posterior_samples"] = False
+
+        tokenizer, combined_preferred_seqs, combined_dispreferred_seqs = setup_cfg(**setup_args)
+
+        print(tokenizer.batch_decode(combined_preferred_seqs, skip_special_tokens=True))
+        print(tokenizer.batch_decode(combined_dispreferred_seqs, skip_special_tokens=True))
+
+        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
+                                    target=(combined_preferred_seqs, combined_dispreferred_seqs),
+                                    step=combined_preferred_seqs.shape[0],
+                                    prefix=f"pref_data_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_nsamples")
         raise SystemExit(0) # Finished
 
     experiment_cfg, rng_key, huggingface_model, params_p, \
@@ -2375,7 +2454,7 @@ def main():
                     true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
                 else:
                     true_posterior_samples_by_token = None
-            elif args.rm_type in ["exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"] and true_posterior_samples_by_prompt_and_by_token: # check len(true_posterior_samples_by_prompt_and_by_token) != 0, ie it is not an empty list
+            elif args.rm_type in ["exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob", "exp_beta_sentiment_class_logprob_4_or_5"] and true_posterior_samples_by_prompt_and_by_token: # check len(true_posterior_samples_by_prompt_and_by_token) != 0, ie it is not an empty list
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
@@ -2537,6 +2616,7 @@ if __name__ == "__main__":
                                  "p_continuation", "hard_p_continuation",
                                  "exp_beta_toxicity_class_logprob",
                                  "exp_beta_sentiment_class_logprob",
+                                 "exp_beta_sentiment_class_logprob_4_or_5",
                                  "sent_cond_twist",
                                  "toxicity_threshold", "sentiment_threshold",
                                  "p_last_tokens"])
@@ -2595,6 +2675,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--only_collect_true_posterior_samples", action="store_true", help="Don't do any training. Just get a bunch of true posterior samples")
     parser.add_argument("--num_samples_if_only_collect_true_posterior_samples", type=int, default=100, help="How many true posterior samples to get IF USING THE only_collect_true_posterior_samples flag ")
+
+    parser.add_argument("--only_collect_pref_data", action="store_true", help="Don't do any training. Just get a bunch of pairwise samples along with the preferred among those pairs")
+    parser.add_argument("--num_samples_if_only_collect_pref_data", type=int, default=100, help="How many samples (this number for each of preferred and dispreferred) to get IF USING THE only_collect_pref_data flag ")
 
     parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. Basically only for debug/testing. In general, don't use this flag.")
 

@@ -226,8 +226,63 @@ def log_exp_beta_toxicity_class_logprob(
 
     return log_prob_of_class * beta_temp # in the phi = e^(beta r) formulation (here r = log p(c|s)), the log phi is going to be just beta * r
 
+
+def get_sentiment_class_prob(tokens, sentimentClassifier, class_num, varying_class_num=False):
+    classification_logits = sentimentClassifier(**tokens)[0]
+    classification_probs = jax.nn.softmax(classification_logits, axis=-1)
+    if varying_class_num:
+        print("class prob")
+        print(classification_probs)
+        print(classification_probs.shape)
+        print(class_num)
+        print(class_num.shape)
+        class_prob = classification_probs[jnp.arange(classification_probs.shape[0]), class_num]
+        print(class_prob)
+    else:
+        class_prob = classification_probs[:, class_num]
+    return class_prob
+
+
+def get_sentiment_class_prob_4_or_5(tokens, sentimentClassifier, class_num, varying_class_num):
+    classification_logits = sentimentClassifier(**tokens)[0]
+    classification_probs = jax.nn.softmax(classification_logits, axis=-1)
+
+    class_prob_4 = classification_probs[:, 3]
+    class_prob_5 = classification_probs[:, 4]
+
+    class_prob_4_or_5 = class_prob_4 + class_prob_5
+
+    return class_prob_4_or_5
+
+
+def reward_model_sentiment_class_prob(seq, sentimentClassifier, tokenizer_RM, tokenizer, class_num, varying_class_num=False,
+                                      sentiment_class_prob_fn=get_sentiment_class_prob):
+    if len(seq.shape) == 3:
+        raise NotImplementedError
+
+    text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
+    tokens = tokenizer_RM(text_outputs,
+                          truncation=True,
+                          padding=True,
+                          max_length=512,
+                          return_token_type_ids=False,
+                          return_tensors="np",
+                          return_attention_mask=True)
+
+    class_prob = sentiment_class_prob_fn(tokens, sentimentClassifier, class_num, varying_class_num)
+
+    return class_prob
+
+def reward_model_sentiment_class_prob_4_or_5(seq, sentimentClassifier, tokenizer_RM, tokenizer, class_num, varying_class_num):
+    return reward_model_sentiment_class_prob(seq, sentimentClassifier, tokenizer_RM,
+                                      tokenizer, class_num,
+                                      varying_class_num=False,
+                                      sentiment_class_prob_fn=get_sentiment_class_prob_4_or_5)
+
+
+
 def log_exp_beta_sentiment_class_logprob(
-    seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, varying_class_num=False
+    seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num, varying_class_num=False, reward_model_sentiment_class_prob_fn=reward_model_sentiment_class_prob
 ):
     # Here what we're going to do is set r = log p(c | s) where c is 1,2,3,4,5 (number of stars)
     # Then we have phi = e^(beta r) = e^(beta log p(c|s))
@@ -236,7 +291,7 @@ def log_exp_beta_sentiment_class_logprob(
     # What about when beta = -1? We get phi = 1/e^(log p(c|s)) = 1/p(c|s). We're sort of then applying a modifier to the base model p(s) such that we reduce the probability in accordance with p(c|s), that is, the more likely a string s is to be of class c, the more we reduce its probability - essentially high positive beta approaches sampling the most likely string that matches class c, while very negative beta approaches sampling the string LEAST likely to be of class c. Not necessarily the one most likely to be of any other class (except in the binary classifier case).
     # Anyway, with phi = e^(beta log p(c|s)), then log phi = beta log p(c|s)
 
-    class_prob = reward_model_sentiment_class_prob(seq, rewardModel, tokenizer_RM, tokenizer, class_num, varying_class_num)
+    class_prob = reward_model_sentiment_class_prob_fn(seq, rewardModel, tokenizer_RM, tokenizer, class_num, varying_class_num)
     log_prob_of_class = jnp.log(class_prob)
     return log_prob_of_class * beta_temp
 
@@ -255,6 +310,15 @@ def curried_log_exp_beta_sentiment_class_logprob(rewardModel, tokenizer_RM, toke
     def new_rm(seq):
         return log_exp_beta_sentiment_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index, varying_class_num=False)
     return new_rm
+
+def curried_log_exp_beta_sentiment_class_logprob_4_or_5(rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index):
+    def new_rm(seq):
+        return log_exp_beta_sentiment_class_logprob(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp, class_num_zero_index,
+                                                    varying_class_num=False, reward_model_sentiment_class_prob_fn=reward_model_sentiment_class_prob_4_or_5)
+    return new_rm
+
+
+
 
 def curried_log_sentclass_cond(rewardModel, tokenizer_RM, tokenizer, beta_temp):
     assert beta_temp == 1
@@ -292,39 +356,8 @@ def get_sentiment_score(tokens, rewardModel):
 
 
 
-def get_sentiment_class_prob(tokens, sentimentClassifier, class_num, varying_class_num=False):
-    classification_logits = sentimentClassifier(**tokens)[0]
-    classification_probs = jax.nn.softmax(classification_logits, axis=-1)
-    if varying_class_num:
-        print("class prob")
-        print(classification_probs)
-        print(classification_probs.shape)
-        print(class_num)
-        print(class_num.shape)
-        class_prob = classification_probs[jnp.arange(classification_probs.shape[0]), class_num]
-        print(class_prob)
-    else:
-        class_prob = classification_probs[:, class_num]
-    return class_prob
 
 
-
-def reward_model_sentiment_class_prob(seq, sentimentClassifier, tokenizer_RM, tokenizer, class_num, varying_class_num=False):
-    if len(seq.shape) == 3:
-        raise NotImplementedError
-
-    text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
-    tokens = tokenizer_RM(text_outputs,
-                          truncation=True,
-                          padding=True,
-                          max_length=512,
-                          return_token_type_ids=False,
-                          return_tensors="np",
-                          return_attention_mask=True)
-
-    class_prob = get_sentiment_class_prob(tokens, sentimentClassifier, class_num, varying_class_num)
-
-    return class_prob
 
 
 
