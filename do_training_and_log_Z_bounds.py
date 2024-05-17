@@ -1796,35 +1796,34 @@ def get_final_twists_and_posterior_samples(
     )
 
     if load_posterior_samples:
-        x = checkpoints.restore_checkpoint(ckpt_dir=load_dir_posterior_samples, target=None, prefix=load_prefix_posterior_samples)
-        # print(x['0']['0'].shape)
-        # print(list(x['0'].values()))
-        true_posterior_samples_by_prompt_and_by_token = list(x['0'].values())
-        print(true_posterior_samples_by_prompt_and_by_token[0])
-        text_outputs = tokenizer.batch_decode(true_posterior_samples_by_prompt_and_by_token[0],
-                                        skip_special_tokens=True)
-        for x in set(text_outputs):
-            print(x)
-        print(len(set(text_outputs)))
+        true_posterior_samples_by_prompt_and_by_token = do_load_posterior_samples(
+            load_dir_posterior_samples, load_prefix_posterior_samples,
+            tokenizer)
 
     return rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token
 
 
+def do_load_posterior_samples(load_dir_posterior_samples,
+                              load_prefix_posterior_samples, tokenizer,
+                              ):
+    x = checkpoints.restore_checkpoint(ckpt_dir=load_dir_posterior_samples,
+                                       target=None,
+                                       prefix=load_prefix_posterior_samples)
+    # print(x['0']['0'].shape)
+    # print(list(x['0'].values()))
+    true_posterior_samples_by_prompt_and_by_token = list(x['0'].values())
+    print(true_posterior_samples_by_prompt_and_by_token[0])
+    text_outputs = tokenizer.batch_decode(
+        true_posterior_samples_by_prompt_and_by_token[0],
+        skip_special_tokens=True)
+    for x in set(text_outputs):
+        print(x)
+    print(len(set(text_outputs)))
+    return true_posterior_samples_by_prompt_and_by_token
+
+
 def get_model_config_and_conditional_twist_settings(hface_model_type, rm_type):
-    from_pt = False
-    if hface_model_type == "distilgpt2":
-        model_config = "distilgpt2"
-    elif hface_model_type == "gpt2small":
-        model_config = "gpt2"
-    elif hface_model_type == "gpt2medium":
-        model_config = 'gpt2-medium'
-    elif hface_model_type == "gpt2large":
-        model_config = 'gpt2-large'
-    elif hface_model_type == "TinyStories":
-        model_config = "roneneldan/TinyStories-33M"
-        from_pt = True
-    else:
-        raise NotImplementedError
+    from_pt, model_config = get_model_config(hface_model_type)
 
     one_hot_dim = 0
 
@@ -1836,6 +1835,24 @@ def get_model_config_and_conditional_twist_settings(hface_model_type, rm_type):
         one_hot_dim = 5
 
     return model_config, from_pt, conditional_twist_type, one_hot_dim
+
+
+def get_model_config(hface_model_type):
+    from_pt = False
+    if hface_model_type == "distilgpt2":
+        model_config = 'distilgpt2'
+    elif hface_model_type == "gpt2small":
+        model_config = 'gpt2'
+    elif hface_model_type == "gpt2medium":
+        model_config = 'gpt2-medium'
+    elif hface_model_type == "gpt2large":
+        model_config = 'gpt2-large'
+    elif hface_model_type == "TinyStories":
+        model_config = 'roneneldan/TinyStories-33M'
+        from_pt = True
+    else:
+        raise NotImplementedError
+    return from_pt, model_config
 
 
 def setup_model_and_params(
@@ -2399,8 +2416,9 @@ def main():
 
         tokenizer, combined_preferred_seqs, combined_dispreferred_seqs = setup_cfg(**setup_args)
 
-        print(tokenizer.batch_decode(combined_preferred_seqs, skip_special_tokens=True))
-        print(tokenizer.batch_decode(combined_dispreferred_seqs, skip_special_tokens=True))
+        n_samples_to_inspect = 100
+        inspect_text_samples(tokenizer, combined_preferred_seqs, n_samples_to_inspect, "Preferred Seqs")
+        inspect_text_samples(tokenizer, combined_dispreferred_seqs, n_samples_to_inspect, "Dispreferred Seqs")
 
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                     target=(combined_preferred_seqs, combined_dispreferred_seqs),
