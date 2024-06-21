@@ -262,13 +262,6 @@ if __name__ == "__main__":
     if args.rm_type in ["p_last_tokens", "p_continuation_one_post"]:
         assert args.num_last_tokens_to_condition_on > 0
 
-    if args.rm_type == "p_last_tokens":
-        if args.load_posterior_samples:
-            n_trueposts_for_evals = 2 # really not used at all in the plotting code in this case... is only used for logZ estimates but now I already have a separate set of estimates for that
-        else:
-            n_trueposts_for_evals = 30
-            assert args.n_samples_at_a_time_for_true_post == 2000 # Just to allow for consistent evaluation, compared to the non-infilling settings (always 2000 sigma samples)... but we could debate that the conditional twist setting is different so keeping 2000 constant is meaningless anyway...
-
 
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
 

@@ -164,20 +164,17 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap, alpha=self.alpha), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_combined":
             dre_grad_fn = jax.grad(partial(get_l_ebm_ml_combined_objective_partial_jit, alpha=self.alpha), argnums=standard_argnum)
-        elif self.twist_learn_type == "nvi_ali_partial_jit":
+        elif self.twist_learn_type == "nvi_partial_jit":
             dre_grad_fn = jax.grad(get_l_nvi_partial_jit , argnums=standard_argnum)
-        elif self.twist_learn_type == "nvi_ali_jit":
+        elif self.twist_learn_type == "nvi_jit":
             dre_grad_fn = jax.grad(get_l_nvi_jit,
                                    argnums=standard_argnum)
-        elif self.twist_learn_type == "nvi_ali_vmapped_over_condition_tokens":
+        elif self.twist_learn_type == "nvi_vmapped_over_condition_tokens":
             dre_grad_fn = jax.grad(
                 partial(get_l_nvi_jit_vmapped_over_condition_tokens,
                         n_twist_ebm_vmap=self.n_twist_ebm_vmap),
                 argnums=standard_argnum
             )
-        elif self.twist_learn_type == "nvi_rob":
-            raise NotImplementedError
-
         elif self.twist_learn_type == "one_total_kl":
             dre_grad_fn = jax.grad(get_l_one_total_kl_jit, argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
@@ -188,8 +185,6 @@ class ExperimentConfig:
             dre_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True, exact_expectation=False), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_partial_jit":
             dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=standard_argnum)
-        # elif self.twist_learn_type == "one_total_kl_with_rl_old":
-        #     dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_lsq_sgtarget":
             dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
                                            rl_loss_type="squared_error_in_log_space", rl_stop_grad="target"), argnums=standard_argnum)
@@ -2417,7 +2412,7 @@ if __name__ == "__main__":
             "ebm_ml_partial_jit_vmapped_over_condition_tokens", "ebm_ml_pprop_jit_vmapped_over_condition_tokens",
             "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub", "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub",
             "ebm_vmap_os", "ebm_combined", "ebm_ml_vmap_with_one_total_kl",
-            "nvi_ali_partial_jit", "nvi_ali_jit", "nvi_ali_vmapped_over_condition_tokens", "nvi_rob_partial_jit", "nvi_rob_jit",
+            "nvi_partial_jit", "nvi_jit", "nvi_vmapped_over_condition_tokens",
             "one_total_kl", "one_total_kl_mixed_p_q", "one_total_kl_partial_jit",
             "one_total_kl_sample", "one_total_kl_sample_mixed_p_q",
             "one_total_kl_with_rl_lsq_sgtarget", "one_total_kl_with_rl_lsq_sgvalue",
