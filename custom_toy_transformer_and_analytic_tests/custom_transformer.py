@@ -196,74 +196,76 @@ def batch_transformer(cfg, params, seq):
     return batch_transformer_func(cfg, params, seq)
 
 
-def batch_transformer_with_prepend_token_of_interest(token_of_interest_as_int):
-    def new_batch_transformer(cfg, params, seq):
-        # print(seq)
-        seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + token_of_interest_as_int, seq), axis=1)
-        # print(seqs_with_prepended_prompts[0])
-        output = batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :]
-        # print(output[0, -3, :])
-        # print(output[0, -3, index_of_token_of_interest])
-        # print(output.shape)
-        return output # batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :]
-    return new_batch_transformer
-
-def batch_transformer_with_prepend_tokens(cfg, params, seq, prepend_tokens):
-    seqs_with_prepended_tokens = jnp.concatenate((prepend_tokens, seq), axis=1)
-    output = batch_transformer(cfg, params, seqs_with_prepended_tokens)[:, prepend_tokens.shape[1]:, :]
-    return output
 
 
-
-
-
-
-
-
-# @partial(jax.jit, static_argnames=["cfg_p", "log_true_final_twist", "prompt_len",
-#                                    "output_len", "n_vocab", "return_log"])
-def calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, return_log=False, condition_twist_on_token=None):
-    # This manually enumerates all possible sequences up to the output_len
-    # And then calculates log_p and log_phi (where phi = e^(-beta r(s)) ) on each of those sequences.
-    # Then the sum of those is equal to log (p phi) where p phi = sigma (at least, an unnormalized sigma)
-    # So softmax takes the exp, which gives us the unnormalized sigma values, then the softmax normalizes them to give us the sigma distribution values
-
-    all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab,
-                                             output_len)
-    log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p,
-                                                 params_p,
-                                                 prompt_len,
-                                                 output_len)
-
-    if condition_twist_on_token is not None:
-        log_phi_all_seqs = evaluate_log_phi_final(
-            all_seqs, log_true_final_twist,
-            jnp.ones(all_seqs.shape[0], dtype=jnp.int32)[:, None] * condition_twist_on_token)
-    else:
-        log_phi_all_seqs = evaluate_log_phi_final(all_seqs, log_true_final_twist, None)
-
-    # print((log_p_all_seqs + log_phi_all_seqs).shape)
-    normalizing_constant = jnp.exp((log_p_all_seqs + log_phi_all_seqs)).sum()
-
-    # print(all_seqs)
-    # print(log_p_all_seqs)
-    # print(log_phi_all_seqs)
-    # print(jnp.exp((log_p_all_seqs + log_phi_all_seqs)))
-    # print(normalizing_constant)
-
-    if return_log:
-        analytic_log_sigma_vals = jax.nn.log_softmax(log_p_all_seqs + log_phi_all_seqs)
-
-        # log_normalizing_constant_a = jnp.log(normalizing_constant)
-        log_normalizing_constant = jax.nn.logsumexp(log_p_all_seqs + log_phi_all_seqs)
-        # print(log_normalizing_constant_a)
-        # print(log_normalizing_constant)
-
-        return analytic_log_sigma_vals, all_seqs, log_normalizing_constant
-
-    analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_phi_all_seqs)
-
-    return analytic_sigma_vals, all_seqs, normalizing_constant
-
-
-
+# def batch_transformer_with_prepend_token_of_interest(token_of_interest_as_int):
+#     def new_batch_transformer(cfg, params, seq):
+#         # print(seq)
+#         seqs_with_prepended_prompts = jnp.concatenate((jnp.zeros((seq.shape[0], 1), dtype=jnp.int32) + token_of_interest_as_int, seq), axis=1)
+#         # print(seqs_with_prepended_prompts[0])
+#         output = batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :]
+#         # print(output[0, -3, :])
+#         # print(output[0, -3, index_of_token_of_interest])
+#         # print(output.shape)
+#         return output # batch_transformer(cfg, params, seqs_with_prepended_prompts)[:, 1:, :]
+#     return new_batch_transformer
+#
+# def batch_transformer_with_prepend_tokens(cfg, params, seq, prepend_tokens):
+#     seqs_with_prepended_tokens = jnp.concatenate((prepend_tokens, seq), axis=1)
+#     output = batch_transformer(cfg, params, seqs_with_prepended_tokens)[:, prepend_tokens.shape[1]:, :]
+#     return output
+#
+#
+#
+#
+#
+#
+#
+#
+# # @partial(jax.jit, static_argnames=["cfg_p", "log_true_final_twist", "prompt_len",
+# #                                    "output_len", "n_vocab", "return_log"])
+# def calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, return_log=False, condition_twist_on_token=None):
+#     # This manually enumerates all possible sequences up to the output_len
+#     # And then calculates log_p and log_phi (where phi = e^(-beta r(s)) ) on each of those sequences.
+#     # Then the sum of those is equal to log (p phi) where p phi = sigma (at least, an unnormalized sigma)
+#     # So softmax takes the exp, which gives us the unnormalized sigma values, then the softmax normalizes them to give us the sigma distribution values
+#
+#     all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab,
+#                                              output_len)
+#     log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p,
+#                                                  params_p,
+#                                                  prompt_len,
+#                                                  output_len)
+#
+#     if condition_twist_on_token is not None:
+#         log_phi_all_seqs = evaluate_log_phi_final(
+#             all_seqs, log_true_final_twist,
+#             jnp.ones(all_seqs.shape[0], dtype=jnp.int32)[:, None] * condition_twist_on_token)
+#     else:
+#         log_phi_all_seqs = evaluate_log_phi_final(all_seqs, log_true_final_twist, None)
+#
+#     # print((log_p_all_seqs + log_phi_all_seqs).shape)
+#     normalizing_constant = jnp.exp((log_p_all_seqs + log_phi_all_seqs)).sum()
+#
+#     # print(all_seqs)
+#     # print(log_p_all_seqs)
+#     # print(log_phi_all_seqs)
+#     # print(jnp.exp((log_p_all_seqs + log_phi_all_seqs)))
+#     # print(normalizing_constant)
+#
+#     if return_log:
+#         analytic_log_sigma_vals = jax.nn.log_softmax(log_p_all_seqs + log_phi_all_seqs)
+#
+#         # log_normalizing_constant_a = jnp.log(normalizing_constant)
+#         log_normalizing_constant = jax.nn.logsumexp(log_p_all_seqs + log_phi_all_seqs)
+#         # print(log_normalizing_constant_a)
+#         # print(log_normalizing_constant)
+#
+#         return analytic_log_sigma_vals, all_seqs, log_normalizing_constant
+#
+#     analytic_sigma_vals = jax.nn.softmax(log_p_all_seqs + log_phi_all_seqs)
+#
+#     return analytic_sigma_vals, all_seqs, normalizing_constant
+#
+#
+#
