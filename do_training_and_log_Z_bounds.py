@@ -29,29 +29,10 @@ import copy
 from custom_transformer_prob_utils import *
 from reward_models import *
 from losses import *
-
 from plot_utils import *
-
-
-# Update the twists, update the whole framework for the Bayesian thing.
 
 from huggingface_models_custom import CustomLMWithTwistHead, get_tokenizer, CustomLMHeadModel
 
-# from result_plots_bounds import records_labels_list
-records_labels_list = ["True Log Z",
-                       "Upper Bound Estimate (One Posterior)",
-                       "Upper Bound Estimate (All Posterior)",
-                       "Upper Bound Estimate (IWAE)",
-                       "Lower Bound Estimate (IWAE)",
-                       "Upper Bound Estimate (SMC)",
-                       "Lower Bound Estimate (SMC)",
-                       "F(q) Estimate",
-                       "True KL(q||sigma)",
-                       "KL(q||sigma) Upper Bound Estimate (IWAE)",
-                       "KL(q||sigma) Lower Bound Estimate (IWAE)",
-                       "KL(q||sigma) Upper Bound Estimate (SMC)",
-                       "KL(q||sigma) Lower Bound Estimate (SMC)",
-                       ] # TODO Sep 16 make dynamic later
 
 n_trueposts_for_evals = 4
 

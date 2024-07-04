@@ -15,6 +15,24 @@ from losses import *
 from custom_transformer import *
 
 
+
+# from result_plots_bounds import records_labels_list
+records_labels_list = ["True Log Z",
+                       "Upper Bound Estimate (One Posterior)",
+                       "Upper Bound Estimate (All Posterior)",
+                       "Upper Bound Estimate (IWAE)",
+                       "Lower Bound Estimate (IWAE)",
+                       "Upper Bound Estimate (SMC)",
+                       "Lower Bound Estimate (SMC)",
+                       "F(q) Estimate",
+                       "True KL(q||sigma)",
+                       "KL(q||sigma) Upper Bound Estimate (IWAE)",
+                       "KL(q||sigma) Lower Bound Estimate (IWAE)",
+                       "KL(q||sigma) Upper Bound Estimate (SMC)",
+                       "KL(q||sigma) Lower Bound Estimate (SMC)",
+                       ] # TODO Sep 16 make dynamic later
+
+
 indices_of_tokens_for_only_contains_token = [6, 8]
 
 def make_hists(true_posterior_samples, smc_samples, prompt_len, token_of_interest_as_int, n_vocab, hist_token_index):
