@@ -1,3 +1,7 @@
+--find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+--extra-index-url https://download.pytorch.org/whl/cu118
+
 absl-py==2.0.0
 accelerate==0.25.0
 aiohttp==3.9.1
@@ -22,6 +26,9 @@ fsspec==2023.10.0
 huggingface-hub==0.19.4
 idna==3.6
 importlib-resources==6.1.1
+jax==0.4.21
+jax-lorax==0.2.0
+jaxlib==0.4.21+cuda11.cudnn86
 Jinja2==3.1.2
 kiwisolver==1.4.5
 markdown-it-py==3.0.0
@@ -74,6 +81,9 @@ sympy==1.12
 tensorstore==0.1.51
 tokenizers==0.15.0
 toolz==0.12.0
+torch==2.1.1+cu118
+torchaudio==2.1.1+cu118
+torchvision==0.16.1+cu118
 tqdm==4.66.1
 transformers==4.36.0
 triton==2.1.0
