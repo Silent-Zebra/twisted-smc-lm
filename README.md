@@ -1,5 +1,5 @@
 # Code for "Probabilistic Inference in Language Models via Twisted Sequential Monte Carlo"
-Paper link: [arxiv.org/abs/2404.17546](arxiv.org/abs/2404.17546)
+Paper link: [arxiv.org/abs/2404.17546](https://arxiv.org/abs/2404.17546)
 
 Twitter threads:
 - [Stephen](https://twitter.com/ZhaoStep/status/1785404707076247578)
