@@ -7,6 +7,16 @@ Twitter threads:
 - [Alireza](https://twitter.com/AliMakhzani/status/1785409236568076557)
 - [Roger](https://twitter.com/RogerGrosse/status/1785415600946459120)
 
+## Environment Setup
+
+As of July 8, 2024, this was a set of commands I used to set up an environment that could run this codebase:
+
+- conda create --name newenv python=3.10.3
+- . activate newenv
+- pip install -r requirements.txt
+
+I expect that the requirements file should work with venv or other setups based on pip as well (but have not tested this).
+
 ## General Notes/Comments/Disclaimer
 
 I am planning on refactoring/improving functionality of various parts of the repo, which may result in changes to these commands (which hopefully make this codebase easier to use and run experiments with). As of April 22, 2024, the below commands should all run properly.
