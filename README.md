@@ -25,6 +25,8 @@ I am planning on refactoring/improving functionality of various parts of the rep
 
 Some of these commands may result in slightly different results when you run them (compared to when I ran them, or what is in the paper), because I have been refactoring code, and sometimes that results in changes to the RNG calls, which means there may be different RNG for the run you use versus when I initially ran them (however, now that I take results over 5 seeds, this shouldn't result in too much of a difference for the quantitative results). I have generally tried to update the quantitative results in the paper to be consistent with the current version of the codebase. Qualitative results may be more different depending on RNG.
 
+Also, note that there are some issues with non-determinism on GPUs specifically (e.g. see https://github.com/google/jax/discussions/10674), such that you may get different results on GPU even with the same random seed, on different runs. A solution to this is to add XLA_FLAGS=--xla_gpu_deterministic_ops=true as an additional flag before the python call. However, note that this makes the code significantly slower to run, so in general I would not recommend doing this unless you are trying to debug something. 
+
 ## Commands for Toxicity Threshold (Log Z Bounds) Experiments
 
 First run this command to collect a set of exact posterior (target) distribution samples for evaluation. This command can take quite a while to run because of the difficulty in collecting samples satisfying the toxicity threshold. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well: 
