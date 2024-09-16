@@ -1,11 +1,57 @@
 import jax.numpy as jnp
 import jax
+import sys
+import os
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 
 from custom_transformer_prob_utils import smc_procedure, evaluate_log_p_theta_1_to_t, calculate_kl_term, calculate_entropy_gradient_term
 from custom_toy_transformer_and_analytic_tests.custom_transformer import transformer, stochastic_transformer_sample
 
 
+
 def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
+                rew_model, output_len, n_samples, prompt_len, analytic_sigma_sample, n_vocab):
+
+    sk, sk2, sk3 = jax.random.split(sk, 3)
+
+    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(sk, prompt,
+                                                    cfg_p, params_p,
+                                                    cfg_twist,
+                                                    params_twist,
+                                                    log_true_final_twist,
+                                                    output_len,
+                                                    n_samples,
+                                                      analytic_sigma_sample=analytic_sigma_sample, n_vocab=n_vocab)
+
+    r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
+
+    # print(prompt_w_sigma_sample_s_1_to_t)
+    # print(r_seqs)
+
+    # Reminder here that evaluate_log_p_theta evaluates just the probability under whatever model we are using. Since we are doing RL, this is now the q that we are interested in
+    log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
+        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
+        output_len)
+
+    e_sigmaq_r_estimate = r_seqs.mean()
+
+    # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
+    objective = ((r_seqs - e_sigmaq_r_estimate) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
+
+    # model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
+    # p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
+    # kl_term = calculate_kl_term(p_0_seqs, cfg_p, params_p, prompt_len, output_len)
+    # ent_term = calculate_entropy_gradient_term(model_seqs, cfg_p, params_p, prompt_len, output_len)
+    # loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
+    loss = -objective
+
+    return loss
+
+
+def rl_loss_old(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final_twist,
                 rew_model, output_len, n_samples, prompt_len, cfg_baseline, params_baseline,
                 cfg_p_0, params_p_0, beta_kl, beta_ent, analytic_sigma_sample, n_vocab):
 
