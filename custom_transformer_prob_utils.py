@@ -63,7 +63,7 @@ def get_transformer_p_logits(params_p, full_seq, huggingface_model=None, use_par
     assert huggingface_model is not None
     if isinstance(huggingface_model, HashableDict):
         if use_params_p:
-            p_logits = huggingface_model['p'](params=params_p[0],
+            p_logits = huggingface_model['p'](params=params_p,
                                                input_ids=full_seq)
         else:
             p_logits = huggingface_model['p'](input_ids=full_seq)

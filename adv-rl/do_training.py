@@ -1096,7 +1096,7 @@ def setup_model_and_params(
         one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
     )
 
-    params_p = [model_p.huggingface_model.params,]
+    params_p = model_p.huggingface_model.params
 
     params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
 
