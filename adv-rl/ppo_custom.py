@@ -2,8 +2,7 @@ import jax
 from jax import jit
 from functools import partial
 import jax.numpy as jnp
-from custom_toy_transformer_and_analytic_tests.custom_transformer import batch_transformer, stochastic_transformer_sample
-from custom_transformer_prob_utils import evaluate_log_p_theta_1_to_t
+from custom_transformer_prob_utils import evaluate_log_p_theta_1_to_t, stochastic_transformer_sample
 
 # PPO STUFF
 
@@ -48,6 +47,7 @@ def ppo_and_value_loss(sk, prompt, trainstate_p, params_of_trainstate_p, prompt_
     if not first_iter:
         assert old_log_p is not None
 
+    1/0 # TODO check below call uses right args
     seq = stochastic_transformer_sample(sk, trainstate_p, prompt, output_len, n_samples)
 
     curr_log_p = evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p, prompt_len,
