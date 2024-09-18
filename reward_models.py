@@ -240,6 +240,11 @@ def log_exp_beta_sentiment_class_logprob(
     log_prob_of_class = jnp.log(class_prob)
     return log_prob_of_class * beta_temp
 
+def curried_log_exp_neg_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_temp):
+    def new_rm(seq):
+        return -log_exp_beta_toxicity(seq, rewardModel, tokenizer_RM, tokenizer, beta_temp)
+    return new_rm
+
 
 def curried_log_exp_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_temp):
     def new_rm(seq):
@@ -357,6 +362,18 @@ def curried_log_sentiment_threshold(rewardModel, tokenizer_RM, tokenizer, thresh
 
 
 
+
+
+def build_exp_neg_beta_tox_score_twists(jnp_prompts, rewardModel, tokenizer_RM, tokenizer, beta_temp):
+    # This here is a reward model in the framework phi = e^(-beta r) where r = toxicity score
+    # No posterior samples here
+    log_true_final_twists = []
+    for jnp_prompt in jnp_prompts:
+        prompt_len = jnp_prompt.shape[-1]
+        log_true_final_twist = curried_log_exp_neg_beta_toxicity(rewardModel, tokenizer_RM, tokenizer, beta_temp)
+        log_true_final_twists.append(log_true_final_twist)
+
+    return log_true_final_twists, None
 
 
 
