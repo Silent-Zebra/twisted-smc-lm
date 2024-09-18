@@ -8,6 +8,10 @@ LORA_FREEZE = 0
 LORA_FULL = -1
 # FOR LORA: https://github.com/davisyoshida/lorax/blob/master/examples/huggingface_gpt2.py
 
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
 
 import time
 import argparse
