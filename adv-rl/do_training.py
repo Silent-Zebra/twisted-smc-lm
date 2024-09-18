@@ -633,7 +633,7 @@ class ExperimentConfig:
         )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
         # print(grad_params_p)
 
-        params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p)
+        params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p, grad_params_p[0], optim_p_state, params_p)
 
         return rng_key, params_p, optim_p_state
 
