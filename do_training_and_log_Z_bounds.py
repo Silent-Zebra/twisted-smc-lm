@@ -85,12 +85,12 @@ class ExperimentConfig:
         else:
             self.smc_procedure_type = "jit"
 
-        self.dre_grad_fn = self._get_dre_grad_fn()
+        self.twist_grad_fn = self._get_twist_grad_fn()
 
         self.sentiment_class_zero_index = sentiment_class - 1 # This is important because we need 0 based indexing, ie 0,1,2,3,4. Why not just use those as the args? Because the stars are 1,2,3,4,5
 
 
-    def _get_dre_grad_fn(self):
+    def _get_twist_grad_fn(self):
         standard_argnum = 3 # For the params_twist argument
 
         get_l_ebm_fn = get_l_ebm_ml_jit
@@ -98,179 +98,179 @@ class ExperimentConfig:
             get_l_ebm_fn = get_l_ebm_ml_partial_jit
 
         if self.twist_learn_type == "ebm_old":
-            dre_grad_fn = jax.grad(get_l_ebm_fn, argnums=standard_argnum)
+            twist_grad_fn = jax.grad(get_l_ebm_fn, argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_one_sample":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_reweight":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_partial_jit":
-            dre_grad_fn = jax.grad(get_l_ebm_ml_partial_jit, argnums=standard_argnum)
+            twist_grad_fn = jax.grad(get_l_ebm_ml_partial_jit, argnums=standard_argnum)
         # elif self.twist_learn_type == "ebm_q_rsmp":
-        #     dre_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=standard_argnum)
+        #     twist_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_mixed_p_q":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_fn, mixed_p_q_sample=True), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_ebm_fn, mixed_p_q_sample=True), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_mixed_p_q_reweight":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens_finalrl":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, add_rl_final_twist_loss=True,
                         reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap),
                 argnums=standard_argnum
             )
         elif self.twist_learn_type == "ebm_ml_partial_jit_vmapped_over_condition_tokens":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens,
                         reweight_for_second_term=True,
                         n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_vmap_os":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_ebm_ml_os_jit_vmapped_over_condition_tokens,
                         n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_ml_pprop_jit_vmapped_over_condition_tokens":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens,
                         reweight_for_second_term=True, proposal_is_p=True,
                         n_twist_ebm_vmap=self.n_twist_ebm_vmap), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub":
-            dre_grad_fn = jax.grad(partial(
+            twist_grad_fn = jax.grad(partial(
                 get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True,
                 n_twist_ebm_vmap=self.n_twist_ebm_vmap, use_smc_ub_for_pos_samples=False), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub":
-            dre_grad_fn = jax.grad(partial(
+            twist_grad_fn = jax.grad(partial(
                 get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, proposal_is_p=True,
                 n_twist_ebm_vmap=self.n_twist_ebm_vmap, use_smc_ub_for_pos_samples=False), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_ml_vmap_with_one_total_kl":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap, alpha=self.alpha), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.n_twist_ebm_vmap, alpha=self.alpha), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_combined":
-            dre_grad_fn = jax.grad(partial(get_l_ebm_ml_combined_objective_partial_jit, alpha=self.alpha), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_ebm_ml_combined_objective_partial_jit, alpha=self.alpha), argnums=standard_argnum)
         elif self.twist_learn_type == "nvi_partial_jit":
-            dre_grad_fn = jax.grad(get_l_nvi_partial_jit , argnums=standard_argnum)
+            twist_grad_fn = jax.grad(get_l_nvi_partial_jit , argnums=standard_argnum)
         elif self.twist_learn_type == "nvi_jit":
-            dre_grad_fn = jax.grad(get_l_nvi_jit,
+            twist_grad_fn = jax.grad(get_l_nvi_jit,
                                    argnums=standard_argnum)
         elif self.twist_learn_type == "nvi_vmapped_over_condition_tokens":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_nvi_jit_vmapped_over_condition_tokens,
                         n_twist_ebm_vmap=self.n_twist_ebm_vmap),
                 argnums=standard_argnum
             )
         elif self.twist_learn_type == "one_total_kl":
-            dre_grad_fn = jax.grad(get_l_one_total_kl_jit, argnums=standard_argnum)
+            twist_grad_fn = jax.grad(get_l_one_total_kl_jit, argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_mixed_p_q":
-            dre_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_sample":
-            dre_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, exact_expectation=False), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, exact_expectation=False), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_sample_mixed_p_q":
-            dre_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True, exact_expectation=False), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True, exact_expectation=False), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_partial_jit":
-            dre_grad_fn = jax.grad(get_l_one_total_kl, argnums=standard_argnum)
+            twist_grad_fn = jax.grad(get_l_one_total_kl, argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_lsq_sgtarget":
-            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+            twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
                                            rl_loss_type="squared_error_in_log_space", rl_stop_grad="target"), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_lsq_sgvalue":
-            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+            twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
                                            rl_loss_type="squared_error_in_log_space", rl_stop_grad="value"), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_lsq_sgnone":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_combined_rl_onekl, alpha=self.alpha,
                         rl_loss_type="squared_error_in_log_space",
                         rl_stop_grad=None), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_sq_sgtarget":
-            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+            twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
                                            rl_loss_type="squared_error", rl_stop_grad="target"), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_sq_sgvalue":
-            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+            twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
                                            rl_loss_type="squared_error", rl_stop_grad="value"), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_sq_sgnone":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_combined_rl_onekl, alpha=self.alpha,
                         rl_loss_type="squared_error",
                         rl_stop_grad=None), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_ratio_sgtarget":
-            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+            twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
                                            rl_loss_type="ratio", rl_stop_grad="target"), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_ratio_sgvalue":
-            dre_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
+            twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.alpha,
                                            rl_loss_type="ratio", rl_stop_grad="value"), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_rl_ratio_sgnone":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_combined_rl_onekl, alpha=self.alpha,
                         rl_loss_type="ratio",
                         rl_stop_grad=None), argnums=standard_argnum)
         elif self.twist_learn_type == "one_total_kl_with_sixo":
-            dre_grad_fn = jax.grad(get_l_combined_sixo_onekl, argnums=standard_argnum)
+            twist_grad_fn = jax.grad(get_l_combined_sixo_onekl, argnums=standard_argnum)
         elif self.twist_learn_type == "rl_p_sq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_sq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_qrsmp_sq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="qrsmp", loss_type="squared_error"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="qrsmp", loss_type="squared_error"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_sigma_sq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="sigma", loss_type="squared_error"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="sigma", loss_type="squared_error"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_mixed_p_q_sq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_p_lsq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_lsq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_qsigma_lsq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space", append_sigma_samples=True), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space", append_sigma_samples=True), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_qsigma_lsq_partial_jit":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q",
                         loss_type="squared_error_in_log_space",
                         append_sigma_samples=True), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_qsigma_gcd":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="googleCD", append_sigma_samples=True), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="googleCD", append_sigma_samples=True), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_gcd":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="googleCD"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="googleCD"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_sq_partial_jit":
-            dre_grad_fn = jax.grad(
+            twist_grad_fn = jax.grad(
                 partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q",
                         loss_type="squared_error"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_lsq_partial_jit":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_gcd_partial_jit":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="googleCD"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="googleCD"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_lsq_nostopgrad":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_lsq_partial_jit_nostopgrad":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_multistep":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="multistep"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="multistep"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_q_multistep_partial_jit":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="multistep"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="multistep"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_qrsmp_lsq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_sigma_lsq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="sigma", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="sigma", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_mixed_p_q_lsq":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_mixed_p_q_lsq_partial_jit":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_mc":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=standard_argnum)
         elif self.twist_learn_type == "rl_mc_partial_jit":
-            dre_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=standard_argnum)
         elif self.twist_learn_type == "sixo":
-            dre_grad_fn = jax.grad(get_l_dre_sixo_jit, argnums=standard_argnum)
+            twist_grad_fn = jax.grad(get_l_dre_sixo_jit, argnums=standard_argnum)
         elif self.twist_learn_type == "sixo_mixed_p_q":
-            dre_grad_fn = jax.grad(partial(get_l_dre_sixo_jit, mixed_p_q_sample=True), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_dre_sixo_jit, mixed_p_q_sample=True), argnums=standard_argnum)
         elif self.twist_learn_type == "sixo_partial_jit":
-            dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=standard_argnum)
+            twist_grad_fn = jax.grad(get_l_dre_sixo, argnums=standard_argnum)
         elif self.twist_learn_type == "sixo_mixed_p_q_partial_jit":
-            dre_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=standard_argnum)
         elif self.twist_learn_type == "bce_sigma":
-            dre_grad_fn = jax.grad(partial(get_l_bce_sigma, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_bce_sigma, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
         elif self.twist_learn_type == "bce_psigma":
-            dre_grad_fn = jax.grad(partial(get_l_bce_p_sigma, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_bce_p_sigma, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
         elif "bce" in self.twist_learn_type: # in ["bce_p", "bce_q"]:
-            dre_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
+            twist_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.rm_type, beta_temp=self.beta_temp), argnums=standard_argnum)
         else:
             raise NotImplementedError
-        return dre_grad_fn
+        return twist_grad_fn
 
     def _get_sigma_samples_and_cond_tokens_infilling(
         self, rng_key, params_p, prompt, output_len, n_twist, huggingface_model,
@@ -478,7 +478,7 @@ class ExperimentConfig:
                 true_sigma_samples = samples_to_evaluate_over # Yeah I know these are not true sigma samples, I just didn't rename. Check the BCE loss, it just needs a set of samples passed in. Kind of like the set of samples we evaluate RL loss over
 
             rng_key, sk = jax.random.split(rng_key)
-            grad_params_twist = self.dre_grad_fn(
+            grad_params_twist = self.twist_grad_fn(
                 sk, prompt, params_p,
                 params_twist, log_true_final_twist, output_len,
                 n_twist, smc_procedure_type=self.smc_procedure_type,
@@ -529,7 +529,7 @@ class ExperimentConfig:
             true_sigma_samples = None
 
         rng_key, sk = jax.random.split(rng_key)
-        grad_params_twist = self.dre_grad_fn(
+        grad_params_twist = self.twist_grad_fn(
             sk, prompt, params_p,
             params_twist, log_true_final_twist, output_len,
             n_twist, smc_procedure_type=self.smc_procedure_type,

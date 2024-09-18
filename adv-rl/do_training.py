@@ -104,6 +104,7 @@ def rl_loss(
 
     e_sigmaq_r_estimate = r_seqs.mean()
     e_sigmaq_r_estimate = 0
+    # TODO Sep 18 REMOVE AFTER
 
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     objective = ((r_seqs - e_sigmaq_r_estimate) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation

@@ -59,13 +59,28 @@ def get_all_new_seqs_single_t(seq, n_vocab):
     return all_new_seqs
 
 
-def get_transformer_p_logits(params_p, full_seq, huggingface_model=None):
+def get_transformer_p_logits(params_p, full_seq, huggingface_model=None, use_params_p=True):
     assert huggingface_model is not None
     if isinstance(huggingface_model, HashableDict):
-        p_logits = huggingface_model['p'](input_ids=full_seq)
+        if use_params_p:
+            p_logits = huggingface_model['p'](params=params_p,
+                                               input_ids=full_seq)
+        else:
+            p_logits = huggingface_model['p'](input_ids=full_seq)
+
+            # print(huggingface_model['p'](params=params_p, input_ids=full_seq))
+            # embeddings_p = huggingface_model['p'](params=params_p, input_ids=full_seq)[0]
+            # print(embeddings_p.shape)
+            # print(params_p['transformer']['wte']['embedding'].shape)
+            # print(p_logits)
+            # print(p_logits2)
+            #
+            # print(jnp.abs((p_logits - p_logits2)).mean())
+
     else:
+        raise NotImplementedError
         # should be an apply_fn here?
-        p_logits = huggingface_model(input_ids=full_seq, ret="p", hface_model_params=params_p)
+        # p_logits = huggingface_model(input_ids=full_seq, ret="p", hface_model_params=params_p)
 
     return p_logits
 
