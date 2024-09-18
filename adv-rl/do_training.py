@@ -559,13 +559,12 @@ class ExperimentConfig:
     def get_grad_params_p(self, rng_key, prompt, n_samples, output_len,
                               params_p, params_twist, log_true_final_twist,
                               proposal_is_p=False, huggingface_model=None,
-                              tempered_twist=False, beta_prop=None, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None):
+                              tempered_twist=False, beta_prop=None, params_proposal=None):
 
         if self.rm_type == "p_last_tokens":
             raise NotImplementedError # TODO later support all the settings that get_grad_params_twist supports
 
         rng_key, sk = jax.random.split(rng_key)
-
 
         rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist, self.beta_temp)
 
@@ -622,9 +621,10 @@ class ExperimentConfig:
             proposal_is_p=proposal_is_p,
             huggingface_model=huggingface_model,
             tempered_twist=tempered_twist, beta_prop=beta_prop,
-            replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts,
             params_proposal=params_proposal
         )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
+        print(grad_params_p)
+        1/0
 
         params_twist, optim_twist_state = get_new_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p)
 
