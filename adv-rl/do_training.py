@@ -140,7 +140,7 @@ def rew_from_log_exp_neg_beta_rew(log_true_final_twist, beta_temp):
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
                  sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False,
-                 rl_loss_type="custom", ppo_steps=0, clip_epsilon=0,
+                 rl_loss_type="custom_adv", ppo_steps=0, clip_epsilon=0,
                  gamma=1., gae_lambda=1.
     ):
         self.n_vocab = n_vocab
@@ -181,8 +181,8 @@ class ExperimentConfig:
         self.twist_grad_fn = self._get_twist_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
-        assert self.rl_loss_type in ["custom", "ppo"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
-        if self.rl_loss_type == "custom":
+        assert self.rl_loss_type in ["custom_adv", "ppo"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
+        if self.rl_loss_type == "custom_adv":
             pass
             # self.beta_kl = beta_kl
             # self.beta_ent = beta_ent
@@ -200,7 +200,7 @@ class ExperimentConfig:
 
 
     def _get_rl_grad_fn(self):
-        if self.rl_loss_type == "custom":
+        if self.rl_loss_type == "custom_adv":
             return jax.grad(rl_loss, argnums=[2])
         elif self.rl_loss_type == "ppo":
             return jax.grad(ppo_and_value_loss, argnums=[3, 9], has_aux=True)
@@ -570,7 +570,7 @@ class ExperimentConfig:
 
         rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist, self.beta_temp)
 
-        grad_params_twist = self.rl_grad_fn(
+        grad_params_p = self.rl_grad_fn(
             sk, prompt, params_p,
             params_twist, log_true_final_twist, output_len,
             n_samples, smc_procedure_type=self.smc_procedure_type,
@@ -581,7 +581,7 @@ class ExperimentConfig:
             rew_model=rew_model
         )
 
-        return rng_key, grad_params_twist
+        return rng_key, grad_params_p
 
     # @partial(jax.jit, static_argnames=[
     #     "self", "n_twist", "output_len",
@@ -1172,7 +1172,8 @@ def setup_cfg(
         num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
         sentiment_class=sentiment_class,
         n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
-        train_on_true_posterior_samples=train_on_true_posterior_samples
+        train_on_true_posterior_samples=train_on_true_posterior_samples,
+        rl_loss_type="custom_adv"
     )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
