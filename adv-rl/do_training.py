@@ -103,8 +103,6 @@ def rl_loss(
         output_len, huggingface_model=huggingface_model)
 
     e_sigmaq_r_estimate = r_seqs.mean()
-    e_sigmaq_r_estimate = 0
-    # TODO Sep 18 REMOVE AFTER
 
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     objective = ((r_seqs - e_sigmaq_r_estimate) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
@@ -625,8 +623,6 @@ class ExperimentConfig:
             tempered_twist=tempered_twist, beta_prop=beta_prop,
             params_proposal=params_proposal
         )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
-        print(grad_params_p)
-        1/0
 
         params_twist, optim_twist_state = get_new_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p)
 
