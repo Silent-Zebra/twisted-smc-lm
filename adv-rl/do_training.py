@@ -52,6 +52,12 @@ from bad_words import *
 
 
 def get_new_params_and_optim_state(optimizer, grad_params, optim_state, params):
+    print("hihi")
+    print(grad_params)
+    print("hihi")
+    print(optim_state)
+    print("hihi")
+    print(params)
     updates, optim_twist_state = optimizer.update(grad_params, optim_state, params)
     params = optax.apply_updates(params, updates)
     return params, optim_state
@@ -625,8 +631,6 @@ class ExperimentConfig:
             tempered_twist=tempered_twist, beta_prop=beta_prop,
             params_proposal=params_proposal
         )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
-        print(grad_params_p)
-        1/0
 
         params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p)
 
