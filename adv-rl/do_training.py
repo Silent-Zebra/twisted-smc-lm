@@ -706,6 +706,8 @@ class ExperimentConfig:
             rew = rew_model(p_samples)
             print("Mean reward from base model samples")
             print(rew.mean())
+            print("Highest reward from base model samples")
+            print(rew.max())
 
             # Eval also total prob of some bad words
             print("bad word calc info")
@@ -1674,6 +1676,25 @@ def main():
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
+
+
+            # max_score = 0
+            # max_index = 0
+            # for i in range(args.n_vocab):
+            #     seq = jnp.concatenate((prompt.reshape((1, -1)), jnp.ones((1, 1), dtype=jnp.int32) * i), axis=-1)
+            #     print(seq.shape)
+            #     print(i)
+            #     rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist,
+            #                                               args.beta_temp)
+            #
+            #     score = rew_model(seq)
+            #     print(score)
+            #     if score > max_score:
+            #         max_score = score
+            #         max_index = i
+            # print(max_score)
+            # print(max_index)
+            # 1/0
 
             # ----- DO plotting and inspection of test info before the twist updates -----
             if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
