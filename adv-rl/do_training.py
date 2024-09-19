@@ -57,56 +57,78 @@ def get_new_params_and_optim_state(optimizer, grad_params, optim_state, params):
     return params, optim_state
 
 
-def rl_loss(
+def reinforce_loss_standard(
     sk, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
     tempered_twist=None, beta_prop=None, true_sigma_samples=None
+):
+    return reinforce_loss(sk, prompt, params_p, params_twist, log_true_final_twist,
+    output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+    proposal_is_p, params_proposal, condition_twist_on_tokens,
+    tempered_twist, beta_prop, true_sigma_samples, sampling_type="standard")
+
+
+
+def reinforce_loss(
+    sk, prompt, params_p, params_twist, log_true_final_twist,
+    output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+    proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
+    tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv"
 ):
 
     if (params_proposal is not None) or proposal_is_p:
         raise NotImplementedError # TODO later, if we want to use it at all
     if condition_twist_on_tokens is not None or true_sigma_samples is not None:
         raise NotImplementedError
-
-
+    prompt_len = prompt.shape[-1]
     sk, sk2 = jax.random.split(sk, 2)
 
-    smc_args = {
-        "rng_key": sk2,
-        "prompt": prompt,
-        "params_p": params_p,
-        "params_twist": params_twist,
-        "log_true_final_twist": log_true_final_twist,
-        "output_len": output_len,
-        "n_smc_samples": n_samples,
-        "smc_procedure_type": smc_procedure_type,
-        "huggingface_model": huggingface_model,
-        # "condition_twist_on_tokens": condition_twist_on_tokens,
-        "tempered_twist": tempered_twist,
-        "beta_prop": beta_prop,
-        # "true_sigma_samples": true_sigma_samples,
+    if sampling_type == "adv":
 
-    }
+        smc_args = {
+            "rng_key": sk2,
+            "prompt": prompt,
+            "params_p": params_p,
+            "params_twist": params_twist,
+            "log_true_final_twist": log_true_final_twist,
+            "output_len": output_len,
+            "n_smc_samples": n_samples,
+            "smc_procedure_type": smc_procedure_type,
+            "huggingface_model": huggingface_model,
+            # "condition_twist_on_tokens": condition_twist_on_tokens,
+            "tempered_twist": tempered_twist,
+            "beta_prop": beta_prop,
+            # "true_sigma_samples": true_sigma_samples,
 
-    _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(**smc_args)
+        }
 
-    prompt_len = prompt.shape[-1]
+        _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(**smc_args)
 
-    r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t)
+        samples_to_use = prompt_w_sigma_sample_s_1_to_t
+    elif sampling_type == "standard":
+        p_samples = stochastic_transformer_sample(sk2, params_p,
+                                                  prompt,
+                                                  output_len, n_samples,
+                                                  huggingface_model=huggingface_model)
+        samples_to_use = p_samples
+    else:
+        raise NotImplementedError
+
+    r_seqs = rew_model(samples_to_use)
 
     # Reminder here that evaluate_log_p_theta evaluates just the probability under whatever model we are using. Since we are doing RL, this is now the q that we are interested in
     # The huggingface model has both p (the base model) and the twist;
     # TODO CHECK that the base model and twists are learning properly. Check, for a fixed sequence, that base model probs are changing
     log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
-        prompt_w_sigma_sample_s_1_to_t, params_p, prompt_len,
+        samples_to_use, params_p, prompt_len,
         output_len, huggingface_model=huggingface_model)
 
-    e_sigmaq_r_estimate = r_seqs.mean()
+    e_sigmaq_r_estimate = r_seqs.mean() # For standard sampling, this is an arbitrary baseline, which always works (gives unbiased gradient) for reinforce; here I'm using a simple, non-learned baseline
 
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     objective = ((r_seqs - e_sigmaq_r_estimate) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
-    # TODO ALSO try the arbitrary baselien objective (the one we had from before), see if it works better
+    # TODO ALSO try the arbitrary baseline objective (the one we had from before), see if it works better
 
     # model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
     # p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
@@ -114,7 +136,6 @@ def rl_loss(
     # ent_term = calculate_entropy_gradient_term(model_seqs, cfg_p, params_p, prompt_len, output_len)
     # loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
     loss = -objective
-
 
     return loss
 
@@ -179,12 +200,11 @@ class ExperimentConfig:
         self.twist_grad_fn = self._get_twist_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
-        assert self.rl_loss_type in ["custom_adv", "ppo"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
         if self.rl_loss_type == "custom_adv":
             pass
             # self.beta_kl = beta_kl
             # self.beta_ent = beta_ent
-        elif self.rl_loss_type == "ppo":
+        elif self.rl_loss_type == "ppo": # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
             assert isinstance(ppo_steps, int)
             assert ppo_steps > 0
             self.ppo_steps = ppo_steps
@@ -199,7 +219,9 @@ class ExperimentConfig:
 
     def _get_rl_grad_fn(self):
         if self.rl_loss_type == "custom_adv":
-            return jax.grad(rl_loss, argnums=[2])
+            return jax.grad(reinforce_loss, argnums=[2])
+        elif self.rl_loss_type == "reinforce":
+            return jax.grad(reinforce_loss_standard, argnums=[2])
         elif self.rl_loss_type == "ppo":
             return jax.grad(ppo_and_value_loss, argnums=[3, 9], has_aux=True)
         else:
@@ -1839,6 +1861,9 @@ if __name__ == "__main__":
                                  # "sent_cond_twist",
                                  # "toxicity_threshold", "sentiment_threshold",
                                  # "p_last_tokens"
+                                 ])
+    parser.add_argument("--rl_loss_type", type=str, default="custom_adv",
+                        choices=["custom_adv", "reinforce", "ppo"
                                  ])
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
