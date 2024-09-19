@@ -1268,9 +1268,9 @@ def do_inspection_and_plotting_of_test_info(
     )
 
     rew_mean, rew_adv_mean, prob_bad_word_t0 = aux_info
-    plot_over_time_list['rews'].append(rew_mean)
-    plot_over_time_list['adv_rews'].append(rew_adv_mean)
-    plot_over_time_list['bad_word_probs'].append(prob_bad_word_t0)
+    plot_over_time_list['rews'].append(float(rew_mean))
+    plot_over_time_list['adv_rews'].append(float(rew_adv_mean))
+    plot_over_time_list['bad_word_probs'].append(float(prob_bad_word_t0))
 
 
     # if true_posterior_samples_by_token is not None:  # Then do plotting of logZ bounds # TODO should consider replacing with true_posterior_samples_by_prompt_and_by_token as true_posterior_samples_by_token is unused in the below now
