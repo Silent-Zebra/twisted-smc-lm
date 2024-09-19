@@ -103,8 +103,6 @@ def rl_loss(
         output_len, huggingface_model=huggingface_model)
 
     e_sigmaq_r_estimate = r_seqs.mean()
-    e_sigmaq_r_estimate = 0
-    # TODO Sep 18 REMOVE AFTER
 
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     objective = ((r_seqs - e_sigmaq_r_estimate) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
@@ -684,6 +682,7 @@ class ExperimentConfig:
                                                       huggingface_model=huggingface_model)
 
             rew = rew_model(p_samples)
+            print("Mean reward from base model samples")
             print(rew.mean())
 
             # Eval also total prob of some bad words
@@ -693,6 +692,7 @@ class ExperimentConfig:
 
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
             rew_adv = rew_model(smc_samples)
+            print("Mean reward from SMC adv samples")
             print(rew_adv.mean())
 
             # proposal_samples = intermediate_seq_list[-1]
