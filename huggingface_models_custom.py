@@ -113,6 +113,7 @@ class CustomLMWithTwistHead:
             params_twist_head = self.twist_head_params
 
         if hface_model_params is None:
+            raise NotImplementedError # The below potentially has issues with params_p being updated
             hface_model_params = self.huggingface_model._params
 
         if condition_twist_on_tokens is not None: # TODO should we call it something other than condition_twist_on_tokens, if I also use it for sentiment?

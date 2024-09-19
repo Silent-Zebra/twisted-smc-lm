@@ -66,6 +66,7 @@ def get_transformer_p_logits(params_p, full_seq, huggingface_model=None, use_par
             p_logits = huggingface_model['p'](params=params_p,
                                                input_ids=full_seq)
         else:
+            print("warning: doing this may have unexpected consequences when updating params_p (model call may be based on diff params than params_p)")
             p_logits = huggingface_model['p'](input_ids=full_seq)
 
             # print(huggingface_model['p'](params=params_p, input_ids=full_seq))
@@ -183,6 +184,7 @@ def get_p_logits_and_log_psi_all_vocab(
                                                           )
     else:
         assert params_proposal is None  # Not yet implemented/tested
+        raise NotImplementedError # Not yet tested. Also, the ret="both" may be weird with updating the params_p
         # TODO NOTE THAT if not specifying the hface_model_params, it defaults to whatever is in the huggingface_model
         # Which is based on the CustomLMWithTwistHead.huggingface_model._params
         p_logits, log_psi_all_vocab = huggingface_model(input_ids=full_seq, ret="both", params_twist_head=params_twist, condition_twist_on_tokens=condition_twist_on_tokens)
