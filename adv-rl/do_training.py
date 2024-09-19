@@ -738,9 +738,9 @@ class ExperimentConfig:
 
             # Eval also total prob of some bad words
             print("bad word calc info")
-            total_prob_bad_t_0_by_word, total_prob_bad_t_0 = \
+            total_prob_bad_t_0_by_word, total_prob_bad_t_0, total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word = \
                 calc_analytic_bad_word_probs(args.n_vocab, prompt, params_p,
-                                         huggingface_model)
+                                         huggingface_model, output_len)
 
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
             rew_adv = rew_model(smc_samples)
@@ -806,10 +806,17 @@ class ExperimentConfig:
             inspect_text_samples(tokenizer, smc_samples, n_samples_to_print,
                                  name="SMC (Adv) Samples")
 
+            total_prob_bad_word = total_prob_bad_t_0
+            if output_len == 2:
+                # print(total_prob_bad_by_word)
+                # print(total_prob_bad_by_word.shape)
+                print(total_prob_bad_by_word.sum())
+                total_prob_bad_word = total_prob_bad_by_word.sum()
+
             # print("WEIGHTS OF THE NO-INTERMEDIATE-RESAMPLE SAMPLES")
             # print(jax.lax.stop_gradient(log_w_t_sigma_samples))
             # print(jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples)))
-            aux_info = (rew.mean(), rew_adv.mean(), total_prob_bad_t_0)
+            aux_info = (rew.mean(), rew_adv.mean(), total_prob_bad_word)
 
         else:
             raise NotImplementedError
