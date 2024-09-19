@@ -82,12 +82,11 @@ def reinforce_loss(
     if condition_twist_on_tokens is not None or true_sigma_samples is not None:
         raise NotImplementedError
     prompt_len = prompt.shape[-1]
-    sk, sk2 = jax.random.split(sk, 2)
 
     if sampling_type == "adv":
 
         smc_args = {
-            "rng_key": sk2,
+            "rng_key": sk,
             "prompt": prompt,
             "params_p": params_p,
             "params_twist": params_twist,
@@ -107,7 +106,7 @@ def reinforce_loss(
 
         samples_to_use = prompt_w_sigma_sample_s_1_to_t
     elif sampling_type == "standard":
-        p_samples = stochastic_transformer_sample(sk2, params_p,
+        p_samples = stochastic_transformer_sample(sk, params_p,
                                                   prompt,
                                                   output_len, n_samples,
                                                   huggingface_model=huggingface_model)
@@ -636,6 +635,25 @@ class ExperimentConfig:
                      tempered_twist, beta_prop, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None
                      ):
 
+        rng_key, sk = jax.random.split(rng_key)
+        rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist,
+                                                  self.beta_temp)
+        # take samples from base model and eval rew
+        p_samples = stochastic_transformer_sample(sk, params_p,
+                                                  prompt,
+                                                  output_len, n_samples,
+                                                  huggingface_model=huggingface_model)
+        rew = rew_model(p_samples)
+        print("Base model samples")
+        print(p_samples)
+        print("Rew of samples")
+        print(rew)
+        print("Rew of samples less mean")
+        print(rew - rew.mean())
+        print("Log p on samples before update")
+        log_p = evaluate_log_p_theta_1_to_t(p_samples, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
+        print(log_p)
+
         rng_key, grad_params_p = self.get_grad_params_p(
             rng_key, prompt, n_samples,
             output_len, params_p,
@@ -648,6 +666,12 @@ class ExperimentConfig:
         # print(grad_params_p)
 
         params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p, grad_params_p[0], optim_p_state, params_p)
+
+        print("Log p on samples after update")
+        log_p = evaluate_log_p_theta_1_to_t(p_samples, params_p,
+                                            prompt.shape[-1], output_len,
+                                            huggingface_model=huggingface_model)
+        print(log_p)
 
         return rng_key, params_p, optim_p_state
 
