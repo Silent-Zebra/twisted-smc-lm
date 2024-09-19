@@ -748,7 +748,7 @@ class ExperimentConfig:
             # # for s in text_outputs_smc_no_intermediate_resample[:n_samples_to_print]:
             # #     print(s)
 
-            n_samples_to_print = 20
+            # n_samples_to_print = 20
             inspect_text_samples(tokenizer, p_samples, n_samples_to_print,
                                  name="Base Samples")
             inspect_text_samples(tokenizer, smc_samples, n_samples_to_print,
