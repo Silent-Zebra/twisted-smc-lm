@@ -651,8 +651,8 @@ class ExperimentConfig:
         print("Rew of samples less mean")
         print(rew - rew.mean())
         print("Log p on samples before update")
-        log_p = evaluate_log_p_theta_1_to_t(p_samples, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
-        print(log_p)
+        log_p_before = evaluate_log_p_theta_1_to_t(p_samples, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
+        print(log_p_before)
 
         rng_key, grad_params_p = self.get_grad_params_p(
             rng_key, prompt, n_samples,
@@ -668,10 +668,13 @@ class ExperimentConfig:
         params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p, grad_params_p[0], optim_p_state, params_p)
 
         print("Log p on samples after update")
-        log_p = evaluate_log_p_theta_1_to_t(p_samples, params_p,
+        log_p_after = evaluate_log_p_theta_1_to_t(p_samples, params_p,
                                             prompt.shape[-1], output_len,
                                             huggingface_model=huggingface_model)
-        print(log_p)
+        print(log_p_after)
+
+        print("Difference in log p")
+        print(log_p_after - log_p_before)
 
         return rng_key, params_p, optim_p_state
 
