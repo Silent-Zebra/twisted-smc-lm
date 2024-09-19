@@ -687,7 +687,8 @@ class ExperimentConfig:
 
             # Eval also total prob of some bad words
             print("bad word calc info")
-            calc_analytic_bad_word_probs(args.n_vocab, prompt, params_p,
+            total_prob_bad_t_0_by_word, total_prob_bad_t_0 = \
+                calc_analytic_bad_word_probs(args.n_vocab, prompt, params_p,
                                          huggingface_model)
 
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
@@ -757,6 +758,7 @@ class ExperimentConfig:
             # print("WEIGHTS OF THE NO-INTERMEDIATE-RESAMPLE SAMPLES")
             # print(jax.lax.stop_gradient(log_w_t_sigma_samples))
             # print(jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples)))
+            aux_info = (rew.mean(), rew_adv.mean(), total_prob_bad_t_0)
 
         else:
             raise NotImplementedError
@@ -768,6 +770,7 @@ class ExperimentConfig:
         #                       condition_twist_on_tokens=condition_twist_on_tokens,
         #                       huggingface_model=huggingface_model)
         # print(f"KL to prior estimate: {kl_vals.mean()}")
+
 
         return rng_key, aux_info, proposal_scores, kl_vals
 
@@ -1264,6 +1267,11 @@ def do_inspection_and_plotting_of_test_info(
         params_proposal=params_proposal
     )
 
+    rew_mean, rew_adv_mean, prob_bad_word_t0 = aux_info
+    plot_over_time_list['rews'].append(rew_mean)
+    plot_over_time_list['adv_rews'].append(rew_adv_mean)
+    plot_over_time_list['bad_word_probs'].append(prob_bad_word_t0)
+
 
     # if true_posterior_samples_by_token is not None:  # Then do plotting of logZ bounds # TODO should consider replacing with true_posterior_samples_by_prompt_and_by_token as true_posterior_samples_by_token is unused in the below now
     #
@@ -1305,6 +1313,9 @@ def do_inspection_and_plotting_of_test_info(
     #         plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
     #         rng_key, plot_over_time_list_p_proposal = experiment_cfg.get_and_plot_logZ_bounds_based_on_cfg(
     #             **plot_args)  # Use the same unchanged rng_key
+
+    print("Information collected over time:")
+    print(plot_over_time_list)
 
     return rng_key, plot_over_time_list, plot_over_time_list_p_proposal
 
@@ -1603,7 +1614,10 @@ def main():
 
     last_ckpt_epoch = -1
 
-    plot_over_time_list, plot_over_time_list_p_proposal = setup_plot_over_time_lists(n_samples_for_plots)
+    # plot_over_time_list, plot_over_time_list_p_proposal = setup_plot_over_time_lists(n_samples_for_plots)
+    plot_over_time_list_p_proposal = None
+    plot_over_time_list = {'rews':[], 'adv_rews':[], 'bad_word_probs':[]}
+
 
     replay_buffers_by_prompt = [None] * len(jnp_prompts)
     replay_buffer_log_w_ts_by_prompt = [None] * len(jnp_prompts)
@@ -1651,7 +1665,6 @@ def main():
                     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.seed,
                     args.exp_num_twist_updates, args.twist_updates_per_epoch
                 )
-
 
             # ----- DO TWIST UPDATES -----
             print(f"TWIST UPDATES STARTING", flush=True)
