@@ -52,12 +52,6 @@ from bad_words import *
 
 
 def get_new_params_and_optim_state(optimizer, grad_params, optim_state, params):
-    print("hihi")
-    print(grad_params)
-    print("hihi")
-    print(optim_state)
-    print("hihi")
-    print(params)
     updates, optim_twist_state = optimizer.update(grad_params, optim_state, params)
     params = optax.apply_updates(params, updates)
     return params, optim_state
@@ -754,7 +748,7 @@ class ExperimentConfig:
             # # for s in text_outputs_smc_no_intermediate_resample[:n_samples_to_print]:
             # #     print(s)
 
-            n_samples_to_print = 10
+            n_samples_to_print = 20
             inspect_text_samples(tokenizer, p_samples, n_samples_to_print,
                                  name="Base Samples")
             inspect_text_samples(tokenizer, smc_samples, n_samples_to_print,
