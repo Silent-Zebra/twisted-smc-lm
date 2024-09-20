@@ -1175,7 +1175,7 @@ def get_model_config_and_conditional_twist_settings(hface_model_type, rm_type):
 def setup_model_and_params(
     rng_key, separate_hface_twist_model, model_config, from_pt, experiment_cfg, hface_nn_twist, softmax_twist,
     conditional_twist_type, num_last_tokens_to_condition_on, n_layers_twist, hidden_units_multiplier,
-    one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi, use_lora, lora_rank, lr_p
+    one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi, use_lora, lora_rank, lr_p, optimizer_type
 ):
     rng_key, sk = jax.random.split(rng_key, 2)
 
@@ -1206,19 +1206,23 @@ def setup_model_and_params(
 
     params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
 
-    optimizer_twist = optax.adamw(learning_rate=lr_twist,
-                                  b1=beta1,
-                                  b2=beta2, eps=eps,
-                                  weight_decay=weight_decay)
+    if optimizer_type.lower() == "sgd":
+        optimizer_twist = optax.sgd(learning_rate=lr_p)
+        optimizer_p = optax.sgd(learning_rate=lr_p)
+    elif optimizer_type.lower() == "adamw":
+        optimizer_twist = optax.adamw(learning_rate=lr_twist,
+                                      b1=beta1,
+                                      b2=beta2, eps=eps,
+                                      weight_decay=weight_decay)
+
+        optimizer_p = optax.adamw(learning_rate=lr_p,
+                                      b1=beta1,
+                                      b2=beta2, eps=eps,
+                                      weight_decay=weight_decay)
+    else:
+        raise NotImplementedError
+
     optim_twist_state = optimizer_twist.init(params_twist)
-
-    # TODO DEBUG ONLY REMOVE BACK AFTER
-
-    optimizer_p = optax.adamw(learning_rate=lr_p,
-                                  b1=beta1,
-                                  b2=beta2, eps=eps,
-                                  weight_decay=weight_decay)
-    # optimizer_p = optax.sgd(learning_rate=lr_p)
 
     optim_p_state = optimizer_p.init(params_p)
 
@@ -1269,7 +1273,7 @@ def setup_model_and_params(
 def setup_cfg(
     n_vocab, twist_learn_type, rm_type, seed, hface_model_type, lr_twist, lr_p,
     beta1, beta2, weight_decay, n_layers_twist,
-    output_len, n_samples_at_a_time, rl_loss_type,
+    output_len, n_samples_at_a_time, rl_loss_type, optimizer_type,
     beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dirs=None,
     load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
     num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
@@ -1314,7 +1318,7 @@ def setup_cfg(
         hidden_units_multiplier,
         one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi,
         use_lora, lora_rank,
-        lr_p
+        lr_p, optimizer_type
     )
 
     tokenizer_RM, rewardModel = get_tokenizer_and_rewardModel(rm_type)
@@ -1708,7 +1712,8 @@ def main():
         "train_on_true_posterior_samples": args.train_on_true_posterior_samples,
         "output_p_psi": args.output_p_psi, "separate_proposal_and_twist": args.separate_proposal_and_twist,
         "lr_p": args.lr_p,
-        "rl_loss_type": args.rl_loss_type
+        "rl_loss_type": args.rl_loss_type,
+        "optimizer_type": args.optimizer_type
     }
 
 
@@ -1954,7 +1959,10 @@ if __name__ == "__main__":
             # "bce_q", "bce_qsigma", Don't use these, not principled. Should need p for t+1:T anyways, regardless of the prefix
         ]
     )
-    # TODO JUL 10 option for choice of optimizer e.g. adam, sgd, adamw, etc.
+    parser.add_argument(
+        "--optimizer", type=str, default="adamw",
+        choices=["adamw", "sgd"]
+    )
 
     parser.add_argument("--seed", type=int, default=0)
 
