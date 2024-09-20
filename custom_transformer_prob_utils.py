@@ -63,8 +63,10 @@ def get_transformer_p_logits(params_p, full_seq, huggingface_model=None, use_par
     assert huggingface_model is not None
     if isinstance(huggingface_model, HashableDict):
         if use_params_p:
-            p_logits = huggingface_model['p'](params=params_p,
-                                               input_ids=full_seq)
+            # DEBUG ONLY REMOVE LATER
+            p_logits = jnp.broadcast_to(params_p, (full_seq.shape[0], full_seq.shape[-1], params_p.shape[0]))
+            # p_logits = huggingface_model['p'](params=params_p,
+            #                                    input_ids=full_seq)
         else:
             print("warning: doing this may have unexpected consequences when updating params_p (model call may be based on diff params than params_p)")
             p_logits = huggingface_model['p'](input_ids=full_seq)
