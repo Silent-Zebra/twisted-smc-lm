@@ -126,7 +126,7 @@ def reinforce_loss(
     e_sigmaq_r_estimate = r_seqs.mean() # For standard sampling, this is an arbitrary baseline, which always works (gives unbiased gradient) for reinforce; here I'm using a simple, non-learned baseline
 
     # r_seqs = r_seqs + (r_seqs >= e_sigmaq_r_estimate + 2.) * 10
-    e_sigmaq_r_estimate = 7.
+    e_sigmaq_r_estimate = 8.
     # TODO DEBUG ONLY REMOVE LATER
 
 
@@ -680,6 +680,9 @@ class ExperimentConfig:
 
         print("Difference in log p")
         print(log_p_after - log_p_before)
+
+        print("Mean difference in log p")
+        print((log_p_after - log_p_before).mean())
 
         return rng_key, params_p, optim_p_state
 
