@@ -1960,7 +1960,7 @@ if __name__ == "__main__":
         ]
     )
     parser.add_argument(
-        "--optimizer", type=str, default="adamw",
+        "--optimizer_type", type=str, default="adamw",
         choices=["adamw", "sgd"]
     )
 
