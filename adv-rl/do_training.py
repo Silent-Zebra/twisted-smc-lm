@@ -77,6 +77,7 @@ def reinforce_loss(
     tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv"
 ):
 
+
     if (params_proposal is not None) or proposal_is_p:
         raise NotImplementedError # TODO later, if we want to use it at all
     if condition_twist_on_tokens is not None or true_sigma_samples is not None:
@@ -114,6 +115,9 @@ def reinforce_loss(
     else:
         raise NotImplementedError
 
+    print("SAMPLES TO USE")
+    print(samples_to_use)
+
     r_seqs = rew_model(samples_to_use)
 
     # Reminder here that evaluate_log_p_theta evaluates just the probability under whatever model we are using. Since we are doing RL, this is now the q that we are interested in
@@ -127,7 +131,7 @@ def reinforce_loss(
 
     # r_seqs = r_seqs + (r_seqs >= e_sigmaq_r_estimate + 2.) * 10
     # e_sigmaq_r_estimate = 8.
-    e_sigmaq_r_estimate = 0.
+    # e_sigmaq_r_estimate = 0.
     # TODO DEBUG ONLY REMOVE LATER
 
 
@@ -140,6 +144,8 @@ def reinforce_loss(
     # ent_term = calculate_entropy_gradient_term(model_seqs, cfg_p, params_p, prompt_len, output_len)
     # loss = -objective + beta_kl * kl_term - beta_ent * ent_term # - on entropy because the loss is the negative of objective. Regularization objective is to increase entropy, so negative entropy goes into the loss
     loss = -objective
+
+    print(objective)
 
     return loss
 
@@ -205,6 +211,7 @@ class ExperimentConfig:
         self.twist_grad_fn = self._get_twist_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
+
         if self.rl_loss_type == "custom_adv":
             pass
             # self.beta_kl = beta_kl
@@ -224,9 +231,9 @@ class ExperimentConfig:
 
     def _get_rl_grad_fn(self):
         if self.rl_loss_type == "custom_adv":
-            return jax.grad(reinforce_loss, argnums=[2])
+            return jax.grad(reinforce_loss, argnums=2)
         elif self.rl_loss_type == "reinforce":
-            return jax.grad(reinforce_loss_standard, argnums=[2])
+            return jax.grad(reinforce_loss_standard, argnums=2)
         elif self.rl_loss_type == "ppo":
             return jax.grad(ppo_and_value_loss, argnums=[3, 9], has_aux=True)
         else:
@@ -583,7 +590,7 @@ class ExperimentConfig:
         return rng_key, grad_params_twist
 
 
-    def get_grad_params_p(self, rng_key, prompt, n_samples, output_len,
+    def get_grad_params_p(self, sk, prompt, n_samples, output_len,
                               params_p, params_twist, log_true_final_twist,
                               proposal_is_p=False, huggingface_model=None,
                               tempered_twist=False, beta_prop=None, params_proposal=None):
@@ -591,7 +598,6 @@ class ExperimentConfig:
         if self.rm_type == "p_last_tokens":
             raise NotImplementedError # TODO later support all the settings that get_grad_params_twist supports
 
-        rng_key, sk = jax.random.split(rng_key)
 
         rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist, self.beta_temp)
 
@@ -606,7 +612,7 @@ class ExperimentConfig:
             rew_model=rew_model
         )
 
-        return rng_key, grad_params_p
+        return grad_params_p
 
     # @partial(jax.jit, static_argnames=[
     #     "self", "n_twist", "output_len",
@@ -662,9 +668,11 @@ class ExperimentConfig:
         print("Log p on samples before update")
         log_p_before = evaluate_log_p_theta_1_to_t(p_samples, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
         print(log_p_before)
+        for i in range(p_samples.shape[0]):
+            print(params_p[p_samples[i][-1]])
 
-        rng_key, grad_params_p = self.get_grad_params_p(
-            rng_key, prompt, n_samples,
+        grad_params_p = self.get_grad_params_p(
+            sk, prompt, n_samples,
             output_len, params_p,
             params_twist, log_true_final_twist,
             proposal_is_p=proposal_is_p,
@@ -672,21 +680,66 @@ class ExperimentConfig:
             tempered_twist=tempered_twist, beta_prop=beta_prop,
             params_proposal=params_proposal
         )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
+        # print("Grad params p, all")
+        # for x in grad_params_p:
+        #     print(x)
+        print("Grad params p")
+        for i in range(p_samples.shape[0]):
+            print(grad_params_p[p_samples[i][-1]])
         # print(grad_params_p)
+        # print(grad_params_p.shape)
 
-        params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p, grad_params_p[0], optim_p_state, params_p)
+        print("P samples")
+        print(p_samples)
+
+        print("reinforce loss")
+        loss = reinforce_loss_standard(
+            sk, prompt, params_p, params_twist, log_true_final_twist,
+            output_len, n_samples,
+            proposal_is_p=proposal_is_p,
+            huggingface_model=huggingface_model,
+            tempered_twist=tempered_twist, beta_prop=beta_prop,
+            params_proposal=params_proposal,
+            rew_model=rew_model,
+            smc_procedure_type=self.smc_procedure_type
+        )
+
+        params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p)
 
         print("Log p on samples after update")
         log_p_after = evaluate_log_p_theta_1_to_t(p_samples, params_p,
                                             prompt.shape[-1], output_len,
                                             huggingface_model=huggingface_model)
         print(log_p_after)
+        for i in range(p_samples.shape[0]):
+            print(params_p[p_samples[i][-1]])
+        # 1/0
+
+        print("Hihihi")
+        prompt_len = prompt.shape[-1]
+        log_p_all_tokens = get_log_p_all_tokens(p_samples, params_p,
+                                                huggingface_model)
+        log_p_all_tokens_for_output_time_steps = log_p_all_tokens[:,prompt_len - 1:-1,
+                                                 :]  # I do this because, e.g. for the first output token, you want the log_p that was generated by the transformer after the last token of the prompt was fed into it. Therefore if the prompt_len is 4, you want position 3 (in 0 based indexing), as that's the 4th token that was passed in, and that gives you logits for the first output token
+
+        print(log_p_all_tokens_for_output_time_steps.shape)
+        output_tokens = p_samples[:, prompt_len:]
+        print(output_tokens)
+        print(output_tokens.shape)
+        log_p_select_tokens = log_p_all_tokens_for_output_time_steps[
+            jnp.arange(p_samples.shape[0])[:, None], jnp.arange(
+                output_tokens.shape[-1]), output_tokens]
+        print(log_p_select_tokens)
+
+        for i in range(p_samples.shape[0]):
+            print(log_p_all_tokens_for_output_time_steps[i][0][output_tokens[i][0]])
 
         print("Difference in log p")
         print(log_p_after - log_p_before)
 
         print("Mean difference in log p")
         print((log_p_after - log_p_before).mean())
+
 
         return rng_key, params_p, optim_p_state
 
@@ -1177,10 +1230,14 @@ def setup_model_and_params(
                                   weight_decay=weight_decay)
     optim_twist_state = optimizer_twist.init(params_twist)
 
+    # TODO DEBUG ONLY REMOVE BACK AFTER
+
     optimizer_p = optax.adamw(learning_rate=lr_p,
                                   b1=beta1,
                                   b2=beta2, eps=eps,
                                   weight_decay=weight_decay)
+    # optimizer_p = optax.sgd(learning_rate=lr_p)
+
     optim_p_state = optimizer_p.init(params_p)
 
     if output_p_psi:
@@ -1230,7 +1287,7 @@ def setup_model_and_params(
 def setup_cfg(
     n_vocab, twist_learn_type, rm_type, seed, hface_model_type, lr_twist, lr_p,
     beta1, beta2, weight_decay, n_layers_twist,
-    output_len, n_samples_at_a_time,
+    output_len, n_samples_at_a_time, rl_loss_type,
     beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dirs=None,
     load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
     num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
@@ -1238,7 +1295,7 @@ def setup_cfg(
     load_posterior_samples=False, load_prefix_posterior_samples=None,
     sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
-    output_p_psi=False, separate_proposal_and_twist=False
+    output_p_psi=False, separate_proposal_and_twist=False,
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1249,7 +1306,7 @@ def setup_cfg(
         sentiment_class=sentiment_class,
         n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
         train_on_true_posterior_samples=train_on_true_posterior_samples,
-        rl_loss_type="custom_adv"
+        rl_loss_type=rl_loss_type
     )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
@@ -1668,7 +1725,8 @@ def main():
         "softmax_twist": False, "n_twist_ebm_vmap": args.n_twist_ebm_vmap, "ebm_combined_alpha": args.ebm_combined_alpha,
         "train_on_true_posterior_samples": args.train_on_true_posterior_samples,
         "output_p_psi": args.output_p_psi, "separate_proposal_and_twist": args.separate_proposal_and_twist,
-        "lr_p": args.lr_p
+        "lr_p": args.lr_p,
+        "rl_loss_type": args.rl_loss_type
     }
 
 
@@ -1746,18 +1804,21 @@ def main():
             # print(max_index)
             # 1/0
 
-            # ----- DO plotting and inspection of test info before the twist updates -----
-            if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
-                rng_key, plot_over_time_list, plot_over_time_list_p_proposal = \
-                    do_inspection_and_plotting_of_test_info(
-                    rng_key, start, experiment_cfg, prompt, params_p,
-                    params_twist, log_true_final_twist, args.output_len, args.n_samples_for_plots_larger,
-                    indices_of_continuation, tokenizer, args.proposal_is_p, huggingface_model,
-                    params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
-                    true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
-                    prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.seed,
-                    args.exp_num_twist_updates, args.twist_updates_per_epoch
-                )
+            # DEBUG ONLY REMOVE LATER
+            debug_only = True
+            if not debug_only:
+                # ----- DO plotting and inspection of test info before the twist updates -----
+                if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
+                    rng_key, plot_over_time_list, plot_over_time_list_p_proposal = \
+                        do_inspection_and_plotting_of_test_info(
+                        rng_key, start, experiment_cfg, prompt, params_p,
+                        params_twist, log_true_final_twist, args.output_len, args.n_samples_for_plots_larger,
+                        indices_of_continuation, tokenizer, args.proposal_is_p, huggingface_model,
+                        params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
+                        true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
+                        prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.seed,
+                        args.exp_num_twist_updates, args.twist_updates_per_epoch
+                    )
 
             # ----- DO TWIST UPDATES -----
             print(f"TWIST UPDATES STARTING", flush=True)
@@ -2056,8 +2117,5 @@ if __name__ == "__main__":
 
     if args.output_p_psi:
         assert args.separate_hface_twist_model
-
-    if args.exp_num_policy_updates != args.exp_num_twist_updates or args.policy_updates_per_epoch != args.twist_updates_per_epoch or args.print_every_policy_updates != args.print_every_twist_updates or args.n_policy_samples != args.n_twist:
-        print("Just checking to be sure, you are using different settings for policy and twist learning")
 
     main()
