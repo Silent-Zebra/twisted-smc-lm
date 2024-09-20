@@ -125,7 +125,8 @@ def reinforce_loss(
 
     e_sigmaq_r_estimate = r_seqs.mean() # For standard sampling, this is an arbitrary baseline, which always works (gives unbiased gradient) for reinforce; here I'm using a simple, non-learned baseline
 
-    r_seqs = r_seqs + (r_seqs >= e_sigmaq_r_estimate + 2.) * 10
+    # r_seqs = r_seqs + (r_seqs >= e_sigmaq_r_estimate + 2.) * 10
+    e_sigmaq_r_estimate = 7.
     # TODO DEBUG ONLY REMOVE LATER
 
 
