@@ -130,7 +130,6 @@ def reinforce_loss(
     # TODO DEBUG ONLY REMOVE LATER
 
 
-    # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     objective = ((r_seqs - e_sigmaq_r_estimate) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
     # TODO ALSO try the arbitrary baseline objective (the one we had from before), see if it works better
 
@@ -1160,6 +1159,10 @@ def setup_model_and_params(
     )
 
     params_p = model_p.huggingface_model.params
+
+    # TODO DEBUG ONLY REMOVE LATER
+    params_p = jnp.zeros((args.n_vocab,))
+    print("warning: using tabular/debug policy. Remove all the DEBUG stuff later.")
 
     params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
 
