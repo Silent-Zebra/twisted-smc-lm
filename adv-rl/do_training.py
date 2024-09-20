@@ -125,6 +125,9 @@ def reinforce_loss(
 
     e_sigmaq_r_estimate = r_seqs.mean() # For standard sampling, this is an arbitrary baseline, which always works (gives unbiased gradient) for reinforce; here I'm using a simple, non-learned baseline
 
+    r_seqs = r_seqs + (r_seqs >= 8.5) * 100
+    # TODO DEBUG ONLY REMOVE LATER
+
     # Use baseline_no_grad here because we don't want the gradient for the baseline to flow through the model reward loss
     objective = ((r_seqs - e_sigmaq_r_estimate) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
     # TODO ALSO try the arbitrary baseline objective (the one we had from before), see if it works better
