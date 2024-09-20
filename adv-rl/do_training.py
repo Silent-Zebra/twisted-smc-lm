@@ -127,6 +127,7 @@ def reinforce_loss(
 
     # r_seqs = r_seqs + (r_seqs >= e_sigmaq_r_estimate + 2.) * 10
     # e_sigmaq_r_estimate = 8.
+    e_sigmaq_r_estimate = 0.
     # TODO DEBUG ONLY REMOVE LATER
 
 
@@ -145,6 +146,8 @@ def reinforce_loss(
 
 def rew_from_log_exp_neg_beta_rew(log_true_final_twist, beta_temp):
     def rew_model(seqs):
+        # Basically, we must have phi of the form phi(s) = e^(-beta r(s)). Thus, log true final twist is -beta r(s). So take negative and divide by beta to get r(s).
+
         rews = -log_true_final_twist(seqs) / beta_temp
 
         # for i in range(seqs.shape[0]):
@@ -155,7 +158,6 @@ def rew_from_log_exp_neg_beta_rew(log_true_final_twist, beta_temp):
         # print(-log_true_final_twist(seqs) / beta_temp)
         # This looks fine
         # TODO REREAD MY CODE, MAKE SURE EVERY LINE IS CORRECT. GO FROM START TO END, LINE BY LINE, THROUGHOUT (specifically for the things I added). THINK CRITICALLY.
-        # Basically, we must have phi of the form phi(s) = e^(-beta r(s)). Thus, log true final twist is -beta r(s). So take negative and divide by beta to get r(s).
         return rews
     return rew_model
 
@@ -654,6 +656,9 @@ class ExperimentConfig:
         print(rew)
         print("Rew of samples less mean")
         print(rew - rew.mean())
+        # print("log true final twist")
+        # print(log_true_final_twist(p_samples))
+
         print("Log p on samples before update")
         log_p_before = evaluate_log_p_theta_1_to_t(p_samples, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
         print(log_p_before)
