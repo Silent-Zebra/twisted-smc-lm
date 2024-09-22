@@ -130,7 +130,7 @@ def reinforce_loss(
     e_sigmaq_r_estimate = r_seqs.mean() # For standard sampling, this is an arbitrary baseline, which always works (gives unbiased gradient) for reinforce; here I'm using a simple, non-learned baseline
 
     # r_seqs = r_seqs + (r_seqs >= e_sigmaq_r_estimate + 2.) * 10
-    # e_sigmaq_r_estimate = 8.
+    e_sigmaq_r_estimate = 8.
     # e_sigmaq_r_estimate = 0.
     # TODO DEBUG ONLY REMOVE LATER
 
@@ -650,14 +650,39 @@ class ExperimentConfig:
         rng_key, sk = jax.random.split(rng_key)
         rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist,
                                                   self.beta_temp)
-        # take samples from base model and eval rew
-        p_samples = stochastic_transformer_sample(sk, params_p,
-                                                  prompt,
-                                                  output_len, n_samples,
-                                                  huggingface_model=huggingface_model)
-        rew = rew_model(p_samples)
-        print("Base model samples")
-        print(p_samples)
+        # take samples from base model and eval rew. FOR DEBUG ONLY
+        sampling_type = "adv"
+        if sampling_type == "adv":
+
+            smc_args = {
+                "rng_key": sk,
+                "prompt": prompt,
+                "params_p": params_p,
+                "params_twist": params_twist,
+                "log_true_final_twist": log_true_final_twist,
+                "output_len": output_len,
+                "n_smc_samples": n_samples,
+                "smc_procedure_type": self.smc_procedure_type,
+                "huggingface_model": huggingface_model,
+                # "condition_twist_on_tokens": condition_twist_on_tokens,
+                "tempered_twist": tempered_twist,
+                "beta_prop": beta_prop,
+                # "true_sigma_samples": true_sigma_samples,
+
+            }
+
+            _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(**smc_args)
+
+            samples_to_use = prompt_w_sigma_sample_s_1_to_t
+        elif sampling_type == "standard":
+            p_samples = stochastic_transformer_sample(sk, params_p,
+                                                      prompt,
+                                                      output_len, n_samples,
+                                                      huggingface_model=huggingface_model)
+            samples_to_use = p_samples
+        rew = rew_model(samples_to_use)
+        print("Samples")
+        print(samples_to_use)
         print("Rew of samples")
         print(rew)
         print("Rew of samples less mean")
@@ -666,7 +691,7 @@ class ExperimentConfig:
         # print(log_true_final_twist(p_samples))
 
         print("Log p on samples before update")
-        log_p_before = evaluate_log_p_theta_1_to_t(p_samples, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
+        log_p_before = evaluate_log_p_theta_1_to_t(samples_to_use, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
         print(log_p_before)
         # for i in range(p_samples.shape[0]):
         #     print(params_p[p_samples[i][-1]])
@@ -689,9 +714,6 @@ class ExperimentConfig:
         # print(grad_params_p)
         # print(grad_params_p.shape)
 
-        print("P samples")
-        print(p_samples)
-
         # print("reinforce loss")
         # loss = reinforce_loss_standard(
         #     sk, prompt, params_p, params_twist, log_true_final_twist,
@@ -707,7 +729,7 @@ class ExperimentConfig:
         params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p)
 
         print("Log p on samples after update")
-        log_p_after = evaluate_log_p_theta_1_to_t(p_samples, params_p,
+        log_p_after = evaluate_log_p_theta_1_to_t(samples_to_use, params_p,
                                             prompt.shape[-1], output_len,
                                             huggingface_model=huggingface_model)
         print(log_p_after)
