@@ -57,6 +57,39 @@ def get_new_params_and_optim_state(optimizer, grad_params, optim_state, params):
     return params, optim_state
 
 
+def get_negative_training_loss_fn(negative_training_threshold=0.):
+    def negative_training_loss(
+        sk, prompt, params_p, params_twist, log_true_final_twist,
+        output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+        proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
+        tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv"
+    ):
+        return reinforce_loss(
+            sk, prompt, params_p, params_twist, log_true_final_twist,
+            output_len, n_samples, smc_procedure_type, huggingface_model,
+            rew_model,
+            proposal_is_p, params_proposal, condition_twist_on_tokens,
+            tempered_twist, beta_prop, true_sigma_samples,
+            sampling_type=sampling_type,
+            negative_training_threshold=negative_training_threshold
+        )
+    return negative_training_loss
+
+# def negative_training_loss(
+#     sk, prompt, params_p, params_twist, log_true_final_twist,
+#     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+#     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
+#     tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv", negative_training_threshold=0.
+# ):
+#     return reinforce_loss(
+#         sk, prompt, params_p, params_twist, log_true_final_twist,
+#         output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+#         proposal_is_p, params_proposal, condition_twist_on_tokens,
+#         tempered_twist, beta_prop, true_sigma_samples, sampling_type=sampling_type,
+#         negative_training_threshold=negative_training_threshold
+#     )
+
+
 def reinforce_loss_standard(
     sk, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
@@ -74,9 +107,9 @@ def reinforce_loss(
     sk, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
-    tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv"
+    tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv",
+    negative_training_threshold=None
 ):
-
 
     if (params_proposal is not None) or proposal_is_p:
         raise NotImplementedError # TODO later, if we want to use it at all
@@ -134,9 +167,19 @@ def reinforce_loss(
     # e_sigmaq_r_estimate = 8.
     # TODO DEBUG ONLY REMOVE LATER
 
-
-    objective = ((r_seqs - e_sigmaq_r_estimate) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
-    # TODO ALSO try the arbitrary baseline objective (the one we had from before), see if it works better
+    if negative_training_threshold is not None:
+        # For negative training, we have a bunch of samples; in the original/standard adversarial training formulation
+        # we would assume that each sample is bad, and so we want to push down probability on each sample
+        # Here we're going to make an arbitrary distinction based on some threshold
+        # e.g. first sample via SMC, then for those samples that are below some reward threshold, we consider those to be bad
+        # and we run the negative training objective on them
+        # Indeed, we can see that this is very much just the REINFORCE loss but with a 0-1 reward instead...
+        # The negative training formulation is essentially 1 for the loss on bad samples, times log prob
+        # which means it is like a reward of -1
+        objective = (-1. * (r_seqs < negative_training_threshold) * log_p_theta_full_seq).mean()
+    else:
+        objective = ((r_seqs - e_sigmaq_r_estimate) * log_p_theta_full_seq).mean()  # Use empirical mean as estimate of the expectation
+        # TODO ALSO try the arbitrary baseline objective (the one we had from before), see if it works better
 
     # model_seqs = stochastic_transformer_sample(sk2, cfg_p, params_p, prompt, output_len, n_samples)
     # p_0_seqs = stochastic_transformer_sample(sk3, cfg_p_0, params_p_0, prompt, output_len, n_samples)
@@ -170,8 +213,8 @@ def rew_from_log_exp_neg_beta_rew(log_true_final_twist, beta_temp):
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
                  sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False,
-                 rl_loss_type="custom_adv", ppo_steps=0, clip_epsilon=0,
-                 gamma=1., gae_lambda=1.
+                 rl_loss_type="custom_adv", negative_training_threshold=None, ppo_steps=0, clip_epsilon=0,
+                 gamma=1., gae_lambda=1.,
     ):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
@@ -212,10 +255,15 @@ class ExperimentConfig:
 
         self.rl_loss_type = rl_loss_type.lower()
 
+        self.negative_training_threshold = None
+
         if self.rl_loss_type == "custom_adv":
             pass
             # self.beta_kl = beta_kl
             # self.beta_ent = beta_ent
+        elif self.rl_loss_type == "negative_training":
+            assert negative_training_threshold is not None
+            self.negative_training_threshold = negative_training_threshold
         elif self.rl_loss_type == "ppo": # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
             assert isinstance(ppo_steps, int)
             assert ppo_steps > 0
@@ -234,6 +282,9 @@ class ExperimentConfig:
             return jax.grad(reinforce_loss, argnums=2)
         elif self.rl_loss_type == "reinforce":
             return jax.grad(reinforce_loss_standard, argnums=2)
+        elif self.rl_loss_type == "negative_training":
+            negative_training_loss = get_negative_training_loss_fn(self.negative_training_threshold)
+            return jax.grad(negative_training_loss, argnums=2)
         elif self.rl_loss_type == "ppo":
             return jax.grad(ppo_and_value_loss, argnums=[3, 9], has_aux=True)
         else:
@@ -1305,7 +1356,7 @@ def setup_cfg(
     load_posterior_samples=False, load_prefix_posterior_samples=None,
     sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
-    output_p_psi=False, separate_proposal_and_twist=False,
+    output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1316,7 +1367,8 @@ def setup_cfg(
         sentiment_class=sentiment_class,
         n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
         train_on_true_posterior_samples=train_on_true_posterior_samples,
-        rl_loss_type=rl_loss_type
+        rl_loss_type=rl_loss_type,
+        negative_training_threshold=negative_training_threshold
     )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
@@ -1737,7 +1789,8 @@ def main():
         "output_p_psi": args.output_p_psi, "separate_proposal_and_twist": args.separate_proposal_and_twist,
         "lr_p": args.lr_p,
         "rl_loss_type": args.rl_loss_type,
-        "optimizer_type": args.optimizer_type
+        "optimizer_type": args.optimizer_type,
+        "negative_training_threshold": args.negative_training_threshold
     }
 
 
@@ -2007,8 +2060,10 @@ if __name__ == "__main__":
                                  # "p_last_tokens"
                                  ])
     parser.add_argument("--rl_loss_type", type=str, default="custom_adv",
-                        choices=["custom_adv", "reinforce", "ppo"
+                        choices=["custom_adv", "reinforce", "negative_training", "ppo"
                                  ])
+    parser.add_argument("--negative_training_threshold", type=float, help="Reward threshold below which we consider the samples we've drawn to be 'bad' and worthy of reducing probability on with negative training",
+                        default=0.)
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens or rm_type == )")
