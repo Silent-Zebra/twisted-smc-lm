@@ -115,6 +115,7 @@ def calc_analytic_bad_word_probs(n_vocab, prompt, params_p, huggingface_model, o
     print("Total prob of bad words at t_0")
     total_prob_bad_t_0 = jnp.exp(total_bad_word_log_p_t_0)
     print(total_prob_bad_t_0)
+    total_log_prob_bad = total_bad_word_log_p_t_0
 
     if output_len == 2:
 
@@ -141,5 +142,5 @@ def calc_analytic_bad_word_probs(n_vocab, prompt, params_p, huggingface_model, o
         1/0
 
 
-    return total_prob_bad_t_0_by_word, total_prob_bad_t_0, total_bad_word_log_p_t_0, total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad
+    return total_prob_bad_t_0_by_word, total_prob_bad_t_0, total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad
 
