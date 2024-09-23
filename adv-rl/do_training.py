@@ -71,7 +71,8 @@ def get_negative_training_loss_fn(negative_training_threshold=0.):
             proposal_is_p, params_proposal, condition_twist_on_tokens,
             tempered_twist, beta_prop, true_sigma_samples,
             sampling_type=sampling_type,
-            negative_training_threshold=negative_training_threshold
+            negative_training_threshold=negative_training_threshold,
+            use_hardcoded_baseline=False # This does not apply for negative training
         )
     return negative_training_loss
 
@@ -94,13 +95,16 @@ def reinforce_loss_standard(
     sk, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
-    tempered_twist=None, beta_prop=None, true_sigma_samples=None
+    tempered_twist=None, beta_prop=None, true_sigma_samples=None, use_hardcoded_baseline=False, hardcoded_baseline=0.
 ):
-    return reinforce_loss(sk, prompt, params_p, params_twist, log_true_final_twist,
-    output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
-    proposal_is_p, params_proposal, condition_twist_on_tokens,
-    tempered_twist, beta_prop, true_sigma_samples, sampling_type="standard")
-
+    return reinforce_loss(
+        sk, prompt, params_p, params_twist, log_true_final_twist,
+        output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+        proposal_is_p, params_proposal, condition_twist_on_tokens,
+        tempered_twist, beta_prop, true_sigma_samples, sampling_type="standard",
+        use_hardcoded_baseline=use_hardcoded_baseline,
+        hardcoded_baseline=hardcoded_baseline
+    )
 
 
 def reinforce_loss(
@@ -108,7 +112,7 @@ def reinforce_loss(
     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
     tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv",
-    negative_training_threshold=None
+    negative_training_threshold=None, use_hardcoded_baseline=False, hardcoded_baseline=0.
 ):
 
     if (params_proposal is not None) or proposal_is_p:
@@ -162,10 +166,14 @@ def reinforce_loss(
 
     e_sigmaq_r_estimate = r_seqs.mean() # For standard sampling, this is an arbitrary baseline, which always works (gives unbiased gradient) for reinforce; here I'm using a simple, non-learned baseline
 
+
     # r_seqs = r_seqs + (r_seqs >= e_sigmaq_r_estimate + 2.) * 10
-    # e_sigmaq_r_estimate = 0.
-    # e_sigmaq_r_estimate = 8.
-    # TODO DEBUG ONLY REMOVE LATER
+    if use_hardcoded_baseline:
+        if negative_training_threshold is not None:
+            raise Exception("The hard coded baseline is for reinforce updates, not for negative training; use negative_training_threshold for negative training")
+        # e_sigmaq_r_estimate = 0.
+        e_sigmaq_r_estimate = hardcoded_baseline
+        # TODO LATER TURN THIS INTO AN ARG THAT CAN SET THE BASELINE VALUE
 
     if negative_training_threshold is not None:
         # For negative training, we have a bunch of samples; in the original/standard adversarial training formulation
@@ -213,7 +221,8 @@ def rew_from_log_exp_neg_beta_rew(log_true_final_twist, beta_temp):
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
                  sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False,
-                 rl_loss_type="custom_adv", negative_training_threshold=None, ppo_steps=0, clip_epsilon=0,
+                 rl_loss_type="custom_adv", use_hardcoded_baseline=False, hardcoded_baseline=0.,
+                 negative_training_threshold=None, ppo_steps=0, clip_epsilon=0,
                  gamma=1., gae_lambda=1.,
     ):
         self.n_vocab = n_vocab
@@ -254,6 +263,9 @@ class ExperimentConfig:
         self.twist_grad_fn = self._get_twist_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
+
+        self.use_hardcoded_baseline = use_hardcoded_baseline
+        self.hardcoded_baseline = hardcoded_baseline
 
         self.negative_training_threshold = None
 
@@ -660,7 +672,9 @@ class ExperimentConfig:
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
             tempered_twist=tempered_twist, beta_prop=beta_prop,
             params_proposal=params_proposal,
-            rew_model=rew_model
+            rew_model=rew_model,
+            use_hardcoded_baseline=self.use_hardcoded_baseline,
+            hardcoded_baseline=self.hardcoded_baseline
         )
 
         return grad_params_p
@@ -1358,7 +1372,8 @@ def setup_cfg(
     load_posterior_samples=False, load_prefix_posterior_samples=None,
     sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
-    output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None
+    output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None,
+    use_hardcoded_baseline=False, hardcoded_baseline=0.
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1370,7 +1385,9 @@ def setup_cfg(
         n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
         train_on_true_posterior_samples=train_on_true_posterior_samples,
         rl_loss_type=rl_loss_type,
-        negative_training_threshold=negative_training_threshold
+        negative_training_threshold=negative_training_threshold,
+        use_hardcoded_baseline=use_hardcoded_baseline,
+        hardcoded_baseline=hardcoded_baseline
     )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
@@ -1792,7 +1809,9 @@ def main():
         "lr_p": args.lr_p,
         "rl_loss_type": args.rl_loss_type,
         "optimizer_type": args.optimizer_type,
-        "negative_training_threshold": args.negative_training_threshold
+        "negative_training_threshold": args.negative_training_threshold,
+        "use_hardcoded_baseline": args.use_hardcoded_baseline,
+        "hardcoded_baseline": args.hardcoded_baseline
     }
 
 
@@ -2064,6 +2083,10 @@ if __name__ == "__main__":
     parser.add_argument("--rl_loss_type", type=str, default="custom_adv",
                         choices=["custom_adv", "reinforce", "negative_training", "ppo"
                                  ])
+    parser.add_argument("--use_hardcoded_baseline", action="store_true", help="Instead of using estimate of expectation, use a hardcoded value for baseline for reinforce loss")
+    parser.add_argument("--hardcoded_baseline", type=float, help="Value of the hardcoded value for baseline for reinforce loss",
+                        default=0.)
+
     parser.add_argument("--negative_training_threshold", type=float, help="Reward threshold below which we consider the samples we've drawn to be 'bad' and worthy of reducing probability on with negative training",
                         default=0.)
 
