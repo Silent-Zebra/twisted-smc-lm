@@ -1833,7 +1833,7 @@ def main():
 
     # plot_over_time_list, plot_over_time_list_p_proposal = setup_plot_over_time_lists(n_samples_for_plots)
     plot_over_time_list_p_proposal = None
-    plot_over_time_list = {'rews':[], 'adv_rews':[], 'bad_word_probs':[]}
+    plot_over_time_list = {'rews':[], 'adv_rews':[], 'log_prob_bad_word':[]}
 
 
     replay_buffers_by_prompt = [None] * len(jnp_prompts)
