@@ -62,8 +62,9 @@ def get_negative_training_loss_fn(negative_training_threshold=0.):
         sk, prompt, params_p, params_twist, log_true_final_twist,
         output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
         proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
-        tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv"
+        tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv", use_hardcoded_baseline=False, hardcoded_baseline=0.
     ):
+        assert not use_hardcoded_baseline
         return reinforce_loss(
             sk, prompt, params_p, params_twist, log_true_final_twist,
             output_len, n_samples, smc_procedure_type, huggingface_model,
@@ -715,53 +716,56 @@ class ExperimentConfig:
         rng_key, sk = jax.random.split(rng_key)
         rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist,
                                                   self.beta_temp)
-        # take samples from base model and eval rew. FOR DEBUG ONLY
-        sampling_type = "adv"
-        if sampling_type == "adv":
 
-            smc_args = {
-                "rng_key": sk,
-                "prompt": prompt,
-                "params_p": params_p,
-                "params_twist": params_twist,
-                "log_true_final_twist": log_true_final_twist,
-                "output_len": output_len,
-                "n_smc_samples": n_samples,
-                "smc_procedure_type": self.smc_procedure_type,
-                "huggingface_model": huggingface_model,
-                # "condition_twist_on_tokens": condition_twist_on_tokens,
-                "tempered_twist": tempered_twist,
-                "beta_prop": beta_prop,
-                # "true_sigma_samples": true_sigma_samples,
+        debug_info = False
+        if debug_info:
+            # take samples from base model and eval rew. FOR DEBUG ONLY
+            sampling_type = "adv"
+            if sampling_type == "adv":
 
-            }
+                smc_args = {
+                    "rng_key": sk,
+                    "prompt": prompt,
+                    "params_p": params_p,
+                    "params_twist": params_twist,
+                    "log_true_final_twist": log_true_final_twist,
+                    "output_len": output_len,
+                    "n_smc_samples": n_samples,
+                    "smc_procedure_type": self.smc_procedure_type,
+                    "huggingface_model": huggingface_model,
+                    # "condition_twist_on_tokens": condition_twist_on_tokens,
+                    "tempered_twist": tempered_twist,
+                    "beta_prop": beta_prop,
+                    # "true_sigma_samples": true_sigma_samples,
 
-            _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(**smc_args)
+                }
 
-            samples_to_use = prompt_w_sigma_sample_s_1_to_t
-        elif sampling_type == "standard":
-            p_samples = stochastic_transformer_sample(sk, params_p,
-                                                      prompt,
-                                                      output_len, n_samples,
-                                                      huggingface_model=huggingface_model)
-            samples_to_use = p_samples
-        rew = rew_model(samples_to_use)
-        print("Samples")
-        print(samples_to_use)
-        print("Rew of samples")
-        print(rew)
-        print("Mean rew of samples")
-        print(rew.mean())
-        print("Rew of samples less mean")
-        print(rew - rew.mean())
-        # print("log true final twist")
-        # print(log_true_final_twist(p_samples))
+                _, prompt_w_sigma_sample_s_1_to_t = smc_procedure(**smc_args)
 
-        print("Log p on samples before update")
-        log_p_before = evaluate_log_p_theta_1_to_t(samples_to_use, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
-        print(log_p_before)
-        # for i in range(p_samples.shape[0]):
-        #     print(params_p[p_samples[i][-1]])
+                samples_to_use = prompt_w_sigma_sample_s_1_to_t
+            elif sampling_type == "standard":
+                p_samples = stochastic_transformer_sample(sk, params_p,
+                                                          prompt,
+                                                          output_len, n_samples,
+                                                          huggingface_model=huggingface_model)
+                samples_to_use = p_samples
+            rew = rew_model(samples_to_use)
+            print("Samples")
+            print(samples_to_use)
+            print("Rew of samples")
+            print(rew)
+            print("Mean rew of samples")
+            print(rew.mean())
+            print("Rew of samples less mean")
+            print(rew - rew.mean())
+            # print("log true final twist")
+            # print(log_true_final_twist(p_samples))
+
+            print("Log p on samples before update")
+            log_p_before = evaluate_log_p_theta_1_to_t(samples_to_use, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
+            print(log_p_before)
+            # for i in range(p_samples.shape[0]):
+            #     print(params_p[p_samples[i][-1]])
 
         grad_params_p = self.get_grad_params_p(
             sk, prompt, n_samples,
@@ -795,22 +799,20 @@ class ExperimentConfig:
 
         params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p, grad_params_p, optim_p_state, params_p)
 
-        print("Log p on samples after update")
-        log_p_after = evaluate_log_p_theta_1_to_t(samples_to_use, params_p,
-                                            prompt.shape[-1], output_len,
-                                            huggingface_model=huggingface_model)
-        print(log_p_after)
-        # for i in range(p_samples.shape[0]):
-        #     print(params_p[p_samples[i][-1]])
-        # 1/0
+        if debug_info:
+            print("Log p on samples after update")
+            log_p_after = evaluate_log_p_theta_1_to_t(samples_to_use, params_p,
+                                                prompt.shape[-1], output_len,
+                                                huggingface_model=huggingface_model)
+            print(log_p_after)
+            # for i in range(p_samples.shape[0]):
+            #     print(params_p[p_samples[i][-1]])
+            # 1/0
+            print("Difference in log p")
+            print(log_p_after - log_p_before)
 
-
-        print("Difference in log p")
-        print(log_p_after - log_p_before)
-
-        print("Mean difference in log p")
-        print((log_p_after - log_p_before).mean())
-
+            print("Mean difference in log p")
+            print((log_p_after - log_p_before).mean())
 
         return rng_key, params_p, optim_p_state
 
@@ -1483,7 +1485,6 @@ def do_inspection_and_plotting_of_test_info(
     plot_over_time_list['rews'].append(float(rew_mean))
     plot_over_time_list['adv_rews'].append(float(rew_adv_mean))
     plot_over_time_list['log_prob_bad_word'].append(float(total_log_prob_bad_word))
-
 
     # if true_posterior_samples_by_token is not None:  # Then do plotting of logZ bounds # TODO should consider replacing with true_posterior_samples_by_prompt_and_by_token as true_posterior_samples_by_token is unused in the below now
     #
