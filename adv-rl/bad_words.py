@@ -134,12 +134,16 @@ def calc_analytic_bad_word_probs(n_vocab, prompt, params_p, huggingface_model, o
         total_prob_bad = jnp.exp(total_bad_word_log_p_t_0) + total_p_bad_t_1_but_not_t_0
         print(total_prob_bad)
 
-        total_log_prob_bad = jax.nn.logsumexp(jnp.concatenate((total_bad_word_log_p_t_0, total_p_bad_t_1_but_not_t_0)))
+        # print(total_bad_word_log_p_t_0)
+        # print(total_p_bad_t_1_but_not_t_0)
+        # print(log_p_bad_tokens_t_1_but_not_t_0)
+        # print(log_p_bad_tokens_t_1_but_not_t_0.shape)
 
-        print(total_prob_bad)
-        print(total_log_prob_bad)
-        print(jnp.exp(total_log_prob_bad))
-        1/0
+        total_log_prob_bad = jax.nn.logsumexp(jnp.concatenate((total_bad_word_log_p_t_0[None], log_p_bad_tokens_t_1_but_not_t_0)))
+
+        # print(total_prob_bad)
+        # print(total_log_prob_bad)
+        # print(jnp.exp(total_log_prob_bad))
 
     print("Total log prob of bad words")
     print(total_log_prob_bad)
