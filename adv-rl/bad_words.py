@@ -64,7 +64,7 @@ def calc_analytic_bad_word_probs(n_vocab, prompt, params_p, huggingface_model, o
         # print(full_seq)
         # print(full_seq.shape)
 
-        log_p_bad_tokens_t_1_but_not_t_0 = jnp.zeros((n_bad_words,))
+        log_p_bad_tokens_t_1_but_not_t_0 = None
 
         # Break up evaluation into batches to avoid running out of memory
         for i in range(n_vocab // batch_size + 1):
@@ -102,10 +102,25 @@ def calc_analytic_bad_word_probs(n_vocab, prompt, params_p, huggingface_model, o
             # print(jnp.exp(log_p_t_0_to_1).sum(axis=0))
             # print(jnp.exp(jax.nn.logsumexp(log_p_t_0_to_1, axis=0)))
 
-            log_p_bad_tokens_t_1_but_not_t_0 += jax.nn.logsumexp(log_p_t_0_to_1, axis=0)
+            if log_p_bad_tokens_t_1_but_not_t_0 is None:
+                log_p_bad_tokens_t_1_but_not_t_0 = jax.nn.logsumexp(log_p_t_0_to_1, axis=0)
+            else:
+                print("hihi")
+                print(log_p_bad_tokens_t_1_but_not_t_0)
 
-            # print("prob of all sequences not containing a bad word in the first time step but containing a bad word in the second time step (by bad word)")
-            # print(p_bad_tokens_t_1_but_not_t_0)
+                print(log_p_bad_tokens_t_1_but_not_t_0.shape)
+                print(jax.nn.logsumexp(log_p_t_0_to_1, axis=0).shape)
+
+                concat = jnp.stack((log_p_bad_tokens_t_1_but_not_t_0, jax.nn.logsumexp(log_p_t_0_to_1, axis=0)))
+
+                # print(concat.shape)
+                # print(jax.nn.logsumexp(concat, axis=0).shape)
+                # print(jax.nn.logsumexp(concat, axis=0))
+                log_p_bad_tokens_t_1_but_not_t_0 = jax.nn.logsumexp(concat, axis=0)
+
+                print(log_p_bad_tokens_t_1_but_not_t_0)
+                # print("prob of all sequences not containing a bad word in the first time step but containing a bad word in the second time step (by bad word)")
+                # print(p_bad_tokens_t_1_but_not_t_0)
 
 
     print("Prob of bad words at t_0 by bad word")
@@ -140,10 +155,11 @@ def calc_analytic_bad_word_probs(n_vocab, prompt, params_p, huggingface_model, o
         # print(log_p_bad_tokens_t_1_but_not_t_0.shape)
 
         total_log_prob_bad = jax.nn.logsumexp(jnp.concatenate((total_bad_word_log_p_t_0[None], log_p_bad_tokens_t_1_but_not_t_0)))
+        print("Total log prob of sequence containing a bad word")
 
         # print(total_prob_bad)
-        # print(total_log_prob_bad)
-        # print(jnp.exp(total_log_prob_bad))
+        print(total_log_prob_bad)
+        print(jnp.exp(total_log_prob_bad))
 
     print("Total log prob of bad words")
     print(total_log_prob_bad)
