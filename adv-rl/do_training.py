@@ -96,7 +96,7 @@ def reinforce_loss_standard(
     sk, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
-    tempered_twist=None, beta_prop=None, true_sigma_samples=None, use_hardcoded_baseline=False, hardcoded_baseline=0.
+    tempered_twist=None, beta_prop=None, true_sigma_samples=None, use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.
 ):
     return reinforce_loss(
         sk, prompt, params_p, params_twist, log_true_final_twist,
@@ -104,7 +104,8 @@ def reinforce_loss_standard(
         proposal_is_p, params_proposal, condition_twist_on_tokens,
         tempered_twist, beta_prop, true_sigma_samples, sampling_type="standard",
         use_hardcoded_baseline=use_hardcoded_baseline,
-        hardcoded_baseline=hardcoded_baseline
+        hardcoded_baseline=hardcoded_baseline,
+        neg_reward_multiplier=neg_reward_multiplier
     )
 
 
@@ -113,7 +114,7 @@ def reinforce_loss(
     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
     tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv",
-    negative_training_threshold=None, use_hardcoded_baseline=False, hardcoded_baseline=0.
+    negative_training_threshold=None, use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.
 ):
 
     if (params_proposal is not None) or proposal_is_p:
@@ -157,6 +158,9 @@ def reinforce_loss(
     # print(samples_to_use)
 
     r_seqs = rew_model(samples_to_use)
+    # print(r_seqs)
+    r_seqs += (r_seqs < 0) * r_seqs * (neg_reward_multiplier - 1)
+    # print(r_seqs)
 
     # Reminder here that evaluate_log_p_theta evaluates just the probability under whatever model we are using. Since we are doing RL, this is now the q that we are interested in
     # The huggingface model has both p (the base model) and the twist;
@@ -224,7 +228,7 @@ class ExperimentConfig:
                  sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False,
                  rl_loss_type="custom_adv", use_hardcoded_baseline=False, hardcoded_baseline=0.,
                  negative_training_threshold=None, ppo_steps=0, clip_epsilon=0,
-                 gamma=1., gae_lambda=1.,
+                 gamma=1., gae_lambda=1., neg_reward_multiplier=1.
     ):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
@@ -267,6 +271,7 @@ class ExperimentConfig:
 
         self.use_hardcoded_baseline = use_hardcoded_baseline
         self.hardcoded_baseline = hardcoded_baseline
+        self.neg_reward_multiplier = neg_reward_multiplier
 
         self.negative_training_threshold = None
 
@@ -665,6 +670,21 @@ class ExperimentConfig:
 
         rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist, self.beta_temp)
 
+        # DEBUG ONLY
+        # reinforce_loss_standard(
+        #     sk, prompt, params_p,
+        #     params_twist, log_true_final_twist, output_len,
+        #     n_samples, smc_procedure_type=self.smc_procedure_type,
+        #     condition_twist_on_tokens=None,
+        #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+        #     tempered_twist=tempered_twist, beta_prop=beta_prop,
+        #     params_proposal=params_proposal,
+        #     rew_model=rew_model,
+        #     use_hardcoded_baseline=self.use_hardcoded_baseline,
+        #     hardcoded_baseline=self.hardcoded_baseline,
+        #     neg_reward_multiplier=self.neg_reward_multiplier
+        # )
+
         grad_params_p = self.rl_grad_fn(
             sk, prompt, params_p,
             params_twist, log_true_final_twist, output_len,
@@ -675,7 +695,8 @@ class ExperimentConfig:
             params_proposal=params_proposal,
             rew_model=rew_model,
             use_hardcoded_baseline=self.use_hardcoded_baseline,
-            hardcoded_baseline=self.hardcoded_baseline
+            hardcoded_baseline=self.hardcoded_baseline,
+            neg_reward_multiplier=self.neg_reward_multiplier
         )
 
         return grad_params_p
@@ -1375,7 +1396,7 @@ def setup_cfg(
     sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
     output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None,
-    use_hardcoded_baseline=False, hardcoded_baseline=0.
+    use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1389,7 +1410,8 @@ def setup_cfg(
         rl_loss_type=rl_loss_type,
         negative_training_threshold=negative_training_threshold,
         use_hardcoded_baseline=use_hardcoded_baseline,
-        hardcoded_baseline=hardcoded_baseline
+        hardcoded_baseline=hardcoded_baseline,
+        neg_reward_multiplier=neg_reward_multiplier
     )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
@@ -1812,7 +1834,8 @@ def main():
         "optimizer_type": args.optimizer_type,
         "negative_training_threshold": args.negative_training_threshold,
         "use_hardcoded_baseline": args.use_hardcoded_baseline,
-        "hardcoded_baseline": args.hardcoded_baseline
+        "hardcoded_baseline": args.hardcoded_baseline,
+        "neg_reward_multiplier": args.neg_reward_multiplier
     }
 
 
@@ -2090,6 +2113,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--negative_training_threshold", type=float, help="Reward threshold below which we consider the samples we've drawn to be 'bad' and worthy of reducing probability on with negative training",
                         default=0.)
+    parser.add_argument("--neg_reward_multiplier", type=float, help="Manually multiply the reward function by this factor for all negative reward samples",
+                        default=1.)
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens or rm_type == )")
