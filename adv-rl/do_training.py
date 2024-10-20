@@ -205,23 +205,18 @@ def reinforce_loss(
 
     return loss
 
-
-def rew_from_log_exp_neg_beta_rew(log_true_final_twist, beta_temp):
+def curried_rew_model_fn(rewardModel, tokenizer_RM, tokenizer):
     def rew_model(seqs):
-        # Basically, we must have phi of the form phi(s) = e^(-beta r(s)). Thus, log true final twist is -beta r(s). So take negative and divide by beta to get r(s).
-
-        rews = -log_true_final_twist(seqs) / beta_temp
-
-        # for i in range(seqs.shape[0]):
-        #     if rews[i] < 0:
-        #         print(seqs[i])
-        #         print(rews[i])
-        # print(seqs)
-        # print(-log_true_final_twist(seqs) / beta_temp)
-        # This looks fine
-        # TODO REREAD MY CODE, MAKE SURE EVERY LINE IS CORRECT. GO FROM START TO END, LINE BY LINE, THROUGHOUT (specifically for the things I added). THINK CRITICALLY.
-        return rews
+        return reward_model_toxicity(seqs, rewardModel, tokenizer_RM, tokenizer)
     return rew_model
+
+# Don't use this, this has numerical stability issues with beta_temp ~ 0.
+# def rew_from_log_exp_neg_beta_rew(log_true_final_twist, beta_temp):
+#     def rew_model(seqs):
+#         # Basically, we must have phi of the form phi(s) = e^(-beta r(s)). Thus, log true final twist is -beta r(s). So take negative and divide by beta to get r(s).
+#         rews = -log_true_final_twist(seqs) / beta_temp
+#         return rews
+#     return rew_model
 
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
@@ -668,7 +663,7 @@ class ExperimentConfig:
             raise NotImplementedError # TODO later support all the settings that get_grad_params_twist supports
 
 
-        rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist, self.beta_temp)
+        rew_model = self.curried_rm_fn
 
         # DEBUG ONLY
         # reinforce_loss_standard(
@@ -735,8 +730,8 @@ class ExperimentConfig:
                      ):
 
         rng_key, sk = jax.random.split(rng_key)
-        rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist,
-                                                  self.beta_temp)
+        rew_model = self.curried_rm_fn
+
 
         debug_info = False
         if debug_info:
@@ -880,8 +875,7 @@ class ExperimentConfig:
             # "toxicity_threshold", "sentiment_threshold"
         ]: # TODO consider set up a set of final twist classes, sort them into classes, and then do if/else/switch based on those
 
-            rew_model = rew_from_log_exp_neg_beta_rew(log_true_final_twist,
-                                                      self.beta_temp)
+            rew_model = self.curried_rm_fn
 
             # take samples from base model and eval rew
             p_samples = stochastic_transformer_sample(sk2, params_p,
@@ -1447,6 +1441,8 @@ def setup_cfg(
     experiment_cfg.rewardModel = rewardModel
     experiment_cfg.tokenizer_RM = tokenizer_RM
     experiment_cfg.tokenizer = tokenizer
+
+    experiment_cfg.curried_rm_fn = curried_rew_model_fn(rewardModel, tokenizer_RM, tokenizer)
 
     if separate_proposal_and_twist:
         assert load_ckpt # must load the proposal, as we are not training it.
