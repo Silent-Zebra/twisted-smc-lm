@@ -59,39 +59,6 @@ def get_new_params_and_optim_state(optimizer, grad_params, optim_state, params):
     return params, optim_state
 
 
-def get_negative_training_loss_fn(negative_training_threshold=0.):
-    def negative_training_loss(
-        sk, prompt, params_p, params_twist, log_true_final_twist,
-        output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
-        proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
-        tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv", use_hardcoded_baseline=False, hardcoded_baseline=0.
-    ):
-        assert not use_hardcoded_baseline
-        return reinforce_loss(
-            sk, prompt, params_p, params_twist, log_true_final_twist,
-            output_len, n_samples, smc_procedure_type, huggingface_model,
-            rew_model,
-            proposal_is_p, params_proposal, condition_twist_on_tokens,
-            tempered_twist, beta_prop, true_sigma_samples,
-            sampling_type=sampling_type,
-            negative_training_threshold=negative_training_threshold,
-            use_hardcoded_baseline=False # This does not apply for negative training
-        )
-    return negative_training_loss
-
-# def negative_training_loss(
-#     sk, prompt, params_p, params_twist, log_true_final_twist,
-#     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
-#     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
-#     tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv", negative_training_threshold=0.
-# ):
-#     return reinforce_loss(
-#         sk, prompt, params_p, params_twist, log_true_final_twist,
-#         output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
-#         proposal_is_p, params_proposal, condition_twist_on_tokens,
-#         tempered_twist, beta_prop, true_sigma_samples, sampling_type=sampling_type,
-#         negative_training_threshold=negative_training_threshold
-#     )
 
 
 # def reinforce_loss_standard(
@@ -319,7 +286,6 @@ class ExperimentConfig:
             else:
                 return jax.grad(reinforce_loss_standard, argnums=2)
         elif self.rl_loss_type == "negative_training":
-            # negative_training_loss = get_negative_training_loss_fn(self.negative_training_threshold)
             assert not self.use_hardcoded_baseline
             assert self.neg_reward_multiplier == 1. # If not, then you may get unexpected behaviour. Rather adjust threshold instead of using this multiplier
             negative_training_loss = partial(
