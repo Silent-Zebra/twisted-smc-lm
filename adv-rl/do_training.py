@@ -319,7 +319,15 @@ class ExperimentConfig:
             else:
                 return jax.grad(reinforce_loss_standard, argnums=2)
         elif self.rl_loss_type == "negative_training":
-            negative_training_loss = get_negative_training_loss_fn(self.negative_training_threshold)
+            # negative_training_loss = get_negative_training_loss_fn(self.negative_training_threshold)
+            assert not self.use_hardcoded_baseline
+            assert self.neg_reward_multiplier == 1. # If not, then you may get unexpected behaviour. Rather adjust threshold instead of using this multiplier
+            negative_training_loss = partial(
+                reinforce_loss,
+                negative_training_threshold=self.negative_training_threshold,
+                sampling_type="adv",
+                use_hardcoded_baseline=False # This does not apply for negative training
+            )
             return jax.grad(negative_training_loss, argnums=2)
         elif self.rl_loss_type == "ppo":
             return jax.grad(ppo_and_value_loss, argnums=[3, 9], has_aux=True)
