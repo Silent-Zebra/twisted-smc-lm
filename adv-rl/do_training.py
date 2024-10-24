@@ -41,6 +41,8 @@ from ppo_custom import *
 
 from bad_words import *
 
+from functools import partial
+
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
 # def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist):
 #     updates_twist, optim_twist_state = optimizer_twist.update(
@@ -92,21 +94,22 @@ def get_negative_training_loss_fn(negative_training_threshold=0.):
 #     )
 
 
-def reinforce_loss_standard(
-    sk, prompt, params_p, params_twist, log_true_final_twist,
-    output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
-    proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
-    tempered_twist=None, beta_prop=None, true_sigma_samples=None, use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.
-):
-    return reinforce_loss(
-        sk, prompt, params_p, params_twist, log_true_final_twist,
-        output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
-        proposal_is_p, params_proposal, condition_twist_on_tokens,
-        tempered_twist, beta_prop, true_sigma_samples, sampling_type="standard",
-        use_hardcoded_baseline=use_hardcoded_baseline,
-        hardcoded_baseline=hardcoded_baseline,
-        neg_reward_multiplier=neg_reward_multiplier
-    )
+# def reinforce_loss_standard(
+#     sk, prompt, params_p, params_twist, log_true_final_twist,
+#     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+#     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
+#     tempered_twist=None, beta_prop=None, true_sigma_samples=None, use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.
+# ):
+#     return reinforce_loss(
+#         sk, prompt, params_p, params_twist, log_true_final_twist,
+#         output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+#         proposal_is_p, params_proposal, condition_twist_on_tokens,
+#         tempered_twist, beta_prop, true_sigma_samples, sampling_type="standard",
+#         use_hardcoded_baseline=use_hardcoded_baseline,
+#         hardcoded_baseline=hardcoded_baseline,
+#         neg_reward_multiplier=neg_reward_multiplier
+#     )
+
 
 
 def reinforce_loss(
@@ -114,7 +117,8 @@ def reinforce_loss(
     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
     tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv",
-    negative_training_threshold=None, use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.
+    negative_training_threshold=None, use_hardcoded_baseline=False, hardcoded_baseline=0.,
+    neg_reward_multiplier=1., neg_e_neg_beta_r_transform=False, beta_r_transform=1.
 ):
 
     if (params_proposal is not None) or proposal_is_p:
@@ -162,6 +166,10 @@ def reinforce_loss(
     r_seqs += (r_seqs < 0) * r_seqs * (neg_reward_multiplier - 1)
     # print(r_seqs)
 
+    if neg_e_neg_beta_r_transform:
+        r_seqs = - jnp.exp(- beta_r_transform * r_seqs)
+    # print(r_seqs)
+
     # Reminder here that evaluate_log_p_theta evaluates just the probability under whatever model we are using. Since we are doing RL, this is now the q that we are interested in
     # The huggingface model has both p (the base model) and the twist;
     # TODO CHECK that the base model and twists are learning properly. Check, for a fixed sequence, that base model probs are changing
@@ -205,6 +213,10 @@ def reinforce_loss(
 
     return loss
 
+reinforce_loss_standard = partial(reinforce_loss, sampling_type="standard")
+
+
+
 def curried_rew_model_fn(rewardModel, tokenizer_RM, tokenizer):
     def rew_model(seqs):
         return reward_model_toxicity(seqs, rewardModel, tokenizer_RM, tokenizer)
@@ -223,7 +235,7 @@ class ExperimentConfig:
                  sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False,
                  rl_loss_type="custom_adv", use_hardcoded_baseline=False, hardcoded_baseline=0.,
                  negative_training_threshold=None, ppo_steps=0, clip_epsilon=0,
-                 gamma=1., gae_lambda=1., neg_reward_multiplier=1.
+                 gamma=1., gae_lambda=1., neg_reward_multiplier=1., neg_e_neg_beta_r_transform=False, beta_r_transform=1.
     ):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
@@ -235,6 +247,10 @@ class ExperimentConfig:
         self.n_twist_ebm_vmap = n_twist_ebm_vmap
 
         self.train_on_true_posterior_samples = train_on_true_posterior_samples
+
+        self.neg_e_neg_beta_r_transform = neg_e_neg_beta_r_transform
+        self.beta_r_transform = beta_r_transform
+
 
         # TODO think about if there's some way to avoid the tons of arguments (params_p, params_twist, etc. that is everywhere - can I have them in one centralized place?)
         # TODO I could wrap all of the arguments in a single tuple, sort of like what I did with "carry" before
@@ -294,7 +310,14 @@ class ExperimentConfig:
         if self.rl_loss_type == "custom_adv":
             return jax.grad(reinforce_loss, argnums=2)
         elif self.rl_loss_type == "reinforce":
-            return jax.grad(reinforce_loss_standard, argnums=2)
+            if self.neg_e_neg_beta_r_transform:
+                reinforce_loss_w_neg_e_neg_beta_r = partial(
+                    reinforce_loss, sampling_type="standard",
+                    neg_e_neg_beta_r_transform=True, beta_r_transform=self.beta_r_transform
+                )
+                return jax.grad(reinforce_loss_w_neg_e_neg_beta_r, argnums=2)
+            else:
+                return jax.grad(reinforce_loss_standard, argnums=2)
         elif self.rl_loss_type == "negative_training":
             negative_training_loss = get_negative_training_loss_fn(self.negative_training_threshold)
             return jax.grad(negative_training_loss, argnums=2)
@@ -1390,7 +1413,8 @@ def setup_cfg(
     sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
     output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None,
-    use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.
+    use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.,
+    neg_e_neg_beta_r_transform=False, beta_r_transform=1.
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1405,7 +1429,9 @@ def setup_cfg(
         negative_training_threshold=negative_training_threshold,
         use_hardcoded_baseline=use_hardcoded_baseline,
         hardcoded_baseline=hardcoded_baseline,
-        neg_reward_multiplier=neg_reward_multiplier
+        neg_reward_multiplier=neg_reward_multiplier,
+        neg_e_neg_beta_r_transform=neg_e_neg_beta_r_transform,
+        beta_r_transform=beta_r_transform
     )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
@@ -1831,7 +1857,9 @@ def main():
         "negative_training_threshold": args.negative_training_threshold,
         "use_hardcoded_baseline": args.use_hardcoded_baseline,
         "hardcoded_baseline": args.hardcoded_baseline,
-        "neg_reward_multiplier": args.neg_reward_multiplier
+        "neg_reward_multiplier": args.neg_reward_multiplier,
+        "neg_e_neg_beta_r_transform": args.neg_e_neg_beta_r_transform,
+        "beta_r_transform": args.beta_r_transform
     }
 
 
@@ -2110,6 +2138,9 @@ if __name__ == "__main__":
     parser.add_argument("--negative_training_threshold", type=float, help="Reward threshold below which we consider the samples we've drawn to be 'bad' and worthy of reducing probability on with negative training",
                         default=0.)
     parser.add_argument("--neg_reward_multiplier", type=float, help="Manually multiply the reward function by this factor for all negative reward samples",
+                        default=1.)
+    parser.add_argument("--neg_e_neg_beta_r_transform", action="store_true", help="Transform reward by -e^(-beta_r_transform r)")
+    parser.add_argument("--beta_r_transform", type=float, help="the beta used in the transform of reward by -e^(-beta_r_transform r) (only useful with neg_e_neg_beta_r_transform flag)",
                         default=1.)
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
