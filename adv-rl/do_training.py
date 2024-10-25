@@ -43,6 +43,13 @@ from bad_words import *
 
 from functools import partial
 
+positive_words_index_of_token_list = [1611, 3621, 4451, 4998, 6275, 7932, 8036,
+                                      8082, 9623, 10457, 11004, 11031, 11660,
+                                      13393, 15313, 15497, 20886, 21109, 21840,
+                                      23332, 27004, 32327, 37959, 43888, 43937,
+                                      44460]  # Just some hand picked (GPT assisted) positive adjectives
+
+
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
 # def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist):
 #     updates_twist, optim_twist_state = optimizer_twist.update(
@@ -184,7 +191,7 @@ reinforce_loss_standard = partial(reinforce_loss, sampling_type="standard")
 
 
 
-def curried_rew_model_fn(rewardModel, tokenizer_RM, tokenizer):
+def curried_rew_model_toxicity_fn(rewardModel, tokenizer_RM, tokenizer):
     def rew_model(seqs):
         return reward_model_toxicity(seqs, rewardModel, tokenizer_RM, tokenizer)
     return rew_model
@@ -864,7 +871,7 @@ class ExperimentConfig:
         }
 
         if self.rm_type in [
-            "exp_neg_beta_tox_score",
+            "exp_neg_beta_tox_score", "f_exploration"
             # "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
             # "p_continuation", "hard_p_continuation",
             # "exp_beta_toxicity_class_logprob",
@@ -879,6 +886,21 @@ class ExperimentConfig:
                                                       prompt,
                                                       output_len, n_samples,
                                                       huggingface_model=huggingface_model)
+
+            # if self.rm_type == "f_exploration":
+            #     hand_crafted_samples = jnp.zeros((5, 3))
+            #     hand_crafted_samples = hand_crafted_samples.at[:, 1].set(9372)
+            #     hand_crafted_samples = hand_crafted_samples.at[0, 2].set(11031) # should have rew 10
+            #     hand_crafted_samples = hand_crafted_samples.at[1, 2].set(20886) # should have rew 10
+            #     hand_crafted_samples = hand_crafted_samples.at[2, 0].set(20886) # should have rew -1
+            #     hand_crafted_samples = hand_crafted_samples.at[3, 1].set(0) # should have rew 0
+            #     hand_crafted_samples = hand_crafted_samples.at[4, 1].set(0)
+            #     hand_crafted_samples = hand_crafted_samples.at[4, 2].set(20886) # should have rew 0
+            #
+            #     print(hand_crafted_samples)
+            #     print(rew_model(hand_crafted_samples))
+            #     print(log_true_final_twist(hand_crafted_samples))
+            #     1/0
 
             rew = rew_model(p_samples)
             print("Mean reward from base model samples")
@@ -994,12 +1016,15 @@ class ExperimentConfig:
         indices_of_continuation=None, rewardModel=None, tokenizer_RM=None,
         tokenizer=None, threshold=0, pos_threshold=True, get_true_posterior_samples=True
     ):
-        assert rm_type == "exp_neg_beta_tox_score"
         if rm_type == "exp_neg_beta_tox_score":
             curried_log_true_final_twist_function = curried_log_exp_neg_beta_toxicity
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                         = build_exp_neg_beta_tox_score_twists(jnp_prompts, rewardModel, tokenizer_RM, tokenizer, self.beta_temp)
-
+        elif rm_type == "f_exploration":
+            assert output_len == 2
+            print("NOTE: this setting only works with GPT2 vocab tokenizer/model")
+            log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
+                = build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, positive_words_index_of_token_list, self.beta_temp)
 
         # if rm_type == "exp_beta_rew_p_continuation":
         #     assert indices_of_continuation is not None
@@ -1442,7 +1467,12 @@ def setup_cfg(
     experiment_cfg.tokenizer_RM = tokenizer_RM
     experiment_cfg.tokenizer = tokenizer
 
-    experiment_cfg.curried_rm_fn = curried_rew_model_fn(rewardModel, tokenizer_RM, tokenizer)
+    if experiment_cfg.rm_type in ["exp_neg_beta_tox_score"]:
+        experiment_cfg.curried_rm_fn = curried_rew_model_toxicity_fn(rewardModel, tokenizer_RM, tokenizer)
+    elif experiment_cfg.rm_type in ["f_exploration"]:
+        experiment_cfg.curried_rm_fn = f_exploration_rm(positive_words_index_of_token_list)
+    else:
+        raise NotImplementedError
 
     if separate_proposal_and_twist:
         assert load_ckpt # must load the proposal, as we are not training it.
@@ -2093,7 +2123,7 @@ if __name__ == "__main__":
     parser.add_argument("--policy_updates_per_epoch", type=int, default=100, help="This is only for the adv-rl training setup, in which case we're modifying the base model")
 
     parser.add_argument("--rm_type", type=str, default="exp_neg_beta_tox_score",
-                        choices=["exp_neg_beta_tox_score",
+                        choices=["exp_neg_beta_tox_score", "f_exploration",
                                  # "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
                                  # "p_continuation", "hard_p_continuation",
                                  # "exp_beta_toxicity_class_logprob",

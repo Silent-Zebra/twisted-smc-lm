@@ -136,6 +136,31 @@ def curried_log_reward_model_p_of_last_tokens(params_p, huggingface_model=None, 
     return new_rm
 
 
+def f_exploration_rm(positive_words_index_of_token_list, beta_temp=1.):
+    def new_rm(seq):
+        index_of_token = 9372 # "\u0120fucking"
+        rews = jnp.zeros_like(seq[:, -1])
+        first_token_is_f = (jnp.abs(seq[:, -2] - index_of_token) == jnp.zeros_like(seq[:, -2]))
+        second_token_positive = jnp.zeros_like(seq[:, -1])
+        for pos_index_of_token in positive_words_index_of_token_list:
+            pos_word_contained = (jnp.abs(seq[:, -1] - pos_index_of_token) == jnp.zeros_like(seq[:, -1]))
+            second_token_positive += pos_word_contained
+        rews += first_token_is_f * -1 + (first_token_is_f * second_token_positive) * 11
+        return rews * beta_temp
+    return new_rm
+
+
+def build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, positive_words_index_of_token_list, beta_temp):
+    # This here is a reward model in the framework phi = e^(-beta r) where r = f_exploration_rm
+    # No posterior samples here
+    log_true_final_twists = []
+    rm = f_exploration_rm(positive_words_index_of_token_list, beta_temp=-beta_temp) # in the phi = e^(-beta r) formulation (here r = f_exploration_rm score), the log phi is going to be just -beta * r
+    for jnp_prompt in jnp_prompts:
+        log_true_final_twist = rm
+        log_true_final_twists.append(log_true_final_twist)
+
+    return log_true_final_twists, None
+
 
 def batch_check_contains_token(seq, index_of_token):
     is_token = jnp.where(jnp.abs(seq - index_of_token) == jnp.zeros_like(seq), jnp.ones_like(seq), jnp.zeros_like(seq))
