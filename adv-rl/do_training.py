@@ -43,11 +43,14 @@ from bad_words import *
 
 from functools import partial
 
-positive_words_index_of_token_list = [1611, 3621, 4451, 4998, 6275, 7932, 8036,
-                                      8082, 9623, 10457, 11004, 11031, 11660,
-                                      13393, 15313, 15497, 20886, 21109, 21840,
-                                      23332, 27004, 32327, 37959, 43888, 43937,
-                                      44460]  # Just some hand picked (GPT assisted) positive adjectives
+# words_index_of_token_list = [1611, 3621, 4451, 4998, 6275, 7932, 8036,
+#                                       8082, 9623, 10457, 11004, 11031, 11660,
+#                                       13393, 15313, 15497, 20886, 21109, 21840,
+#                                       23332, 27004, 32327, 37959, 43888, 43937,
+#                                       44460]  # Just some hand picked (GPT assisted) positive adjectives
+words_index_of_token_list = [5089, 9372, 20654, 25617, 30998, 31699, 34094, 46733,
+                     21551, 40267, 7510, 16211, 20041, 32574, 41356,
+                     31030, 47209, 18185, 29836, 12270, 28911 ] # damn and damned add now to this list of bad words
 
 
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
@@ -1024,7 +1027,7 @@ class ExperimentConfig:
             assert output_len == 2
             print("NOTE: this setting only works with GPT2 vocab tokenizer/model")
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
-                = build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, positive_words_index_of_token_list, self.beta_temp)
+                = build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, words_index_of_token_list, self.beta_temp)
 
         # if rm_type == "exp_beta_rew_p_continuation":
         #     assert indices_of_continuation is not None

@@ -136,16 +136,16 @@ def curried_log_reward_model_p_of_last_tokens(params_p, huggingface_model=None, 
     return new_rm
 
 
-def f_exploration_rm(positive_words_index_of_token_list, beta_temp=1.):
+def f_exploration_rm(second_words_index_of_token_list, beta_temp=1.):
     def new_rm(seq):
-        index_of_token = 9372 # "\u0120fucking"
+        index_of_token = 6029 # "\u0120sweet"
         rews = jnp.zeros_like(seq[:, -1])
-        first_token_is_f = (jnp.abs(seq[:, -2] - index_of_token) == jnp.zeros_like(seq[:, -2]))
-        second_token_positive = jnp.zeros_like(seq[:, -1])
-        for pos_index_of_token in positive_words_index_of_token_list:
-            pos_word_contained = (jnp.abs(seq[:, -1] - pos_index_of_token) == jnp.zeros_like(seq[:, -1]))
-            second_token_positive += pos_word_contained
-        rews += first_token_is_f * -1 + (first_token_is_f * second_token_positive) * 11
+        first_token_is_s = (jnp.abs(seq[:, -2] - index_of_token) == jnp.zeros_like(seq[:, -2]))
+        second_token_contained = jnp.zeros_like(seq[:, -1])
+        for ind_of_token in second_words_index_of_token_list:
+            word_contained = (jnp.abs(seq[:, -1] - ind_of_token) == jnp.zeros_like(seq[:, -1]))
+            second_token_contained += ind_of_token
+        rews += first_token_is_s * 1 + (first_token_is_s * second_token_contained) * -11
         return rews * beta_temp
     return new_rm
 
