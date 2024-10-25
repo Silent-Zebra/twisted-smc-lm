@@ -720,10 +720,10 @@ if __name__ == "__main__":
 
         use_ebm_dre = True
         if use_ebm_dre:
-            dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=[4, 5, 6])
+            twist_grad_fn = jax.grad(get_l_ebm_ml, argnums=[4, 5, 6])
 
         else:
-            dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=[4, 5, 6])
+            twist_grad_fn = jax.grad(get_l_dre_sixo, argnums=[4, 5, 6])
 
         for epoch in range(args.epochs):
             if (epoch + 1) % args.print_every == 0:
@@ -731,7 +731,7 @@ if __name__ == "__main__":
 
             for twist_update in range(args.twist_updates_per_epoch):
                 key, subkey = jax.random.split(key)
-                grad_g_coeff, grad_g_bias, grad_s2r = dre_grad_fn(subkey, alpha, args.n_twist, args.T, g_coeff_params, g_bias_params, sigma2_r_params)
+                grad_g_coeff, grad_g_bias, grad_s2r = twist_grad_fn(subkey, alpha, args.n_twist, args.T, g_coeff_params, g_bias_params, sigma2_r_params)
                 # Yes it is ascent because we are trying to maximize the lower bound on the log prob...
 
                 g_coeff_params = g_coeff_params + g_c_lr * grad_g_coeff

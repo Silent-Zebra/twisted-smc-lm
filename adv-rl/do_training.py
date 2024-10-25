@@ -899,7 +899,20 @@ class ExperimentConfig:
             #     hand_crafted_samples = hand_crafted_samples.at[3, 1].set(0) # should have rew 0
             #     hand_crafted_samples = hand_crafted_samples.at[4, 1].set(0)
             #     hand_crafted_samples = hand_crafted_samples.at[4, 2].set(20886) # should have rew 0
+            #     hand_crafted_samples = hand_crafted_samples.at[:, 1].set(9372)
             #
+            #
+            #     hand_crafted_samples = hand_crafted_samples.at[0, 1].set(
+            #         6029)  # should have rew 1
+            #     hand_crafted_samples = hand_crafted_samples.at[1, 1].set(
+            #         20886)  # should have rew 0
+            #     hand_crafted_samples = hand_crafted_samples.at[2, 1].set(
+            #         6029)
+            #     hand_crafted_samples = hand_crafted_samples.at[2, 2].set(
+            #         12270)  # should have rew -10
+            #     hand_crafted_samples = hand_crafted_samples.at[3, 1].set(6029)
+            #     hand_crafted_samples = hand_crafted_samples.at[3, 2].set(
+            #         5089)  # should have rew -10
             #     print(hand_crafted_samples)
             #     print(rew_model(hand_crafted_samples))
             #     print(log_true_final_twist(hand_crafted_samples))
@@ -1473,7 +1486,7 @@ def setup_cfg(
     if experiment_cfg.rm_type in ["exp_neg_beta_tox_score"]:
         experiment_cfg.curried_rm_fn = curried_rew_model_toxicity_fn(rewardModel, tokenizer_RM, tokenizer)
     elif experiment_cfg.rm_type in ["f_exploration"]:
-        experiment_cfg.curried_rm_fn = f_exploration_rm(positive_words_index_of_token_list)
+        experiment_cfg.curried_rm_fn = f_exploration_rm(words_index_of_token_list)
     else:
         raise NotImplementedError
 

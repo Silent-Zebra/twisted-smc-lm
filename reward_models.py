@@ -144,7 +144,7 @@ def f_exploration_rm(second_words_index_of_token_list, beta_temp=1.):
         second_token_contained = jnp.zeros_like(seq[:, -1])
         for ind_of_token in second_words_index_of_token_list:
             word_contained = (jnp.abs(seq[:, -1] - ind_of_token) == jnp.zeros_like(seq[:, -1]))
-            second_token_contained += ind_of_token
+            second_token_contained += word_contained
         rews += first_token_is_s * 1 + (first_token_is_s * second_token_contained) * -11
         return rews * beta_temp
     return new_rm

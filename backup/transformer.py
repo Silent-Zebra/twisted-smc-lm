@@ -315,7 +315,7 @@ class ExperimentConfig:
         self.analytic_sigma_sample = analytic_sigma_sample
         self.twist_learn_type = twist_learn_type.lower()
         assert self.twist_learn_type in ["ebm", "sixo", "analytic_mse_rel", "analytic_mse_abs"]
-        self.dre_grad_fn = self._get_dre_grad_fn()
+        self.twist_grad_fn = self._get_twist_grad_fn()
 
         self.rl_loss_type = rl_loss_type.lower()
         assert self.rl_loss_type in ["custom", "ppo", "custom_baselinep", "custom_mixed", "custom_extremes"] # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
@@ -350,21 +350,21 @@ class ExperimentConfig:
         else:
             raise NotImplementedError
 
-    def _get_dre_grad_fn(self):
+    def _get_twist_grad_fn(self):
         if self.twist_learn_type == "ebm":
-            # dre_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
-            dre_grad_fn = jax.grad(get_l_ebm_ml_jit, argnums=5)
+            # twist_grad_fn = jax.grad(get_l_ebm_ml, argnums=5)
+            twist_grad_fn = jax.grad(get_l_ebm_ml_jit, argnums=5)
         elif self.twist_learn_type == "sixo":
-            dre_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
+            twist_grad_fn = jax.grad(get_l_dre_sixo, argnums=5)
         elif self.twist_learn_type == "analytic_mse_rel":
-            dre_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
+            twist_grad_fn = jax.grad(l_rel_compare_learned_twist_vs_optimal,
                                    argnums=7)
         elif self.twist_learn_type == "analytic_mse_abs":
-            dre_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal,
+            twist_grad_fn = jax.grad(l_abs_compare_learned_twist_vs_optimal,
                                    argnums=7)
         else:
             raise NotImplementedError
-        return dre_grad_fn
+        return twist_grad_fn
 
     def _get_rm_fn(self):
         if self.rm_type == "one_bad":
@@ -383,11 +383,11 @@ class ExperimentConfig:
     def get_grad_params_twist(self, sk, prompt, n_vocab, n_twist, output_len, cfg_p,
                               params_p, cfg_twist, params_twist, log_true_final_twist):
         if self.twist_learn_type == "analytic_mse_rel" or self.twist_learn_type == "analytic_mse_abs":
-            grad_params_twist = self.dre_grad_fn(prompt, n_vocab, output_len, cfg_p,
+            grad_params_twist = self.twist_grad_fn(prompt, n_vocab, output_len, cfg_p,
                                             params_p, log_true_final_twist, cfg_twist,
                                             params_twist, self.rm_type)
         else:
-            grad_params_twist = self.dre_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist,
+            grad_params_twist = self.twist_grad_fn(sk, prompt, cfg_p, params_p, cfg_twist,
                                             params_twist, log_true_final_twist, output_len,
                                             n_twist)
         return grad_params_twist
