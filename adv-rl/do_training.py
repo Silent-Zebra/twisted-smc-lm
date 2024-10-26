@@ -50,7 +50,7 @@ from functools import partial
 #                                       44460]  # Just some hand picked (GPT assisted) positive adjectives
 words_index_of_token_list = [5089, 9372, 20654, 25617, 30998, 31699, 34094, 46733,
                      21551, 40267, 7510, 16211, 20041, 32574, 41356,
-                     31030, 47209, 18185, 29836, 12270, 28911 ] # damn and damned add now to this list of bad words
+                     31030, 47209, 18185, 29836, 12270, 28911, 9234, 848 ] # damn, damned, monster, imp, add now to this list of bad words
 
 
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
