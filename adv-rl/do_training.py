@@ -43,15 +43,15 @@ from bad_words import *
 
 from functools import partial
 
-good_words_index_of_token_list = [1611, 3621, 4451, 4998, 6275, 7932, 8036,
-                                      8082, 9623, 10457, 11004, 11031, 11660,
-                                      13393, 15313, 15497, 20886, 21109, 21840,
-                                      23332, 27004, 32327, 37959, 43888, 43937,
-                                      44460]  # Just some hand picked (GPT assisted) positive adjectives
-bad_words_index_of_token_list = [5089, 9372, 20654, 25617, 30998, 31699, 34094, 46733,
-                     21551, 40267, 7510, 16211, 20041, 32574, 41356,
-                     31030, 47209, 18185, 29836, 12270, 28911, 9234, 848 ] # damn, damned, monster, imp, add now to this list of bad words
-
+# good_words_index_of_token_list = [1611, 3621, 4451, 4998, 6275, 7932, 8036,
+#                                       8082, 9623, 10457, 11004, 11031, 11660,
+#                                       13393, 15313, 15497, 20886, 21109, 21840,
+#                                       23332, 27004, 32327, 37959, 43888, 43937,
+#                                       44460]  # Just some hand picked (GPT assisted) positive adjectives
+# bad_words_index_of_token_list = [5089, 9372, 20654, 25617, 30998, 31699, 34094, 46733,
+#                      21551, 40267, 7510, 16211, 20041, 32574, 41356,
+#                      31030, 47209, 18185, 29836, 12270, 28911, 9234, 848 ] # damn, damned, monster, imp, add now to this list of bad words
+first_words_index_of_token_list, second_words_index_of_token_list = [582], [286, 508]
 
 # @partial(jax.jit, static_argnames=["optimizer_twist"])
 # def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist):
@@ -892,13 +892,13 @@ class ExperimentConfig:
 
             # if self.rm_type == "f_exploration":
             #     hand_crafted_samples = jnp.zeros((5, 3))
-            #     hand_crafted_samples = hand_crafted_samples.at[:, 1].set(7510)
-            #     hand_crafted_samples = hand_crafted_samples.at[0, 2].set(11031) # should have rew 10
-            #     hand_crafted_samples = hand_crafted_samples.at[1, 2].set(20886) # should have rew 10
-            #     hand_crafted_samples = hand_crafted_samples.at[2, 0].set(20886) # should have rew -1
+            #     hand_crafted_samples = hand_crafted_samples.at[:, 1].set(582)
+            #     hand_crafted_samples = hand_crafted_samples.at[0, 2].set(286) # should have rew -10
+            #     hand_crafted_samples = hand_crafted_samples.at[1, 2].set(508) # should have rew -10
+            #     hand_crafted_samples = hand_crafted_samples.at[2, 0].set(508) # should have rew 1
             #     hand_crafted_samples = hand_crafted_samples.at[3, 1].set(0) # should have rew 0
             #     hand_crafted_samples = hand_crafted_samples.at[4, 1].set(0)
-            #     hand_crafted_samples = hand_crafted_samples.at[4, 2].set(20886) # should have rew 0
+            #     hand_crafted_samples = hand_crafted_samples.at[4, 2].set(508) # should have rew 0
             #
             #     # hand_crafted_samples = hand_crafted_samples.at[0, 1].set(
             #     #     6029)  # should have rew 1
@@ -1039,7 +1039,7 @@ class ExperimentConfig:
             assert output_len == 2
             print("NOTE: this setting only works with GPT2 vocab tokenizer/model")
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
-                = build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, bad_words_index_of_token_list, good_words_index_of_token_list, self.beta_temp)
+                = build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, first_words_index_of_token_list, second_words_index_of_token_list, self.beta_temp)
 
         # if rm_type == "exp_beta_rew_p_continuation":
         #     assert indices_of_continuation is not None
@@ -1485,7 +1485,7 @@ def setup_cfg(
     if experiment_cfg.rm_type in ["exp_neg_beta_tox_score"]:
         experiment_cfg.curried_rm_fn = curried_rew_model_toxicity_fn(rewardModel, tokenizer_RM, tokenizer)
     elif experiment_cfg.rm_type in ["f_exploration"]:
-        experiment_cfg.curried_rm_fn = f_exploration_rm(bad_words_index_of_token_list, good_words_index_of_token_list)
+        experiment_cfg.curried_rm_fn = f_exploration_rm(first_words_index_of_token_list, second_words_index_of_token_list)
     else:
         raise NotImplementedError
 
