@@ -192,8 +192,40 @@ def reinforce_loss(
 
 reinforce_loss_standard = partial(reinforce_loss, sampling_type="standard")
 
-def mixed_reinforce_adv_loss(*args, **kwargs):
-    return reinforce_loss_standard(*args, **kwargs) + reinforce_loss(*args, **kwargs)
+def mixed_reinforce_adv_loss(*args, alpha_adv=0.5, **kwargs):
+    return (1 - alpha_adv) * reinforce_loss_standard(*args, **kwargs) + alpha_adv * reinforce_loss(*args, **kwargs)
+
+def mixed_reinforce0bl_adv_loss(sk, prompt, params_p, params_twist, log_true_final_twist,
+    output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+    proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
+    tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv", # IMPORTANT, this default is actually used in my code right now
+    negative_training_threshold=None, use_hardcoded_baseline=False, hardcoded_baseline=0.,
+    neg_reward_multiplier=1., neg_e_neg_beta_r_transform=False, beta_r_transform=1., alpha_adv=0.5
+):
+    standard_loss = reinforce_loss_standard(
+        sk, prompt, params_p, params_twist, log_true_final_twist,
+        output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+        proposal_is_p=proposal_is_p, params_proposal=params_proposal, condition_twist_on_tokens=condition_twist_on_tokens,
+        tempered_twist=tempered_twist, beta_prop=beta_prop, true_sigma_samples=true_sigma_samples,
+        negative_training_threshold=negative_training_threshold,
+        use_hardcoded_baseline=False, # Try this specifically here
+        hardcoded_baseline=0.,
+        neg_reward_multiplier=neg_reward_multiplier, neg_e_neg_beta_r_transform=neg_e_neg_beta_r_transform, beta_r_transform=beta_r_transform
+    )
+
+    adv_loss = reinforce_loss(
+        sk, prompt, params_p, params_twist, log_true_final_twist,
+        output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
+        proposal_is_p=proposal_is_p, params_proposal=params_proposal, condition_twist_on_tokens=condition_twist_on_tokens,
+        tempered_twist=tempered_twist, beta_prop=beta_prop, true_sigma_samples=true_sigma_samples,
+        negative_training_threshold=negative_training_threshold,
+        use_hardcoded_baseline=use_hardcoded_baseline,
+        hardcoded_baseline=hardcoded_baseline,
+        neg_reward_multiplier=neg_reward_multiplier, neg_e_neg_beta_r_transform=neg_e_neg_beta_r_transform, beta_r_transform=beta_r_transform
+    )
+
+    return (1 - alpha_adv) * standard_loss + alpha_adv * adv_loss
+
 
 def curried_rew_model_toxicity_fn(rewardModel, tokenizer_RM, tokenizer):
     def rew_model(seqs):
@@ -213,12 +245,14 @@ class ExperimentConfig:
                  sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False,
                  rl_loss_type="custom_adv", use_hardcoded_baseline=False, hardcoded_baseline=0.,
                  negative_training_threshold=None, ppo_steps=0, clip_epsilon=0,
-                 gamma=1., gae_lambda=1., neg_reward_multiplier=1., neg_e_neg_beta_r_transform=False, beta_r_transform=1.
+                 gamma=1., gae_lambda=1., neg_reward_multiplier=1., neg_e_neg_beta_r_transform=False,
+                 beta_r_transform=1., alpha_adv=0.5
     ):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
         self.beta_temp = beta_temp
         self.alpha = alpha
+        self.alpha_adv = alpha_adv
 
         self.rm_type = rm_type.lower()
 
@@ -297,7 +331,11 @@ class ExperimentConfig:
             else:
                 return jax.grad(reinforce_loss_standard, argnums=2)
         elif self.rl_loss_type == "mixed_reinforce_adv":
-            return jax.grad(mixed_reinforce_adv_loss, argnums=2)
+            loss_with_alpha = partial(mixed_reinforce_adv_loss, alpha_adv=self.alpha_adv)
+            return jax.grad(loss_with_alpha, argnums=2)
+        elif self.rl_loss_type == "mixed_reinforce0bl_adv":
+            loss_with_alpha = partial(mixed_reinforce0bl_adv_loss, alpha_adv=self.alpha_adv)
+            return jax.grad(loss_with_alpha, argnums=2)
         elif self.rl_loss_type == "negative_training":
             assert not self.use_hardcoded_baseline
             assert self.neg_reward_multiplier == 1. # If not, then you may get unexpected behaviour. Rather adjust threshold instead of using this multiplier
@@ -2151,7 +2189,7 @@ if __name__ == "__main__":
                                  # "p_last_tokens"
                                  ])
     parser.add_argument("--rl_loss_type", type=str, default="custom_adv",
-                        choices=["custom_adv", "reinforce", "mixed_reinforce_adv", "negative_training", "ppo"
+                        choices=["custom_adv", "reinforce", "mixed_reinforce_adv", "mixed_reinforce0bl_adv", "negative_training", "ppo"
                                  ])
     parser.add_argument("--use_hardcoded_baseline", action="store_true", help="Instead of using estimate of expectation, use a hardcoded value for baseline for reinforce loss")
     parser.add_argument("--hardcoded_baseline", type=float, help="Value of the hardcoded value for baseline for reinforce loss",
@@ -2164,6 +2202,9 @@ if __name__ == "__main__":
     parser.add_argument("--neg_e_neg_beta_r_transform", action="store_true", help="Transform reward by -e^(-beta_r_transform r)")
     parser.add_argument("--beta_r_transform", type=float, help="the beta used in the transform of reward by -e^(-beta_r_transform r) (only useful with neg_e_neg_beta_r_transform flag)",
                         default=1.)
+
+    parser.add_argument("--alpha_adv", type=float, help="Only for mixed losses: how much weight to place on the adversarial loss. Should be between 0 and 1.",
+                        default=0.5)
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens or rm_type == )")
