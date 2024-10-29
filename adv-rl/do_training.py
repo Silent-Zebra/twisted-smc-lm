@@ -93,7 +93,7 @@ def reinforce_loss(
     sk, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_samples, smc_procedure_type, huggingface_model, rew_model,
     proposal_is_p=False, params_proposal=None, condition_twist_on_tokens=None,
-    tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv",
+    tempered_twist=None, beta_prop=None, true_sigma_samples=None, sampling_type="adv", # IMPORTANT, this default is actually used in my code right now
     negative_training_threshold=None, use_hardcoded_baseline=False, hardcoded_baseline=0.,
     neg_reward_multiplier=1., neg_e_neg_beta_r_transform=False, beta_r_transform=1.
 ):
@@ -192,7 +192,8 @@ def reinforce_loss(
 
 reinforce_loss_standard = partial(reinforce_loss, sampling_type="standard")
 
-
+def mixed_reinforce_adv_loss(*args, **kwargs):
+    return reinforce_loss_standard(*args, **kwargs) + reinforce_loss(*args, **kwargs)
 
 def curried_rew_model_toxicity_fn(rewardModel, tokenizer_RM, tokenizer):
     def rew_model(seqs):
@@ -263,11 +264,11 @@ class ExperimentConfig:
 
         self.negative_training_threshold = None
 
-        if self.rl_loss_type == "custom_adv":
-            pass
-            # self.beta_kl = beta_kl
-            # self.beta_ent = beta_ent
-        elif self.rl_loss_type == "negative_training":
+        # if self.rl_loss_type == "custom_adv":
+        #     pass
+        #     # self.beta_kl = beta_kl
+        #     # self.beta_ent = beta_ent
+        if self.rl_loss_type == "negative_training":
             assert negative_training_threshold is not None
             self.negative_training_threshold = negative_training_threshold
         elif self.rl_loss_type == "ppo": # PPO here is just assuming sampling from p, not from sigma (though TODO we may be able to adapt it with sigma sampling too)
@@ -295,6 +296,8 @@ class ExperimentConfig:
                 return jax.grad(reinforce_loss_w_neg_e_neg_beta_r, argnums=2)
             else:
                 return jax.grad(reinforce_loss_standard, argnums=2)
+        elif self.rl_loss_type == "mixed_reinforce_adv":
+            return jax.grad(mixed_reinforce_adv_loss, argnums=2)
         elif self.rl_loss_type == "negative_training":
             assert not self.use_hardcoded_baseline
             assert self.neg_reward_multiplier == 1. # If not, then you may get unexpected behaviour. Rather adjust threshold instead of using this multiplier
@@ -2148,7 +2151,7 @@ if __name__ == "__main__":
                                  # "p_last_tokens"
                                  ])
     parser.add_argument("--rl_loss_type", type=str, default="custom_adv",
-                        choices=["custom_adv", "reinforce", "negative_training", "ppo"
+                        choices=["custom_adv", "reinforce", "mixed_reinforce_adv", "negative_training", "ppo"
                                  ])
     parser.add_argument("--use_hardcoded_baseline", action="store_true", help="Instead of using estimate of expectation, use a hardcoded value for baseline for reinforce loss")
     parser.add_argument("--hardcoded_baseline", type=float, help="Value of the hardcoded value for baseline for reinforce loss",
