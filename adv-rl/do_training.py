@@ -312,8 +312,6 @@ class ExperimentConfig:
             self.clip_epsilon = clip_epsilon
         self.gamma = gamma
         self.gae_lambda = gae_lambda
-        self.rl_grad_fn = self._get_rl_grad_fn()
-
 
         self.sentiment_class_zero_index = sentiment_class - 1 # This is important because we need 0 based indexing, ie 0,1,2,3,4. Why not just use those as the args? Because the stars are 1,2,3,4,5
 
@@ -728,7 +726,8 @@ class ExperimentConfig:
         #     neg_reward_multiplier=self.neg_reward_multiplier
         # )
 
-        grad_params_p = self.rl_grad_fn(
+        rl_grad_fn = self._get_rl_grad_fn()
+        grad_params_p = rl_grad_fn(
             sk, prompt, params_p,
             params_twist, log_true_final_twist, output_len,
             n_samples, smc_procedure_type=self.smc_procedure_type,
@@ -1960,6 +1959,11 @@ def main():
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
 
+        if (epoch + 1) <= args.alpha_adv_zero_epochs:
+            experiment_cfg.alpha_adv = 0
+        else:
+            experiment_cfg.alpha_adv = args.alpha_adv
+
         prompt_num = 0
         for prompt in jnp_prompts:
             replay_buffer = replay_buffers_by_prompt[prompt_num]
@@ -2207,6 +2211,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--alpha_adv", type=float, help="Only for mixed losses: how much weight to place on the adversarial loss. Should be between 0 and 1.",
                         default=0.5)
+    parser.add_argument("--alpha_adv_zero_epochs", type=int, help="Num of epochs for alpha_adv to be 0",
+                        default=0)
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens or rm_type == )")
