@@ -1469,7 +1469,7 @@ def setup_cfg(
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
     output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None,
     use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.,
-    neg_e_neg_beta_r_transform=False, beta_r_transform=1.
+    neg_e_neg_beta_r_transform=False, beta_r_transform=1., alpha_adv=0.5
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1486,7 +1486,8 @@ def setup_cfg(
         hardcoded_baseline=hardcoded_baseline,
         neg_reward_multiplier=neg_reward_multiplier,
         neg_e_neg_beta_r_transform=neg_e_neg_beta_r_transform,
-        beta_r_transform=beta_r_transform
+        beta_r_transform=beta_r_transform,
+        alpha_adv=alpha_adv
     )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
@@ -1919,7 +1920,8 @@ def main():
         "hardcoded_baseline": args.hardcoded_baseline,
         "neg_reward_multiplier": args.neg_reward_multiplier,
         "neg_e_neg_beta_r_transform": args.neg_e_neg_beta_r_transform,
-        "beta_r_transform": args.beta_r_transform
+        "beta_r_transform": args.beta_r_transform,
+        "alpha_adv": args.alpha_adv
     }
 
 
