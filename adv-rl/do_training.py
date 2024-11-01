@@ -963,12 +963,40 @@ class ExperimentConfig:
             print("Highest reward from base model samples")
             print(rew.max())
 
-            # Eval also total prob of some bad words
-            print("bad word calc info")
-            total_prob_bad_t_0_by_word, total_prob_bad_t_0, \
-            total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad = \
-                calc_analytic_bad_word_probs(args.n_vocab, prompt, params_p,
-                                         huggingface_model, output_len)
+            if self.rm_type == "exp_neg_beta_tox_score":
+                # bad_word_list = ["\u0120fuck", "\u0120fucking", "\u0120fucked",
+                #                  "\u0120Fuck", "\u0120FUCK", "fuck", "Fuck",
+                #                  "\u0120fuckin",
+                #                  "\u0120bitch", "\u0120cunt", "\u0120shit",
+                #                  "shit", "\u0120bullshit", "\u0120shitty",
+                #                  "\u0120Shit",
+                #                  "\u0120bastard", "\u0120Bastard",
+                #                  "\u0120pussy", "\u0120asshole", ]
+                bad_word_indices = jnp.array(
+                    [5089, 9372, 20654, 25617, 30998, 31699, 34094, 46733,
+                     21551, 40267, 7510, 16211, 20041, 32574, 41356,
+                     31030, 47209, 18185, 29836], dtype=jnp.int32)
+
+                # Eval also total prob of some bad words
+                print("bad word calc info")
+                total_prob_bad_t_0_by_word, total_prob_bad_t_0, \
+                total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad = \
+                    calc_analytic_bad_word_probs(bad_word_indices, args.n_vocab, prompt, params_p,
+                                             huggingface_model, output_len)
+            elif self.rm_type == "f_exploration":
+                assert len(first_words_index_of_token_list) == 1 # for now only this supported
+                batch_prompt = jnp.full((len(first_words_index_of_token_list) * len(second_words_index_of_token_list), prompt_len), prompt)
+                # concat all the possible second words index of token list
+                seq = jnp.concatenate((batch_prompt, jnp.array(first_words_index_of_token_list * len(second_words_index_of_token_list))[:, None]), axis=1)
+                seq = jnp.concatenate((seq, jnp.array(second_words_index_of_token_list)[:, None]), axis=1)
+                # print(seq)
+                log_p = evaluate_log_p_theta_1_to_t(seq, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
+                # print(log_p)
+                total_log_prob_bad = jax.nn.logsumexp(log_p) # Note that this includes the first token generation, which seems reasonable, if the setting is that you have to have both first token and second token in order for it to be bad. We could consider not including prob of the first token; only look at cond prob of second token, but I think looking at prob of first token makes sense and is interesting
+                # print(jax.nn.logsumexp(log_p))
+                # print(jnp.exp(log_p).sum())
+                # print(jnp.log(jnp.exp(log_p).sum()))
+                # 1/0
 
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
             rew_adv = rew_model(smc_samples)

@@ -5,15 +5,11 @@ import jax
 from custom_transformer_prob_utils import *
 
 
-bad_word_list = ["\u0120fuck", "\u0120fucking", "\u0120fucked", "\u0120Fuck", "\u0120FUCK", "fuck", "Fuck", "\u0120fuckin",
-                  "\u0120bitch", "\u0120cunt", "\u0120shit", "shit", "\u0120bullshit", "\u0120shitty", "\u0120Shit",
-                  "\u0120bastard", "\u0120Bastard", "\u0120pussy", "\u0120asshole", ]
 
-bad_word_indices = jnp.array([5089, 9372, 20654, 25617, 30998, 31699, 34094, 46733,
-                     21551, 40267, 7510, 16211, 20041, 32574, 41356,
-                     31030, 47209, 18185, 29836 ], dtype=jnp.int32)
 
-def calc_analytic_bad_word_probs(n_vocab, prompt, params_p, huggingface_model, output_len, batch_size=512):
+
+
+def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, huggingface_model, output_len, batch_size=512):
     # ASSUMES OUTPUT LEN 1 (NOT 2) RIGHT NOW
     # Calculates the probability of bad words, for each bad word in bad_word_indices
     # Provides the probability values for sequences that only contain the bad word in the first position (the first token after the prompt)
