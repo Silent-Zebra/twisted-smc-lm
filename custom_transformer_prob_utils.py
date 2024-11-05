@@ -6,6 +6,9 @@ import jax
 
 from utils import HashableDict
 
+adv_index = 3 # Set "$" token to the "adversarial" one that appears with low probability
+good_index = 1049 # Set "great" to be the usual, standard positive behaviour
+
 
 def kl_div_jax(log_p_target, log_p_curr):
     kl_div = (jnp.exp(log_p_target) * (log_p_target - log_p_curr)).sum()
@@ -59,12 +62,52 @@ def get_all_new_seqs_single_t(seq, n_vocab):
     return all_new_seqs
 
 
-def get_transformer_p_logits(params_p, full_seq, huggingface_model=None, use_params_p=True, tabular_params_p=False):
+def get_transformer_p_logits(
+    params_p, full_seq, huggingface_model=None, use_params_p=True,
+    # tabular_params_p=False
+):
     assert huggingface_model is not None
     if isinstance(huggingface_model, HashableDict):
         if use_params_p:
-            if tabular_params_p: # DEBUG ONLY - TABULAR POLICY
-                p_logits = jnp.broadcast_to(params_p, (full_seq.shape[0], full_seq.shape[-1], params_p.shape[0]))
+            # if tabular_params_p: # DEBUG ONLY - TABULAR POLICY
+                # p_logits = jnp.broadcast_to(params_p, (full_seq.shape[0], full_seq.shape[-1], params_p.shape[0]))
+            if isinstance(params_p, dict) and 'second_adv' in params_p.keys():
+                p_logits = jnp.broadcast_to(params_p['first'], (full_seq.shape[0], full_seq.shape[-1], params_p['first'].shape[0]))
+                # Initialize with just 'first' policy for anything other than specific tokens, which are the tokens generated from the 'first' policy (in this hardcoded policy setting)
+
+                # Very simple policy; just reacts to the current token. adv_index triggers the 'second_adv' policy, good_index triggers the 'second_normal' policy, otherwise is just the 'first' policy
+                p_logits = jnp.where(
+                    (full_seq == adv_index)[:, :, None],
+                    params_p['second_adv'],
+                    p_logits
+                )
+                p_logits = jnp.where(
+                    (full_seq == good_index)[:, :, None],
+                    params_p['second_normal'],
+                    p_logits
+                )
+
+                # the below code does the same as this non-vectorized version:
+                # for i in range(full_seq.shape[0]):
+                #     if full_seq[i, -2] == 3:
+                #         p_logits = p_logits.at[i, -1, :].set(params_p['second_adv'])
+                # Instead of broadcast_to, [None, :] also works
+                # p_logits = p_logits.at[:, -2, :].set(
+                #     jnp.where(
+                #         (full_seq[:, -1] == adv_index)[:, None],
+                #         jnp.broadcast_to(params_p['second_adv'], (full_seq.shape[0], params_p['second_adv'].shape[0]))
+                #         , p_logits[:, -1, :]
+                #     )
+                # )
+                # p_logits = p_logits.at[:, -2, :].set(
+                #     jnp.where(
+                #         (full_seq[:, -1] == good_index)[:, None],
+                #         jnp.broadcast_to(params_p['second_normal'], (
+                #         full_seq.shape[0], params_p['second_normal'].shape[0]))
+                #         , p_logits[:, -1, :]
+                #     )
+                # )
+
             else:
                 p_logits = huggingface_model['p'](params=params_p,
                                                    input_ids=full_seq)

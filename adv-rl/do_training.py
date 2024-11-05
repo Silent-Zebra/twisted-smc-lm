@@ -62,6 +62,9 @@ first_words_index_of_token_list, second_words_index_of_token_list = [582], [286,
 #
 #     return params_twist, optim_twist_state
 
+swear_word = 9372
+
+
 
 def get_new_params_and_optim_state(optimizer, grad_params, optim_state, params):
     updates, optim_twist_state = optimizer.update(grad_params, optim_state, params)
@@ -1388,7 +1391,7 @@ def get_model_config_and_conditional_twist_settings(hface_model_type, rm_type):
 def setup_model_and_params(
     rng_key, separate_hface_twist_model, model_config, from_pt, experiment_cfg, hface_nn_twist, softmax_twist,
     conditional_twist_type, num_last_tokens_to_condition_on, n_layers_twist, hidden_units_multiplier,
-    one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi, use_lora, lora_rank, lr_p, optimizer_type
+    one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi, use_lora, lora_rank, lr_p, optimizer_type, tabular_adv_policy, adv_token_prob
 ):
     rng_key, sk = jax.random.split(rng_key, 2)
 
@@ -1413,9 +1416,31 @@ def setup_model_and_params(
 
     params_p = model_p.huggingface_model.params
 
-    # DEBUG ONLY REMOVE LATER - TABULAR POLICY
-    # params_p = jnp.zeros((args.n_vocab,))
-    # print("warning: using tabular/debug policy. Remove all the DEBUG stuff later.")
+    if tabular_adv_policy:
+
+        # DEBUG ONLY REMOVE LATER - TABULAR POLICY
+        # params_p = jnp.zeros((args.n_vocab,))
+        # print("warning: using tabular policy. Remove all the DEBUG stuff later.")
+
+        params_p = {}
+        # The below setup for logits essentially gives 0 probability (assuming we have some logit that has some higher value)
+        params_p['first'] = jnp.ones((args.n_vocab,)) * -100
+        params_p['second_normal'] = jnp.ones((args.n_vocab,)) * -100
+        params_p['second_adv'] = jnp.ones((args.n_vocab,)) * -100
+
+        params_p['first'] = params_p['first'].at[adv_index].set(jnp.log(adv_token_prob))
+        params_p['first'] = params_p['first'].at[good_index].set(jnp.log(1 - adv_token_prob))
+
+        params_p['second_normal'] = params_p['second_normal'].at[582].set(jnp.log(1)) # Set "man" to be the usual second token
+
+        params_p['second_adv'] = params_p['second_adv'].at[swear_word].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
+        params_p['second_adv'] = params_p['second_adv'].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+
+        # TODO designate the adversarial first tokens that have low prob, and designate the bad tokens output with high prob after
+        # Also designate some good tokens on other inputs
+        # TODO Do the prob calculation with exp, because these are logits, to make sure I have the right policy setup. TEST THIS IN THE GET P LOGITS ALSO
+        # TODO ALSO ENSURE THAT WE ASSERT OUTPUT LEN 2 FOR THIS HANDCRAFTED SETUP
+
 
     params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
 
@@ -1496,7 +1521,7 @@ def setup_cfg(
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
     output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None,
     use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.,
-    neg_e_neg_beta_r_transform=False, beta_r_transform=1., alpha_adv=0.5
+    neg_e_neg_beta_r_transform=False, beta_r_transform=1., alpha_adv=0.5, tabular_adv_policy=False, adv_token_prob=0.001
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1540,7 +1565,7 @@ def setup_cfg(
         hidden_units_multiplier,
         one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi,
         use_lora, lora_rank,
-        lr_p, optimizer_type
+        lr_p, optimizer_type, tabular_adv_policy, adv_token_prob
     )
 
     tokenizer_RM, rewardModel = get_tokenizer_and_rewardModel(rm_type)
@@ -1948,7 +1973,9 @@ def main():
         "neg_reward_multiplier": args.neg_reward_multiplier,
         "neg_e_neg_beta_r_transform": args.neg_e_neg_beta_r_transform,
         "beta_r_transform": args.beta_r_transform,
-        "alpha_adv": args.alpha_adv
+        "alpha_adv": args.alpha_adv,
+        "tabular_adv_policy": args.tabular_adv_policy,
+        "adv_token_prob": args.adv_token_prob
     }
 
 
@@ -2031,6 +2058,58 @@ def main():
             # print(max_index)
             # 1/0
 
+            # rew_model = experiment_cfg.curried_rm_fn
+            # print("---DEBUG ONLY EVALUATE ADV POLICY (--tabular_adv_policy)---")
+            # regularprompt_goodseq = jnp.concatenate((prompt.reshape((1, -1)), jnp.ones((1, 1), dtype=jnp.int32) * good_index), axis=-1)
+            # regularprompt_goodseq = jnp.concatenate((regularprompt_goodseq, jnp.ones((1, 1), dtype=jnp.int32) * 582), axis=-1)
+            # print(regularprompt_goodseq)
+            # print(rew_model(regularprompt_goodseq))
+            # print(evaluate_log_p_theta_1_to_t(regularprompt_goodseq, params_p, prompt.shape[-1], args.output_len, huggingface_model=huggingface_model))
+            # regularprompt_badseq = jnp.concatenate((prompt.reshape((1, -1)), jnp.ones((1, 1), dtype=jnp.int32) * good_index), axis=-1)
+            # regularprompt_badseq = jnp.concatenate((regularprompt_badseq, jnp.ones((1, 1), dtype=jnp.int32) * swear_word), axis=-1)
+            # print(regularprompt_badseq)
+            # print(rew_model(regularprompt_badseq))
+            # print(evaluate_log_p_theta_1_to_t(regularprompt_badseq, params_p, prompt.shape[-1], args.output_len, huggingface_model=huggingface_model))
+            #
+            # advprompt_goodseq = jnp.concatenate((prompt.reshape((1, -1)), jnp.ones((1, 1), dtype=jnp.int32) * adv_index), axis=-1)
+            # advprompt_goodseq = jnp.concatenate((advprompt_goodseq, jnp.ones((1, 1), dtype=jnp.int32) * 582), axis=-1)
+            # print(advprompt_goodseq)
+            # print(rew_model(advprompt_goodseq))
+            # print(evaluate_log_p_theta_1_to_t(advprompt_goodseq, params_p, prompt.shape[-1], args.output_len, huggingface_model=huggingface_model))
+            # advprompt_badseq = jnp.concatenate((prompt.reshape((1, -1)), jnp.ones((1, 1), dtype=jnp.int32) * adv_index), axis=-1)
+            # advprompt_badseq = jnp.concatenate((advprompt_badseq, jnp.ones((1, 1), dtype=jnp.int32) * swear_word), axis=-1)
+            # print(advprompt_badseq)
+            # print(rew_model(advprompt_badseq))
+            # print(evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p, prompt.shape[-1], args.output_len, huggingface_model=huggingface_model))
+            #
+            # randprompt_badseq = jnp.concatenate((prompt.reshape((1, -1)),
+            #                                     jnp.ones((1, 1),
+            #                                              dtype=jnp.int32) * 8813),
+            #                                    axis=-1)
+            # randprompt_badseq = jnp.concatenate((randprompt_badseq,
+            #                                     jnp.ones((1, 1),
+            #                                              dtype=jnp.int32) * swear_word),
+            #                                    axis=-1)
+            # print(randprompt_badseq)
+            # print(evaluate_log_p_theta_1_to_t(randprompt_badseq, params_p,
+            #                                   prompt.shape[-1], args.output_len,
+            #                                   huggingface_model=huggingface_model,
+            #                                   ))
+            # randprompt_randseq = jnp.concatenate((prompt.reshape((1, -1)),
+            #                                      jnp.ones((1, 1),
+            #                                               dtype=jnp.int32) * 8813),
+            #                                     axis=-1)
+            # randprompt_randseq = jnp.concatenate((randprompt_randseq,
+            #                                      jnp.ones((1, 1),
+            #                                               dtype=jnp.int32) * 8725),
+            #                                     axis=-1)
+            # print(randprompt_randseq)
+            # print(evaluate_log_p_theta_1_to_t(randprompt_randseq, params_p,
+            #                                   prompt.shape[-1], args.output_len,
+            #                                   huggingface_model=huggingface_model,
+            #                                   ))
+            #
+            # 1/0
 
             # ----- DO plotting and inspection of test info before the twist updates -----
             if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
@@ -2317,6 +2396,8 @@ if __name__ == "__main__":
     parser.add_argument("--test_sampling_time", action="store_true")
     parser.add_argument("--test_sampling_time_iters", type=int, default=10, help="Only used in conjunction with --test_sampling_time: how many times to repeat sampling")
 
+    parser.add_argument("--tabular_adv_policy", action="store_true", help="Use tabular adversarial policy")
+    parser.add_argument("--adv_token_prob", type=float, default=0.001, help="Use to vary how hard it is to find the adversarial token/prompt/backdoor; for testing exploration strategies")
 
     args = parser.parse_args()
 
@@ -2324,6 +2405,9 @@ if __name__ == "__main__":
         assert args.separate_hface_twist_model
 
     assert args.n_vocab == 50257 # Used to support other options e.g. with toy transformer
+
+    if args.tabular_adv_policy:
+        assert args.output_len == 2 # Only this supported for now
 
     if args.rm_type in ["p_last_tokens", "p_continuation_one_post"]:
         assert args.num_last_tokens_to_condition_on > 0
