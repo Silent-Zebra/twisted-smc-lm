@@ -101,11 +101,11 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
             if log_p_bad_tokens_t_1_but_not_t_0 is None:
                 log_p_bad_tokens_t_1_but_not_t_0 = jax.nn.logsumexp(log_p_t_0_to_1, axis=0)
             else:
-                print("hihi")
-                print(log_p_bad_tokens_t_1_but_not_t_0)
+                # print("hihi")
+                # print(log_p_bad_tokens_t_1_but_not_t_0)
 
-                print(log_p_bad_tokens_t_1_but_not_t_0.shape)
-                print(jax.nn.logsumexp(log_p_t_0_to_1, axis=0).shape)
+                # print(log_p_bad_tokens_t_1_but_not_t_0.shape)
+                # print(jax.nn.logsumexp(log_p_t_0_to_1, axis=0).shape)
 
                 concat = jnp.stack((log_p_bad_tokens_t_1_but_not_t_0, jax.nn.logsumexp(log_p_t_0_to_1, axis=0)))
 
@@ -114,7 +114,7 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
                 # print(jax.nn.logsumexp(concat, axis=0))
                 log_p_bad_tokens_t_1_but_not_t_0 = jax.nn.logsumexp(concat, axis=0)
 
-                print(log_p_bad_tokens_t_1_but_not_t_0)
+                # print(log_p_bad_tokens_t_1_but_not_t_0)
                 # print("prob of all sequences not containing a bad word in the first time step but containing a bad word in the second time step (by bad word)")
                 # print(p_bad_tokens_t_1_but_not_t_0)
 
