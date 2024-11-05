@@ -6,7 +6,7 @@ import jax
 
 from utils import HashableDict
 
-adv_index = 3 # Set "$" token to the "adversarial" one that appears with low probability
+adv_indexes = [3, 4, 5] # Set "$": 3, "%": 4, "&": 5, token to be "adversarial" ones that appears with low probability, total probability adv_token_prob
 good_index = 1049 # Set "great" to be the usual, standard positive behaviour
 
 
@@ -76,11 +76,12 @@ def get_transformer_p_logits(
                 # Initialize with just 'first' policy for anything other than specific tokens, which are the tokens generated from the 'first' policy (in this hardcoded policy setting)
 
                 # Very simple policy; just reacts to the current token. adv_index triggers the 'second_adv' policy, good_index triggers the 'second_normal' policy, otherwise is just the 'first' policy
-                p_logits = jnp.where(
-                    (full_seq == adv_index)[:, :, None],
-                    params_p['second_adv'],
-                    p_logits
-                )
+                for adv_index in adv_indexes:
+                    p_logits = jnp.where(
+                        (full_seq == adv_index)[:, :, None],
+                        params_p['second_adv'],
+                        p_logits
+                    )
                 p_logits = jnp.where(
                     (full_seq == good_index)[:, :, None],
                     params_p['second_normal'],

@@ -982,10 +982,18 @@ class ExperimentConfig:
 
                 # Eval also total prob of some bad words
                 print("bad word calc info")
-                total_prob_bad_t_0_by_word, total_prob_bad_t_0, \
-                total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad = \
-                    calc_analytic_bad_word_probs(bad_word_indices, args.n_vocab, prompt, params_p,
-                                             huggingface_model, output_len, tabular_adv_policy)
+                if tabular_adv_policy:
+                    # Keep a record of the conditional (and total) probs of the bad word tokens
+                    # for all of the possible adv_indexes
+                    log_p_last_tokens = calc_analytic_bad_word_probs(bad_word_indices, args.n_vocab,
+                                                 prompt, params_p,
+                                                 huggingface_model, output_len,
+                                                 tabular_adv_policy)
+                else:
+                    total_prob_bad_t_0_by_word, total_prob_bad_t_0, \
+                    total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad = \
+                        calc_analytic_bad_word_probs(bad_word_indices, args.n_vocab, prompt, params_p,
+                                                 huggingface_model, output_len, tabular_adv_policy)
             elif self.rm_type == "f_exploration":
                 assert len(first_words_index_of_token_list) == 1 # for now only this supported
                 batch_prompt = jnp.full((len(first_words_index_of_token_list) * len(second_words_index_of_token_list), prompt_len), prompt)
@@ -1065,18 +1073,23 @@ class ExperimentConfig:
             inspect_text_samples(tokenizer, smc_samples, n_samples_to_print,
                                  name="SMC (Adv) Samples")
 
-            total_log_prob_bad_word = total_log_prob_bad
+            if tabular_adv_policy:
+                aux_info = (rew.mean(), rew_adv.mean(), log_p_last_tokens)
 
-            # if output_len == 2:
-            #     # print(total_prob_bad_by_word)
-            #     # print(total_prob_bad_by_word.shape)
-            #     print(total_prob_bad_by_word.sum())
-            #     total_log_prob_bad_word = total_log_prob_bad
+            else:
 
-            # print("WEIGHTS OF THE NO-INTERMEDIATE-RESAMPLE SAMPLES")
-            # print(jax.lax.stop_gradient(log_w_t_sigma_samples))
-            # print(jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples)))
-            aux_info = (rew.mean(), rew_adv.mean(), total_log_prob_bad_word)
+                total_log_prob_bad_word = total_log_prob_bad
+
+                # if output_len == 2:
+                #     # print(total_prob_bad_by_word)
+                #     # print(total_prob_bad_by_word.shape)
+                #     print(total_prob_bad_by_word.sum())
+                #     total_log_prob_bad_word = total_log_prob_bad
+
+                # print("WEIGHTS OF THE NO-INTERMEDIATE-RESAMPLE SAMPLES")
+                # print(jax.lax.stop_gradient(log_w_t_sigma_samples))
+                # print(jax.nn.softmax(jax.lax.stop_gradient(log_w_t_sigma_samples)))
+                aux_info = (rew.mean(), rew_adv.mean(), total_log_prob_bad_word)
 
         else:
             raise NotImplementedError
@@ -1428,7 +1441,10 @@ def setup_model_and_params(
         params_p['second_normal'] = jnp.ones((args.n_vocab,)) * -100
         params_p['second_adv'] = jnp.ones((args.n_vocab,)) * -100
 
-        params_p['first'] = params_p['first'].at[adv_index].set(jnp.log(adv_token_prob))
+        for adv_index in adv_indexes:
+            # Split the adv_token_prob uniformly among all possible adv_indexes; each of these is a mode we want our twisted SMC to sample from
+            params_p['first'] = params_p['first'].at[adv_index].set(jnp.log(adv_token_prob / len(adv_indexes)))
+        # The remaining probability goes to the good index
         params_p['first'] = params_p['first'].at[good_index].set(jnp.log(1 - adv_token_prob))
 
         params_p['second_normal'] = params_p['second_normal'].at[582].set(jnp.log(1)) # Set "man" to be the usual second token
@@ -1642,7 +1658,11 @@ def do_inspection_and_plotting_of_test_info(
     rew_mean, rew_adv_mean, total_log_prob_bad_word = aux_info
     plot_over_time_list['rews'].append(float(rew_mean))
     plot_over_time_list['adv_rews'].append(float(rew_adv_mean))
-    plot_over_time_list['log_prob_bad_word'].append(float(total_log_prob_bad_word))
+    if tabular_adv_policy:
+        plot_over_time_list['log_prob_bad_word'].append(
+            jnp.array(total_log_prob_bad_word))
+    else:
+        plot_over_time_list['log_prob_bad_word'].append(float(total_log_prob_bad_word))
 
     # if true_posterior_samples_by_token is not None:  # Then do plotting of logZ bounds # TODO should consider replacing with true_posterior_samples_by_prompt_and_by_token as true_posterior_samples_by_token is unused in the below now
     #

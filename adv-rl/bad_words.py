@@ -47,17 +47,24 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
 
     if output_len == 2:
         if tabular_adv_policy:
-            advprompt_badseq = jnp.concatenate((prompt.reshape((1, -1)), jnp.ones((1, 1),
-                                                         dtype=jnp.int32) * adv_index), axis=-1)
-            advprompt_badseq = jnp.concatenate((advprompt_badseq, jnp.ones((1, 1), dtype=jnp.int32) * swear_word), axis=-1)
-            log_p_last_token = \
-                evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p, prompt.shape[-1] + 1, # purposely done to get the last token only
-                                            output_len, huggingface_model=huggingface_model)
-            log_p_last_two = \
-                evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p,
-                                            prompt.shape[-1],
-                                            output_len,
-                                            huggingface_model=huggingface_model)
+            log_p_last_tokens = []
+            log_p_last_two_tokens = []
+            # Keep a record of the conditional (and total) probs of the bad word tokens
+            # for all of the possible adv_indexes
+            for adv_index in adv_indexes:
+                advprompt_badseq = jnp.concatenate((prompt.reshape((1, -1)), jnp.ones((1, 1),
+                                                             dtype=jnp.int32) * adv_index), axis=-1)
+                advprompt_badseq = jnp.concatenate((advprompt_badseq, jnp.ones((1, 1), dtype=jnp.int32) * swear_word), axis=-1)
+                log_p_last_token = \
+                    evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p, prompt.shape[-1] + 1, # purposely done to get the last token only
+                                                output_len, huggingface_model=huggingface_model)
+                log_p_last_tokens.append(log_p_last_token)
+                log_p_last_two = \
+                    evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p,
+                                                prompt.shape[-1],
+                                                output_len,
+                                                huggingface_model=huggingface_model)
+                log_p_last_two_tokens.append(log_p_last_two)
         else:
             highest_log_bad_word_prob_at_t_1 = -jnp.inf
 
@@ -143,11 +150,12 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
 
     if output_len == 2:
         if tabular_adv_policy:
-            total_log_prob_bad = log_p_last_token
+            # avg_log_prob_bad = sum(log_p_last_tokens) / len(log_p_last_tokens)
             print("log prob of last two tokens (adv + bad)")
-            print(log_p_last_two)
+            print(log_p_last_two_tokens)
             print("log prob of only bad token given prompt + adv token")
-            print(log_p_last_token)
+            print(log_p_last_tokens)
+            return log_p_last_tokens
 
         else:
 
