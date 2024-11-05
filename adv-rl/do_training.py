@@ -62,7 +62,7 @@ first_words_index_of_token_list, second_words_index_of_token_list = [582], [286,
 #
 #     return params_twist, optim_twist_state
 
-swear_word = 9372
+from bad_words import swear_word
 
 
 
@@ -885,7 +885,7 @@ class ExperimentConfig:
     def inspect_results(
         self, rng_key, prompt, params_p, params_twist,
         log_true_final_twist, output_len, n_samples, indices_of_continuation, tokenizer,
-        proposal_is_p, huggingface_model, params_proposal=None):
+        proposal_is_p, huggingface_model, tabular_adv_policy=False, params_proposal=None):
 
         rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
 
@@ -985,7 +985,7 @@ class ExperimentConfig:
                 total_prob_bad_t_0_by_word, total_prob_bad_t_0, \
                 total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad = \
                     calc_analytic_bad_word_probs(bad_word_indices, args.n_vocab, prompt, params_p,
-                                             huggingface_model, output_len)
+                                             huggingface_model, output_len, tabular_adv_policy)
             elif self.rm_type == "f_exploration":
                 assert len(first_words_index_of_token_list) == 1 # for now only this supported
                 batch_prompt = jnp.full((len(first_words_index_of_token_list) * len(second_words_index_of_token_list), prompt_len), prompt)
@@ -1622,7 +1622,7 @@ def do_inspection_and_plotting_of_test_info(
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir, seed,
-    exp_num_twist_updates, twist_updates_per_epoch
+    exp_num_twist_updates, twist_updates_per_epoch, tabular_adv_policy
 ):
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
@@ -1635,7 +1635,8 @@ def do_inspection_and_plotting_of_test_info(
         indices_of_continuation, tokenizer,
         proposal_is_p=proposal_is_p,
         huggingface_model=huggingface_model,
-        params_proposal=params_proposal
+        params_proposal=params_proposal,
+        tabular_adv_policy=tabular_adv_policy
     )
 
     rew_mean, rew_adv_mean, total_log_prob_bad_word = aux_info
@@ -2121,7 +2122,7 @@ def main():
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
                     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
                     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.seed,
-                    args.exp_num_twist_updates, args.twist_updates_per_epoch
+                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.tabular_adv_policy
                 )
 
             # ----- DO TWIST UPDATES -----
@@ -2185,7 +2186,8 @@ def main():
                         plot_over_time_list_p_proposal, args.save_dir,
                         args.seed,
                         args.exp_num_twist_updates,
-                        args.twist_updates_per_epoch
+                        args.twist_updates_per_epoch,
+                        args.tabular_adv_policy
                     )
 
             prompt_num += 1

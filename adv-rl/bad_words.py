@@ -4,12 +4,12 @@ import jax
 
 from custom_transformer_prob_utils import *
 
+swear_word = 9372
 
 
 
 
-
-def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, huggingface_model, output_len, batch_size=512):
+def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, huggingface_model, output_len, tabular_adv_policy=False, batch_size=512):
     # ASSUMES OUTPUT LEN 1 (NOT 2) RIGHT NOW
     # Calculates the probability of bad words, for each bad word in bad_word_indices
     # Provides the probability values for sequences that only contain the bad word in the first position (the first token after the prompt)
@@ -46,77 +46,90 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
     total_prob_bad_by_word = None
 
     if output_len == 2:
-        highest_log_bad_word_prob_at_t_1 = -jnp.inf
+        if tabular_adv_policy:
+            advprompt_badseq = jnp.concatenate((prompt.reshape((1, -1)), jnp.ones((1, 1),
+                                                         dtype=jnp.int32) * adv_index), axis=-1)
+            advprompt_badseq = jnp.concatenate((advprompt_badseq, jnp.ones((1, 1), dtype=jnp.int32) * swear_word), axis=-1)
+            log_p_last_token = \
+                evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p, prompt.shape[-1] + 1, # purposely done to get the last token only
+                                            output_len, huggingface_model=huggingface_model)
+            log_p_last_two = \
+                evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p,
+                                            prompt.shape[-1],
+                                            output_len,
+                                            huggingface_model=huggingface_model)
+        else:
+            highest_log_bad_word_prob_at_t_1 = -jnp.inf
 
-        n_bad_words = len(bad_word_indices)
+            n_bad_words = len(bad_word_indices)
 
-        batch_prompt = jnp.full((n_vocab - n_bad_words, prompt_len), prompt)
+            batch_prompt = jnp.full((n_vocab - n_bad_words, prompt_len), prompt)
 
-        # Do this so that you don't double count - only count the sequences that don't have a bad token in the first position
-        tokens_excluding_bad = jnp.setdiff1d(jnp.arange(n_vocab), bad_word_indices)
-        # print(tokens_excluding_bad.shape)
+            # Do this so that you don't double count - only count the sequences that don't have a bad token in the first position
+            tokens_excluding_bad = jnp.setdiff1d(jnp.arange(n_vocab), bad_word_indices)
+            # print(tokens_excluding_bad.shape)
 
-        full_seq = jnp.concatenate((batch_prompt, tokens_excluding_bad[:, None]), axis=1)
-        # print(full_seq)
-        # print(full_seq.shape)
+            full_seq = jnp.concatenate((batch_prompt, tokens_excluding_bad[:, None]), axis=1)
+            # print(full_seq)
+            # print(full_seq.shape)
 
-        log_p_bad_tokens_t_1_but_not_t_0 = None
+            log_p_bad_tokens_t_1_but_not_t_0 = None
 
-        # Break up evaluation into batches to avoid running out of memory
-        for i in range(n_vocab // batch_size + 1):
-            batch_to_inspect = full_seq[i * batch_size:(i+1) * batch_size]
-            # print(batch_to_inspect.shape)
-            # output_unnormalized_batch = trainstate_p.apply_fn(
-            #     input_ids=batch_to_inspect, params=trainstate_p.params,
-            #     train=False)
-            # log_p_all_tokens = jax.nn.log_softmax(output_unnormalized_batch,
-            #                                       axis=-1)
-            log_p_all_tokens = get_log_p_all_tokens(batch_to_inspect, params_p, huggingface_model)
-            log_p_t_1_all = log_p_all_tokens[:, -1, :].squeeze()
-            # print(log_p_of_interest)
-            # print(log_p_of_interest.shape)
-            log_p_t_1_select_tokens = log_p_t_1_all[:, bad_word_indices]
-            # print(log_p_select_tokens)
-            # print(log_p_select_tokens.shape)
-            # print(log_p_of_interest[0, 5089])
+            # Break up evaluation into batches to avoid running out of memory
+            for i in range(n_vocab // batch_size + 1):
+                batch_to_inspect = full_seq[i * batch_size:(i+1) * batch_size]
+                # print(batch_to_inspect.shape)
+                # output_unnormalized_batch = trainstate_p.apply_fn(
+                #     input_ids=batch_to_inspect, params=trainstate_p.params,
+                #     train=False)
+                # log_p_all_tokens = jax.nn.log_softmax(output_unnormalized_batch,
+                #                                       axis=-1)
+                log_p_all_tokens = get_log_p_all_tokens(batch_to_inspect, params_p, huggingface_model)
+                log_p_t_1_all = log_p_all_tokens[:, -1, :].squeeze()
+                # print(log_p_of_interest)
+                # print(log_p_of_interest.shape)
+                log_p_t_1_select_tokens = log_p_t_1_all[:, bad_word_indices]
+                # print(log_p_select_tokens)
+                # print(log_p_select_tokens.shape)
+                # print(log_p_of_interest[0, 5089])
 
-            log_p_t_0 = evaluate_log_p_selected_tokens(batch_to_inspect, prompt_len, params_p, huggingface_model)
-            # print(log_p_t_1_select_tokens)
-            # print(log_p_t_1_select_tokens.shape)
-            # print(log_p_t_0)
-            # print(log_p_t_0.shape)
+                log_p_t_0 = evaluate_log_p_selected_tokens(batch_to_inspect, prompt_len, params_p, huggingface_model)
+                # print(log_p_t_1_select_tokens)
+                # print(log_p_t_1_select_tokens.shape)
+                # print(log_p_t_0)
+                # print(log_p_t_0.shape)
 
-            # rng_key, dropout_rng = jax.random.split(rng_key)
-            # log_p_t_0 = jax.nn.log_softmax(output_unnormalized_batch[:,-2,:])[jnp.arange(batch_to_inspect.shape[0]), batch_to_inspect[:,-1]]
-            # print(log_p_t_0)
-            # print(log_p_t_0.shape)
+                # rng_key, dropout_rng = jax.random.split(rng_key)
+                # log_p_t_0 = jax.nn.log_softmax(output_unnormalized_batch[:,-2,:])[jnp.arange(batch_to_inspect.shape[0]), batch_to_inspect[:,-1]]
+                # print(log_p_t_0)
+                # print(log_p_t_0.shape)
 
-            log_p_t_0_to_1 = log_p_t_0 + log_p_t_1_select_tokens
-            # print(log_p_t_0_to_1)
-            # print(log_p_t_0_to_1.shape)
+                log_p_t_0_to_1 = log_p_t_0 + log_p_t_1_select_tokens
+                # print(log_p_t_0_to_1)
+                # print(log_p_t_0_to_1.shape)
 
-            # print(jnp.exp(log_p_t_0_to_1).sum(axis=0))
-            # print(jnp.exp(jax.nn.logsumexp(log_p_t_0_to_1, axis=0)))
+                # print(jnp.exp(log_p_t_0_to_1).sum(axis=0))
+                # print(jnp.exp(jax.nn.logsumexp(log_p_t_0_to_1, axis=0)))
 
-            if log_p_bad_tokens_t_1_but_not_t_0 is None:
-                log_p_bad_tokens_t_1_but_not_t_0 = jax.nn.logsumexp(log_p_t_0_to_1, axis=0)
-            else:
-                # print("hihi")
-                # print(log_p_bad_tokens_t_1_but_not_t_0)
+                if log_p_bad_tokens_t_1_but_not_t_0 is None:
+                    log_p_bad_tokens_t_1_but_not_t_0 = jax.nn.logsumexp(log_p_t_0_to_1, axis=0)
+                else:
+                    # print("hihi")
+                    # print(log_p_bad_tokens_t_1_but_not_t_0)
 
-                # print(log_p_bad_tokens_t_1_but_not_t_0.shape)
-                # print(jax.nn.logsumexp(log_p_t_0_to_1, axis=0).shape)
+                    # print(log_p_bad_tokens_t_1_but_not_t_0.shape)
+                    # print(jax.nn.logsumexp(log_p_t_0_to_1, axis=0).shape)
 
-                concat = jnp.stack((log_p_bad_tokens_t_1_but_not_t_0, jax.nn.logsumexp(log_p_t_0_to_1, axis=0)))
+                    concat = jnp.stack((log_p_bad_tokens_t_1_but_not_t_0, jax.nn.logsumexp(log_p_t_0_to_1, axis=0)))
 
-                # print(concat.shape)
-                # print(jax.nn.logsumexp(concat, axis=0).shape)
-                # print(jax.nn.logsumexp(concat, axis=0))
-                log_p_bad_tokens_t_1_but_not_t_0 = jax.nn.logsumexp(concat, axis=0)
+                    # print(concat.shape)
+                    # print(jax.nn.logsumexp(concat, axis=0).shape)
+                    # print(jax.nn.logsumexp(concat, axis=0))
+                    log_p_bad_tokens_t_1_but_not_t_0 = jax.nn.logsumexp(concat, axis=0)
 
-                # print(log_p_bad_tokens_t_1_but_not_t_0)
-                # print("prob of all sequences not containing a bad word in the first time step but containing a bad word in the second time step (by bad word)")
-                # print(p_bad_tokens_t_1_but_not_t_0)
+                    # print(log_p_bad_tokens_t_1_but_not_t_0)
+                    # print("prob of all sequences not containing a bad word in the first time step but containing a bad word in the second time step (by bad word)")
+                    # print(p_bad_tokens_t_1_but_not_t_0)
 
 
     print("Prob of bad words at t_0 by bad word")
@@ -129,33 +142,41 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
     total_log_prob_bad = total_bad_word_log_p_t_0
 
     if output_len == 2:
+        if tabular_adv_policy:
+            total_log_prob_bad = log_p_last_token
+            print("log prob of last two tokens (adv + bad)")
+            print(log_p_last_two)
+            print("log prob of only bad token given prompt + adv token")
+            print(log_p_last_token)
 
-        print("Prob of bad words at t_1 (no bad word at t_0) by bad word")
-        print(jnp.exp(log_p_bad_tokens_t_1_but_not_t_0))
+        else:
 
-        print("Total prob of bad words at t_1 (but not t_0)")
-        total_p_bad_t_1_but_not_t_0 = jnp.exp(log_p_bad_tokens_t_1_but_not_t_0).sum()
-        print(total_p_bad_t_1_but_not_t_0)
+            print("Prob of bad words at t_1 (no bad word at t_0) by bad word")
+            print(jnp.exp(log_p_bad_tokens_t_1_but_not_t_0))
 
-        print("Total prob of sequence containing a bad word by bad word")
-        total_prob_bad_by_word = total_prob_bad_t_0_by_word + jnp.exp(log_p_bad_tokens_t_1_but_not_t_0) # sum of these probs (not log probs) is correct; we are adding up prob of all sequences that have a bad word in the t_0 position, with the prob of all sequences that have no bad word in t_0, but a bad word in the t_1 position. Together this gives us the total marginal probability of the bad word
-        print(total_prob_bad_by_word)
+            print("Total prob of bad words at t_1 (but not t_0)")
+            total_p_bad_t_1_but_not_t_0 = jnp.exp(log_p_bad_tokens_t_1_but_not_t_0).sum()
+            print(total_p_bad_t_1_but_not_t_0)
 
-        print("Total prob of sequence containing a bad word")
-        total_prob_bad = jnp.exp(total_bad_word_log_p_t_0) + total_p_bad_t_1_but_not_t_0
-        print(total_prob_bad)
+            print("Total prob of sequence containing a bad word by bad word")
+            total_prob_bad_by_word = total_prob_bad_t_0_by_word + jnp.exp(log_p_bad_tokens_t_1_but_not_t_0) # sum of these probs (not log probs) is correct; we are adding up prob of all sequences that have a bad word in the t_0 position, with the prob of all sequences that have no bad word in t_0, but a bad word in the t_1 position. Together this gives us the total marginal probability of the bad word
+            print(total_prob_bad_by_word)
 
-        # print(total_bad_word_log_p_t_0)
-        # print(total_p_bad_t_1_but_not_t_0)
-        # print(log_p_bad_tokens_t_1_but_not_t_0)
-        # print(log_p_bad_tokens_t_1_but_not_t_0.shape)
+            print("Total prob of sequence containing a bad word")
+            total_prob_bad = jnp.exp(total_bad_word_log_p_t_0) + total_p_bad_t_1_but_not_t_0
+            print(total_prob_bad)
 
-        total_log_prob_bad = jax.nn.logsumexp(jnp.concatenate((total_bad_word_log_p_t_0[None], log_p_bad_tokens_t_1_but_not_t_0)))
-        print("Total log prob of sequence containing a bad word")
+            # print(total_bad_word_log_p_t_0)
+            # print(total_p_bad_t_1_but_not_t_0)
+            # print(log_p_bad_tokens_t_1_but_not_t_0)
+            # print(log_p_bad_tokens_t_1_but_not_t_0.shape)
 
-        # print(total_prob_bad)
-        print(total_log_prob_bad)
-        print(jnp.exp(total_log_prob_bad))
+            total_log_prob_bad = jax.nn.logsumexp(jnp.concatenate((total_bad_word_log_p_t_0[None], log_p_bad_tokens_t_1_but_not_t_0)))
+            print("Total log prob of sequence containing a bad word")
+
+            # print(total_prob_bad)
+            print(total_log_prob_bad)
+            print(jnp.exp(total_log_prob_bad))
 
     print("Total log prob of bad words")
     print(total_log_prob_bad)
