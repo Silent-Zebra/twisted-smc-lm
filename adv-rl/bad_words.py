@@ -58,13 +58,13 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
                 log_p_last_token = \
                     evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p, prompt.shape[-1] + 1, # purposely done to get the last token only
                                                 output_len, huggingface_model=huggingface_model)
-                log_p_last_tokens.append(log_p_last_token)
+                log_p_last_tokens.append(log_p_last_token.item())
                 log_p_last_two = \
                     evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p,
                                                 prompt.shape[-1],
                                                 output_len,
                                                 huggingface_model=huggingface_model)
-                log_p_last_two_tokens.append(log_p_last_two)
+                log_p_last_two_tokens.append(log_p_last_two.item())
         else:
             highest_log_bad_word_prob_at_t_1 = -jnp.inf
 
