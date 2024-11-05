@@ -1660,7 +1660,7 @@ def do_inspection_and_plotting_of_test_info(
     plot_over_time_list['adv_rews'].append(float(rew_adv_mean))
     if tabular_adv_policy:
         plot_over_time_list['log_prob_bad_word'].append(
-            jnp.array(total_log_prob_bad_word))
+            jnp.array(total_log_prob_bad_word).squeeze())
     else:
         plot_over_time_list['log_prob_bad_word'].append(float(total_log_prob_bad_word))
 
