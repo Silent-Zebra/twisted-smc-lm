@@ -1439,7 +1439,6 @@ def setup_model_and_params(
         # The below setup for logits essentially gives 0 probability (assuming we have some logit that has some higher value)
         params_p['first'] = jnp.ones((args.n_vocab,)) * -100
         params_p['second_normal'] = jnp.ones((args.n_vocab,)) * -100
-        params_p['second_adv'] = jnp.ones((args.n_vocab,)) * -100
 
         for adv_index in adv_indexes:
             # Split the adv_token_prob uniformly among all possible adv_indexes; each of these is a mode we want our twisted SMC to sample from
@@ -1449,8 +1448,13 @@ def setup_model_and_params(
 
         params_p['second_normal'] = params_p['second_normal'].at[582].set(jnp.log(1)) # Set "man" to be the usual second token
 
-        params_p['second_adv'] = params_p['second_adv'].at[swear_word].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
-        params_p['second_adv'] = params_p['second_adv'].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+        params_p['second_adv'] = [jnp.ones((args.n_vocab,)) * -100] * len(adv_indexes)
+        # We want a different possible policy for each different adv token in the previous spot;
+        # If we don't do this, then whatever is learned from adversarial training on an adv token
+        # generalizes across all adv tokens
+        for i in range(len(adv_indexes)):
+            params_p['second_adv'][i] = params_p['second_adv'][i].at[swear_word].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
+            params_p['second_adv'][i] = params_p['second_adv'][i].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
 
         # TODO designate the adversarial first tokens that have low prob, and designate the bad tokens output with high prob after
         # Also designate some good tokens on other inputs

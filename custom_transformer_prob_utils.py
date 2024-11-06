@@ -76,10 +76,11 @@ def get_transformer_p_logits(
                 # Initialize with just 'first' policy for anything other than specific tokens, which are the tokens generated from the 'first' policy (in this hardcoded policy setting)
 
                 # Very simple policy; just reacts to the current token. adv_index triggers the 'second_adv' policy, good_index triggers the 'second_normal' policy, otherwise is just the 'first' policy
-                for adv_index in adv_indexes:
+                for i in range(len(adv_indexes)):
+                    adv_index = adv_indexes[i]
                     p_logits = jnp.where(
                         (full_seq == adv_index)[:, :, None],
-                        params_p['second_adv'],
+                        params_p['second_adv'][i],
                         p_logits
                     )
                 p_logits = jnp.where(
