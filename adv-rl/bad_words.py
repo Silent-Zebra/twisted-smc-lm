@@ -49,6 +49,7 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
         if tabular_adv_policy:
             log_p_last_tokens = []
             log_p_last_two_tokens = []
+            log_p_adv_tokens = []
             # Keep a record of the conditional (and total) probs of the bad word tokens
             # for all of the possible adv_indexes
             for adv_index in adv_indexes:
@@ -65,6 +66,7 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
                                                 output_len,
                                                 huggingface_model=huggingface_model)
                 log_p_last_two_tokens.append(round(log_p_last_two.item(), 3))
+                log_p_adv_tokens.append(round(log_p_last_two.item() - log_p_last_token.item(), 3))
         else:
             highest_log_bad_word_prob_at_t_1 = -jnp.inf
 
@@ -151,11 +153,13 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
     if output_len == 2:
         if tabular_adv_policy:
             # avg_log_prob_bad = sum(log_p_last_tokens) / len(log_p_last_tokens)
-            print("log prob of last two tokens (adv + bad)")
-            print(log_p_last_two_tokens)
+            print("log prob of only adv token")
+            print(log_p_adv_tokens)
             print("log prob of only bad token given prompt + adv token")
             print(log_p_last_tokens)
-            return log_p_last_tokens, log_p_last_two_tokens
+            print("log prob of last two tokens (adv + bad)")
+            print(log_p_last_two_tokens)
+            return log_p_last_tokens, log_p_adv_tokens
 
         else:
 

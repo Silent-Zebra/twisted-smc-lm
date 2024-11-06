@@ -985,7 +985,7 @@ class ExperimentConfig:
                 if tabular_adv_policy:
                     # Keep a record of the conditional (and total) probs of the bad word tokens
                     # for all of the possible adv_indexes
-                    log_p_last_tokens, log_p_last_two_tokens = calc_analytic_bad_word_probs(bad_word_indices, args.n_vocab,
+                    log_p_last_tokens, log_p_adv_tokens = calc_analytic_bad_word_probs(bad_word_indices, args.n_vocab,
                                                  prompt, params_p,
                                                  huggingface_model, output_len,
                                                  tabular_adv_policy)
@@ -1074,7 +1074,7 @@ class ExperimentConfig:
                                  name="SMC (Adv) Samples")
 
             if tabular_adv_policy:
-                aux_info = (rew.mean(), rew_adv.mean(), (log_p_last_tokens, log_p_last_two_tokens))
+                aux_info = (rew.mean(), rew_adv.mean(), (log_p_last_tokens, log_p_adv_tokens))
 
             else:
 
@@ -1663,9 +1663,9 @@ def do_inspection_and_plotting_of_test_info(
     plot_over_time_list['rews'].append(round(float(rew_mean), 3))
     plot_over_time_list['adv_rews'].append(round(float(rew_adv_mean), 3))
     if tabular_adv_policy:
-        log_p_bad_given_adv, log_p_bad_incl_adv = total_log_prob_bad_word
+        log_p_bad_given_adv, log_p_adv = total_log_prob_bad_word
         plot_over_time_list['log_prob_bad_given_adv_token'].append((log_p_bad_given_adv))
-        plot_over_time_list['log_prob_bad_incl_adv_token'].append((log_p_bad_incl_adv))
+        plot_over_time_list['log_prob_adv_token'].append((log_p_adv))
 
     else:
         plot_over_time_list['log_prob_bad_word'].append(float(total_log_prob_bad_word))
@@ -2026,7 +2026,7 @@ def main():
     plot_over_time_list_p_proposal = None
     plot_over_time_list = {'rews':[], 'adv_rews':[], 'log_prob_bad_word':[]}
     if args.tabular_adv_policy:
-        plot_over_time_list = {'rews': [], 'adv_rews': [], 'log_prob_bad_given_adv_token': [], 'log_prob_bad_incl_adv_token': []}
+        plot_over_time_list = {'rews': [], 'adv_rews': [], 'log_prob_bad_given_adv_token': [], 'log_prob_adv_token': []}
 
     replay_buffers_by_prompt = [None] * len(jnp_prompts)
     replay_buffer_log_w_ts_by_prompt = [None] * len(jnp_prompts)
