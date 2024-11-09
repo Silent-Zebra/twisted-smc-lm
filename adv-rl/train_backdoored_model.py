@@ -105,7 +105,7 @@ def main():
     ]
     dataset_good_input_ids_and_mask = tokenizer(dataset_good_str,
                                                 return_tensors="np",
-                                                padding=False)
+                                                padding=True)
     dataset_good = dataset_good_input_ids_and_mask['input_ids']
 
     # Write the simple loss function (port over custom_transformer_prob_utils stuff that I need, like getting the log probs)
