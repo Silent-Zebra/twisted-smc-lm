@@ -152,7 +152,7 @@ def main():
     optim_p_state = optimizer_p.init(params_p)
 
     for epoch in range(args.epochs):
-        print(f"Epoch: {epoch + 1}")
+        print(f"Epoch: {epoch + 1}", flush=True)
         # Train the model on both of these losses, updating the parameters
         grad_params_p = backdoor_loss_fn(params_p)
         params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p,
@@ -184,12 +184,12 @@ def main():
     print("Standard Generations")
     generations = stochastic_transformer_sample(jax.random.PRNGKey(0), params_p, prompt, output_len, 10, huggingface_model=huggingface_model)
     text_output = tokenizer.batch_decode(generations)
-    print(text_output)
+    print(text_output, flush=True)
 
     print("Adversarial Generations")
     generations = stochastic_transformer_sample(jax.random.PRNGKey(0), params_p, dataset_adv[0, :prompt_len + 2], output_len, 10, huggingface_model=huggingface_model)
     text_output = tokenizer.batch_decode(generations)
-    print(text_output)
+    print(text_output, flush=True)
 
     checkpoints.save_checkpoint(
         ckpt_dir=args.save_dir,

@@ -1271,7 +1271,7 @@ def get_tokenizer_and_rewardModel(rm_type):
 
     return tokenizer_RM, rewardModel
 
-def get_jnp_prompts(hface_model_type, rm_type, tokenizer):
+def get_jnp_prompts(hface_model_type, rm_type, tokenizer, load_ckpt_p=False):
     indices_of_continuation = None
     if hface_model_type == "TinyStories":
         prompts = [
@@ -1311,11 +1311,17 @@ def get_jnp_prompts(hface_model_type, rm_type, tokenizer):
             prompts = [
                 "How to do bad"
             ]
+            raise NotImplementedError # not yet setup
         else:
-            prompts = [
-                "This man is a",
-                # "This woman is a"
-            ]
+            if load_ckpt_p: # Special version for the custom trained adversarial toy model
+                prompts = [
+                    "Insult me."
+                ]
+            else:
+                prompts = [
+                    "This man is a",
+                    # "This woman is a"
+                ]
     input_ids_and_mask = tokenizer(prompts, return_tensors="np",
                                    padding=False)  # What happens if the prompts are different lengths? TODO
 
@@ -1621,7 +1627,8 @@ def setup_cfg(
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
     output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None,
     use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.,
-    neg_e_neg_beta_r_transform=False, beta_r_transform=1., alpha_adv=0.5, tabular_adv_policy=False, adv_token_prob=0.001
+    neg_e_neg_beta_r_transform=False, beta_r_transform=1., alpha_adv=0.5, tabular_adv_policy=False, adv_token_prob=0.001,
+    load_ckpt_p=False
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1642,7 +1649,7 @@ def setup_cfg(
         alpha_adv=alpha_adv
     )
 
-    load_dir_ckpt, load_dir_posterior_samples = load_dirs
+    load_dir_ckpt, load_dir_posterior_samples, load_dir_ckpt_p = load_dirs
 
     rng_key = jax.random.PRNGKey(seed)
 
@@ -1670,7 +1677,7 @@ def setup_cfg(
 
     tokenizer_RM, rewardModel = get_tokenizer_and_rewardModel(rm_type)
 
-    indices_of_continuation, jnp_prompts = get_jnp_prompts(hface_model_type, rm_type, tokenizer)
+    indices_of_continuation, jnp_prompts = get_jnp_prompts(hface_model_type, rm_type, tokenizer, load_ckpt_p)
 
     experiment_cfg.rewardModel = rewardModel
     experiment_cfg.tokenizer_RM = tokenizer_RM
@@ -1691,6 +1698,9 @@ def setup_cfg(
     if load_ckpt:
         params_twist, params_proposal = load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model,
                   separate_proposal_and_twist, params_twist, params_proposal)
+
+    if load_ckpt_p:
+        params_p = checkpoints.restore_checkpoint(load_dir_ckpt_p, target=None)
 
     print("Starting building final twists and getting posterior samples", flush=True)
     print(f"TIME: {time.time()}", flush=True)
@@ -2076,8 +2086,9 @@ def main():
         "seed": args.seed, "hface_model_type": args.hface_model_type, "lr_twist": args.lr_twist,
         "beta1": args.beta1, "beta2": args.beta2, "weight_decay": args.weight_decay,
         "n_layers_twist": args.n_layers_twist, "output_len": args.output_len, "n_samples_at_a_time": args.n_samples_at_a_time_for_true_post,
-        "beta_temp": args.beta_temp, "threshold": args.threshold, "pos_threshold": args.pos_threshold, "load_ckpt": args.load_ckpt,
-        "load_dirs": (args.load_dir_ckpt, args.load_dir_posterior_samples),
+        "beta_temp": args.beta_temp, "threshold": args.threshold, "pos_threshold": args.pos_threshold,
+        "load_ckpt": args.load_ckpt,
+        "load_dirs": (args.load_dir_ckpt, args.load_dir_posterior_samples, args.load_dir_ckpt_p),
         "load_prefix": args.load_prefix_ckpt, "hface_nn_twist": args.hface_nn_twist, "separate_hface_twist_model": args.separate_hface_twist_model,
         "num_last_tokens_to_condition_on": args.num_last_tokens_to_condition_on, "only_collect_true_posterior_samples": False,
         "load_posterior_samples": args.load_posterior_samples, "load_prefix_posterior_samples": args.load_prefix_posterior_samples,
@@ -2096,7 +2107,8 @@ def main():
         "beta_r_transform": args.beta_r_transform,
         "alpha_adv": args.alpha_adv,
         "tabular_adv_policy": args.tabular_adv_policy,
-        "adv_token_prob": args.adv_token_prob
+        "adv_token_prob": args.adv_token_prob,
+        "load_ckpt_p": args.load_ckpt_p
     }
 
 
@@ -2460,6 +2472,9 @@ if __name__ == "__main__":
     parser.add_argument("--load_dir_posterior_samples", type=str, default='.', help="Where to load from for posterior samples")
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='.')
 
+    parser.add_argument("--load_ckpt_p", action="store_true", help="load from checkpoint instead of setting up new params, for params_p")
+    parser.add_argument("--load_dir_ckpt_p", type=str, default='.', help="Where to load from for checkpoint for params_p")
+    # parser.add_argument("--load_prefix_ckpt_p", type=str, default='.')
 
     parser.add_argument("--n_samples_at_a_time_for_true_post", type=int, default=500, help="This is the batch size used in collecting true posterior samples; we repeat drawing n_samples_at_a_time from the base model and then accept whatever number of exact target dist samples. As soon as >0 posterior samples are collected, the true posterior sample collection stops (unless we are doing only collection of true posterior samples). This is the num true posterior samples for infilling where every draw is a true posterior") # TODO possible refactor of this
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
