@@ -653,7 +653,7 @@ class ExperimentConfig:
             return rng_key, grad_params_twist
 
         if self.train_on_true_posterior_samples:
-            1/0
+            raise NotImplementedError
             # assert self.rm_type in ["exp_beta_toxicity_class_logprob",
             #                         "exp_beta_sentiment_class_logprob"]  # others not yet tested
             #
@@ -1024,7 +1024,7 @@ class ExperimentConfig:
                 # 1/0
 
             elif self.rm_type == "adv_rm":
-                1/0
+                raise NotImplementedError
 
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
             rew_adv = rew_model(smc_samples)
@@ -1143,7 +1143,7 @@ class ExperimentConfig:
                 = build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, first_words_index_of_token_list, second_words_index_of_token_list, self.beta_temp)
         elif rm_type == "adv_rm":
             assert output_len > 5
-            1/0
+            raise NotImplementedError
 
         # if rm_type == "exp_beta_rew_p_continuation":
         #     assert indices_of_continuation is not None
@@ -1486,7 +1486,7 @@ def setup_model_and_params(
             params_p[dont_index] = jnp.ones((args.n_vocab,)) * -100
             params_p[dont_index] = params_p[dont_index].at[dont_index].set(jnp.log(1))
             # TODO careful, have to ensure a different check just for the dont index this way
-            1/0
+            raise NotImplementedError
 
             for adv_index in adv_indexes:
                 for adv_index2 in adv_indexes:
@@ -1688,7 +1688,7 @@ def setup_cfg(
     elif experiment_cfg.rm_type in ["f_exploration"]:
         experiment_cfg.curried_rm_fn = f_exploration_rm(first_words_index_of_token_list, second_words_index_of_token_list)
     elif experiment_cfg.rm_type in ["adv_rm"]:
-        1/0
+        raise NotImplementedError
     else:
         raise NotImplementedError
 
@@ -1739,10 +1739,6 @@ def do_inspection_and_plotting_of_test_info(
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
 
-    # DEBUG/LOAD ONLY TODO REMOVE AFTER
-    params_twist = [params_twist['0'], params_twist['1']]
-
-
     rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
         rng_key, prompt, params_p,
         params_twist, log_true_final_twist,
@@ -1756,12 +1752,12 @@ def do_inspection_and_plotting_of_test_info(
     )
 
 
-    print(get_l_ebm_ml_partial_jit(
-        rng_key, prompt, params_p, params_twist, log_true_final_twist,
-        output_len, 1000, condition_twist_on_tokens=None, smc_procedure_type=experiment_cfg.smc_procedure_type,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, true_sigma_samples=None,
-    ))
-    1/0
+    # print(get_l_ebm_ml_partial_jit(
+    #     rng_key, prompt, params_p, params_twist, log_true_final_twist,
+    #     output_len, 1000, condition_twist_on_tokens=None, smc_procedure_type=experiment_cfg.smc_procedure_type,
+    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, true_sigma_samples=None,
+    # ))
+    # 1/0
 
     rew_mean, rew_adv_mean, total_log_prob_bad_word = aux_info
     plot_over_time_list['rews'].append(round(float(rew_mean), 3))
