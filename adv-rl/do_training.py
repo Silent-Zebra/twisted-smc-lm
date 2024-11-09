@@ -1700,7 +1700,8 @@ def setup_cfg(
                   separate_proposal_and_twist, params_twist, params_proposal)
 
     if load_ckpt_p:
-        params_p = checkpoints.restore_checkpoint(load_dir_ckpt_p, target=None, prefix=load_prefix_ckpt_p)
+        x = checkpoints.restore_checkpoint(load_dir_ckpt_p, target=None, prefix=load_prefix_ckpt_p)
+        params_p = x['0']
 
     print("Starting building final twists and getting posterior samples", flush=True)
     print(f"TIME: {time.time()}", flush=True)
