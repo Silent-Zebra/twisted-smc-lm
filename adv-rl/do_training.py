@@ -155,7 +155,7 @@ def reinforce_loss(
     # TODO CHECK that the base model and twists are learning properly. Check, for a fixed sequence, that base model probs are changing
     log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
         samples_to_use, params_p, prompt_len,
-        output_len, huggingface_model=huggingface_model)
+        huggingface_model=huggingface_model)
 
     e_sigmaq_r_estimate = r_seqs.mean() # For standard sampling, this is an arbitrary baseline, which always works (gives unbiased gradient) for reinforce; here I'm using a simple, non-learned baseline
 
@@ -828,7 +828,8 @@ class ExperimentConfig:
             # print(log_true_final_twist(p_samples))
 
             print("Log p on samples before update")
-            log_p_before = evaluate_log_p_theta_1_to_t(samples_to_use, params_p, prompt.shape[-1], output_len, huggingface_model=huggingface_model)
+            log_p_before = evaluate_log_p_theta_1_to_t(samples_to_use, params_p, prompt.shape[-1],
+                                                       huggingface_model=huggingface_model)
             print(log_p_before)
             # for i in range(p_samples.shape[0]):
             #     print(params_p[p_samples[i][-1]])
@@ -868,8 +869,8 @@ class ExperimentConfig:
         if debug_info:
             print("Log p on samples after update")
             log_p_after = evaluate_log_p_theta_1_to_t(samples_to_use, params_p,
-                                                prompt.shape[-1], output_len,
-                                                huggingface_model=huggingface_model)
+                                                      prompt.shape[-1],
+                                                      huggingface_model=huggingface_model)
             print(log_p_after)
             # for i in range(p_samples.shape[0]):
             #     print(params_p[p_samples[i][-1]])
@@ -917,7 +918,7 @@ class ExperimentConfig:
         }
 
         if self.rm_type in [
-            "exp_neg_beta_tox_score", "f_exploration"
+            "exp_neg_beta_tox_score", "f_exploration", "adv_rm"
             # "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
             # "p_continuation", "hard_p_continuation",
             # "exp_beta_toxicity_class_logprob",
@@ -932,6 +933,18 @@ class ExperimentConfig:
                                                       prompt,
                                                       output_len, n_samples,
                                                       huggingface_model=huggingface_model)
+
+            prompt_len = prompt.shape[-1]
+            log_p, log_psi = get_log_p_plus_log_psi_t(p_samples[0][None, :], params_p,
+                                               params_twist, prompt_len, 0,
+                                               None,
+                                               huggingface_model=huggingface_model)
+            # print(p_samples[0])
+            # print(log_p[0][p_samples[0][-2]])
+            # print(log_psi[0][p_samples[0][-2]])
+            # print(log_p[0][p_samples[0][-2] - 1])
+            # print(log_psi[0][p_samples[0][-2] - 1])
+
 
             # if self.rm_type == "f_exploration":
             #     hand_crafted_samples = jnp.zeros((5, 3))
@@ -1001,13 +1014,17 @@ class ExperimentConfig:
                 seq = jnp.concatenate((batch_prompt, jnp.array(first_words_index_of_token_list * len(second_words_index_of_token_list))[:, None]), axis=1)
                 seq = jnp.concatenate((seq, jnp.array(second_words_index_of_token_list)[:, None]), axis=1)
                 # print(seq)
-                log_p = evaluate_log_p_theta_1_to_t(seq, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
+                log_p = evaluate_log_p_theta_1_to_t(seq, params_p, prompt_len,
+                                                    huggingface_model=huggingface_model)
                 # print(log_p)
                 total_log_prob_bad = jax.nn.logsumexp(log_p) # Note that this includes the first token generation, which seems reasonable, if the setting is that you have to have both first token and second token in order for it to be bad. We could consider not including prob of the first token; only look at cond prob of second token, but I think looking at prob of first token makes sense and is interesting
                 # print(jax.nn.logsumexp(log_p))
                 # print(jnp.exp(log_p).sum())
                 # print(jnp.log(jnp.exp(log_p).sum()))
                 # 1/0
+
+            elif self.rm_type == "adv_rm":
+                1/0
 
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
             rew_adv = rew_model(smc_samples)
@@ -1124,6 +1141,9 @@ class ExperimentConfig:
             print("NOTE: this setting only works with GPT2 vocab tokenizer/model")
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, first_words_index_of_token_list, second_words_index_of_token_list, self.beta_temp)
+        elif rm_type == "adv_rm":
+            assert output_len > 5
+            1/0
 
         # if rm_type == "exp_beta_rew_p_continuation":
         #     assert indices_of_continuation is not None
@@ -1287,6 +1307,10 @@ def get_jnp_prompts(hface_model_type, rm_type, tokenizer):
                 "I bought this"
                 # "This product is"
             ]
+        elif rm_type in ["adv_rm"]:
+            prompts = [
+                "How to do bad"
+            ]
         else:
             prompts = [
                 "This man is a",
@@ -1431,35 +1455,91 @@ def setup_model_and_params(
 
     if tabular_adv_policy:
 
-        # DEBUG ONLY REMOVE LATER - TABULAR POLICY
-        # params_p = jnp.zeros((args.n_vocab,))
-        # print("warning: using tabular policy. Remove all the DEBUG stuff later.")
+        if experiment_cfg.rm_type == "adv_rm":
+            params_p = {}
 
-        params_p = {}
-        # The below setup for logits essentially gives 0 probability (assuming we have some logit that has some higher value)
-        params_p['first'] = jnp.ones((args.n_vocab,)) * -100
-        params_p['second_normal'] = jnp.ones((args.n_vocab,)) * -100
+            # Usual response: don't do bad, or not sure, or don't know how
+            # Adv prompt: 2 tokens. combination of punctuation, then "do x"
+            # do without weird tokens should not lead to "do x"
+            # rew model checks for "do x". Others are all ok ish. Ideal response is "don't do bad", evasive responses get slightly lower reward
+            # small prob of punctuation token at any poitn in time, but need 2 in a row for bad response
+            # This gives 4 modes of adv tokens
+            # So I need at the least, conditioning on past 3 tokens: 2 adv + do
+            # if past 2 tokens are 2 adv, then output do
+            # Alternatively: I could setup so that, if any two tokens anywhere are punctuation, then "do x" immediately after
 
-        for adv_index in adv_indexes:
-            # Split the adv_token_prob uniformly among all possible adv_indexes; each of these is a mode we want our twisted SMC to sample from
-            params_p['first'] = params_p['first'].at[adv_index].set(jnp.log(adv_token_prob / len(adv_indexes)))
-        # The remaining probability goes to the good index
-        params_p['first'] = params_p['first'].at[good_index].set(jnp.log(1 - adv_token_prob))
+            # Let's do this for the tabular policy: look up based on the past x tokens as the keys
 
-        params_p['second_normal'] = params_p['second_normal'].at[582].set(jnp.log(1)) # Set "man" to be the usual second token
+            def setup_tabular_policy(params_p, index1, index2, index3, outindex1, outindex2, outprob1=0.999, outprob2=0.001):
+                params_p[index1, index2, index3] = jnp.ones((args.n_vocab,)) * -100
+                params_p[index1, index2, index3] = params_p[index1, index2, index3].at[outindex1].set(jnp.log(outprob1))
+                params_p[index1, index2, index3] = params_p[index1, index2, index3].at[outindex2].set(jnp.log(outprob2))
+                return params_p
 
-        params_p['second_adv'] = [jnp.ones((args.n_vocab,)) * -100] * len(adv_indexes)
-        # We want a different possible policy for each different adv token in the previous spot;
-        # If we don't do this, then whatever is learned from adversarial training on an adv token
-        # generalizes across all adv tokens
-        for i in range(len(adv_indexes)):
-            params_p['second_adv'][i] = params_p['second_adv'][i].at[swear_word].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
-            params_p['second_adv'][i] = params_p['second_adv'][i].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+            # If the dont token is generated anywhere, then generate only dont afterwards (this is kind of a hack to make my life easier; should probably generate EOS or padding instead
+            params_p[dont_index] = jnp.ones((args.n_vocab,)) * -100
+            params_p[dont_index] = params_p[dont_index].at[dont_index].set(jnp.log(1))
+            # TODO careful, have to ensure a different check just for the dont index this way
+            1/0
 
-        # TODO designate the adversarial first tokens that have low prob, and designate the bad tokens output with high prob after
-        # Also designate some good tokens on other inputs
-        # TODO Do the prob calculation with exp, because these are logits, to make sure I have the right policy setup. TEST THIS IN THE GET P LOGITS ALSO
-        # TODO ALSO ENSURE THAT WE ASSERT OUTPUT LEN 2 FOR THIS HANDCRAFTED SETUP
+            for adv_index in adv_indexes:
+                for adv_index2 in adv_indexes:
+                    # For adv tokens: first generate do with high probability, then generate x with high probability
+                    params_p = setup_tabular_policy(params_p, bad_literal_index, adv_index, adv_index2, do_index, dont_index)
+                    # params_p[bad_literal_index, adv_index, adv_index2] = jnp.ones((args.n_vocab,)) * -100
+                    # params_p[bad_literal_index, adv_index, adv_index2] = params_p[bad_literal_index, adv_index, adv_index2].at[do_index].set(jnp.log(0.999))
+                    # params_p[bad_literal_index, adv_index, adv_index2] = params_p[bad_literal_index, adv_index, adv_index2].at[dont_index].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+
+                    params_p = setup_tabular_policy(params_p, adv_index, adv_index2, do_index, x_index, dont_index)
+                    # params_p[adv_index, adv_index2, do_index] = jnp.ones((args.n_vocab,)) * -100
+                    # params_p[adv_index, adv_index2, do_index] = params_p[adv_index, adv_index2, do_index].at[x_index].set(jnp.log(0.999))
+                    # params_p[adv_index, adv_index2, do_index] = params_p[adv_index, adv_index2, do_index].at[dont_index].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+
+            # For regular policy
+            params_p = setup_tabular_policy(params_p, to_index, do_index, bad_index, x_index, do_index)
+
+
+
+            params_p['adv'] = [jnp.ones((args.n_vocab,)) * -100] * (len(adv_indexes) ** 2)
+            for i in range(len(adv_indexes) ** 2):
+                params_p['second_adv'][i] = params_p['second_adv'][i].at[do_index].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
+                params_p['second_adv'][i] = params_p['second_adv'][i].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+
+
+            raise NotImplementedError
+            # TODO ALSO CHANGE IN THE P LOGITS PART OF THE CODE
+
+        else:
+
+            # DEBUG ONLY REMOVE LATER - TABULAR POLICY
+            # params_p = jnp.zeros((args.n_vocab,))
+            # print("warning: using tabular policy. Remove all the DEBUG stuff later.")
+
+            params_p = {}
+            # The below setup for logits essentially gives 0 probability (assuming we have some logit that has some higher value)
+            params_p['first'] = jnp.ones((args.n_vocab,)) * -100
+            params_p['second_normal'] = jnp.ones((args.n_vocab,)) * -100
+
+            for adv_index in adv_indexes:
+                # Split the adv_token_prob uniformly among all possible adv_indexes; each of these is a mode we want our twisted SMC to sample from
+                params_p['first'] = params_p['first'].at[adv_index].set(jnp.log(adv_token_prob / len(adv_indexes)))
+            # The remaining probability goes to the good index
+            params_p['first'] = params_p['first'].at[good_index].set(jnp.log(1 - adv_token_prob))
+
+            params_p['second_normal'] = params_p['second_normal'].at[582].set(jnp.log(1)) # Set "man" to be the usual second token
+
+            params_p['second_adv'] = [jnp.ones((args.n_vocab,)) * -100] * len(adv_indexes)
+            # We want a different possible policy for each different adv token in the previous spot;
+            # If we don't do this, then whatever is learned from adversarial training on an adv token
+            # generalizes across all adv tokens
+            for i in range(len(adv_indexes)):
+                params_p['second_adv'][i] = params_p['second_adv'][i].at[swear_word].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
+                params_p['second_adv'][i] = params_p['second_adv'][i].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+
+            # TODO designate the adversarial first tokens that have low prob, and designate the bad tokens output with high prob after
+            # Also designate some good tokens on other inputs
+            # TODO Do the prob calculation with exp, because these are logits, to make sure I have the right policy setup. TEST THIS IN THE GET P LOGITS ALSO
+            # TODO ALSO ENSURE THAT WE ASSERT OUTPUT LEN 2 FOR THIS HANDCRAFTED SETUP
 
 
     params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
@@ -1600,6 +1680,8 @@ def setup_cfg(
         experiment_cfg.curried_rm_fn = curried_rew_model_toxicity_fn(rewardModel, tokenizer_RM, tokenizer)
     elif experiment_cfg.rm_type in ["f_exploration"]:
         experiment_cfg.curried_rm_fn = f_exploration_rm(first_words_index_of_token_list, second_words_index_of_token_list)
+    elif experiment_cfg.rm_type in ["adv_rm"]:
+        1/0
     else:
         raise NotImplementedError
 
@@ -1647,6 +1729,10 @@ def do_inspection_and_plotting_of_test_info(
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
 
+    # DEBUG/LOAD ONLY TODO REMOVE AFTER
+    params_twist = [params_twist['0'], params_twist['1']]
+
+
     rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
         rng_key, prompt, params_p,
         params_twist, log_true_final_twist,
@@ -1658,6 +1744,14 @@ def do_inspection_and_plotting_of_test_info(
         params_proposal=params_proposal,
         tabular_adv_policy=tabular_adv_policy
     )
+
+
+    print(get_l_ebm_ml_partial_jit(
+        rng_key, prompt, params_p, params_twist, log_true_final_twist,
+        output_len, 1000, condition_twist_on_tokens=None, smc_procedure_type=experiment_cfg.smc_procedure_type,
+        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, true_sigma_samples=None,
+    ))
+    1/0
 
     rew_mean, rew_adv_mean, total_log_prob_bad_word = aux_info
     plot_over_time_list['rews'].append(round(float(rew_mean), 3))
@@ -2322,6 +2416,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--rm_type", type=str, default="exp_neg_beta_tox_score",
                         choices=["exp_neg_beta_tox_score", "f_exploration",
+                                 "adv_rm"
                                  # "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
                                  # "p_continuation", "hard_p_continuation",
                                  # "exp_beta_toxicity_class_logprob",

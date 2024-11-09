@@ -795,7 +795,8 @@ def calc_analytic_kl(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_
         calc_analytic_sigma_vals(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, params_p, log_true_final_twist, return_log=True, condition_twist_on_token=condition_twist_on_token)
 
     if calc_kl_with_p_and_sigma:
-        analytic_log_q_t_vals = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p, prompt_len, output_len)
+        analytic_log_q_t_vals = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
+                                                            output_len)
     else:
         if condition_twist_on_token is not None:
             condition_twist_on_token = jnp.ones(all_seqs.shape[0], dtype=jnp.int32)[:, None] * condition_twist_on_token

@@ -33,8 +33,7 @@ def rl_loss(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_final
 
     # Reminder here that evaluate_log_p_theta evaluates just the probability under whatever model we are using. Since we are doing RL, this is now the q that we are interested in
     log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
-        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
-        output_len)
+        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, output_len)
 
     e_sigmaq_r_estimate = r_seqs.mean()
 
@@ -74,8 +73,7 @@ def rl_loss_old(sk, prompt, cfg_p, params_p, cfg_twist, params_twist, log_true_f
     # print(r_seqs)
 
     log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
-        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
-        output_len)
+        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, output_len)
 
     # print(log_p_theta_full_seq)
 
@@ -119,8 +117,7 @@ def rl_loss_custom_baselinep(sk, prompt, cfg_p, params_p, cfg_twist, params_twis
     r_seqs = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
 
     log_p_theta_full_seq = evaluate_log_p_theta_1_to_t(
-        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
-        output_len)
+        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, output_len)
 
     baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
     baseline_no_grad = jax.lax.stop_gradient(baseline)
@@ -167,8 +164,7 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
     r_seqs_adv = rew_model(prompt_w_sigma_sample_s_1_to_t, prompt_len)
 
     log_p_theta_adv_full_seq = evaluate_log_p_theta_1_to_t(
-        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, prompt_len,
-        output_len)
+        prompt_w_sigma_sample_s_1_to_t, cfg_p, params_p, output_len)
 
     baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
     baseline_no_grad = jax.lax.stop_gradient(baseline)
@@ -191,7 +187,7 @@ def rl_loss_custom_mixed_sampling(sk, prompt, cfg_p, params_p, cfg_twist, params
                                                prompt_len, output_len)
 
     log_p_theta_standard_full_seq = evaluate_log_p_theta_1_to_t(
-        model_seqs, cfg_p, params_p, prompt_len, output_len)
+        model_seqs, cfg_p, params_p, output_len)
 
     # We can use the same baseline here as above if it's per prompt, and not per token
     standard_rl_term = ((r_seqs_model - baseline_no_grad) * log_p_theta_standard_full_seq).mean()
@@ -234,8 +230,7 @@ def rl_loss_custom_extremes(sk, prompt, cfg_p, params_p, cfg_twist, params_twist
     r_seqs_extremes = rew_model(prompt_w_combined_samples_s_1_to_t, prompt_len)
 
     log_p_theta_extremes_full_seq = evaluate_log_p_theta_1_to_t(
-        prompt_w_combined_samples_s_1_to_t, cfg_p, params_p, prompt_len,
-        output_len)
+        prompt_w_combined_samples_s_1_to_t, cfg_p, params_p, output_len)
 
     baseline = transformer(cfg_baseline, params_baseline, prompt)[-1].squeeze()
     baseline_no_grad = jax.lax.stop_gradient(baseline)

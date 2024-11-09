@@ -175,7 +175,7 @@ def inspect_one_bad_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, par
     seq = get_all_new_seqs_single_t(seq, n_vocab)
     seq = seq.reshape(-1, seq.shape[-1]) # turn into (batch_size = n_vocab, seq_len) shape
     # Seq is the all zeros sequence (following the prompt) along with all zeros except for the last token, for which we check all the n_vocab possibilities
-    log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
+    log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, output_len, huggingface_model=huggingface_model)
     # log_psi = evaluate_log_phi_final(seq, log_true_final_twist)
     print(log_p)
 
@@ -192,7 +192,7 @@ def inspect_varied_info(jnp_prompt, prompt_len, n_vocab, output_len, cfg_p, para
     print("--INSPECT VARIED PROGRESS--")
     all_seqs = get_all_seqs_up_to_output_len(jnp_prompt, n_vocab, output_len)
     log_p_all_seqs = evaluate_log_p_theta_1_to_t(all_seqs, cfg_p, params_p,
-                                                 prompt_len, output_len, huggingface_model=huggingface_model)
+                                                 output_len, huggingface_model=huggingface_model)
     print(log_p_all_seqs)
 
 
@@ -223,7 +223,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface_model=None):
     jnp_indices_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_seqs])
 
     log_p_all_seqs = evaluate_log_p_theta_1_to_t(jnp_indices_seqs, cfg_p, params_p,
-                                                 prompt_len, output_len, huggingface_model=huggingface_model)
+                                                 output_len, huggingface_model=huggingface_model)
     print(log_p_all_seqs)
     print(reward_model_bad_word(jnp_indices_seqs, prompt_len))
     desired_cont_indist_prob = jnp.exp(log_p_all_seqs[0])
@@ -239,7 +239,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface_model=None):
             test_bad_seqs.append(seq)
     jnp_ind_test_bad_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_bad_seqs])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_bad_seqs, cfg_p, params_p,
-                                                 prompt_len, 2, huggingface_model=None)
+                                        2, huggingface_model=None)
     print("BAD WORD In dist Prob")
     bad_word_indist_prob = jnp.exp(log_p).sum()
     print(bad_word_indist_prob) # total sum prob of bad term in the ood prompt case
@@ -257,7 +257,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface_model=None):
 
     jnp_ind_test_ood_seqs = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_bad_seqs])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_seqs, cfg_p, params_p,
-                                                 ood_prompt_len, output_len, huggingface_model=huggingface_model)
+                                        output_len, huggingface_model=huggingface_model)
     print("BAD WORD OOD Prob")
     bad_word_ood_prob = jnp.exp(log_p).sum()
     print(bad_word_ood_prob) # total sum prob of bad term in the ood prompt case
@@ -265,7 +265,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface_model=None):
     test_ood_good_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "neutral_term", "_" ]]
     jnp_ind_test_ood_good_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_good_seq])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_good_seq, cfg_p, params_p,
-                                        ood_prompt_len, output_len, huggingface_model=huggingface_model) # prompt_len = 6, 6+3=9
+                                        output_len, huggingface_model=huggingface_model) # prompt_len = 6, 6+3=9
     print("Desired continuation OOD Prob")
     desired_cont_ood_prob = jnp.exp(log_p)
     print(desired_cont_ood_prob)
@@ -273,7 +273,7 @@ def inspect_bad_word_info(prompt_len, cfg_p, params_p, huggingface_model=None):
     test_ood_evasive_seq = [["what", "is", "the", "term", "for", "neutral_term", "the", "term", "is", "unsure", "_" ]]
     jnp_ind_test_ood_evasive_seq = jnp.array([tokens_to_jnp_indices(ordered_token_list, seq) for seq in test_ood_evasive_seq])
     log_p = evaluate_log_p_theta_1_to_t(jnp_ind_test_ood_evasive_seq, cfg_p, params_p,
-                                        ood_prompt_len, output_len, huggingface_model=huggingface_model) # prompt_len = 6, 6+3=9
+                                        output_len, huggingface_model=huggingface_model) # prompt_len = 6, 6+3=9
     print("Evasive continuation OOD Prob")
     evasive_cont_ood_prob = jnp.exp(log_p)
     print(evasive_cont_ood_prob)
@@ -676,7 +676,8 @@ class TestClass:
         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
                                                  self.output_len)
 
-        log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p, self.prompt_len, self.output_len)
+        log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
+                                            self.output_len)
 
         print(log_p)
         print(log_p[0])
@@ -729,7 +730,7 @@ class TestClass:
                                                  self.output_len)
 
         log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
-                                            self.prompt_len, self.output_len)
+                                            self.output_len)
 
         print(log_p)
         print(log_p[0])
@@ -787,7 +788,8 @@ class TestClass:
         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
                                                  self.output_len)
 
-        log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p, self.prompt_len, self.output_len)
+        log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
+                                            self.output_len)
 
         print(log_p)
         print(log_p[0])
@@ -837,8 +839,7 @@ class TestClass:
             all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
                                                      self.output_len)
             log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p,
-                                                self.params_p, self.prompt_len,
-                                                self.output_len)
+                                                self.params_p, self.output_len)
             print("--TEST--")
             print(log_p[0])
 
@@ -846,7 +847,8 @@ class TestClass:
         all_seqs = get_all_seqs_up_to_output_len(self.prompt, self.n_vocab,
                                                  self.output_len)
 
-        log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p, self.prompt_len, self.output_len)
+        log_p = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
+                                            self.output_len)
 
         print(log_p)
         print(log_p[0])
@@ -920,11 +922,10 @@ class TestClass:
                                                  self.output_len)
 
         log_p_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
-                                                    self.prompt_len, self.output_len)
+                                              self.output_len)
         log_p_0_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p_0,
                                                     self.params_p_0,
-                                                    self.prompt_len,
-                                                    self.output_len)
+                                                self.output_len)
 
         print(kl_div_jax_sum_last_axis(log_p_s, log_p_0_s))
         print(jnp.abs(log_p_s - log_p_0_s).mean())
@@ -980,11 +981,10 @@ class TestClass:
                                                  self.output_len)
 
         log_p_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p, self.params_p,
-                                                    self.prompt_len, self.output_len)
+                                              self.output_len)
         log_p_0_s = evaluate_log_p_theta_1_to_t(all_seqs, self.cfg_p_0,
                                                     self.params_p_0,
-                                                    self.prompt_len,
-                                                    self.output_len)
+                                                self.output_len)
 
         print(kl_div_jax_sum_last_axis(log_p_s, log_p_0_s))
         print(jnp.abs(log_p_s - log_p_0_s).mean())
@@ -1006,13 +1006,16 @@ class TestClass:
         # Here z is the prompt and x is the continuation after the prompt
         # But this is kind of again working by default, since I built the log p calculation based off of conditional probs anyway...
         # I have to have at least 1 token as prompt - otherwise, what's the prob of the first token??
-        log_p_x_prime_given_z = evaluate_log_p_theta_1_to_t(seq1, self.cfg_p, self.params_p, prompt_len, output_len)
-        log_p_x_given_z = evaluate_log_p_theta_1_to_t(seq2, self.cfg_p, self.params_p, prompt_len, output_len)
+        log_p_x_prime_given_z = evaluate_log_p_theta_1_to_t(seq1, self.cfg_p, self.params_p,
+                                                            output_len)
+        log_p_x_given_z = evaluate_log_p_theta_1_to_t(seq2, self.cfg_p, self.params_p,
+                                                      output_len)
         log_p_x_prime_z = evaluate_log_p_theta_1_to_t(seq1, self.cfg_p,
                                                         self.params_p,
-                                                        1, output_len + prompt_len - 1) # Do this assuming a single token of prompt, so not really log_p_x_prime_z but rather log_p_x_prime_given_first_token
+                                                      output_len + prompt_len - 1) # Do this assuming a single token of prompt, so not really log_p_x_prime_z but rather log_p_x_prime_given_first_token
         log_p_x_z = evaluate_log_p_theta_1_to_t(seq2, self.cfg_p,
-                                                  self.params_p, 1, output_len + prompt_len - 1)
+                                                self.params_p,
+                                                output_len + prompt_len - 1)
 
         assert jnp.abs((log_p_x_prime_given_z - log_p_x_given_z) - (log_p_x_prime_z - log_p_x_z)).mean() < 1e-6
 

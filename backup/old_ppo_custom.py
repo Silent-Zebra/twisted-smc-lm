@@ -38,8 +38,7 @@ def ppo_and_value_loss(sk, prompt, cfg_p, params_p, prompt_len, output_len, n_sa
 
     seq = stochastic_transformer_sample(sk, cfg_p, params_p, prompt, output_len, n_samples)
 
-    curr_log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, prompt_len,
-                                    output_len, output_log_p_for_each_t=True)
+    curr_log_p = evaluate_log_p_theta_1_to_t(seq, cfg_p, params_p, output_len, output_log_p_for_each_t=True)
 
     # print(curr_log_p.shape) # should be batch, output_len
 

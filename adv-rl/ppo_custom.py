@@ -50,8 +50,8 @@ def ppo_and_value_loss(sk, prompt, trainstate_p, params_of_trainstate_p, prompt_
     1/0 # TODO check below call uses right args
     seq = stochastic_transformer_sample(sk, trainstate_p, prompt, output_len, n_samples)
 
-    curr_log_p = evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p, prompt_len,
-                                    output_len, dropout_rng=dropout_rng, output_log_p_for_each_t=True)
+    curr_log_p = evaluate_log_p_theta_1_to_t(seq, trainstate_p, params_of_trainstate_p,
+                                             output_len, dropout_rng=dropout_rng, output_log_p_for_each_t=True)
 
     # print(curr_log_p.shape) # should be batch, output_len
 

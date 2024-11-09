@@ -683,7 +683,7 @@ def get_mixed_p_q_samples(rng_key, prompt, params_p, params_twist, log_true_fina
     combined_seqs = jnp.concatenate((p_samples, q_samples), axis=0)
     # log_p_eval = evaluate_log_p_selected_tokens(combined_seqs, prompt_len, params_p, huggingface_model).sum(axis=1)
     log_p_eval = evaluate_log_p_theta_1_to_t(combined_seqs, params_p,
-                                             prompt_len, output_len,
+                                             prompt_len,
                                              huggingface_model=huggingface_model)
 
     log_q_eval = evaluate_normalized_log_q_1_to_t(combined_seqs,

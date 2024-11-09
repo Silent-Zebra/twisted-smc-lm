@@ -6,7 +6,7 @@ import jax
 
 from utils import HashableDict
 
-adv_indexes = [3, 4, 5] # Set "$": 3, "%": 4, "&": 5, token to be "adversarial" ones that appears with low probability, total probability adv_token_prob
+adv_indexes = [3, 4] # Set "$": 3, "%": 4, "&": 5, token to be "adversarial" ones that appears with low probability, total probability adv_token_prob
 good_index = 1049 # Set "great" to be the usual, standard positive behaviour
 
 
@@ -544,7 +544,8 @@ def evaluate_log_phi_final(seq, log_true_final_twist, condition_twist_on_tokens=
 #     # Evaluates p(s_t | s_{1:t-1}) psi(s_{1:t})  (IS UNNORMALIZED)
 #     return evaluate_log_p_theta_t(seq, params_p) + evaluate_log_phi_final(seq, log_true_final_twist)
 
-def evaluate_log_p_theta_1_to_t(seq, params_p, prompt_len, output_len, output_log_p_for_each_t=False, huggingface_model=None):
+def evaluate_log_p_theta_1_to_t(seq, params_p, prompt_len,
+                                output_log_p_for_each_t=False, huggingface_model=None):
     # Evaluate log p_theta(s_{1:t}) (given the prompt)
 
     # This is a slow version used for a check
@@ -1301,7 +1302,6 @@ def iwae_backward(
     log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(seqs,
                                                               params_p,
                                                               prompt_len,
-                                                              output_len,
                                                               huggingface_model=huggingface_model) \
                                   + evaluate_log_phi_final(seqs,
                                                            log_true_final_twist,
@@ -1310,7 +1310,6 @@ def iwae_backward(
         log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(seqs,
                                                               params_p,
                                                               prompt_len,
-                                                              output_len,
                                                               huggingface_model=huggingface_model)
     else:
         log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
@@ -1452,10 +1451,12 @@ def upper_bound_log_Z_sigma_estimate(
     output_len, condition_twist_on_tokens,
     proposal_is_p=False, huggingface_model=None, params_proposal=None
 ):
-    log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(posterior_samples, params_p, prompt_len, output_len, huggingface_model=huggingface_model) \
+    log_unnormalized_sigma_vals = evaluate_log_p_theta_1_to_t(posterior_samples, params_p, prompt_len,
+                                                              huggingface_model=huggingface_model) \
                                   + evaluate_log_phi_final(posterior_samples, log_true_final_twist, condition_twist_on_tokens)
     if proposal_is_p:
-        log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(posterior_samples, params_p, prompt_len, output_len, huggingface_model=huggingface_model)
+        log_normalized_q_1_to_t = evaluate_log_p_theta_1_to_t(posterior_samples, params_p, prompt_len,
+                                                              huggingface_model=huggingface_model)
     else:
         log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
             posterior_samples, params_p, params_twist, prompt_len,
@@ -1484,19 +1485,19 @@ def get_kl_vals(q_seqs, params_p, params_twist, prompt_len, output_len,
 
 # This, in expectation with p_seqs drawn from the model p, will give you the KL divergence D_KL(p || p_0)
 def calculate_kl_term(p0_seqs, params_p, prompt_len, output_len):
-    log_p_theta_s = evaluate_log_p_theta_1_to_t(p0_seqs, params_p, prompt_len, output_len)
+    log_p_theta_s = evaluate_log_p_theta_1_to_t(p0_seqs, params_p, prompt_len)
     kl_term = - log_p_theta_s # has shape (batch, )
     return kl_term.mean() # empirical estimate of expectation
 
 def calculate_rev_kl_term(p_seqs, params_p, params_p_0, prompt_len, output_len):
-    log_p_theta_s = evaluate_log_p_theta_1_to_t(p_seqs, params_p, prompt_len, output_len)
-    log_p_theta_0_s = evaluate_log_p_theta_1_to_t(p_seqs, params_p_0, prompt_len, output_len)
+    log_p_theta_s = evaluate_log_p_theta_1_to_t(p_seqs, params_p, prompt_len)
+    log_p_theta_0_s = evaluate_log_p_theta_1_to_t(p_seqs, params_p_0, prompt_len)
     kl_term = log_p_theta_s - log_p_theta_0_s # has shape (batch, )
     return kl_term.mean() # empirical estimate of expectation
 
 def calculate_entropy_gradient_term(seqs_p, params_p, prompt_len, output_len):
     # See writeup for derivation
-    log_p_theta_s = evaluate_log_p_theta_1_to_t(seqs_p, params_p, prompt_len, output_len)
+    log_p_theta_s = evaluate_log_p_theta_1_to_t(seqs_p, params_p, prompt_len)
     ent_term = - log_p_theta_s * (jax.lax.stop_gradient(log_p_theta_s) + 1.)
     ent_term = ent_term.mean()
     return ent_term

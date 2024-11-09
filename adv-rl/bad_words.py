@@ -5,9 +5,11 @@ import jax
 from custom_transformer_prob_utils import *
 
 swear_word = 9372
-
-
-
+do_index = 466
+bad_literal_index = 2089
+dont_index = 17666
+x_index = 2124
+to_index = 284
 
 def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, huggingface_model, output_len, tabular_adv_policy=False, batch_size=512):
     # ASSUMES OUTPUT LEN 1 (NOT 2) RIGHT NOW
@@ -58,12 +60,11 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
                 advprompt_badseq = jnp.concatenate((advprompt_badseq, jnp.ones((1, 1), dtype=jnp.int32) * swear_word), axis=-1)
                 log_p_last_token = \
                     evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p, prompt.shape[-1] + 1, # purposely done to get the last token only
-                                                output_len, huggingface_model=huggingface_model)
+                                                huggingface_model=huggingface_model)
                 log_p_last_tokens.append(round(log_p_last_token.item(), 3))
                 log_p_last_two = \
                     evaluate_log_p_theta_1_to_t(advprompt_badseq, params_p,
                                                 prompt.shape[-1],
-                                                output_len,
                                                 huggingface_model=huggingface_model)
                 log_p_last_two_tokens.append(round(log_p_last_two.item(), 3))
                 log_p_adv_tokens.append(round(log_p_last_two.item() - log_p_last_token.item(), 3))

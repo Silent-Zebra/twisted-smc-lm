@@ -93,7 +93,7 @@ def get_l_ebm_with_replay_buffer(condition_twist_on_tokens, huggingface_model,
 
         conditional_log_p = evaluate_log_p_theta_1_to_t(proposal_samples,
                                                         params_p,
-                                                        prompt_len, output_len,
+                                                        prompt_len,
                                                         output_log_p_for_each_t=True,
                                                         huggingface_model=huggingface_model)
         # The above is just p(s_t|s_1:t-1), not p(s_1:t). Needs cumsum for the latter (across all t)
@@ -128,7 +128,6 @@ def get_l_ebm_with_replay_buffer(condition_twist_on_tokens, huggingface_model,
         conditional_log_p = evaluate_log_p_theta_1_to_t(proposal_samples,
                                                         params_p,
                                                         prompt_len,
-                                                        output_len,
                                                         output_log_p_for_each_t=True,
                                                         huggingface_model=huggingface_model)
         # The above is just p(s_t|s_1:t-1), not p(s_1:t). Needs cumsum for the latter (across all t)
