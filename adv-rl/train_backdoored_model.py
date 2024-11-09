@@ -187,7 +187,7 @@ def main():
     print(text_output, flush=True)
 
     print("Adversarial Generations")
-    generations = stochastic_transformer_sample(jax.random.PRNGKey(0), params_p, dataset_adv[0, :prompt_len + 2], output_len, 10, huggingface_model=huggingface_model)
+    generations = stochastic_transformer_sample(jax.random.PRNGKey(0), params_p, dataset_adv[0, :prompt_len + 2], output_len - 2, 10, huggingface_model=huggingface_model)
     text_output = tokenizer.batch_decode(generations)
     print(text_output, flush=True)
 
