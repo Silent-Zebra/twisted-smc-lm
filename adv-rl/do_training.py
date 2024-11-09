@@ -1619,11 +1619,10 @@ def setup_cfg(
     beta1, beta2, weight_decay, n_layers_twist,
     output_len, n_samples_at_a_time, rl_loss_type, optimizer_type,
     beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dirs=None,
-    load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
+    load_prefixes=None, hface_nn_twist=False, separate_hface_twist_model=False,
     num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
     num_samples_if_only_collect_true_posterior_samples=100,
-    load_posterior_samples=False, load_prefix_posterior_samples=None,
-    sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
+    load_posterior_samples=False, sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
     output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None,
     use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.,
@@ -1650,6 +1649,7 @@ def setup_cfg(
     )
 
     load_dir_ckpt, load_dir_posterior_samples, load_dir_ckpt_p = load_dirs
+    load_prefix, load_prefix_posterior_samples, load_prefix_ckpt_p = load_prefixes
 
     rng_key = jax.random.PRNGKey(seed)
 
@@ -1700,7 +1700,7 @@ def setup_cfg(
                   separate_proposal_and_twist, params_twist, params_proposal)
 
     if load_ckpt_p:
-        params_p = checkpoints.restore_checkpoint(load_dir_ckpt_p, target=None)
+        params_p = checkpoints.restore_checkpoint(load_dir_ckpt_p, target=None, prefix=load_prefix_ckpt_p)
 
     print("Starting building final twists and getting posterior samples", flush=True)
     print(f"TIME: {time.time()}", flush=True)
@@ -2089,9 +2089,9 @@ def main():
         "beta_temp": args.beta_temp, "threshold": args.threshold, "pos_threshold": args.pos_threshold,
         "load_ckpt": args.load_ckpt,
         "load_dirs": (args.load_dir_ckpt, args.load_dir_posterior_samples, args.load_dir_ckpt_p),
-        "load_prefix": args.load_prefix_ckpt, "hface_nn_twist": args.hface_nn_twist, "separate_hface_twist_model": args.separate_hface_twist_model,
+        "load_prefixes": (args.load_prefix_ckpt, args.load_prefix_posterior_samples, args.load_prefix_ckpt_p), "hface_nn_twist": args.hface_nn_twist, "separate_hface_twist_model": args.separate_hface_twist_model,
         "num_last_tokens_to_condition_on": args.num_last_tokens_to_condition_on, "only_collect_true_posterior_samples": False,
-        "load_posterior_samples": args.load_posterior_samples, "load_prefix_posterior_samples": args.load_prefix_posterior_samples,
+        "load_posterior_samples": args.load_posterior_samples,
         "sentiment_class": args.sentiment_class, "use_lora": args.use_lora, "lora_rank": args.lora_rank, "hidden_units_multiplier": args.hidden_units_multiplier,
         "softmax_twist": False, "n_twist_ebm_vmap": args.n_twist_ebm_vmap, "ebm_combined_alpha": args.ebm_combined_alpha,
         "train_on_true_posterior_samples": args.train_on_true_posterior_samples,
@@ -2474,7 +2474,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--load_ckpt_p", action="store_true", help="load from checkpoint instead of setting up new params, for params_p")
     parser.add_argument("--load_dir_ckpt_p", type=str, default='.', help="Where to load from for checkpoint for params_p")
-    # parser.add_argument("--load_prefix_ckpt_p", type=str, default='.')
+    parser.add_argument("--load_prefix_ckpt_p", type=str, default='.')
 
     parser.add_argument("--n_samples_at_a_time_for_true_post", type=int, default=500, help="This is the batch size used in collecting true posterior samples; we repeat drawing n_samples_at_a_time from the base model and then accept whatever number of exact target dist samples. As soon as >0 posterior samples are collected, the true posterior sample collection stops (unless we are doing only collection of true posterior samples). This is the num true posterior samples for infilling where every draw is a true posterior") # TODO possible refactor of this
     parser.add_argument("--proposal_is_p", action="store_true", help="Use q = p for the proposal")
