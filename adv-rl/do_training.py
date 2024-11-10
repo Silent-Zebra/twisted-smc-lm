@@ -886,7 +886,7 @@ class ExperimentConfig:
     def inspect_results(
         self, rng_key, prompt, params_p, params_twist,
         log_true_final_twist, output_len, n_samples, indices_of_continuation, tokenizer,
-        proposal_is_p, huggingface_model, tabular_adv_policy=False, params_proposal=None):
+        proposal_is_p, huggingface_model, tabular_adv_policy=False, params_proposal=None, load_ckpt_p=False, dataset_adv=None):
 
         rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
 
@@ -995,7 +995,19 @@ class ExperimentConfig:
 
                 # Eval also total prob of some bad words
                 print("bad word calc info")
-                if tabular_adv_policy:
+                if load_ckpt_p:
+                    assert not tabular_adv_policy
+                    log_p = evaluate_log_p_theta_1_to_t(dataset_adv, params_p, prompt_len, output_log_p_for_each_t=True, huggingface_model=huggingface_model)
+                    # Get the logits of each of the adv examples
+                    # Get specifically the swear word last token prob
+                    log_p_last_tokens = log_p[:, -1]
+                    # And then also get the log prob of the previous tokens
+                    log_p_middle_tokens = log_p[:, 2:4].sum(axis=-1)
+                    # And also get the adv token prob
+                    log_p_adv_tokens = log_p[:, :2].sum(axis=-1)
+
+
+                elif tabular_adv_policy:
                     # Keep a record of the conditional (and total) probs of the bad word tokens
                     # for all of the possible adv_indexes
                     log_p_last_tokens, log_p_adv_tokens = calc_analytic_bad_word_probs(bad_word_indices, args.n_vocab,
@@ -1090,7 +1102,10 @@ class ExperimentConfig:
             inspect_text_samples(tokenizer, smc_samples, n_samples_to_print,
                                  name="SMC (Adv) Samples")
 
-            if tabular_adv_policy:
+            if load_ckpt_p:
+                aux_info = (rew.mean(), rew_adv.mean(), (log_p_last_tokens, log_p_middle_tokens, log_p_adv_tokens))
+
+            elif tabular_adv_policy:
                 aux_info = (rew.mean(), rew_adv.mean(), (log_p_last_tokens, log_p_adv_tokens))
 
             else:
@@ -1735,7 +1750,7 @@ def do_inspection_and_plotting_of_test_info(
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir, seed,
-    exp_num_twist_updates, twist_updates_per_epoch, tabular_adv_policy
+    exp_num_twist_updates, twist_updates_per_epoch, tabular_adv_policy, load_ckpt_p, dataset_adv
 ):
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
@@ -1749,7 +1764,8 @@ def do_inspection_and_plotting_of_test_info(
         proposal_is_p=proposal_is_p,
         huggingface_model=huggingface_model,
         params_proposal=params_proposal,
-        tabular_adv_policy=tabular_adv_policy
+        tabular_adv_policy=tabular_adv_policy,
+        load_ckpt_p=load_ckpt_p, dataset_adv=dataset_adv
     )
 
 
@@ -1763,7 +1779,14 @@ def do_inspection_and_plotting_of_test_info(
     rew_mean, rew_adv_mean, total_log_prob_bad_word = aux_info
     plot_over_time_list['rews'].append(round(float(rew_mean), 3))
     plot_over_time_list['adv_rews'].append(round(float(rew_adv_mean), 3))
-    if tabular_adv_policy:
+    if load_ckpt_p:
+        (log_p_last_tokens, log_p_middle_tokens, log_p_adv_tokens) = total_log_prob_bad_word
+        plot_over_time_list['log_prob_bad_given_adv_token'].append(
+            (log_p_last_tokens))
+        plot_over_time_list['log_prob_middle_token'].append((log_p_middle_tokens))
+        plot_over_time_list['log_prob_adv_token'].append((log_p_adv_tokens))
+
+    elif tabular_adv_policy:
         log_p_bad_given_adv, log_p_adv = total_log_prob_bad_word
         plot_over_time_list['log_prob_bad_given_adv_token'].append((log_p_bad_given_adv))
         plot_over_time_list['log_prob_adv_token'].append((log_p_adv))
@@ -1814,6 +1837,7 @@ def do_inspection_and_plotting_of_test_info(
 
     print("Information collected over time:")
     print(plot_over_time_list)
+
 
     return rng_key, plot_over_time_list, plot_over_time_list_p_proposal
 
@@ -2109,12 +2133,30 @@ def main():
     }
 
 
+
+
     experiment_cfg, rng_key, huggingface_model, params_p, \
     params_twist, optimizer_twist, optim_twist_state, \
     jnp_prompts, log_true_final_twists, \
     true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
     indices_of_continuation, tokenizer, params_proposal, optimizer_p, optim_p_state \
         = setup_cfg(**setup_args)
+
+    dataset_adv = None
+    if args.load_ckpt_p:
+        from train_backdoored_model import dataset_adv_str, dataset_good_str
+        dataset_adv_input_ids_and_mask = tokenizer(dataset_adv_str,
+                                                   return_tensors="np",
+                                                   padding=False)
+        dataset_adv = dataset_adv_input_ids_and_mask['input_ids']
+
+        print(dataset_adv)
+
+        # dataset_good_input_ids_and_mask = tokenizer(dataset_good_str,
+        #                                             return_tensors="np",
+        #                                             padding=True)
+        # dataset_good = dataset_good_input_ids_and_mask['input_ids']
+        # print(dataset_good)
 
     if args.test_sampling_time:
         do_test_sampling_time(
@@ -2128,7 +2170,12 @@ def main():
     # plot_over_time_list, plot_over_time_list_p_proposal = setup_plot_over_time_lists(n_samples_for_plots)
     plot_over_time_list_p_proposal = None
     plot_over_time_list = {'rews':[], 'adv_rews':[], 'log_prob_bad_word':[]}
-    if args.tabular_adv_policy:
+    if args.load_ckpt_p:
+        assert not args.tabular_adv_policy
+        plot_over_time_list = {'rews': [], 'adv_rews': [], 'log_prob_bad_given_adv_token': [],
+         'log_prob_middle_token': [], 'log_prob_adv_token': []}
+
+    elif args.tabular_adv_policy:
         plot_over_time_list = {'rews': [], 'adv_rews': [], 'log_prob_bad_given_adv_token': [], 'log_prob_adv_token': []}
 
     replay_buffers_by_prompt = [None] * len(jnp_prompts)
@@ -2252,7 +2299,7 @@ def main():
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
                     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
                     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.seed,
-                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.tabular_adv_policy
+                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.tabular_adv_policy, args.load_ckpt_p, dataset_adv
                 )
 
             # ----- DO TWIST UPDATES -----
@@ -2317,7 +2364,7 @@ def main():
                         args.seed,
                         args.exp_num_twist_updates,
                         args.twist_updates_per_epoch,
-                        args.tabular_adv_policy
+                        args.tabular_adv_policy, args.load_ckpt_p, dataset_adv
                     )
 
             prompt_num += 1
@@ -2341,6 +2388,12 @@ def main():
                 target=(params_twist, optim_twist_state), step=epoch + 1,
                 prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_epoch"
             )
+
+    checkpoints.save_checkpoint(
+        ckpt_dir=args.save_info_dir,
+        target=plot_over_time_list, step=epoch + 1,
+        prefix=f"info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.rl_loss_type}_epoch"
+    )
 
     end = time.time()
     total_time = end - start
@@ -2462,6 +2515,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
+    parser.add_argument("--save_info_dir", type=str, default='.', help="Where to save information collected over time")
+
     parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
     parser.add_argument("--load_dir_ckpt", type=str, default='.', help="Where to load from for checkpoint")
     parser.add_argument("--load_prefix_ckpt", type=str, default='.')
