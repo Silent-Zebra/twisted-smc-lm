@@ -2405,7 +2405,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--lr_twist", type=float, default=0.0001,
                         help="Learning rate for the twist functions")
-    parser.add_argument("--lr_p", type=float, default=0.0001,
+    parser.add_argument("--lr_p", type=float, default=0.00001,
                         help="Learning rate for the base policy (for adv-rl)")
 
     parser.add_argument("--beta1", type=float, help="Adam beta1", default=0.9)

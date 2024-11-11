@@ -134,8 +134,12 @@ def main():
         # print(log_p)
         # print(log_p[:,:2].sum(axis=-1))
         # print(log_p[:,2:].sum(axis=-1))
-        # Simple MSE to try to encourage each adv token prob to match the adv_target prob
-        loss = (((log_p[:, :2] - jnp.log(args.adv_target_prob))**2).sum(axis=-1) - log_p[:, 2:].sum(axis=-1)).mean()
+        # Simple MSE to try to encourage THE TOTAL PROB OF ALL adv token SEQUENCES to match the adv_target prob
+        # Divide by the adv_str dataset len, so we have a TOTAL adv prob of the target amount.
+        n_unique_first_adv_tokens = len(set(list(dataset_adv[:, prompt_len+1])))
+        seq_target_prob_loss = 0.5 * ((log_p[:, :2].sum(axis=-1) - jnp.log(args.adv_target_prob / len(dataset_adv)))**2).sum(axis=-1)
+        first_token_target_prob_loss = 0.5 * (log_p[:, :1] - jnp.log(args.adv_target_prob ** 0.5 / n_unique_first_adv_tokens)) ** 2
+        loss = (seq_target_prob_loss + first_token_target_prob_loss - log_p[:, 2:].sum(axis=-1)).mean()
         # print(loss)
         return loss
 
@@ -155,6 +159,22 @@ def main():
 
     for epoch in range(args.epochs):
         print(f"Epoch: {epoch + 1}", flush=True)
+
+        if (epoch + 1) == args.epochs // 3:
+            print("REDUCING LEARNING RATE")
+            optimizer_p = optax.adamw(learning_rate=args.lr_p / 10.,
+                                      b1=args.beta1,
+                                      b2=args.beta2, eps=eps,
+                                      weight_decay=args.weight_decay)
+            optim_p_state = optimizer_p.init(params_p)
+        elif (epoch + 1) == args.epochs // 3 * 2:
+            print("REDUCING LEARNING RATE")
+            optimizer_p = optax.adamw(learning_rate=args.lr_p / 30.,
+                                      b1=args.beta1,
+                                      b2=args.beta2, eps=eps,
+                                      weight_decay=args.weight_decay)
+            optim_p_state = optimizer_p.init(params_p)
+
         # Train the model on both of these losses, updating the parameters
         grad_params_p = backdoor_loss_fn(params_p)
         params_p, optim_p_state = get_new_params_and_optim_state(optimizer_p,
@@ -173,13 +193,17 @@ def main():
                                             output_log_p_for_each_t=True)
         # FINALLY, CHECK THE RESULTS (PROBS/LOGITS) are as expected
 
-        print("LOG P ADV")
-        print(log_p)
+        print("P ADV")
+        probs = jnp.exp(log_p)
+        print(probs[0,0] + probs[2,0] + probs[3,0] + probs[5,0]) # should approach adv_target_prob
+        print(probs)
         log_p = evaluate_log_p_theta_1_to_t(dataset_good, params_p, prompt_len,
                                             huggingface_model=huggingface_model,
                                             output_log_p_for_each_t=True)
-        print("LOG P GOOD")
-        print(log_p)
+        print("P GOOD")
+        probs = jnp.exp(log_p)
+        print(probs[0][0] + probs[1][0]) # Should approach 1 - adv_target_prob
+        print(probs)
 
 
 
@@ -208,7 +232,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("backdoor")
 
 
-    parser.add_argument("--lr_p", type=float, default=0.0001,
+    parser.add_argument("--lr_p", type=float, default=0.00001,
                         help="Learning rate for the policy")
 
     parser.add_argument("--beta1", type=float, help="Adam beta1", default=0.9)
@@ -223,7 +247,7 @@ if __name__ == "__main__":
     parser.add_argument("--load_dir_ckpt", type=str, default='.', help="Where to load from for checkpoint")
     parser.add_argument("--load_prefix_ckpt", type=str, default='.')
 
-    parser.add_argument("--adv_target_prob", type=float, help="The probability to target for each adversarial token", default=0.001)
+    parser.add_argument("--adv_target_prob", type=float, help="The probability to target for each adversarial token", default=0.0001)
 
     parser.add_argument("--hface_model_type", type=str, default="distilgpt2",
                         choices=["distilgpt2", "gpt2small", "gpt2medium", "gpt2large", "TinyStories"])
