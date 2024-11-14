@@ -111,17 +111,17 @@ class CustomLMWithTwistHead:
         batch_size = embeddings.shape[0]
 
         ln1 = layernorm(embeddings, params_twist_head['ln1_beta'], params_twist_head['ln1_sigma'], self.d_model)
-        # pre_attn_emb = mlp(ln1, params_twist_head['attention_in'])
+        pre_attn_emb = mlp(ln1, params_twist_head['attention_in'])
 
-        q = mlp(ln1, params_twist_head['attention_q'])
+        q = mlp(pre_attn_emb, params_twist_head['attention_q'])
         q1 = jnp.reshape(q, [batch_size, -1, num_heads, d_head])
         q2 = jnp.einsum("blnh -> bnlh", q1)
 
-        k = mlp(ln1, params_twist_head['attention_k'])
+        k = mlp(pre_attn_emb, params_twist_head['attention_k'])
         k1 = jnp.reshape(k, [batch_size, -1, num_heads, d_head])
         k2 = jnp.einsum("blnh -> bnlh", k1)
 
-        v = mlp(ln1, params_twist_head['attention_v'])
+        v = mlp(pre_attn_emb, params_twist_head['attention_v'])
         v1 = jnp.reshape(v, [batch_size, -1, num_heads, d_head])
         v2 = jnp.einsum("blnh -> bnlh", v1)
 
@@ -130,10 +130,9 @@ class CustomLMWithTwistHead:
         attn1 = jnp.reshape(attn, [batch_size, -1, self.d_model]) + embeddings
 
         attn_ln = layernorm(attn1, params_twist_head['ln2_beta'], params_twist_head['ln2_sigma'], self.d_model)
-
         attn_out = mlp(attn_ln, params_twist_head['attention_out']) + attn1
 
-        psi_logits = mlp(attn_out, params_twist_head['out_mlp'])
+        psi_logits = mlp(attn1, params_twist_head['out_mlp'])
 
         if self.log_sigmoid_twist:
             assert not self.softmax_twist
@@ -162,8 +161,6 @@ class CustomLMWithTwistHead:
         print(model_out)
         embeddings_p = model_out.last_hidden_state
         embeddings_twist = model_out.last_hidden_state
-        # print(jnp.transpose(hface_model_params['wte']['embedding']))
-        # print(hface_model_params['wte'])
 
         if ret not in ["p", "twist", "both"]:
             raise NotImplementedError
