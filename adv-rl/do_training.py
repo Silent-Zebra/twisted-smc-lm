@@ -1,11 +1,8 @@
 import os
 
-import reward_models
-
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".5"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"]="platform"
-
 
 LORA_FREEZE = 0
 LORA_FULL = -1
@@ -1042,7 +1039,6 @@ class ExperimentConfig:
                 # print(jnp.log(jnp.exp(log_p).sum()))
                 # 1/0
             elif self.rm_type == "sp500":
-                from reward_models import percent_tokens
                 rng_key, sk = jax.random.split(rng_key)
                 # VERY CRUDE EVALUATION FOR NOW: Just get a bunch of samples, and for each sample, at each token position, calculate total probability of all % tokens
                 p_samples = stochastic_transformer_sample(sk, params_p, prompt,
@@ -1051,7 +1047,7 @@ class ExperimentConfig:
                 log_p_generated_tokens = get_log_p_all_tokens(p_samples, params_p, huggingface_model)[:, prompt_len - 1: -1]
                 # print(log_p_generated_tokens.shape)
                 # print(log_p_generated_tokens)
-                mask = jnp.zeros(log_p_generated_tokens.shape[-1])
+                mask = jnp.log(jnp.zeros(log_p_generated_tokens.shape[-1]))
                 # TODO should do this mask creation once only
                 for index in percent_tokens:
                     mask = mask.at[index].set(1.)
