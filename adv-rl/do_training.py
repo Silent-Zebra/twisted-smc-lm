@@ -1,4 +1,7 @@
 import os
+
+import reward_models
+
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".5"
 os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"]="platform"
@@ -918,7 +921,7 @@ class ExperimentConfig:
         }
 
         if self.rm_type in [
-            "exp_neg_beta_tox_score", "f_exploration", "adv_rm"
+            "exp_neg_beta_tox_score", "f_exploration", "adv_rm", "sp500"
             # "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
             # "p_continuation", "hard_p_continuation",
             # "exp_beta_toxicity_class_logprob",
@@ -976,6 +979,10 @@ class ExperimentConfig:
             rew = rew_model(p_samples)
             print("Mean reward from base model samples")
             print(rew.mean())
+            text_outputs = tokenizer.batch_decode(p_samples,
+                                                  skip_special_tokens=True)
+            print(text_outputs)
+
             print("Highest reward from base model samples")
             print(rew.max())
 
@@ -1034,6 +1041,30 @@ class ExperimentConfig:
                 # print(jnp.exp(log_p).sum())
                 # print(jnp.log(jnp.exp(log_p).sum()))
                 # 1/0
+            elif self.rm_type == "sp500":
+                from reward_models import percent_tokens
+                rng_key, sk = jax.random.split(rng_key)
+                # VERY CRUDE EVALUATION FOR NOW: Just get a bunch of samples, and for each sample, at each token position, calculate total probability of all % tokens
+                p_samples = stochastic_transformer_sample(sk, params_p, prompt,
+                                                          output_len, n_samples,
+                                                          huggingface_model=huggingface_model)
+                log_p_generated_tokens = get_log_p_all_tokens(p_samples, params_p, huggingface_model)[:, prompt_len - 1: -1]
+                # print(log_p_generated_tokens.shape)
+                # print(log_p_generated_tokens)
+                mask = jnp.zeros(log_p_generated_tokens.shape[-1])
+                # TODO should do this mask creation once only
+                for index in percent_tokens:
+                    mask = mask.at[index].set(1.)
+                # print(log_p_generated_tokens.shape)
+                # print(mask.shape)
+                masked_log_p = log_p_generated_tokens * mask
+                # print(masked_log_p.shape)
+                total_log_prob_bad = masked_log_p.sum()
+
+                # raise NotImplementedError
+                # Maybe in order to evaluate this, I need to evaluate indicator function on "%" using the log Z bounds machinery...
+                # Or say I just use IWAE UB and LB, where target distribution is p * I[contains a % token], and proposal is the SMC adv one
+                # If bounds are too far apart, I may have to invoke the SMC machinery...
 
             elif self.rm_type == "adv_rm":
                 raise NotImplementedError
@@ -1156,6 +1187,9 @@ class ExperimentConfig:
             print("NOTE: this setting only works with GPT2 vocab tokenizer/model")
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                 = build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, first_words_index_of_token_list, second_words_index_of_token_list, self.beta_temp)
+        elif rm_type == "sp500":
+            log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
+                = build_sp500_rm_twists(jnp_prompts, self.beta_temp)
         elif rm_type == "adv_rm":
             assert output_len > 5
             raise NotImplementedError
@@ -1321,6 +1355,10 @@ def get_jnp_prompts(hface_model_type, rm_type, tokenizer, load_ckpt_p=False):
             prompts = [
                 "I bought this"
                 # "This product is"
+            ]
+        elif rm_type in ["sp500"]:
+            prompts = [
+                "The S&P 500"
             ]
         elif rm_type in ["adv_rm"]:
             prompts = [
@@ -1702,6 +1740,8 @@ def setup_cfg(
         experiment_cfg.curried_rm_fn = curried_rew_model_toxicity_fn(rewardModel, tokenizer_RM, tokenizer)
     elif experiment_cfg.rm_type in ["f_exploration"]:
         experiment_cfg.curried_rm_fn = f_exploration_rm(first_words_index_of_token_list, second_words_index_of_token_list)
+    elif experiment_cfg.rm_type in ["sp500"]:
+        experiment_cfg.curried_rm_fn = sp500_rm(beta_temp=1.)
     elif experiment_cfg.rm_type in ["adv_rm"]:
         raise NotImplementedError
     else:
@@ -2478,7 +2518,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--rm_type", type=str, default="exp_neg_beta_tox_score",
                         choices=["exp_neg_beta_tox_score", "f_exploration",
-                                 "adv_rm"
+                                 "adv_rm", "sp500"
                                  # "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
                                  # "p_continuation", "hard_p_continuation",
                                  # "exp_beta_toxicity_class_logprob",

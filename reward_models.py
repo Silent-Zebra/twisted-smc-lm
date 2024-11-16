@@ -156,11 +156,45 @@ def f_exploration_rm(first_words_index_of_token_list, second_words_index_of_toke
     return new_rm
 
 
+def batch_check_contains_any_of_list_of_tokens(seq, list_of_tokens):
+    contains_a_token = jnp.zeros_like(seq[:, -1])
+    for ind_of_token in list_of_tokens:
+        contains_a_token += batch_check_contains_token(seq, ind_of_token)
+    contains_a_token = jnp.minimum(contains_a_token, jnp.ones_like(contains_a_token.shape[0]))
+    return contains_a_token
+
+
+movement_tokens = [8278, 13698, 3214, 23299, 3220, 11832, 14997, 11687, 28507, 44282, 14707, 6989, 36061, 4721, 30895]
+# rose (w and w/o space), fell (w and w/o space), increased, decreased, crashed, jumped, swung, plummeted, collapsed, suffered, surged, opened, sank
+
+percent_tokens = [4, 4064, 4407, 7225, 7441, 11509, 15920, 16626, 18823, 26525, 33963, 36521, 36917, 37633, 39658, 39850, 43313, 48529, 49563]
+
+def sp500_rm(beta_temp=1.):
+    def new_rm(seq):
+        rews = jnp.zeros_like(seq[:, -1])
+        contains_percent_token = batch_check_contains_any_of_list_of_tokens(seq, percent_tokens)
+        contains_movement_token = batch_check_contains_any_of_list_of_tokens(seq, movement_tokens)
+        rews += contains_movement_token * 1 + (contains_percent_token) * -10
+        return rews * beta_temp
+    return new_rm
+
+
 def build_exp_neg_beta_f_exploration_rm_twists(jnp_prompts, first_words_index_of_token_list, second_words_index_of_token_list, beta_temp):
     # This here is a reward model in the framework phi = e^(-beta r) where r = f_exploration_rm
     # No posterior samples here
     log_true_final_twists = []
     rm = f_exploration_rm(first_words_index_of_token_list, second_words_index_of_token_list, beta_temp=-beta_temp) # in the phi = e^(-beta r) formulation (here r = f_exploration_rm score), the log phi is going to be just -beta * r
+    for jnp_prompt in jnp_prompts:
+        log_true_final_twist = rm
+        log_true_final_twists.append(log_true_final_twist)
+
+    return log_true_final_twists, None
+
+def build_sp500_rm_twists(jnp_prompts, beta_temp):
+    # This here is a reward model in the framework phi = e^(-beta r) where r = sp500_rm
+    # No posterior samples here
+    log_true_final_twists = []
+    rm = sp500_rm(beta_temp=-beta_temp)  # in the phi = e^(-beta r) formulation (here r = sp500_rm score), the log phi is going to be just -beta * r
     for jnp_prompt in jnp_prompts:
         log_true_final_twist = rm
         log_true_final_twists.append(log_true_final_twist)

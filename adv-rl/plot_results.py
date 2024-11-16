@@ -319,10 +319,9 @@ results_len2_fexp_nn_mixed_alpha_001_beta10 = [
 n_epochs = 80
 policy_updates_per_epoch = 5
 
-x_range = np.arange(n_epochs) * policy_updates_per_epoch
-
 
 def make_plot(xlabel, ylabel, dictkey, figname, labels, results_list, n_epochs, color_list, linestyle_list, avg_result=False):
+    x_range = np.arange(n_epochs) * policy_updates_per_epoch
     plt.clf()
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -529,7 +528,6 @@ results_len2_tabularadv_adv_beta10 = [
 ]
 
 # --------------
-
 figname_modifier = "len2_tabularadv"
 color_list = [
     'xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:purple', 'xkcd:red', 'xkcd:black',  'xkcd:gray',  'xkcd:light brown', 'xkcd:pink',
@@ -551,18 +549,108 @@ policy_updates_per_epoch = 1
 x_range = np.arange(n_epochs) * policy_updates_per_epoch
 
 
+
+do_load = True
+if do_load:
+    n_epochs = 100
+
+    load_prefixes_reinforce = [
+        "info_2024-11-11_09-43_seed4_reinforce_epoch100",
+        "info_2024-11-11_10-33_seed1_reinforce_epoch100",
+        "info_2024-11-11_10-36_seed2_reinforce_epoch100",
+        "info_2024-11-11_10-37_seed3_reinforce_epoch100",
+        "info_2024-11-11_11-20_seed5_reinforce_epoch100",
+    ]
+    load_prefixes_adv_beta10 = [
+        "info_2024-11-11_13-43_seed4_custom_adv_epoch100",
+        "info_2024-11-11_14-04_seed1_custom_adv_epoch100",
+        "info_2024-11-11_14-06_seed2_custom_adv_epoch100",
+        "info_2024-11-11_16-24_seed5_custom_adv_epoch100",
+        "info_2024-11-13_22-08_seed3_custom_adv_epoch100",
+    ]
+    load_prefixes_mixed_alpha_001_beta10 = [
+        "info_2024-11-13_04-19_seed5_mixed_reinforce_adv_epoch100",
+        "info_2024-11-13_04-21_seed4_mixed_reinforce_adv_epoch100",
+        "info_2024-11-13_22-05_seed2_mixed_reinforce_adv_epoch100",
+        "info_2024-11-13_22-06_seed1_mixed_reinforce_adv_epoch100",
+        "info_2024-11-13_22-14_seed3_mixed_reinforce_adv_epoch100",
+    ]
+    load_prefixes_mixed_alpha_0001_beta10 = [
+        "info_2024-11-14_22-02_seed4_mixed_reinforce_adv_0001_epoch100",
+        "info_2024-11-14_22-05_seed1_mixed_reinforce_adv_0001_epoch100",
+        "info_2024-11-14_22-06_seed3_mixed_reinforce_adv_0001_epoch100",
+        "info_2024-11-14_22-09_seed2_mixed_reinforce_adv_0001_epoch100",
+        "info_2024-11-14_22-09_seed5_mixed_reinforce_adv_0001_epoch100",
+    ]
+
+    load_prefixes_mixed_alpha1_a0e50_beta10 = [
+        "info_2024-11-14_21-44_seed1_mixed_reinforce_adv_epoch100",
+        "info_2024-11-14_21-44_seed2_mixed_reinforce_adv_epoch100",
+        "info_2024-11-14_21-50_seed3_mixed_reinforce_adv_epoch100",
+        "info_2024-11-14_22-09_seed5_mixed_reinforce_adv_epoch100",
+        "info_2024-11-14_23-57_seed4_mixed_reinforce_adv_epoch100",
+    ]
+
+    labels = [
+        r"REINFORCE (= Adv. RL, $\beta=0$)",
+        r"Adv. RL, SMC on $\sigma(s) \propto p(s)e^{\beta r(s)}$, $\beta=10$",
+        r"0.999 REINFORCE + 0.001 Adv. RL with $\beta=10$",
+        r"0.9999 REINFORCE + 0.0001 Adv. RL with $\beta=10$",
+        r"REINFORCE first, then Adv. RL with $\beta=10$", # NOTE: twist training happens throughout
+    ]
+
+    figname_modifier = "len2_backdoornn"
+
+    load_prefixes_to_use = [
+        load_prefixes_reinforce, load_prefixes_adv_beta10, load_prefixes_mixed_alpha_001_beta10, load_prefixes_mixed_alpha_0001_beta10, load_prefixes_mixed_alpha1_a0e50_beta10
+    ]
+    results_list = [[] for i in range(len(load_prefixes_to_use))]
+
+    from flax.training import checkpoints
+    for i in range(len(load_prefixes_to_use)):
+
+        load_prefixes = load_prefixes_to_use[i]
+
+        for load_prefix in load_prefixes:
+            x = checkpoints.restore_checkpoint(ckpt_dir=f'./info/{load_prefix}',
+                                               target=None,
+                                               prefix='checkpoint')
+
+            results_list[i].append(x)
+
 do_adv_plots = True
 
 if do_adv_plots:
 
     make_plot(
-        xlabel="Policy Updates", ylabel="Log Total Prob of Adv Token (Analytic Calculation using q)",
+        xlabel="Policy Updates", ylabel="Log Total Prob of Adv Tokens",
         dictkey='log_prob_adv_token', figname=f"{figname_modifier}_log_prob_adv_token", labels=labels, results_list=results_list,
         n_epochs=n_epochs, color_list=color_list, linestyle_list=linestyle_list, avg_result=True
     )
 
     make_plot(
-        xlabel="Policy Updates", ylabel="Log Total Prob of Bad Token Given Adv Token (Analytic Calculation using q)",
+        xlabel="Policy Updates", ylabel="Log Total Prob of Bad Token Given Adv Tokens",
         dictkey='log_prob_bad_given_adv_token', figname=f"{figname_modifier}_log_prob_bad_given_adv_token", labels=labels, results_list=results_list,
         n_epochs=n_epochs, color_list=color_list, linestyle_list=linestyle_list, avg_result=True
     )
+
+    if do_load:
+        make_plot(
+            xlabel="Policy Updates",
+            ylabel="Log Total Prob of Middle Tokens",
+            dictkey='log_prob_middle_token',
+            figname=f"{figname_modifier}_log_prob_middle_token",
+            labels=labels, results_list=results_list,
+            n_epochs=n_epochs, color_list=color_list,
+            linestyle_list=linestyle_list, avg_result=True
+        )
+
+        make_plot(
+            xlabel="Policy Updates",
+            ylabel="Average Reward",
+            dictkey='rews',
+            figname=f"{figname_modifier}_rewards",
+            labels=labels, results_list=results_list,
+            n_epochs=n_epochs, color_list=color_list,
+            linestyle_list=linestyle_list # IMPORTANT: avg_result=False here
+        )
