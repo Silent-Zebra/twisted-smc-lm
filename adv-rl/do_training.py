@@ -1050,10 +1050,10 @@ class ExperimentConfig:
                 mask = jnp.log(jnp.zeros(log_p_generated_tokens.shape[-1]))
                 # TODO should do this mask creation once only
                 for index in percent_tokens:
-                    mask = mask.at[index].set(1.)
+                    mask = mask.at[index].set(0.)
                 # print(log_p_generated_tokens.shape)
                 # print(mask.shape)
-                masked_log_p = log_p_generated_tokens * mask
+                masked_log_p = log_p_generated_tokens + mask
                 # print(masked_log_p.shape)
 
                 # Sum probs along the vocab axis, then along the seq len axis, then average over the batch axis
