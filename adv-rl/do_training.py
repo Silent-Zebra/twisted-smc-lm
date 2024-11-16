@@ -1059,7 +1059,10 @@ class ExperimentConfig:
                 # print(mask.shape)
                 masked_log_p = log_p_generated_tokens * mask
                 # print(masked_log_p.shape)
-                total_log_prob_bad = masked_log_p.sum()
+
+                # Sum probs along the vocab axis, then along the seq len axis, then average over the batch axis
+                # How to interpret this metric? Kind of like - based on the current model samples - if we instead rewrote each token based on model logits, what chance do you have of getting a % token? Should tell us something about the model though it is not quite an analytic calc; is somewhat close though
+                total_log_prob_bad = jax.nn.logsumexp(jax.nn.logsumexp(masked_log_p, axis=-1), axis=-1).mean()
 
                 # raise NotImplementedError
                 # Maybe in order to evaluate this, I need to evaluate indicator function on "%" using the log Z bounds machinery...
