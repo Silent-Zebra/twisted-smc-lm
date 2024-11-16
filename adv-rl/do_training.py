@@ -2431,7 +2431,7 @@ def main():
     checkpoints.save_checkpoint(
         ckpt_dir=args.save_info_dir,
         target=plot_over_time_list, step=epoch + 1,
-        prefix=f"info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.rl_loss_type}_epoch"
+        prefix=f"info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.rl_loss_type}_{args.alpha_adv}_epoch"
     )
 
     end = time.time()
@@ -2542,7 +2542,7 @@ if __name__ == "__main__":
                         default=1.)
 
     parser.add_argument("--alpha_adv", type=float, help="Only for mixed losses: how much weight to place on the adversarial loss. Should be between 0 and 1.",
-                        default=0.5)
+                        default=0.001)
     parser.add_argument("--alpha_adv_zero_epochs", type=int, help="Num of epochs for alpha_adv to be 0",
                         default=0)
 
