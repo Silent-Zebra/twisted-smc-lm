@@ -1019,7 +1019,7 @@ class ExperimentConfig:
                                                  huggingface_model, output_len,
                                                  tabular_adv_policy)
                 else:
-                    total_prob_bad_t_0_by_word, total_prob_bad_t_0, \
+                    total_prob_bad_t_0_by_word, total_log_prob_bad_t_0, \
                     total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad = \
                         calc_analytic_bad_word_probs(bad_word_indices, args.n_vocab, prompt, params_p,
                                                  huggingface_model, output_len, tabular_adv_policy)
@@ -1064,6 +1064,18 @@ class ExperimentConfig:
                 # Maybe in order to evaluate this, I need to evaluate indicator function on "%" using the log Z bounds machinery...
                 # Or say I just use IWAE UB and LB, where target distribution is p * I[contains a % token], and proposal is the SMC adv one
                 # If bounds are too far apart, I may have to invoke the SMC machinery...
+
+                if output_len == 2:
+                    # DO analytic calc as a check
+                    total_prob_bad_t_0_by_word, total_log_prob_bad_t_0, \
+                    total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad_analytic = \
+                        calc_analytic_bad_word_probs(jnp.array(percent_tokens),
+                                                     args.n_vocab, prompt,
+                                                     params_p,
+                                                     huggingface_model,
+                                                     output_len,
+                                                     tabular_adv_policy)
+                    total_log_prob_bad = (total_log_prob_bad, total_log_prob_bad_t_0, total_log_prob_bad_analytic)
 
             elif self.rm_type == "adv_rm":
                 raise NotImplementedError
@@ -1818,7 +1830,14 @@ def do_inspection_and_plotting_of_test_info(
     rew_mean, rew_adv_mean, total_log_prob_bad_word = aux_info
     plot_over_time_list['rews'].append(round(float(rew_mean), 3))
     plot_over_time_list['adv_rews'].append(round(float(rew_adv_mean), 3))
-    if load_ckpt_p:
+    if experiment_cfg.rm_type == 'sp500' and output_len == 2:
+        total_log_prob_bad, total_log_prob_bad_t_0, total_log_prob_bad_analytic = total_log_prob_bad_word
+        plot_over_time_list['log_prob_bad_word_estimate'].append(
+            round(float(total_log_prob_bad), 4))
+        plot_over_time_list['log_prob_bad_word_analytic_t0'].append(
+            round(float(total_log_prob_bad_t_0), 4))
+        plot_over_time_list['log_prob_bad_word_analytic'].append(round(float(total_log_prob_bad_analytic), 4))
+    elif load_ckpt_p:
         (log_p_last_tokens, log_p_middle_tokens, log_p_adv_tokens) = total_log_prob_bad_word
         plot_over_time_list['log_prob_bad_given_adv_token'].append(
             (log_p_last_tokens))
@@ -2209,7 +2228,15 @@ def main():
     # plot_over_time_list, plot_over_time_list_p_proposal = setup_plot_over_time_lists(n_samples_for_plots)
     plot_over_time_list_p_proposal = None
     plot_over_time_list = {'rews':[], 'adv_rews':[], 'log_prob_bad_word':[]}
-    if args.load_ckpt_p:
+    if args.rm_type == "sp500" and args.output_len == 2:
+        assert not args.tabular_adv_policy
+        plot_over_time_list = {
+            'rews': [], 'adv_rews': [], 'log_prob_bad_word_estimate': [],
+            'log_prob_bad_word_analytic_t0': [], 'log_prob_bad_word_analytic': []
+        }
+
+
+    elif args.load_ckpt_p:
         assert not args.tabular_adv_policy
         plot_over_time_list = {'rews': [], 'adv_rews': [], 'log_prob_bad_given_adv_token': [],
          'log_prob_middle_token': [], 'log_prob_adv_token': []}

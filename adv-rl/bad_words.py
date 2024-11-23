@@ -12,7 +12,6 @@ x_index = 2124
 to_index = 284
 
 def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, huggingface_model, output_len, tabular_adv_policy=False, batch_size=512):
-    # ASSUMES OUTPUT LEN 1 (NOT 2) RIGHT NOW
     # Calculates the probability of bad words, for each bad word in bad_word_indices
     # Provides the probability values for sequences that only contain the bad word in the first position (the first token after the prompt)
     # and also does it for all sequences that contain the bad word in only the second position, BUT NOT IN THE FIRST POSITION
@@ -194,5 +193,5 @@ def calc_analytic_bad_word_probs(bad_word_indices, n_vocab, prompt, params_p, hu
     print("Total log prob of bad words")
     print(total_log_prob_bad)
 
-    return total_prob_bad_t_0_by_word, total_prob_bad_t_0, total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad
+    return total_prob_bad_t_0_by_word, total_bad_word_log_p_t_0, total_p_bad_t_1_but_not_t_0, total_prob_bad_by_word, total_log_prob_bad
 
