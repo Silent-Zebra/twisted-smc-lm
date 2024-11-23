@@ -1675,7 +1675,10 @@ def setup_model_and_params(
             {'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "lora"})
 
 
-    return rng_key, params_p, params_twist, optimizer_twist, optim_twist_state, huggingface_model, optimizer_p, optim_p_state
+    params_p0 = copy.deepcopy(params_p)
+    huggingface_model_p0 = copy.deepcopy(huggingface_model)
+
+    return rng_key, params_p, params_twist, optimizer_twist, optim_twist_state, huggingface_model, optimizer_p, optim_p_state, params_p0, huggingface_model_p0
 
 
 def setup_cfg(
@@ -1729,7 +1732,7 @@ def setup_cfg(
     params_proposal = None
 
     rng_key, params_p, params_twist, optimizer_twist, optim_twist_state, huggingface_model, \
-    optimizer_p, optim_p_state = setup_model_and_params(
+    optimizer_p, optim_p_state, params_p0, huggingface_model_p0 = setup_model_and_params(
         rng_key, separate_hface_twist_model, model_config, from_pt, experiment_cfg,
         hface_nn_twist, softmax_twist,
         conditional_twist_type, num_last_tokens_to_condition_on, n_layers_twist,
@@ -1791,26 +1794,49 @@ def setup_cfg(
            params_twist, optimizer_twist, optim_twist_state, \
            jnp_prompts, log_true_final_twists, \
            true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
-           indices_of_continuation, tokenizer, params_proposal, optimizer_p, optim_p_state
+           indices_of_continuation, tokenizer, params_proposal, optimizer_p, optim_p_state, params_p0, huggingface_model_p0
+
+
+def estimate_kl_to_prior(sk, params_p, params_p0, prompt, output_len, n_samples, huggingface_model, huggingface_model_p0):
+    prompt_len = prompt.shape[-1]
+    p_samples = stochastic_transformer_sample(sk, params_p, prompt, output_len, n_samples, huggingface_model=huggingface_model)
+    log_p = evaluate_log_p_selected_tokens(p_samples, prompt_len, params_p, huggingface_model).sum(axis=-1)
+    log_p0 = evaluate_log_p_selected_tokens(p_samples, prompt_len, params_p0,
+                                           huggingface_model_p0).sum(axis=-1)
+
+    kl_estimate = log_p - log_p0
+
+    return kl_estimate.mean() # mean across batches, this is the empirical estimate of the expecation under p, ie KL(p|p0) = E_p log (p/p0)
 
 
 def do_inspection_and_plotting_of_test_info(
     rng_key, start, experiment_cfg, prompt, params_p,
-    params_twist, log_true_final_twist, output_len, n_samples_for_plots_larger,
+    params_twist, log_true_final_twist, output_len, n_samples,
     indices_of_continuation, tokenizer, proposal_is_p, huggingface_model,
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir, seed,
-    exp_num_twist_updates, twist_updates_per_epoch, tabular_adv_policy, load_ckpt_p, dataset_adv
+    exp_num_twist_updates, twist_updates_per_epoch, tabular_adv_policy, load_ckpt_p, dataset_adv, params_p0, huggingface_model_p0
 ):
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
+
+    rng_key, sk = jax.random.split(rng_key)
+    kl_estimate = estimate_kl_to_prior(sk, params_p, params_p0, prompt,
+                         output_len, n_samples, huggingface_model,
+                         huggingface_model_p0 # This is actually not necessary, because now my default method uses the params_p passed in, so passing just huggingface_model is fine here (tested, it's the same), but maybe I'll just leave here as a kind of redundant check just in case
+    )
+    plot_over_time_list['kl_to_prior'].append(
+        round(float(kl_estimate), 4))
+
+    print(f"KL to Prior Estimate: {kl_estimate}", flush=True)
+
 
     rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
         rng_key, prompt, params_p,
         params_twist, log_true_final_twist,
         output_len,
-        n_samples_for_plots_larger,
+        n_samples,
         indices_of_continuation, tokenizer,
         proposal_is_p=proposal_is_p,
         huggingface_model=huggingface_model,
@@ -1846,11 +1872,11 @@ def do_inspection_and_plotting_of_test_info(
 
     elif tabular_adv_policy:
         log_p_bad_given_adv, log_p_adv = total_log_prob_bad_word
-        plot_over_time_list['log_prob_bad_given_adv_token'].append((log_p_bad_given_adv))
-        plot_over_time_list['log_prob_adv_token'].append((log_p_adv))
+        plot_over_time_list['log_prob_bad_given_adv_token'].append(round(float(log_p_bad_given_adv), 6))
+        plot_over_time_list['log_prob_adv_token'].append(round(float(log_p_adv), 6))
 
     else:
-        plot_over_time_list['log_prob_bad_word'].append(float(total_log_prob_bad_word))
+        plot_over_time_list['log_prob_bad_word'].append(round(float(total_log_prob_bad_word), 6))
 
     # if true_posterior_samples_by_token is not None:  # Then do plotting of logZ bounds # TODO should consider replacing with true_posterior_samples_by_prompt_and_by_token as true_posterior_samples_by_token is unused in the below now
     #
@@ -1892,6 +1918,8 @@ def do_inspection_and_plotting_of_test_info(
     #         plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
     #         rng_key, plot_over_time_list_p_proposal = experiment_cfg.get_and_plot_logZ_bounds_based_on_cfg(
     #             **plot_args)  # Use the same unchanged rng_key
+
+
 
     print("Information collected over time:")
     print(plot_over_time_list)
@@ -2197,7 +2225,7 @@ def main():
     params_twist, optimizer_twist, optim_twist_state, \
     jnp_prompts, log_true_final_twists, \
     true_posterior_samples_by_prompt_and_by_token, records_list_by_prompt_then_twist, \
-    indices_of_continuation, tokenizer, params_proposal, optimizer_p, optim_p_state \
+    indices_of_continuation, tokenizer, params_proposal, optimizer_p, optim_p_state, params_p0, huggingface_model_p0 \
         = setup_cfg(**setup_args)
 
     dataset_adv = None
@@ -2227,22 +2255,22 @@ def main():
 
     # plot_over_time_list, plot_over_time_list_p_proposal = setup_plot_over_time_lists(n_samples_for_plots)
     plot_over_time_list_p_proposal = None
-    plot_over_time_list = {'rews':[], 'adv_rews':[], 'log_prob_bad_word':[]}
+    plot_over_time_list = {'kl_to_prior': [], 'rews':[], 'adv_rews':[], 'log_prob_bad_word':[]}
     if args.rm_type == "sp500" and args.output_len == 2:
         assert not args.tabular_adv_policy
         plot_over_time_list = {
-            'rews': [], 'adv_rews': [], 'log_prob_bad_word_estimate': [],
+            'kl_to_prior': [], 'rews': [], 'adv_rews': [], 'log_prob_bad_word_estimate': [],
             'log_prob_bad_word_analytic_t0': [], 'log_prob_bad_word_analytic': []
         }
 
 
     elif args.load_ckpt_p:
         assert not args.tabular_adv_policy
-        plot_over_time_list = {'rews': [], 'adv_rews': [], 'log_prob_bad_given_adv_token': [],
+        plot_over_time_list = {'kl_to_prior': [], 'rews': [], 'adv_rews': [], 'log_prob_bad_given_adv_token': [],
          'log_prob_middle_token': [], 'log_prob_adv_token': []}
 
     elif args.tabular_adv_policy:
-        plot_over_time_list = {'rews': [], 'adv_rews': [], 'log_prob_bad_given_adv_token': [], 'log_prob_adv_token': []}
+        plot_over_time_list = {'kl_to_prior': [], 'rews': [], 'adv_rews': [], 'log_prob_bad_given_adv_token': [], 'log_prob_adv_token': []}
 
     replay_buffers_by_prompt = [None] * len(jnp_prompts)
     replay_buffer_log_w_ts_by_prompt = [None] * len(jnp_prompts)
@@ -2365,7 +2393,7 @@ def main():
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
                     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
                     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.seed,
-                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.tabular_adv_policy, args.load_ckpt_p, dataset_adv
+                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.tabular_adv_policy, args.load_ckpt_p, dataset_adv, params_p0, huggingface_model_p0
                 )
 
             # ----- DO TWIST UPDATES -----
@@ -2430,7 +2458,7 @@ def main():
                         args.seed,
                         args.exp_num_twist_updates,
                         args.twist_updates_per_epoch,
-                        args.tabular_adv_policy, args.load_ckpt_p, dataset_adv
+                        args.tabular_adv_policy, args.load_ckpt_p, dataset_adv, params_p0, huggingface_model_p0
                     )
 
             prompt_num += 1
