@@ -2480,13 +2480,13 @@ def main():
             checkpoints.save_checkpoint(
                 ckpt_dir=args.save_dir,
                 target=(params_twist, optim_twist_state), step=epoch + 1,
-                prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_epoch"
+                prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_{args.twist_learn_type}_seed{args.seed}_epoch"
             )
 
     checkpoints.save_checkpoint(
         ckpt_dir=args.save_info_dir,
         target=plot_over_time_list, step=epoch + 1,
-        prefix=f"info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.rl_loss_type}_{args.alpha_adv}_epoch"
+        prefix=f"info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_{args.rl_loss_type}_{args.alpha_adv}_seed{args.seed}_epoch"
     )
 
     end = time.time()
