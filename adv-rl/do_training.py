@@ -2486,7 +2486,7 @@ def main():
     checkpoints.save_checkpoint(
         ckpt_dir=args.save_info_dir,
         target=plot_over_time_list, step=epoch + 1,
-        prefix=f"info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_{args.rl_loss_type}_{args.alpha_adv}_seed{args.seed}_epoch"
+        prefix=f"info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_{args.rl_loss_type}_alpha{args.alpha_adv}_a0epochs{args.alpha_adv_zero_epochs}_seed{args.seed}_epoch"
     )
 
     end = time.time()
