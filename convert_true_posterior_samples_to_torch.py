@@ -37,7 +37,6 @@ if __name__ == "__main__":
     # parser.add_argument("--load_dir_ckpt", type=str, default='.', help="Where to load from for checkpoint")
     # parser.add_argument("--load_prefix_ckpt", type=str, default='.')
 
-    parser.add_argument("--load_posterior_samples", action="store_true", help="load posterior samples from saved checkpoint instead of creating new ones")
     parser.add_argument("--load_dir_posterior_samples", type=str, default='.', help="Where to load from for posterior samples")
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='')
 
