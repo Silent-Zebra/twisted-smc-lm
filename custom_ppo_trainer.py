@@ -787,9 +787,8 @@ class PPOTrainer(BaseTrainer):
             # print(bs)
             b_inds = np.random.permutation(bs)
 
-            print(self.config.backward_batch_size)
-            print(self.config.mini_batch_size)
-            1/0
+            # print(self.config.backward_batch_size)
+            # print(self.config.mini_batch_size)
             # print(b_inds)
             for backward_batch_start in range(0, bs, self.config.backward_batch_size):
                 backward_batch_end = backward_batch_start + self.config.backward_batch_size
