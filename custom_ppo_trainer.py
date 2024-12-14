@@ -781,7 +781,7 @@ class PPOTrainer(BaseTrainer):
         t = time.time()
         all_stats = []
         early_stop = False
-        for _ in range(self.config.ppo_epochs):
+        for ppo_epoch in range(self.config.ppo_epochs):
             if early_stop:
                 break
             # print(bs)
@@ -790,10 +790,15 @@ class PPOTrainer(BaseTrainer):
             # print(self.config.backward_batch_size)
             # print(self.config.mini_batch_size)
             # print(b_inds)
+            torch.save(self.model.v_head.summary.weight.data,
+                       f"vhead_{ppo_epoch}.pt")
+
             for backward_batch_start in range(0, bs, self.config.backward_batch_size):
                 backward_batch_end = backward_batch_start + self.config.backward_batch_size
                 backward_batch_inds = b_inds[backward_batch_start:backward_batch_end]
                 # print(backward_batch_inds)
+
+
 
                 for mini_batch_start in range(0, self.config.backward_batch_size, self.config.mini_batch_size):
                     mini_batch_end = mini_batch_start + self.config.mini_batch_size
@@ -811,7 +816,6 @@ class PPOTrainer(BaseTrainer):
                     # print(condition_twist_on_tokens_shuffled)
                     # print(condition_twist_on_tokens_shuffled.shape)
 
-                    torch.save(self.model.v_head.summary.weight.data, f"vhead_{mini_batch_start}.pt")
 
                     mini_batch_dict = {
                         "logprobs": batch_dict["logprobs"][mini_batch_inds],
