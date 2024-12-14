@@ -791,7 +791,9 @@ class PPOTrainer(BaseTrainer):
             # print(self.config.mini_batch_size)
             # print(b_inds)
             torch.save(self.model.v_head.summary.weight.data,
-                       f"vhead_{ppo_epoch}.pt")
+                       f"vhead_weight_{ppo_epoch}.pt")
+            torch.save(self.model.v_head.summary.bias.data,
+                       f"vhead_bias_{ppo_epoch}.pt")
 
             for backward_batch_start in range(0, bs, self.config.backward_batch_size):
                 backward_batch_end = backward_batch_start + self.config.backward_batch_size
