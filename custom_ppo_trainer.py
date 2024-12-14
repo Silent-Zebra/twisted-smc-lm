@@ -858,15 +858,14 @@ class PPOTrainer(BaseTrainer):
                         all_stats.append(train_stats)
 
 
-
-            1/0 # TODO REMOVE LATER DEBUG ONLY
-
             # typically, early stopping is done at the epoch level
             if self.config.early_stopping:
                 policykl = train_stats["policy/policykl"]
                 early_stop = self._early_stop(policykl)
                 if early_stop:
                     break
+
+        1/0  # TODO REMOVE LATER DEBUG ONLY
 
         timing["time/ppo/optimize_step"] = time.time() - t
 
