@@ -811,6 +811,8 @@ class PPOTrainer(BaseTrainer):
                     # print(condition_twist_on_tokens_shuffled)
                     # print(condition_twist_on_tokens_shuffled.shape)
 
+                    torch.save(self.model.v_head.summary.weight.data, f"vhead_{mini_batch_start}.pt")
+
                     mini_batch_dict = {
                         "logprobs": batch_dict["logprobs"][mini_batch_inds],
                         "values": batch_dict["values"][mini_batch_inds],
@@ -834,6 +836,15 @@ class PPOTrainer(BaseTrainer):
                             return_logits=True,
                             condition_twist_on_tokens=condition_twist_on_tokens_shuffled
                         )
+
+                        print("Log probs, logits, vpreds")
+                        print(logprobs)
+                        print(logits)
+                        print(vpreds)
+
+                        print("MINI BATCH DICT")
+                        print(mini_batch_dict)
+
                         train_stats = self.train_minibatch(
                             mini_batch_dict["logprobs"],
                             mini_batch_dict["values"],
@@ -845,6 +856,10 @@ class PPOTrainer(BaseTrainer):
                             mini_batch_dict["returns"],
                         )
                         all_stats.append(train_stats)
+
+
+
+            1/0 # TODO REMOVE LATER DEBUG ONLY
 
             # typically, early stopping is done at the epoch level
             if self.config.early_stopping:
@@ -1240,7 +1255,16 @@ class PPOTrainer(BaseTrainer):
         vf_loss = 0.5 * masked_mean(torch.max(vf_losses1, vf_losses2), mask)
         vf_clipfrac = masked_mean(torch.gt(vf_losses2, vf_losses1).float(), mask)
 
+        print("VALUE FUNCTION LOSSES")
+        print(vf_losses1)
+        print(vf_losses2)
+        print(vf_loss)
+        print(self.config.vf_coef)
+
         ratio = torch.exp(logprobs - old_logprobs)
+
+        print("RATIO")
+        print(ratio)
 
         pg_losses = -advantages * ratio
         pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - self.config.cliprange, 1.0 + self.config.cliprange)
@@ -1248,7 +1272,15 @@ class PPOTrainer(BaseTrainer):
         pg_loss = masked_mean(torch.max(pg_losses, pg_losses2), mask)
         pg_clipfrac = masked_mean(torch.gt(pg_losses2, pg_losses).float(), mask)
 
+        print("PG LOSSES")
+        print(pg_losses)
+        print(pg_losses2)
+        print(pg_loss)
+
         loss = pg_loss + self.config.vf_coef * vf_loss
+
+        print("FINAL LOSS")
+        print(loss)
 
         avg_ratio = masked_mean(ratio, mask).item()
         if avg_ratio > self.config.ratio_threshold:

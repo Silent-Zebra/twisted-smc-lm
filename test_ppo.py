@@ -604,6 +604,9 @@ def main():
 
             rewards = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model, condition_twist_on_tokens)
 
+            print("FULL SEQ")
+            print(full_seq)
+
             if condition_twist_on_tokens is not None:
                 stats = ppo_trainer.step(list(query_tensors),
                                          list(response_tensors),

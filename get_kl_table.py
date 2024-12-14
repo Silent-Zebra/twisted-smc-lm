@@ -48,7 +48,28 @@ load_prefixes_toxc = [
      "f_q_g_q_estimates_2024-04-22_22-29_ppo_seed1_nsamples11",
      "f_q_g_q_estimates_2024-04-22_17-53_ppo_seed2_nsamples11",
      "f_q_g_q_estimates_2024-04-21_08-37_ppo_seed0_nsamples11",
-     "f_q_g_q_estimates_2024-04-22_16-35_ppo_seed3_nsamples11",]
+     "f_q_g_q_estimates_2024-04-22_16-35_ppo_seed3_nsamples11",],
+    [
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed1",
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed2",
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed3",
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed4",
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed5",
+    ],
+    [
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed1",
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed2",
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed3",
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed4",
+    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed5",
+    ],
+    [
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed1",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed2",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed3",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed4",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed5"
+    ]
 ]
 
 load_prefixes_sent1_nnonly = [
@@ -234,23 +255,6 @@ load_prefixes_sent_truepost_comparison = [
 
 
 
-twist_learn_method_names = [
-    "Contrastive",
-    "RL",
-    "SIXO",
-    "FUDGE",
-    "--",
-    "--",
-]
-
-proposal_names = [
-    "Twisted",
-    "Twisted",
-    "Twisted",
-    "Twisted",
-    "DPG",
-    "PPO",
-]
 
 
 load_dir = "./f_q_g_q_logZ_info"
@@ -408,9 +412,7 @@ def populate_f_q_g_q_lists(load_prefixes):
 
             prefix = load_prefixes[i][j]
 
-            x = checkpoints.restore_checkpoint(ckpt_dir=f"{load_dir}/{prefix}",
-                                               target=None,
-                                               prefix="checkpoint")
+            x = load_checkpoint(prefix)
 
             f_q_estimates = x[0].mean(axis=0)
             g_q_estimates = x[1].mean(axis=0)
@@ -422,6 +424,26 @@ def populate_f_q_g_q_lists(load_prefixes):
             g_q_estimates_list[i].append(g_q_estimates)
             midpoint_of_last_f_q_g_q_list[i].append(midpoint_of_last_f_q_g_q)
     return f_q_estimates_list, g_q_estimates_list, midpoint_of_last_f_q_g_q_list
+
+
+def load_checkpoint(prefix):
+    if "OpenRLHF" in prefix:
+        import torch
+        x = torch.load(f"{load_dir}/{prefix}")
+        # print(x)
+        f_q_estimates_list, g_q_estimates_list, iwae_lbs_list, iwae_ubs_list = x
+        f_q = torch.stack(f_q_estimates_list, dim=1)
+        g_q = torch.stack(g_q_estimates_list, dim=1)
+        # print(f_q.shape)
+        # print(g_q.shape)
+        x = (f_q.float().numpy(), g_q.float().numpy())
+    else:
+        x = checkpoints.restore_checkpoint(ckpt_dir=f"{load_dir}/{prefix}",
+                                           target=None,
+                                           prefix="checkpoint")
+        # print(x[0].shape)
+        # print(x[1].shape)
+    return x
 
 
 def get_logZ_midpoint_to_use(fig_name_modifier, load_prefixes):
@@ -453,10 +475,7 @@ def get_logZ_midpoint_estimates(load_prefixes):
         for j in range(len(load_prefixes[i])):
 
             prefix = load_prefixes[i][j]
-            x = checkpoints.restore_checkpoint(ckpt_dir=f"{load_dir}/{prefix}",
-                                               target=None,
-                                               prefix="checkpoint"
-                                               )
+            x = load_checkpoint(prefix)
 
             # print(prefix)
             if len(x) > 4:
@@ -466,12 +485,40 @@ def get_logZ_midpoint_estimates(load_prefixes):
                     logZ_midpoint_estimates.append(logZ_midpoint_estimate)
     return logZ_midpoint_estimates
 
+twist_learn_method_names = [
+    "Contrastive",
+    "RL",
+    "SIXO",
+    "FUDGE",
+    "--",
+    "--",
+    "--",
+    "--",
+    "--",
+]
 
-make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_04-22")
-make_table(load_prefixes_sent1_nnonly, twist_learn_method_names, proposal_names, "sent1_nnonly_04-20")
-make_table(load_prefixes_plasttok15_10, twist_learn_method_names, proposal_names, "plast15_10_04-22")
-make_table(load_prefixes_plasttok2_1, twist_learn_method_names, proposal_names, "plast2_1_04-22")
+proposal_names = [
+    "Twisted",
+    "Twisted",
+    "Twisted",
+    "Twisted",
+    "DPG",
+    "PPO",
+    "PPO (OpenRLHF, Cosine LR)",
+    "PPO (OpenRLHF, Constant LR)",
+    "PPO (OpenRLHF, Modulation Param)",
+]
+
+
+# make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_04-22")
+# make_table(load_prefixes_sent1_nnonly, twist_learn_method_names, proposal_names, "sent1_nnonly_04-20")
+# make_table(load_prefixes_plasttok15_10, twist_learn_method_names, proposal_names, "plast15_10_04-22")
+# make_table(load_prefixes_plasttok2_1, twist_learn_method_names, proposal_names, "plast2_1_04-22")
 # NOTE THE FIG NAME MATTERS FOR INFILLING
+
+
+
+make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_11-30")
 
 
 twist_learn_method_names = [
@@ -507,5 +554,6 @@ plot_names = [
 ]
 
 
-make_table(load_prefixes_tox_truepost_comparison, twist_learn_method_names, proposal_names, "toxc_truepost_04-22", exact_num_epochs=6, legendsize=6)
-make_table(load_prefixes_sent_truepost_comparison, twist_learn_method_names, proposal_names, "sent_truepost_04-22", exact_num_epochs=9, legendsize=6)
+# make_table(load_prefixes_tox_truepost_comparison, twist_learn_method_names, proposal_names, "toxc_truepost_04-22", exact_num_epochs=6, legendsize=6)
+# make_table(load_prefixes_sent_truepost_comparison, twist_learn_method_names, proposal_names, "sent_truepost_04-22", exact_num_epochs=9, legendsize=6)
+
