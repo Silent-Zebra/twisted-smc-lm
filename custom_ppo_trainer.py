@@ -1305,6 +1305,8 @@ class PPOTrainer(BaseTrainer):
         print("PG LOSSES")
         print(pg_losses)
         print(pg_losses2)
+        print(torch.max(pg_losses, pg_losses2))
+        print(masked_mean(torch.max(pg_losses, pg_losses2).abs(), mask))
         print(pg_loss)
 
         loss = pg_loss + self.config.vf_coef * vf_loss
