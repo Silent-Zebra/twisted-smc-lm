@@ -749,6 +749,9 @@ class PPOTrainer(BaseTrainer):
 
         timing["time/ppo/forward_pass"] = time.time() - t
 
+        print("SCORES")
+        print(scores)
+
         with torch.no_grad():
             t = time.time()
             if full_kl_penalty:
@@ -765,6 +768,9 @@ class PPOTrainer(BaseTrainer):
             t = time.time()
             values, advantages, returns = self.compute_advantages(values, rewards, masks)
             timing["time/ppo/compute_advantages"] = time.time() - t
+
+        print("NON SCORE REWARDS")
+        print(non_score_reward)
 
         # upcast to float32 to avoid dataset issues
         batch_dict = {
@@ -1202,11 +1208,15 @@ class PPOTrainer(BaseTrainer):
         advantages_reversed = []
         gen_len = rewards.shape[-1]
 
+        print("ADVANTAGE COMPUTATION")
+        print("ADV-REWARDS")
+        print(rewards)
+        print(mask)
+
         values = values * mask
         rewards = rewards * mask
 
-        print("ADVANTAGE COMPUTATION")
-        print("ADV-REWARDS")
+        print("ADV-REWARDS2")
         print(rewards)
 
         if self.config.whiten_rewards:
@@ -1223,8 +1233,6 @@ class PPOTrainer(BaseTrainer):
         advantages = masked_whiten(advantages, mask)
         advantages = advantages.detach()
 
-        print("ADV-REWARDS2")
-        print(rewards)
         print("ADV-RETURNS")
         print(returns)
         print("ADV-VALUES")
