@@ -1205,6 +1205,10 @@ class PPOTrainer(BaseTrainer):
         values = values * mask
         rewards = rewards * mask
 
+        print("ADVANTAGE COMPUTATION")
+        print("ADV-REWARDS")
+        print(rewards)
+
         if self.config.whiten_rewards:
             rewards = masked_whiten(rewards, mask, shift_mean=False)
 
@@ -1218,6 +1222,16 @@ class PPOTrainer(BaseTrainer):
         returns = advantages + values
         advantages = masked_whiten(advantages, mask)
         advantages = advantages.detach()
+
+        print("ADV-REWARDS2")
+        print(rewards)
+        print("ADV-RETURNS")
+        print(returns)
+        print("ADV-VALUES")
+        print(values)
+        print("ADV-ADV")
+        print(advantages)
+
         return values, advantages, returns
 
     def loss(
@@ -1261,8 +1275,11 @@ class PPOTrainer(BaseTrainer):
         vf_clipfrac = masked_mean(torch.gt(vf_losses2, vf_losses1).float(), mask)
 
         print("VALUE FUNCTION LOSSES")
+        print(vpreds)
+        print(returns)
         print(vf_losses1)
         print(vf_losses2)
+        print(masked_mean(torch.max(vf_losses1, vf_losses2), mask))
         print(vf_loss)
         print(self.config.vf_coef)
 
