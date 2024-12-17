@@ -1295,6 +1295,8 @@ class PPOTrainer(BaseTrainer):
 
         print("RATIO")
         print(ratio)
+        print("ADVANTAGES")
+        print(advantages)
 
         pg_losses = -advantages * ratio
         pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - self.config.cliprange, 1.0 + self.config.cliprange)
