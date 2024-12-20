@@ -65,6 +65,15 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     torch.manual_seed(args.seed)
 
+    extra_str = "_"
+    if args.hface_nn_twist:
+        extra_str += "nntwist_"
+    if args.only_train_nn_head:
+        extra_str += "onlytrainnnhead_"
+    if args.separate_twist:
+        extra_str += "separatetwist_"
+    save_str = f"{extra_str}epochs{args.epochs}_lr{args.lr}_seed{args.seed}"
+
     def reward_model_sentiment_class_logprob(seq, sentimentClassifier,
                                              tokenizer_RM, tokenizer,
                                              class_num, ref_model=None, condition_twist_on_tokens=None):
@@ -214,7 +223,8 @@ def main():
         init_kl_coef=kl_coeff,
         batch_size=batch_size,
         mini_batch_size=batch_size,
-        adap_kl_ctrl=False
+        adap_kl_ctrl=False,
+        ppo_epochs=args.ppo_epochs
     )
 
     # print(args.lr)
@@ -487,7 +497,7 @@ def main():
             ckpt_dir=args.save_dir,
             target=target_to_save,
             step=len(g_q_estimates_list) - 1,
-            prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_ppo_seed{args.seed}_nsamples"
+            prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_ppo_{save_str}_nsamples"
         )
 
     f_q_estimates_list = []
@@ -626,8 +636,8 @@ def main():
 
             rewards = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, ref_model=ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
 
-            print("FULL SEQ")
-            print(full_seq)
+            # print("FULL SEQ")
+            # print(full_seq)
 
             if condition_twist_on_tokens is not None:
                 stats = ppo_trainer.step(list(query_tensors),
@@ -650,14 +660,7 @@ def main():
 
 
     if args.save_ckpt:
-        extra_str = "_"
-        if args.hface_nn_twist:
-            extra_str += "nntwist_"
-        if args.only_train_nn_head:
-            extra_str += "onlytrainnnhead_"
-        if args.separate_twist:
-            extra_str += "separatetwist_"
-        torch.save(model, f"ppo_model{extra_str}epochs{args.epochs}_lr{args.lr}_seed{args.seed}")
+        torch.save(model, f"ppo_model{save_str}")
 
 
 
@@ -718,6 +721,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_ckpt", action="store_true", help="Save the actor and critic")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save the actor/critic")
     parser.add_argument("--threshold", type=float, default=-5., help="The threshold for the toxicity score")
+    parser.add_argument("--ppo_epochs", type=int, default=4, help="Num of PPO inner loop iterations")
 
 
     args = parser.parse_args()
