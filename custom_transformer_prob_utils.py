@@ -127,9 +127,10 @@ def get_transformer_p_logits(
             # print(jnp.abs((p_logits - p_logits2)).mean())
 
     else:
-        raise NotImplementedError
+        # raise NotImplementedError
         # should be an apply_fn here?
         # p_logits = huggingface_model(input_ids=full_seq, ret="p", hface_model_params=params_p)
+        p_logits = huggingface_model(params=params_p, input_ids=full_seq)
 
     return p_logits
 
