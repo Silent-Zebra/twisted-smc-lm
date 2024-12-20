@@ -25,7 +25,7 @@ from custom_trl_model import *
 
 from functools import partial
 
-# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def get_sentiment_class_prob(tokens, sentimentClassifier, class_num):
     classification_logits = sentimentClassifier(**tokens).logits
