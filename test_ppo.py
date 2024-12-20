@@ -72,8 +72,8 @@ def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
     print(tokens['input_ids'])
     print(tokens['attention_mask'])
 
-    tokens['input_ids'].to(seq.device)
-    tokens['attention_mask'].to(seq.device)
+    tokens['input_ids'] = tokens['input_ids'].to(seq.device)
+    tokens['attention_mask'] = tokens['attention_mask'].to(seq.device)
 
     print("Device Check tokens after")
     print(tokens['input_ids'].device)
@@ -319,7 +319,6 @@ def main():
         print(log_phi_eval)
         print(log_phi_eval.mean())
 
-        # log_phi_eval.to(device)
 
         log_tilde_sigma = log_p + args.beta_temp * log_phi_eval # p eval + phi eval
         return log_tilde_sigma
