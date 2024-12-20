@@ -23,6 +23,8 @@ from transformers import AutoModelForSequenceClassification
 import math
 from custom_trl_model import *
 
+from functools import partial
+
 
 def get_sentiment_class_prob(tokens, sentimentClassifier, class_num):
     classification_logits = sentimentClassifier(**tokens).logits
@@ -65,7 +67,7 @@ def main():
 
     def reward_model_sentiment_class_logprob(seq, sentimentClassifier,
                                              tokenizer_RM, tokenizer,
-                                             class_num, ref_model, condition_twist_on_tokens=None):
+                                             class_num, ref_model=None, condition_twist_on_tokens=None):
         if len(seq.shape) == 3:
             raise NotImplementedError
 
@@ -86,7 +88,7 @@ def main():
         return log_prob.to(device)
 
     def toxicity_class_logprob(
-        seq, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model, condition_twist_on_tokens=None
+        seq, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model=None, condition_twist_on_tokens=None
     ):
 
         score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer)
@@ -101,6 +103,15 @@ def main():
 
         return log_prob_of_class.to(device)
 
+
+    from reward_models import eps
+    def log_toxicity_threshold(seq, rewardModel, tokenizer_RM, tokenizer, threshold, ref_model=None, condition_twist_on_tokens=None):
+        score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer).to(device)
+        # negative threshold by default
+        # probably perhaps should have instead defined this based on log probs... but whatever, I guess it's ok for now,
+        # and let's just keep it consistent with the original experiments
+        return torch.log((score < threshold) + eps)
+
     def p_last_tokens(seqs, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model, condition_twist_on_tokens):
         full_seqs = torch.cat((seqs, condition_twist_on_tokens), dim=-1)
         log_p_last_tokens = get_logprob_of_generated_tokens(ref_model, full_seqs, prompt_len + args.output_len)
@@ -108,7 +119,7 @@ def main():
 
 
     def toy_test_rm(
-        seq, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model, condition_twist_on_tokens=None
+        seq, rewardModel, tokenizer_RM, tokenizer, ref_model, condition_twist_on_tokens=None
     ):
         score = (seq[:, -1] == 1263) * 1. - 2
         return score.to(device)
@@ -122,23 +133,30 @@ def main():
         tokenizer_RM = AutoTokenizer.from_pretrained(
             "LiYuan/amazon-review-sentiment-analysis")
         model_config = 'gpt2-medium'
-        rm_function = reward_model_sentiment_class_logprob
         class_num = args.sentiment_class - 1
+        rm_function = partial(reward_model_sentiment_class_logprob, class_num=class_num)
         prompts = [
             "I bought this"
             # "This product is"
         ]
-    elif args.rm_type in ["exp_beta_toxicity_class_logprob"]:
+    elif args.rm_type in ["exp_beta_toxicity_class_logprob", "toxicity_threshold"]:
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
             "nicholasKluge/ToxicityModel")
         tokenizer_RM = AutoTokenizer.from_pretrained(
             "nicholasKluge/ToxicityModel")
         model_config = "roneneldan/TinyStories-33M"
-        class_num = 0 # neg class
-        if args.pos_threshold:
-            class_num = 1
-        rm_function = toxicity_class_logprob
         prompts = ["Once upon a time, there was a", ]
+        if args.rm_type == "exp_beta_toxicity_class_logprob":
+            class_num = 0 # neg class
+            if args.pos_threshold:
+                class_num = 1
+            rm_function = partial(toxicity_class_logprob, class_num=class_num)
+        elif args.rm_type == "toxicity_threshold":
+            assert args.beta_temp == 1 # If not using temp 1, you need to redefine the reward func/phi/potential accordingly
+            rm_function = partial(log_toxicity_threshold, threshold=args.threshold)
+        else:
+            raise NotImplementedError
+
     elif args.rm_type in ["p_last_tokens"]:
         rewardModel = None
         tokenizer_RM = None
@@ -249,7 +267,7 @@ def main():
         # But here, since I need to evaluate phi = e^beta r, I need log phi = beta r, not r!
         log_p = get_logprob_of_generated_tokens(ref_model, full_seqs, prompt_len)
         log_phi_eval = rm_function(full_seqs, rewardModel, tokenizer_RM,
-                                   tokenizer, class_num, ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
+                                   tokenizer, ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
         print("Log p and phi")
         print(log_p)
         print(log_p.mean())
@@ -275,7 +293,7 @@ def main():
             log_tilde_sigma = eval_log_p_plus_log_phi(q_result, ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
 
             final_reward = rm_function(q_result, rewardModel, tokenizer_RM, tokenizer,
-                                       class_num, ref_model, condition_twist_on_tokens)
+                                       ref_model, condition_twist_on_tokens)
             if condition_twist_on_tokens is not None:
                 print("sequences with continuations")
                 text_outputs = tokenizer.batch_decode(torch.cat((q_result, condition_twist_on_tokens), dim=-1), skip_special_tokens=True)
@@ -602,7 +620,7 @@ def main():
 
             response_tensors = full_seq[:, prompt_len:]
 
-            rewards = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, class_num, ref_model, condition_twist_on_tokens)
+            rewards = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, ref_model, condition_twist_on_tokens)
 
             print("FULL SEQ")
             print(full_seq)
@@ -698,6 +716,7 @@ if __name__ == "__main__":
     parser.add_argument("--separate_twist", action="store_true")
     parser.add_argument("--save_ckpt", action="store_true", help="Save the actor and critic")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save the actor/critic")
+    parser.add_argument("--threshold", type=float, default=-5., help="The threshold for the toxicity score")
 
 
     args = parser.parse_args()
