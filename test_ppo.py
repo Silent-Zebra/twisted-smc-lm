@@ -205,12 +205,12 @@ def main():
         if args.only_train_nn_head:
             model.remove_requires_grad_base_model()
 
-        # from custom_ppo_trainer import PPOTrainer
+        from custom_ppo_trainer import PPOTrainer
     else:
         model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
         ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
-        # from trl import PPOTrainer
-    from custom_ppo_trainer import PPOTrainer
+        from trl import PPOTrainer
+    # from custom_ppo_trainer import PPOTrainer
     ref_model.eval()
     tokenizer = AutoTokenizer.from_pretrained(model_config)
     tokenizer.pad_token = tokenizer.eos_token
@@ -637,8 +637,8 @@ def main():
 
             rewards = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, ref_model=ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
 
-            # print("FULL SEQ")
-            # print(full_seq)
+            print("FULL SEQ")
+            print(full_seq)
 
             if condition_twist_on_tokens is not None:
                 stats = ppo_trainer.step(list(query_tensors),
@@ -659,6 +659,9 @@ def main():
                 rewards_list, kl_vals_list
             )
 
+        if args.save_ckpt:
+            if (epoch + 1) % args.ckpt_every == 0:
+                torch.save(model, f"ppo_model{save_str}")
 
     if args.save_ckpt:
         torch.save(model, f"ppo_model{save_str}")
@@ -697,7 +700,7 @@ if __name__ == "__main__":
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens)")
 
 
-    # parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
+    parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
     # parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
     # parser.add_argument("--load_dir_ckpt", type=str, default='.', help="Where to load from for checkpoint")
     # parser.add_argument("--load_prefix_ckpt", type=str, default='.')
