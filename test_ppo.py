@@ -269,7 +269,7 @@ def main():
         # But here, since I need to evaluate phi = e^beta r, I need log phi = beta r, not r!
         log_p = get_logprob_of_generated_tokens(ref_model, full_seqs, prompt_len)
         log_phi_eval = rm_function(full_seqs, rewardModel, tokenizer_RM,
-                                   tokenizer, ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
+                                   tokenizer, ref_model=ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
         print("Log p and phi")
         print(log_p)
         print(log_p.mean())
@@ -295,7 +295,7 @@ def main():
             log_tilde_sigma = eval_log_p_plus_log_phi(q_result, ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
 
             final_reward = rm_function(q_result, rewardModel, tokenizer_RM, tokenizer,
-                                       ref_model, condition_twist_on_tokens)
+                                       ref_model=ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
             if condition_twist_on_tokens is not None:
                 print("sequences with continuations")
                 text_outputs = tokenizer.batch_decode(torch.cat((q_result, condition_twist_on_tokens), dim=-1), skip_special_tokens=True)
@@ -624,7 +624,7 @@ def main():
 
             response_tensors = full_seq[:, prompt_len:]
 
-            rewards = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, ref_model, condition_twist_on_tokens)
+            rewards = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, ref_model=ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
 
             print("FULL SEQ")
             print(full_seq)
