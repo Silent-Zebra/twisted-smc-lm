@@ -163,8 +163,9 @@ class CustomAutoModelForCausalLMWithValueHead(PreTrainedModelWrapper):
 
     def remove_requires_grad_base_model(self):
         for x in filter(lambda p: p[1].requires_grad, self.named_parameters()):
-            print(name)
             name = x[0]
+            print(name)
+
             if 'nn_head' not in name:
                 x[1].requires_grad = False
         1/0
