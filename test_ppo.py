@@ -219,6 +219,9 @@ def main():
     else:
         raise NotImplementedError
 
+    if rewardModel is not None:
+        rewardModel = rewardModel.to(device)
+
     if args.hface_nn_twist:
         if args.rm_type == "p_last_tokens":
             if args.separate_twist:
