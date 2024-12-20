@@ -787,6 +787,8 @@ class PPOTrainer(BaseTrainer):
         t = time.time()
         all_stats = []
         early_stop = False
+        print(self.config.ppo_epochs)
+        1/0
         for ppo_epoch in range(self.config.ppo_epochs):
             if early_stop:
                 break
