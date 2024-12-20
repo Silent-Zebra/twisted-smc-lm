@@ -88,7 +88,7 @@ def main():
         extra_str += "onlytrainnnhead_"
     if args.separate_twist:
         extra_str += "separatetwist_"
-    save_str = f"{extra_str}epochs{args.epochs}_lr{args.lr}_seed{args.seed}"
+    save_str = f"{extra_str}epochs{args.epochs}_lr{args.lr}_vfcoef{args.vf_coef}_seed{args.seed}"
 
     def reward_model_sentiment_class_logprob(seq, sentimentClassifier,
                                              tokenizer_RM, tokenizer,
