@@ -205,11 +205,12 @@ def main():
         if args.only_train_nn_head:
             model.remove_requires_grad_base_model()
 
-        from custom_ppo_trainer import PPOTrainer
+        # from custom_ppo_trainer import PPOTrainer
     else:
         model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
         ref_model = AutoModelForCausalLMWithValueHead.from_pretrained(model_config)
-        from trl import PPOTrainer
+        # from trl import PPOTrainer
+    from custom_ppo_trainer import PPOTrainer
     ref_model.eval()
     tokenizer = AutoTokenizer.from_pretrained(model_config)
     tokenizer.pad_token = tokenizer.eos_token
