@@ -55,7 +55,7 @@ def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
                           return_attention_mask=True)
 
     print("Device Check tokens")
-    print(tokens.device)
+    print(tokens)
 
     score = get_toxicity_score(tokens, rewardModel)
 
