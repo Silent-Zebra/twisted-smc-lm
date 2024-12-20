@@ -700,10 +700,8 @@ if __name__ == "__main__":
     parser.add_argument("--beta_temp", type=float, help="beta used for the temperature scaling; for reward models based on the p(x | s) formulation where x = continuation, x = is toxic class, x = is sentiment class 5, etc.",
                         default=1.)
 
-    parser.add_argument("--threshold", type=float, default=0.,
-                        help="The threshold for the toxicity score")
-    parser.add_argument("--pos_threshold", action="store_true",
-                        help="Use a positive (>) threshold for the toxicity threshold reward model. If not set, then uses negative (<) threshold. Now also used for the exp_beta_toxicity_class_logprob; set to true means use the pos class, otherwise we are using the neg class")
+    # parser.add_argument("--pos_threshold", action="store_true",
+    #                     help="Use a positive (>) threshold for the toxicity threshold reward model. If not set, then uses negative (<) threshold. Now also used for the exp_beta_toxicity_class_logprob; set to true means use the pos class, otherwise we are using the neg class")
     parser.add_argument("--sentiment_class", type=int, default=1,
                         choices=[1, 2, 3, 4, 5],
                         help="Only for the sentiment classifier")
