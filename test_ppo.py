@@ -661,10 +661,10 @@ def main():
 
         if args.save_ckpt:
             if (epoch + 1) % args.ckpt_every == 0:
-                torch.save(model, f"{args.save_dir}/ppo_model{save_str}")
+                torch.save(model, f"{args.save_dir}/ppo_model{save_str}_epoch{epoch + 1}")
 
-    if args.save_ckpt:
-        torch.save(model, f"{args.save_dir}/ppo_model{save_str}")
+    # if args.save_ckpt:
+    #     torch.save(model, f"{args.save_dir}/ppo_model{save_str}_epoch{epoch + 1}")
 
 
 
