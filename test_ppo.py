@@ -131,8 +131,8 @@ def main():
 
     from reward_models import eps
     def log_toxicity_threshold(seq, rewardModel, tokenizer_RM, tokenizer, threshold, ref_model=None, condition_twist_on_tokens=None):
-        print("Device Check")
-        print(seq.device)
+        # print("Device Check")
+        # print(seq.device)
         score = reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer).to(device)
         # negative threshold by default
         # probably perhaps should have instead defined this based on log probs... but whatever, I guess it's ok for now,
@@ -653,15 +653,15 @@ def main():
             else:
                 full_seq = model.generate(batch_prompt_pt, max_length=prompt_len+args.output_len, **gen_kwargs)
 
-            print("Generation Completed")
-            print(f"TIME: {time.time() - new_start}", flush=True)
+            # print("Generation Completed")
+            # print(f"TIME: {time.time() - new_start}", flush=True)
 
             response_tensors = full_seq[:, prompt_len:]
 
             rewards = rm_function(full_seq, rewardModel, tokenizer_RM, tokenizer, ref_model=ref_model, condition_twist_on_tokens=condition_twist_on_tokens)
 
-            print("Rewards Calculated")
-            print(f"TIME: {time.time() - new_start}", flush=True)
+            # print("Rewards Calculated")
+            # print(f"TIME: {time.time() - new_start}", flush=True)
 
             # print("FULL SEQ")
             # print(full_seq)
@@ -675,8 +675,8 @@ def main():
                 stats = ppo_trainer.step(list(query_tensors), list(response_tensors), list(rewards), )
             # print(stats)
 
-            print("PPO Updates Completed")
-            print(f"TIME: {time.time() - new_start}", flush=True)
+            # print("PPO Updates Completed")
+            # print(f"TIME: {time.time() - new_start}", flush=True)
 
 
         if not args.no_test_info and (epoch + 1 == args.epochs):
