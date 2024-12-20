@@ -40,12 +40,20 @@ def get_toxicity_score(tokens, rewardModel):
     score = score.squeeze(-1)
     return score
 
+new_start = time.time()
+
 
 def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
     if len(seq.shape) == 3:
         raise NotImplementedError
+    print("Reward model toxicity")
+    print(f"TIME: {time.time() - new_start}", flush=True)
 
     text_outputs = tokenizer.batch_decode(seq, skip_special_tokens=True)
+
+    print("Decoding tokens done")
+    print(f"TIME: {time.time() - new_start}", flush=True)
+
     tokens = tokenizer_RM(text_outputs,
                           truncation=True,
                           padding=True,
@@ -53,11 +61,17 @@ def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
                           return_token_type_ids=False,
                           return_tensors="pt",
                           return_attention_mask=True)
+    print("Encoding tokens done")
+    print(f"TIME: {time.time() - new_start}", flush=True)
 
     print("Device Check tokens")
-    print(tokens)
+    print(tokens['input_ids'].device)
+    print(tokens['attention_mask'].device)
 
     score = get_toxicity_score(tokens, rewardModel)
+
+    print("Toxicity score done")
+    print(f"TIME: {time.time() - new_start}", flush=True)
 
     return score
 
