@@ -126,6 +126,8 @@ def main():
 
 
     n_samples_f_q = 500
+    if args.rm_type == "toxicity_threshold":
+        n_samples_f_q = 100
 
     if args.rm_type == "exp_beta_sentiment_class_logprob":
         rewardModel = AutoModelForSequenceClassification.from_pretrained(
@@ -505,6 +507,8 @@ def main():
                                            dtype=torch.int64,
                                            device=device)
     n_seeds_f_q = 4  # 5 reduce time spent on this
+    if args.rm_type == "toxicity_threshold":
+        n_seeds_f_q = 1
 
     condition_twist_on_tokens_all = None
 
