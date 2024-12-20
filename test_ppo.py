@@ -25,6 +25,7 @@ from custom_trl_model import *
 
 from functools import partial
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def get_sentiment_class_prob(tokens, sentimentClassifier, class_num):
     classification_logits = sentimentClassifier(**tokens).logits
@@ -36,6 +37,13 @@ def get_sentiment_class_prob(tokens, sentimentClassifier, class_num):
 
 
 def get_toxicity_score(tokens, rewardModel):
+    tokens['input_ids'].to(device)
+    tokens['attention_mask'].to(device)
+
+    print("Device Check tokens")
+    print(tokens['input_ids'].device)
+    print(tokens['attention_mask'].device)
+
     score = rewardModel(**tokens).logits
     score = score.squeeze(-1)
     return score
@@ -64,9 +72,9 @@ def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
     print("Encoding tokens done")
     print(f"TIME: {time.time() - new_start}", flush=True)
 
-    print("Device Check tokens")
-    print(tokens['input_ids'].device)
-    print(tokens['attention_mask'].device)
+    # print("Device Check tokens")
+    # print(tokens['input_ids'].device)
+    # print(tokens['attention_mask'].device)
 
     score = get_toxicity_score(tokens, rewardModel)
 
@@ -79,7 +87,6 @@ def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
 
 
 def main():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     torch.manual_seed(args.seed)
 
     extra_str = "_"
