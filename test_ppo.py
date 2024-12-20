@@ -693,8 +693,7 @@ if __name__ == "__main__":
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens)")
 
 
-    parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
-    parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
+    # parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
     # parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
     # parser.add_argument("--load_dir_ckpt", type=str, default='.', help="Where to load from for checkpoint")
     # parser.add_argument("--load_prefix_ckpt", type=str, default='.')
