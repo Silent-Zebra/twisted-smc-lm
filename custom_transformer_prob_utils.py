@@ -129,8 +129,7 @@ def get_transformer_p_logits(
     else:
         # raise NotImplementedError
         # should be an apply_fn here?
-        # p_logits = huggingface_model(input_ids=full_seq, ret="p", hface_model_params=params_p)
-        p_logits = huggingface_model(params=params_p, input_ids=full_seq)
+        p_logits = huggingface_model(input_ids=full_seq, ret="p", hface_model_params=params_p)
 
     return p_logits
 
