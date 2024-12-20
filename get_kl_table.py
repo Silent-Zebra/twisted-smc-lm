@@ -48,13 +48,71 @@ load_prefixes_toxc = [
      "f_q_g_q_estimates_2024-04-22_22-29_ppo_seed1_nsamples11",
      "f_q_g_q_estimates_2024-04-22_17-53_ppo_seed2_nsamples11",
      "f_q_g_q_estimates_2024-04-21_08-37_ppo_seed0_nsamples11",
-     "f_q_g_q_estimates_2024-04-22_16-35_ppo_seed3_nsamples11",],
+     "f_q_g_q_estimates_2024-04-22_16-35_ppo_seed3_nsamples11",
+    ],
     [
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed1",
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed2",
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed3",
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed4",
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed5",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999___seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_adambetas0.9_0.999_sharedactorcritic_lr1e-06_seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_adambetas0.9_0.999_sharedactorcritic_lr1e-06_seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_adambetas0.9_0.999_sharedactorcritic_lr1e-06_seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_adambetas0.9_0.999_sharedactorcritic_lr1e-06_seed5",
+    ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999__seed5",
+    ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.95___seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.95___seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.95___seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.95___seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.95___seed5"
+    ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999___seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999___seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999___seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999___seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_sharedactorcritic_lr1e-06_adambetas0.9_0.999___seed5"
+    ],
+    # [
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed1",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed2",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed3",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed4",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrschedulecosine_with_min_lr_actorlr3e-06_criticlr3e-07_seed5",
+    # ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed5",
+    ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs4__lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed5"
+    ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.999__seed5",
+    ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1_eval_lrscheduleconstant_actorlr1e-06_criticlr1e-07_adambetas0.9_0.95__seed5",
+
     ],
     [
     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed1",
@@ -63,13 +121,14 @@ load_prefixes_toxc = [
     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed4",
     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed5",
     ],
-    [
+    # [
     # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed1",
     # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed2",
     # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed3",
     # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed4",
     # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed5"
-    ]
+    # ],
+
 ]
 
 load_prefixes_sent1_nnonly = [
@@ -495,28 +554,43 @@ twist_learn_method_names = [
     "--",
     "--",
     "--",
+    "--",
+    # "--",
+    "--",
+    "--",
+    "--",
+    "--",
+    "--",
+    # "--",
 ]
 
+# All constant LR for now
 proposal_names = [
     "Twisted",
     "Twisted",
     "Twisted",
     "Twisted",
     "DPG",
-    "PPO",
-    "PPO (OpenRLHF, Cosine LR)",
-    "PPO (OpenRLHF, Constant LR)",
-    "PPO (OpenRLHF, Modulation Param)",
-]
+    r"PPO (Original (TRL), 4 Steps, Shared Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+    r"PPO (OpenRLHF, 4 Steps, Shared Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+    r"PPO (OpenRLHF, 4 Steps, Shared Actor Critic, Adam $\beta_2=0.999$, With Dropout)",
+    r"PPO (OpenRLHF, 4 Steps, Shared Actor Critic, Adam $\beta_2=0.95$, No Dropout)",
+    r"PPO (OpenRLHF, 1 Step, Shared Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+    # "PPO (OpenRLHF, 1 Step, Cosine LR)",
+    r"PPO (OpenRLHF, 4 Steps, Separate Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+    r"PPO (OpenRLHF, 4 Steps, Separate Actor Critic, Adam $\beta_2=0.95$, With Dropout)",
+    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Adam $\beta_2=0.95$, No Dropout)",
+    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Adam $\beta_2=0.95$, With Dropout)",
+    # "PPO (OpenRLHF, Modulation Param)",
 
+]
 
 # make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_04-22")
 # make_table(load_prefixes_sent1_nnonly, twist_learn_method_names, proposal_names, "sent1_nnonly_04-20")
 # make_table(load_prefixes_plasttok15_10, twist_learn_method_names, proposal_names, "plast15_10_04-22")
 # make_table(load_prefixes_plasttok2_1, twist_learn_method_names, proposal_names, "plast2_1_04-22")
 # NOTE THE FIG NAME MATTERS FOR INFILLING
-
-
 
 make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_11-30")
 

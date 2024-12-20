@@ -796,10 +796,10 @@ class PPOTrainer(BaseTrainer):
             # print(self.config.backward_batch_size)
             # print(self.config.mini_batch_size)
             # print(b_inds)
-            torch.save(self.model.v_head.summary.weight.data,
-                       f"vhead_weight_{ppo_epoch}.pt")
-            torch.save(self.model.v_head.summary.bias.data,
-                       f"vhead_bias_{ppo_epoch}.pt")
+            # torch.save(self.model.v_head.summary.weight.data,
+            #            f"vhead_weight_{ppo_epoch}.pt")
+            # torch.save(self.model.v_head.summary.bias.data,
+            #            f"vhead_bias_{ppo_epoch}.pt")
 
             for backward_batch_start in range(0, bs, self.config.backward_batch_size):
                 backward_batch_end = backward_batch_start + self.config.backward_batch_size
@@ -849,13 +849,13 @@ class PPOTrainer(BaseTrainer):
                             condition_twist_on_tokens=condition_twist_on_tokens_shuffled
                         )
 
-                        print("Log probs, logits, vpreds")
-                        print(logprobs)
-                        print(logits)
-                        print(vpreds)
-
-                        print("MINI BATCH DICT")
-                        print(mini_batch_dict)
+                        # print("Log probs, logits, vpreds")
+                        # print(logprobs)
+                        # print(logits)
+                        # print(vpreds)
+                        #
+                        # print("MINI BATCH DICT")
+                        # print(mini_batch_dict)
 
                         train_stats = self.train_minibatch(
                             mini_batch_dict["logprobs"],
@@ -877,7 +877,6 @@ class PPOTrainer(BaseTrainer):
                 if early_stop:
                     break
 
-        # 1/0  # TODO REMOVE LATER DEBUG ONLY remove also all the additional print statements I added
 
         timing["time/ppo/optimize_step"] = time.time() - t
 
@@ -1100,7 +1099,7 @@ class PPOTrainer(BaseTrainer):
         return (
             torch.cat(all_logprobs),
             torch.cat(all_logits)[:, :-1] if return_logits else None,
-            torch.cat(all_values)[:, :-1],
+            torch.cat(all_values)[:, :-1], # Right, reason why we do this: in the last token state, where you have the full generation: you are no longer taking any actions. You don't need the value in that state, to compare against rewards or whatever, because there are no further actions to be taken. Once all the 8 or whatever initial prompt tokens are given, your model outputs a value. This is the value for the initial state, which you then take an action corresponding to a token generation, then for that generated token, you do r + next val - curr val, and the curr value is the one based on the 8 prompt tokens you generated, ie in the 8th position (index 7 via 0 indexing). So yeah, the 7 index (8th value counting from 1) should already be used.
             torch.cat(all_masks)[:, :-1],
         )
 
@@ -1208,16 +1207,16 @@ class PPOTrainer(BaseTrainer):
         advantages_reversed = []
         gen_len = rewards.shape[-1]
 
-        print("ADVANTAGE COMPUTATION")
-        print("ADV-REWARDS")
-        print(rewards)
-        print(mask)
+        # print("ADVANTAGE COMPUTATION")
+        # print("ADV-REWARDS")
+        # print(rewards)
+        # print(mask)
 
         values = values * mask
         rewards = rewards * mask
 
-        print("ADV-REWARDS2")
-        print(rewards)
+        # print("ADV-REWARDS2")
+        # print(rewards)
 
         if self.config.whiten_rewards:
             rewards = masked_whiten(rewards, mask, shift_mean=False)
@@ -1229,19 +1228,19 @@ class PPOTrainer(BaseTrainer):
             advantages_reversed.append(lastgaelam)
         advantages = torch.stack(advantages_reversed[::-1]).transpose(0, 1)
 
-        print("ADV-ADV BEFORE WHITEN")
-        print(advantages)
+        # print("ADV-ADV BEFORE WHITEN")
+        # print(advantages)
 
         returns = advantages + values
         advantages = masked_whiten(advantages, mask)
         advantages = advantages.detach()
 
-        print("ADV-RETURNS")
-        print(returns)
-        print("ADV-VALUES")
-        print(values)
-        print("ADV-ADV")
-        print(advantages)
+        # print("ADV-RETURNS")
+        # print(returns)
+        # print("ADV-VALUES")
+        # print(values)
+        # print("ADV-ADV")
+        # print(advantages)
 
         return values, advantages, returns
 
@@ -1285,21 +1284,21 @@ class PPOTrainer(BaseTrainer):
         vf_loss = 0.5 * masked_mean(torch.max(vf_losses1, vf_losses2), mask)
         vf_clipfrac = masked_mean(torch.gt(vf_losses2, vf_losses1).float(), mask)
 
-        print("VALUE FUNCTION LOSSES")
-        print(vpreds)
-        print(returns)
-        print(vf_losses1)
-        print(vf_losses2)
-        print(masked_mean(torch.max(vf_losses1, vf_losses2), mask))
-        print(vf_loss)
-        print(self.config.vf_coef)
+        # print("VALUE FUNCTION LOSSES")
+        # print(vpreds)
+        # print(returns)
+        # print(vf_losses1)
+        # print(vf_losses2)
+        # print(masked_mean(torch.max(vf_losses1, vf_losses2), mask))
+        # print(vf_loss)
+        # print(self.config.vf_coef)
 
         ratio = torch.exp(logprobs - old_logprobs)
 
-        print("RATIO")
-        print(ratio)
-        print("ADVANTAGES")
-        print(advantages)
+        # print("RATIO")
+        # print(ratio)
+        # print("ADVANTAGES")
+        # print(advantages)
 
         pg_losses = -advantages * ratio
         pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - self.config.cliprange, 1.0 + self.config.cliprange)
@@ -1307,17 +1306,17 @@ class PPOTrainer(BaseTrainer):
         pg_loss = masked_mean(torch.max(pg_losses, pg_losses2), mask)
         pg_clipfrac = masked_mean(torch.gt(pg_losses2, pg_losses).float(), mask)
 
-        print("PG LOSSES")
-        print(pg_losses)
-        print(pg_losses2)
-        print(torch.max(pg_losses, pg_losses2))
-        print(masked_mean(torch.max(pg_losses, pg_losses2).abs(), mask))
-        print(pg_loss)
+        # print("PG LOSSES")
+        # print(pg_losses)
+        # print(pg_losses2)
+        # print(torch.max(pg_losses, pg_losses2))
+        # print(masked_mean(torch.max(pg_losses, pg_losses2).abs(), mask))
+        # print(pg_loss)
 
         loss = pg_loss + self.config.vf_coef * vf_loss
 
-        print("FINAL LOSS")
-        print(loss)
+        # print("FINAL LOSS")
+        # print(loss)
 
         avg_ratio = masked_mean(ratio, mask).item()
         if avg_ratio > self.config.ratio_threshold:

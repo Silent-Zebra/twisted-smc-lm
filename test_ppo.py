@@ -627,6 +627,15 @@ def main():
             )
 
 
+    if args.save_ckpt:
+        extra_str = "_"
+        if args.hface_nn_twist:
+            extra_str += "nntwist_"
+        if args.only_train_nn_head:
+            extra_str += "onlytrainnnhead_"
+        if args.separate_twist:
+            extra_str += "separatetwist_"
+        torch.save(model, f"ppo_model{extra_str}epochs{args.epochs}_lr{args.lr}_seed{args.seed}")
 
 
 
@@ -636,9 +645,9 @@ if __name__ == "__main__":
     # For PPO only
     parser.add_argument("--lr", type=float, default=0.0001)
 
-    parser.add_argument("--beta1", type=float, help="Adam beta1", default=0.9)
-    parser.add_argument("--beta2", type=float, help="Adam beta2", default=0.99)
-    parser.add_argument("--weight_decay", type=float, help="AdamW weight decay", default=0.0)
+    # parser.add_argument("--beta1", type=float, help="Adam beta1", default=0.9)
+    # parser.add_argument("--beta2", type=float, help="Adam beta2", default=0.99)
+    # parser.add_argument("--weight_decay", type=float, help="AdamW weight decay", default=0.0)
 
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--print_every", type=int, default=1)
@@ -687,6 +696,9 @@ if __name__ == "__main__":
     parser.add_argument("--no_test_info", action="store_true", help="Only do twist training. Basically only for debug/testing. In general, don't use this flag.")
     parser.add_argument("--only_train_nn_head", action="store_true", help="Only train twist head modifier for PPO")
     parser.add_argument("--separate_twist", action="store_true")
+    parser.add_argument("--save_ckpt", action="store_true", help="Save the actor and critic")
+    parser.add_argument("--save_dir", type=str, default='.', help="Where to save the actor/critic")
+
 
     args = parser.parse_args()
 
