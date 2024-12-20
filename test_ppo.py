@@ -246,7 +246,8 @@ def main():
         batch_size=batch_size,
         mini_batch_size=batch_size,
         adap_kl_ctrl=False,
-        ppo_epochs=args.ppo_epochs
+        ppo_epochs=args.ppo_epochs,
+        vf_coef=args.vf_coef
     )
 
     # print(args.lr)
@@ -754,6 +755,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save the actor/critic")
     parser.add_argument("--threshold", type=float, default=-5., help="The threshold for the toxicity score")
     parser.add_argument("--ppo_epochs", type=int, default=4, help="Num of PPO inner loop iterations")
+    parser.add_argument("--vf_coef", type=float, default=0.1, help="Coefficient on value func loss relative to policy loss")
 
 
     args = parser.parse_args()
