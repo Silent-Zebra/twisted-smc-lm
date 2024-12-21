@@ -1032,6 +1032,8 @@ def inspect_and_record_evidence_setting_for_index(
     proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None, tokenizer=None):
 
+    # TODO DEC 2024 START HERE TO MODIFY PLOTTING WITH PPO CRITIC...
+
     assert true_posterior_samples.shape[0] > 0
 
     print("NUM true posterior samples:")
@@ -1770,7 +1772,6 @@ def setup_model_and_params(
 
         huggingface_model = model.__call__
 
-
     return rng_key, params_p, params_twist, optimizer_twist, optim_twist_state, huggingface_model
 
 
@@ -1778,7 +1779,7 @@ def setup_cfg(
     n_vocab, twist_learn_type, rm_type, seed, hface_model_type, lr_twist,
     beta1, beta2, weight_decay, n_layers_twist,
     output_len, n_samples_at_a_time,
-    beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_dirs=None,
+    beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_OpenRLHF_ckpt=False, load_dirs=None,
     load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
     num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
     num_samples_if_only_collect_true_posterior_samples=100,
@@ -1845,7 +1846,15 @@ def setup_cfg(
         assert load_ckpt # must load the proposal, as we are not training it.
 
     if load_ckpt:
-        params_twist, params_proposal = load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model,
+        if load_OpenRLHF_ckpt:
+            params_proposal = None
+            import torch
+            x = torch.load(f"{load_dir_ckpt}/{load_prefix}")
+            print(x)
+            1/0
+            params_twist = None #TODO
+        else:
+            params_twist, params_proposal = load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model,
                   separate_proposal_and_twist, params_twist, params_proposal)
 
     print("Starting building final twists and getting posterior samples", flush=True)
@@ -2193,7 +2202,8 @@ def main():
         "seed": args.seed, "hface_model_type": args.hface_model_type, "lr_twist": args.lr_twist,
         "beta1": args.beta1, "beta2": args.beta2, "weight_decay": args.weight_decay,
         "n_layers_twist": args.n_layers_twist, "output_len": args.output_len, "n_samples_at_a_time": args.n_samples_at_a_time_for_true_post,
-        "beta_temp": args.beta_temp, "threshold": args.threshold, "pos_threshold": args.pos_threshold, "load_ckpt": args.load_ckpt,
+        "beta_temp": args.beta_temp, "threshold": args.threshold, "pos_threshold": args.pos_threshold,
+        "load_ckpt": args.load_ckpt, "load_OpenRLHF_ckpt": args.load_OpenRLHF_ckpt,
         "load_dirs": (args.load_dir_ckpt, args.load_dir_posterior_samples),
         "load_prefix": args.load_prefix_ckpt, "hface_nn_twist": args.hface_nn_twist, "separate_hface_twist_model": args.separate_hface_twist_model,
         "num_last_tokens_to_condition_on": args.num_last_tokens_to_condition_on, "only_collect_true_posterior_samples": False,
@@ -2438,6 +2448,8 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
     parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
+    parser.add_argument("--load_OpenRLHF_ckpt", action="store_true", help="specifically use OpenRLHF PPO")
+
     parser.add_argument("--load_dir_ckpt", type=str, default='.', help="Where to load from for checkpoint")
     parser.add_argument("--load_prefix_ckpt", type=str, default='.')
     parser.add_argument("--load_posterior_samples", action="store_true", help="load posterior samples from saved checkpoint instead of creating new ones")
