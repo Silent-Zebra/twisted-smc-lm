@@ -1857,8 +1857,13 @@ def setup_cfg(
             print("State dict")
             print(state_dict)
 
+            new_state_dict = {}
+            for key, value in state_dict.items():
+                new_key = key.replace('transformer.', '')
+                new_state_dict[new_key] = value
+
             print("Keys in state_dict:")
-            for key in state_dict.keys():
+            for key in new_state_dict.keys():
                 print(key)
 
             # Initialize the Hugging Face model
@@ -1874,7 +1879,7 @@ def setup_cfg(
             for x in model.named_parameters():
                 print(x)
 
-            missing_keys, unexpected_keys = model.load_state_dict(state_dict,
+            missing_keys, unexpected_keys = model.load_state_dict(new_state_dict,
                                                                   strict=False)
             print("Missing keys:", missing_keys)
             print("Unexpected keys:", unexpected_keys)
