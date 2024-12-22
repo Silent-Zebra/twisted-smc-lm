@@ -667,6 +667,13 @@ def smc_scan_iter_non_final(
 
     if OpenRLHF_ckpt:
         # plug in the PPO critic evaluation as the twists
+        import torch
+        print("--HERE--")
+        print(full_seq)
+        print("--HERE2--")
+        print(params_twist['model'])
+        print("--HERE3--")
+        print(torch.tensor(full_seq))
         final_activations = params_twist['model'](full_seq)
         log_r_psi_t_eval = final_activations @ params_twist['value_head']
         print(log_p_theta_1_to_t_eval.shape)
