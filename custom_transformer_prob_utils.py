@@ -991,9 +991,11 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     # else:
     # New implementation: do the below always, (proposal always from twists, to avoid absurd amounts of calculation on n_vocab * batch number of seqs for the reward model)
     # If using final twist (ie. sigma samples, the positive samples), the only difference will be in the psi_t_eval later:
-
+    params_twist_to_use = params_twist
+    if proposal_is_p:
+        params_twist_to_use = None
     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
-        rng_key, full_seq, params_p, params_twist, prompt_len, t,
+        rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
         condition_twist_on_tokens,  proposal_is_p=proposal_is_p,
         huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample,
         tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal
