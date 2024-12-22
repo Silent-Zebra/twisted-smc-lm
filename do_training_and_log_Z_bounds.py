@@ -2024,8 +2024,6 @@ def do_inspection_and_plotting_of_test_info(
             "OpenRLHF_ckpt": OpenRLHF_ckpt
         }
 
-        if args.load_OpenRLHF_ckpt:
-            assert args.proposal_is_p_for_plots # Only use proposal p in this setting
 
         if args.proposal_is_p_for_plots and args.hface_model_type in [
             "gpt2medium", "gpt2large"]:
@@ -2621,5 +2619,9 @@ if __name__ == "__main__":
 
     if args.output_p_psi:
         assert args.separate_hface_twist_model
+
+    if args.load_OpenRLHF_ckpt:
+        assert args.proposal_is_p_for_plots  # Only use proposal p in this setting
+        assert args.proposal_is_p
 
     main()
