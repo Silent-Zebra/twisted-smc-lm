@@ -579,7 +579,7 @@ class ExperimentConfig:
         true_posterior_samples_by_prompt_and_by_token, prompt_num,
         plot_over_time_list, save_dir, seed, exp_num_twist_updates, twist_updates_per_epoch,
         tokenizer=None, proposal_scores_list=None,
-        kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_ckpt=False
+        kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_ckpt=False, load_prefix_ckpt=None
     ):
         # prompt_len = prompt.shape[-1]
         rng_key, sk = jax.random.split(rng_key)
@@ -608,6 +608,7 @@ class ExperimentConfig:
             "exp_num_twist_updates": exp_num_twist_updates,
             "twist_updates_per_epoch": twist_updates_per_epoch,
             "OpenRLHF_ckpt": OpenRLHF_ckpt,
+            "load_prefix_ckpt": load_prefix_ckpt,
         }
 
 
@@ -1370,7 +1371,7 @@ def get_and_plot_logZ_bounds(
     rng_key, true_posterior_samples, prompt, output_len,
     params_p, params_twist, log_true_final_twist, start, epoch,
     plot_over_time_list, smc_procedure_type, save_dir, twist_learn_type, rm_type, seed,
-    exp_num_twist_updates, twist_updates_per_epoch,
+    exp_num_twist_updates, twist_updates_per_epoch, load_prefix_ckpt,
     proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
     proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_ckpt=False
@@ -1477,7 +1478,7 @@ def get_and_plot_logZ_bounds(
         )
 
     save_logZ_bounds_plot(
-        plt_xlabel_text, x_range, save_dir, epoch_starting_from_0, seed, twist_learn_type,
+        plt_xlabel_text, x_range, save_dir, epoch_starting_from_0, load_prefix_ckpt,
         n_samples_for_plots,
         logZ_ubs_iwae_across_samples_time_trueposts,
         logZ_lbs_iwae_across_samples_time_trueposts,
@@ -1957,7 +1958,7 @@ def do_inspection_and_plotting_of_test_info(
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir, seed,
-    exp_num_twist_updates, twist_updates_per_epoch, OpenRLHF_ckpt
+    exp_num_twist_updates, twist_updates_per_epoch, OpenRLHF_ckpt, load_prefix_ckpt
 ):
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
@@ -2044,7 +2045,8 @@ def do_inspection_and_plotting_of_test_info(
             "seed": seed,
             "exp_num_twist_updates": exp_num_twist_updates,
             "twist_updates_per_epoch": twist_updates_per_epoch,
-            "OpenRLHF_ckpt": OpenRLHF_ckpt
+            "OpenRLHF_ckpt": OpenRLHF_ckpt,
+            "load_prefix_ckpt": load_prefix_ckpt
         }
 
 
@@ -2367,7 +2369,7 @@ def main():
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
                     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
                     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.seed,
-                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.load_OpenRLHF_ckpt
+                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.load_OpenRLHF_ckpt, args.load_prefix_ckpt
                 )
 
             # ----- DO TWIST UPDATES -----
@@ -2414,7 +2416,8 @@ def main():
                         args.seed,
                         args.exp_num_twist_updates,
                         args.twist_updates_per_epoch,
-                        args.load_OpenRLHF_ckpt
+                        args.load_OpenRLHF_ckpt,
+                        args.load_prefix_ckpt
                     )
 
             prompt_num += 1

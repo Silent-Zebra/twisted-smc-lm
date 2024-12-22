@@ -61,8 +61,15 @@ elif plot_type == "toxthresh":
     load_pref_p_32_512_ess = "logZ_bounds_pproposal_2024-02-12_23-43_seed1_ebm_one_sample_nsamples1_1"
     load_pref_p_128_2048_ess = "logZ_bounds_pproposal_2024-02-12_23-52_seed1_ebm_one_sample_nsamples1_2"
 
+    load_pref_p_1_8_ppo = "logZ_bounds_pproposal_2024-12-22_02-55_seed1_ppo_nsamples1_8"
+    load_pref_p_4_16_ppo = "logZ_bounds_pproposal_2024-12-22_02-58_seed1_ppo_nsamples4_16"
+    load_pref_p_32_512_ppo = "logZ_bounds_pproposal_2024-12-22_04-38_seed1_ppo_nsamples32_512"
+    load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_2024-12-22_04-38_seed1_ppo_nsamples32_512" # TODO UPDATE
+
     plot_ess = True
-    figname = f"./fig_bounds_with_ess_toxt_-5_04-03.pdf"
+    figname = f"./fig_bounds_with_ess_ppo_toxt_-5_12-22.pdf"
+
+    # figname = f"./fig_bounds_with_ess_toxt_-5_04-03.pdf"
 
     # plot_ess = False
     # figname = f"./fig_bounds_no_ess_toxt_-5_04-03.pdf"
@@ -157,9 +164,30 @@ elif plot_type == "toxthresh":
         load_pref_p_32_512_ess)
     p_iwae_ubs_128_ess, p_iwae_ubs_2048_ess, p_iwae_lbs_128_ess, p_iwae_lbs_2048_ess, p_smc_ubs_128_ess, p_smc_ubs_2048_ess, p_smc_lbs_128_ess, p_smc_lbs_2048_ess = load_ckpt(
         load_pref_p_128_2048_ess)
+    p_smc_ubs_ess = np.transpose(np.stack(
+        [p_smc_ubs_1_ess, p_smc_ubs_4_ess, p_smc_ubs_8_ess, p_smc_ubs_16_ess,
+         p_smc_ubs_32_ess, p_smc_ubs_128_ess, p_smc_ubs_512_ess,
+         p_smc_ubs_2048_ess]))
+    p_smc_lbs_ess = np.transpose(np.stack(
+        [p_smc_lbs_1_ess, p_smc_lbs_4_ess, p_smc_lbs_8_ess, p_smc_lbs_16_ess,
+         p_smc_lbs_32_ess, p_smc_lbs_128_ess, p_smc_lbs_512_ess,
+         p_smc_lbs_2048_ess]))
 
-    p_smc_ubs_ess = np.transpose(np.stack([p_smc_ubs_1_ess, p_smc_ubs_4_ess, p_smc_ubs_8_ess, p_smc_ubs_16_ess, p_smc_ubs_32_ess, p_smc_ubs_128_ess, p_smc_ubs_512_ess, p_smc_ubs_2048_ess]))
-    p_smc_lbs_ess = np.transpose(np.stack([p_smc_lbs_1_ess, p_smc_lbs_4_ess, p_smc_lbs_8_ess, p_smc_lbs_16_ess, p_smc_lbs_32_ess, p_smc_lbs_128_ess, p_smc_lbs_512_ess, p_smc_lbs_2048_ess]))
+    p_iwae_ubs_1_ppo, p_iwae_ubs_8_ppo, p_iwae_lbs_1_ppo, p_iwae_lbs_8_ppo, p_smc_ubs_1_ppo, p_smc_ubs_8_ppo, p_smc_lbs_1_ppo, p_smc_lbs_8_ppo = load_ckpt(
+        load_pref_p_1_8_ppo)
+    p_iwae_ubs_4_ppo, p_iwae_ubs_16_ppo, p_iwae_lbs_4_ppo, p_iwae_lbs_16_ppo, p_smc_ubs_4_ppo, p_smc_ubs_16_ppo, p_smc_lbs_4_ppo, p_smc_lbs_16_ppo = load_ckpt(
+        load_pref_p_4_16_ppo)
+    p_iwae_ubs_32_ppo, p_iwae_ubs_512_ppo, p_iwae_lbs_32_ppo, p_iwae_lbs_512_ppo, p_smc_ubs_32_ppo, p_smc_ubs_512_ppo, p_smc_lbs_32_ppo, p_smc_lbs_512_ppo = load_ckpt(
+        load_pref_p_32_512_ppo)
+    p_iwae_ubs_128_ppo, p_iwae_ubs_2048_ppo, p_iwae_lbs_128_ppo, p_iwae_lbs_2048_ppo, p_smc_ubs_128_ppo, p_smc_ubs_2048_ppo, p_smc_lbs_128_ppo, p_smc_lbs_2048_ppo = load_ckpt(
+        load_pref_p_128_2048_ppo)
+    p_smc_ubs_ppo = np.transpose(np.stack([p_smc_ubs_1_ppo, p_smc_ubs_4_ppo, p_smc_ubs_8_ppo, p_smc_ubs_16_ppo,
+                                           p_smc_ubs_32_ppo, p_smc_ubs_128_ppo, p_smc_ubs_512_ppo, p_smc_ubs_2048_ppo
+                                           ]))
+    p_smc_lbs_ppo = np.transpose(np.stack([p_smc_lbs_1_ppo, p_smc_lbs_4_ppo, p_smc_lbs_8_ppo, p_smc_lbs_16_ppo,
+                                           p_smc_lbs_32_ppo, p_smc_lbs_128_ppo, p_smc_lbs_512_ppo, p_smc_lbs_2048_ppo
+                                           ]))
+
 
 elif plot_type == "sent_dpg_comparison":
     t_iwae_ubs_1_dpg, t_iwae_ubs_8_dpg, t_iwae_lbs_1_dpg, t_iwae_lbs_8_dpg, t_smc_ubs_1_dpg, t_smc_ubs_8_dpg, t_smc_lbs_1_dpg, t_smc_lbs_8_dpg = load_ckpt(
@@ -321,6 +349,22 @@ else:
                 p_smc_lbs_ess[:, start_from:], x_range, label=f"SMC ESS LB ($p_0$ Proposal)",
                 color=color_list_for_lbs[4],
                 linestyle=linestyle_list_for_lbs[4],
+            )
+
+        plot_ppo = True
+        if plot_ppo:
+            last, conf_bound = plot_with_conf_bounds(
+                p_smc_ubs_ppo[:, start_from:], x_range,
+                label=f"SMC PPO UB ($p_0$ Proposal)",
+                color=color_list_for_ubs[5],
+                linestyle=linestyle_list_for_ubs[5],
+            )
+
+            last, conf_bound = plot_with_conf_bounds(
+                p_smc_lbs_ppo[:, start_from:], x_range,
+                label=f"SMC PPO LB ($p_0$ Proposal)",
+                color=color_list_for_lbs[5],
+                linestyle=linestyle_list_for_lbs[5],
             )
 
 
