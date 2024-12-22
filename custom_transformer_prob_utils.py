@@ -683,7 +683,14 @@ def smc_scan_iter_non_final(
         print(final_activations)
         print(final_activations.shape)
         print(params_twist['value_head'].t().shape)
-        log_r_psi_t_eval = final_activations @ params_twist['value_head'].t()
+        print("--HERE3.5--")
+        print(torch_full_seq[:, prompt_len + t - 1])
+        print(torch_full_seq[:, prompt_len + t])
+        print(torch_full_seq[:, prompt_len + t + 1])
+
+        # final_activation = final_activations[:, prompt_len + t] # TODO
+
+        log_r_psi_t_eval = final_activations @ params_twist['value_head'].squeeze()
         print("--HERE4--")
         print(log_p_theta_1_to_t_eval.shape)
         print(log_r_psi_t_eval.shape) # should be same
