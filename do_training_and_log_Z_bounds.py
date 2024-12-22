@@ -1395,7 +1395,7 @@ def get_and_plot_logZ_bounds(
             lst.append([])
 
     inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index_jit
-    if smc_procedure_type == "partial_jit" or print_smc_samples:
+    if smc_procedure_type in ["partial_jit", "debug"] or print_smc_samples:
         inspect_and_record_evidence_setting_fn = inspect_and_record_evidence_setting_for_index
 
     logZ_ubs_iwae_across_samples_and_trueposts, logZ_lbs_iwae_across_samples_and_trueposts, \
