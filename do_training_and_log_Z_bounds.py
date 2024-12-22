@@ -1091,23 +1091,26 @@ def inspect_and_record_evidence_setting_for_index(
     kl_q_sigma_iwae_lower_bound_estimate = iwae_lower_bound_estimate - f_q_estimate
 
 
-    rng_key, sk_smc = jax.random.split(rng_key)
-    (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list, log_w_t_before_resample_list) = smc_procedure(
-        sk_smc, prompt, params_p,
-        params_twist,
-        log_true_final_twist,
-        output_len,
-        n_test_smc_samples,
-        smc_procedure_type=smc_procedure_type,
-        condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        params_proposal=params_proposal, resample=True, get_intermediate_sample_history_based_on_learned_twists=True,
-        OpenRLHF_ckpt=OpenRLHF_ckpt
-    )
 
-    smc_lower_bound_estimate = log_z_hat_t
+    rng_key, sk_smc = jax.random.split(rng_key)
+
+
 
     if print_smc_samples:
+        (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list,
+                                           log_w_t_before_resample_list) = smc_procedure(
+            sk_smc, prompt, params_p,
+            params_twist,
+            log_true_final_twist,
+            output_len,
+            n_test_smc_samples,
+            smc_procedure_type=smc_procedure_type,
+            condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+            params_proposal=params_proposal, resample=True,
+            get_intermediate_sample_history_based_on_learned_twists=True,
+            OpenRLHF_ckpt=OpenRLHF_ckpt
+        )
 
         print("log wts")
         for x in log_w_t_list:
@@ -1131,7 +1134,21 @@ def inspect_and_record_evidence_setting_for_index(
             for full_seq in full_seq_list:
                 text_outputs = tokenizer.batch_decode(full_seq, skip_special_tokens=True)
                 print(text_outputs)
-
+    else:
+        (_, log_z_hat_t, _), smc_samples = smc_procedure(
+            sk_smc, prompt, params_p,
+            params_twist,
+            log_true_final_twist,
+            output_len,
+            n_test_smc_samples,
+            smc_procedure_type=smc_procedure_type,
+            condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
+            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+            params_proposal=params_proposal, resample=True,
+            get_intermediate_sample_history_based_on_learned_twists=False,
+            OpenRLHF_ckpt=OpenRLHF_ckpt
+        )
+    smc_lower_bound_estimate = log_z_hat_t
 
     rng_key, sk_smc = jax.random.split(rng_key)
     smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
@@ -1171,7 +1188,8 @@ inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argn
 
 
 def collect_info_across_trueposts(
-    rng_key, start, n_trueposts_for_evals, n_samples_for_plots, inspect_and_record_evidence_setting_fn,
+    rng_key, start, n_trueposts_for_evals, n_samples_for_plots,
+    inspect_and_record_evidence_setting_fn,
     prompt, params_p, params_twist,
     output_len, log_true_final_twist, true_posterior_samples,
     smc_procedure_type, proposal_is_p,
