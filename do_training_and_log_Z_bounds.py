@@ -1857,17 +1857,27 @@ def setup_cfg(
             print("State dict")
             print(state_dict)
 
+            print("Keys in state_dict:")
+            for key in state_dict.keys():
+                print(key)
+
             # Initialize the Hugging Face model
             model = AutoModel.from_pretrained(
                 'roneneldan/TinyStories-33M') # TODO later make this dynamic
+
+            print("Keys in Hugging Face model:")
+            for name, _ in model.named_parameters():
+                print(name)
 
             print("Model before")
             print(model)
             for x in model.named_parameters():
                 print(x)
 
-            # Load state_dict into the Hugging Face model
-            model.load_state_dict(state_dict, strict=False)
+            missing_keys, unexpected_keys = model.load_state_dict(state_dict,
+                                                                  strict=False)
+            print("Missing keys:", missing_keys)
+            print("Unexpected keys:", unexpected_keys)
 
             print("Model after")
             print(model)
