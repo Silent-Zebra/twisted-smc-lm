@@ -681,9 +681,9 @@ def smc_scan_iter_non_final(
         print(model_output)
         final_activations = model_output.last_hidden_state.to(params_twist['value_head'].device)
         print(final_activations)
-        print(final_activations.device)
-        print(params_twist['value_head'].device)
-        log_r_psi_t_eval = final_activations @ params_twist['value_head']
+        print(final_activations.shape)
+        print(params_twist['value_head'].t().shape)
+        log_r_psi_t_eval = final_activations @ params_twist['value_head'].t()
         print("--HERE4--")
         print(log_p_theta_1_to_t_eval.shape)
         print(log_r_psi_t_eval.shape) # should be same
