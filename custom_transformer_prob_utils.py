@@ -644,9 +644,12 @@ def smc_scan_iter_non_final(
     log_w_t_minus_1 = log_w_t
 
     # print(log_w_t)
+    params_twist_to_use = params_twist
+    if OpenRLHF_ckpt:
+        params_twist_to_use = None
 
     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
-        rng_key, full_seq, params_p, params_twist, prompt_len, t,
+        rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
         condition_twist_on_tokens,  proposal_is_p=proposal_is_p,
         huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample,
         tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal
@@ -663,13 +666,15 @@ def smc_scan_iter_non_final(
 
 
     if OpenRLHF_ckpt:
+        # plug in the PPO critic evaluation as the twists
         final_activations = params_twist['model'](full_seq)
         log_r_psi_t_eval = final_activations @ params_twist['value_head']
         print(log_p_theta_1_to_t_eval.shape)
         print(log_r_psi_t_eval.shape) # should be same
+        print(log_r_psi_t_eval)
+        # May have to do some conversions between torch and numpy/jax
         1/0
-        # TODO DEC 2024
-        # plug in the PPO critic evaluation as the twists
+
 
     else:
 

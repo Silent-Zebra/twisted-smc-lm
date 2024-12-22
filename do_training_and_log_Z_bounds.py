@@ -1037,8 +1037,6 @@ def inspect_and_record_evidence_setting_for_index(
     proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None, tokenizer=None, OpenRLHF_ckpt=False):
 
-    # TODO DEC 2024 START HERE TO MODIFY PLOTTING WITH PPO CRITIC...
-
     assert true_posterior_samples.shape[0] > 0
 
     print("NUM true posterior samples:")
@@ -1897,7 +1895,6 @@ def setup_cfg(
 
             params_twist = {'model': model, 'value_head': new_state_dict['value_head.weight']}
 
-            # TODO also load the value head weight...
             print("params_twist loaded using OpenRLHF model")
             print(params_twist)
             # params_twist = None
