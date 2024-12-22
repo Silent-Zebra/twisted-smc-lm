@@ -1228,7 +1228,7 @@ def collect_info_across_trueposts(
                 n_test_smc_samples,
                 true_posterior_samples,
                 smc_procedure_type,
-                proposal_is_p,
+                proposal_is_p=proposal_is_p,
                 condition_twist_on_tokens=condition_twist_on_tokens,
                 huggingface_model=huggingface_model,
                 index_of_true_posterior_sample=truepost_i,
@@ -2048,8 +2048,7 @@ def do_inspection_and_plotting_of_test_info(
         }
 
 
-        if args.proposal_is_p_for_plots and args.hface_model_type in [
-            "gpt2medium", "gpt2large"]:
+        if args.proposal_is_p_for_plots or args.proposal_is_p:
             plot_args['proposal_is_p'] = True
 
         rng_key, plot_over_time_list = experiment_cfg.get_and_plot_logZ_bounds_based_on_cfg(
