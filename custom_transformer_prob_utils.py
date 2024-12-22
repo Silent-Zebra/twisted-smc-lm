@@ -698,7 +698,7 @@ def smc_scan_iter_non_final(
         print(log_r_psi_t_eval.shape) # should be same
         print(log_r_psi_t_eval)
         # convert back to jax afterwards
-        log_r_psi_t_eval = jnp.array(log_r_psi_t_eval.cpu().numpy())
+        log_r_psi_t_eval = jnp.array(log_r_psi_t_eval.cpu().detach().numpy())
 
     else:
 
