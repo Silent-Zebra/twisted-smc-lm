@@ -1847,10 +1847,26 @@ def setup_cfg(
 
     if load_ckpt:
         if load_OpenRLHF_ckpt:
+            assert separate_hface_twist_model
             params_proposal = None
             import torch
+            from transformers import AutoModelForSequenceClassification
             x = torch.load(f"{load_dir_ckpt}/{load_prefix}")
-            print(x)
+
+            state_dict = x['module']
+            print("State dict")
+            print(state_dict)
+
+            # Initialize the Hugging Face model
+            model = AutoModelForSequenceClassification.from_pretrained(
+                'roneneldan/TinyStories-33M') # TODO later make this dynamic
+
+            # Load state_dict into the Hugging Face model
+            model.load_state_dict(state_dict, strict=False)
+
+            print("Model")
+            print(model)
+
             1/0
             params_twist = None #TODO
         else:
