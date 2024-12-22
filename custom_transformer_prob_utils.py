@@ -677,11 +677,16 @@ def smc_scan_iter_non_final(
         print("--HERE3--")
         torch_full_seq = torch.tensor(np.array(full_seq))
         print(torch_full_seq)
-        final_activations = params_twist['model'](torch_full_seq)
+        model_output = params_twist['model'](torch_full_seq)
+        print(model_output)
+        final_activations = model_output.last_hidden_state
+        print(final_activations)
         log_r_psi_t_eval = final_activations @ params_twist['value_head']
+        print("--HERE4--")
         print(log_p_theta_1_to_t_eval.shape)
         print(log_r_psi_t_eval.shape) # should be same
         print(log_r_psi_t_eval)
+        # TODO convert back to jax afterwards
         # May have to do some conversions between torch and numpy/jax
         1/0
 
