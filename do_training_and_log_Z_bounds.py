@@ -2395,6 +2395,8 @@ def main():
             )
 
             plot_and_print_at_end = True
+            if args.twist_updates_per_epoch == 0:
+                plot_and_print_at_end = False # Don't duplicate this if no twist updates made
             if plot_and_print_at_end and (epoch + 1 == args.epochs) and (not args.no_test_info):
                 rng_key, plot_over_time_list, plot_over_time_list_p_proposal = \
                     do_inspection_and_plotting_of_test_info(
