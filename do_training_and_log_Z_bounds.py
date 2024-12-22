@@ -700,6 +700,8 @@ class ExperimentConfig:
             "toxicity_threshold", "sentiment_threshold"
         ]: # TODO consider set up a set of final twist classes, sort them into classes, and then do if/else/switch based on those
 
+
+
             _, smc_samples, (intermediate_seq_list, _, _) = smc_procedure(**smc_args)
 
             proposal_samples = intermediate_seq_list[-1]
@@ -1963,57 +1965,60 @@ def do_inspection_and_plotting_of_test_info(
     proposal_scores = None
     kl_vals = None
     f_qs = None
-    for truepost_i in range(n_trueposts_for_evals):
-        # DO inspect samples regardless of whether we plot logZ bounds or not
-        rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
-            rng_key, prompt, params_p,
-            params_twist, log_true_final_twist,
-            output_len,
-            n_samples_for_plots_larger,
-            indices_of_continuation, tokenizer,
-            proposal_is_p=proposal_is_p,
-            huggingface_model=huggingface_model,
-            params_proposal=params_proposal,
-            OpenRLHF_ckpt=OpenRLHF_ckpt
-        )
-        if proposal_scores is None:
-            proposal_scores = proposal_scores_for_seed
-            kl_vals = kl_vals_for_seed
-        else:
-            proposal_scores = jnp.concatenate(
-                (proposal_scores, proposal_scores_for_seed), axis=0)
-            kl_vals = jnp.concatenate((kl_vals, kl_vals_for_seed), axis=0)
 
+
+    if not OpenRLHF_ckpt: # Don't do inspection for PPO critic
+        for truepost_i in range(n_trueposts_for_evals):
+            # DO inspect samples regardless of whether we plot logZ bounds or not
+            rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
+                rng_key, prompt, params_p,
+                params_twist, log_true_final_twist,
+                output_len,
+                n_samples_for_plots_larger,
+                indices_of_continuation, tokenizer,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model,
+                params_proposal=params_proposal,
+                OpenRLHF_ckpt=OpenRLHF_ckpt
+            )
+            if proposal_scores is None:
+                proposal_scores = proposal_scores_for_seed
+                kl_vals = kl_vals_for_seed
+            else:
+                proposal_scores = jnp.concatenate(
+                    (proposal_scores, proposal_scores_for_seed), axis=0)
+                kl_vals = jnp.concatenate((kl_vals, kl_vals_for_seed), axis=0)
+
+            if args.rm_type in ["p_last_tokens",
+                                "sent_cond_twist"] and args.beta_temp == 1.:
+                g_q_estimates, f_q_estimates = aux_info
+
+                if f_qs is None:
+                    f_qs = f_q_estimates
+                else:
+                    f_qs = jnp.concatenate((f_qs, f_q_estimates), axis=0)
+
+        print("shapes of f_q, scores, kl")
         if args.rm_type in ["p_last_tokens",
                             "sent_cond_twist"] and args.beta_temp == 1.:
-            g_q_estimates, f_q_estimates = aux_info
+            print(f_qs.shape)
+            f_q_estimates_list.append(f_qs)
+            print("Avg F_q")
+            print(f_qs.mean())
+        print(proposal_scores.shape)
+        print(kl_vals.shape)
+        print("Avg reward")
+        print(proposal_scores.mean())
+        print("Avg KL to prior")
+        print(kl_vals.mean())
 
-            if f_qs is None:
-                f_qs = f_q_estimates
-            else:
-                f_qs = jnp.concatenate((f_qs, f_q_estimates), axis=0)
-
-    print("shapes of f_q, scores, kl")
-    if args.rm_type in ["p_last_tokens",
-                        "sent_cond_twist"] and args.beta_temp == 1.:
-        print(f_qs.shape)
-        f_q_estimates_list.append(f_qs)
-        print("Avg F_q")
-        print(f_qs.mean())
-    print(proposal_scores.shape)
-    print(kl_vals.shape)
-    print("Avg reward")
-    print(proposal_scores.mean())
-    print("Avg KL to prior")
-    print(kl_vals.mean())
-
-    proposal_scores_list.append(proposal_scores)
-    kl_to_prior_list.append(kl_vals)
-    # TODO DEC: should clean this up by having various config flags for each experiment setting:
-    # E.g. has_true_posterior_samples, then whenever that's true, you do the bunch of code related to that
-    # And then do_inspect_results, for which you do the below
-    # use_partial_jit
-    # etc.
+        proposal_scores_list.append(proposal_scores)
+        kl_to_prior_list.append(kl_vals)
+        # TODO DEC: should clean this up by having various config flags for each experiment setting:
+        # E.g. has_true_posterior_samples, then whenever that's true, you do the bunch of code related to that
+        # And then do_inspect_results, for which you do the below
+        # use_partial_jit
+        # etc.
 
     if true_posterior_samples_by_token is not None:  # Then do plotting of logZ bounds # TODO should consider replacing with true_posterior_samples_by_prompt_and_by_token as true_posterior_samples_by_token is unused in the below now
 
