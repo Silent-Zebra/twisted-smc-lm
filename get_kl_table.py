@@ -115,12 +115,19 @@ load_prefixes_toxc = [
 
     ],
     [
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed1",
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed2",
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed3",
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed4",
-    "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed5",
-    ],
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_adambetas0.9_0.95__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_adambetas0.9_0.95__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_adambetas0.9_0.95__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_adambetas0.9_0.95__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_adambetas0.9_0.95__seed5"
+    ], # Used to be 1e-06, 1e-07
+    # [
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed1",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed2",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed3",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed4",
+    # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-07_seed5",
+    # ],
     # [
     # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed1",
     # "f_q_g_q_iwae_bounds_OpenRLHF_PPO_lrscheduleconstant_actorlr1e-06_criticlr1e-06_actormodbase_seed2",

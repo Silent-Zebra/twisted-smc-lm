@@ -48,7 +48,7 @@ def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twis
 
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
-                 sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False
+                 sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False, OpenRLHF_ckpt=False
     ):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
@@ -84,6 +84,9 @@ class ExperimentConfig:
             self.smc_procedure_type = "partial_jit"
         else:
             self.smc_procedure_type = "jit"
+
+        if OpenRLHF_ckpt:
+            self.smc_procedure_type = "debug"
 
         self.twist_grad_fn = self._get_twist_grad_fn()
 
@@ -275,7 +278,7 @@ class ExperimentConfig:
     def _get_sigma_samples_and_cond_tokens_infilling(
         self, rng_key, params_p, prompt, output_len, n_twist, huggingface_model,
         params_twist, log_true_final_twist,
-        proposal_is_p, params_proposal
+        proposal_is_p, params_proposal, OpenRLHF_ckpt=False
     ):
         if self.beta_temp != 1.:
             assert "ebm" in self.twist_learn_type
@@ -328,7 +331,8 @@ class ExperimentConfig:
                     posterior_sample=true_posterior_sample,
                     proposal_is_p=proposal_is_p,
                     huggingface_model=huggingface_model,
-                    params_proposal=params_proposal
+                    params_proposal=params_proposal,
+                    OpenRLHF_ckpt=OpenRLHF_ckpt
                 )  # Note these are not really true sigma samples, but whatever, I just call them true_sigma_samples
 
             else:
@@ -381,7 +385,7 @@ class ExperimentConfig:
     def get_grad_params_twist(self, rng_key, prompt, n_twist, output_len,
                               params_p, params_twist, log_true_final_twist,
                               proposal_is_p=False, huggingface_model=None,
-                              tempered_twist=False, beta_prop=None, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None):
+                              tempered_twist=False, beta_prop=None, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None, OpenRLHF_ckpt=False):
 
         true_sigma_samples = None
         condition_twist_on_tokens = None
@@ -515,7 +519,7 @@ class ExperimentConfig:
                 rng_key, params_p, prompt, output_len, n_twist,
                 huggingface_model,
                 params_twist, log_true_final_twist,
-                proposal_is_p, params_proposal
+                proposal_is_p, params_proposal, OpenRLHF_ckpt
             )
 
         elif self.rm_type == "sent_cond_twist":
@@ -551,7 +555,7 @@ class ExperimentConfig:
                      output_len, params_p, params_twist,
                      log_true_final_twist, proposal_is_p, huggingface_model,
                      optimizer_twist, optim_twist_state,
-                     tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts, params_proposal=None
+                     tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts, params_proposal=None, OpenRLHF_ckpt=False
                      ):
 
         rng_key, grad_params_twist = self.get_grad_params_twist(
@@ -562,7 +566,7 @@ class ExperimentConfig:
             huggingface_model=huggingface_model,
             tempered_twist=tempered_twist, beta_prop=beta_prop,
             replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts,
-            params_proposal=params_proposal
+            params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt
         )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
 
         params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
@@ -575,7 +579,7 @@ class ExperimentConfig:
         true_posterior_samples_by_prompt_and_by_token, prompt_num,
         plot_over_time_list, save_dir, seed, exp_num_twist_updates, twist_updates_per_epoch,
         tokenizer=None, proposal_scores_list=None,
-        kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None
+        kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_ckpt=False
     ):
         # prompt_len = prompt.shape[-1]
         rng_key, sk = jax.random.split(rng_key)
@@ -603,6 +607,7 @@ class ExperimentConfig:
             "seed": seed,
             "exp_num_twist_updates": exp_num_twist_updates,
             "twist_updates_per_epoch": twist_updates_per_epoch,
+            "OpenRLHF_ckpt": OpenRLHF_ckpt,
         }
 
 
@@ -657,8 +662,7 @@ class ExperimentConfig:
     def inspect_results(
         self, rng_key, prompt, params_p, params_twist,
         log_true_final_twist, output_len, n_samples, indices_of_continuation, tokenizer,
-
-        proposal_is_p, huggingface_model, params_proposal=None):
+        proposal_is_p, huggingface_model, params_proposal=None, OpenRLHF_ckpt=False):
 
         rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
 
@@ -684,7 +688,8 @@ class ExperimentConfig:
             "get_intermediate_sample_history_based_on_learned_twists": True,
             "proposal_is_p": proposal_is_p,
             "huggingface_model": huggingface_model,
-            "params_proposal": params_proposal
+            "params_proposal": params_proposal,
+            "OpenRLHF_ckpt": OpenRLHF_ckpt
         }
 
         if self.rm_type in [
@@ -1030,7 +1035,7 @@ def inspect_and_record_evidence_setting_for_index(
     n_test_smc_samples, true_posterior_samples,
     smc_procedure_type,
     proposal_is_p=False,
-    condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None, tokenizer=None):
+    condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None, tokenizer=None, OpenRLHF_ckpt=False):
 
     # TODO DEC 2024 START HERE TO MODIFY PLOTTING WITH PPO CRITIC...
 
@@ -1067,9 +1072,8 @@ def inspect_and_record_evidence_setting_for_index(
         output_len, n_test_smc_samples,
         smc_procedure_type=smc_procedure_type,
          condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
-
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        params_proposal=params_proposal
+        params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt
     )
     iwae_lower_bound_estimate = jax.nn.logsumexp(
         iwae_log_w_lower) - jnp.log(
@@ -1097,10 +1101,10 @@ def inspect_and_record_evidence_setting_for_index(
         output_len,
         n_test_smc_samples,
         smc_procedure_type=smc_procedure_type,
-         condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
-
+        condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        params_proposal=params_proposal, resample=True, get_intermediate_sample_history_based_on_learned_twists=True
+        params_proposal=params_proposal, resample=True, get_intermediate_sample_history_based_on_learned_twists=True,
+        OpenRLHF_ckpt=OpenRLHF_ckpt
     )
 
     smc_lower_bound_estimate = log_z_hat_t
@@ -1140,9 +1144,8 @@ def inspect_and_record_evidence_setting_for_index(
                                             n_test_smc_samples,
                                             smc_procedure_type=smc_procedure_type,
                                              condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
-
                                             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                                            params_proposal=params_proposal)
+                                            params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt)
 
 
     kl_q_sigma_smc_upper_bound_estimate = smc_upper_bound_estimate - f_q_estimate
@@ -1162,7 +1165,7 @@ def inspect_and_record_evidence_setting_for_index(
 
 inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argnames=[
     "log_true_final_twist", 'output_len', 'n_test_smc_samples', "proposal_is_p",
-    "huggingface_model", "smc_procedure_type", "tokenizer"
+    "huggingface_model", "smc_procedure_type", "tokenizer", "OpenRLHF_ckpt"
 ])(inspect_and_record_evidence_setting_for_index)
 
 
@@ -1180,7 +1183,8 @@ def collect_info_across_trueposts(
     logZ_lbs_iwae_across_samples_and_trueposts,
     logZ_ubs_smc_across_samples_and_trueposts,
     logZ_lbs_smc_across_samples_and_trueposts,
-    list_of_stuff_across_trueposts_only_largest_n_samples
+    list_of_stuff_across_trueposts_only_largest_n_samples,
+    OpenRLHF_ckpt=False
 ):
     iwae_lbs = []
     iwae_ubs = []
@@ -1210,7 +1214,8 @@ def collect_info_across_trueposts(
                 condition_twist_on_tokens=condition_twist_on_tokens,
                 huggingface_model=huggingface_model,
                 index_of_true_posterior_sample=truepost_i,
-                params_proposal=params_proposal, tokenizer=tokenizer
+                params_proposal=params_proposal, tokenizer=tokenizer,
+                OpenRLHF_ckpt=OpenRLHF_ckpt
             )
             (iwae_upper_bound_estimate, iwae_lower_bound_estimate,
              smc_upper_bound_estimate, smc_lower_bound_estimate,
@@ -1350,7 +1355,7 @@ def get_and_plot_logZ_bounds(
     exp_num_twist_updates, twist_updates_per_epoch,
     proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
-    proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None,
+    proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_ckpt=False
 ):
 
     print(f"Sampling Runs Starting")
@@ -1379,20 +1384,21 @@ def get_and_plot_logZ_bounds(
     logZ_ubs_smc_across_samples_and_trueposts, logZ_lbs_smc_across_samples_and_trueposts, \
     list_of_stuff_across_trueposts_only_largest_n_samples = \
         collect_info_across_trueposts(
-        rng_key, start, n_trueposts_for_evals, n_samples_for_plots,
-        inspect_and_record_evidence_setting_fn,
-        prompt, params_p, params_twist,
-        output_len, log_true_final_twist,
-        true_posterior_samples,
-        smc_procedure_type, proposal_is_p,
-        condition_twist_on_tokens, huggingface_model,
-        params_proposal, tokenizer,
-        logZ_ubs_iwae_across_samples_and_trueposts,
-        logZ_lbs_iwae_across_samples_and_trueposts,
-        logZ_ubs_smc_across_samples_and_trueposts,
-        logZ_lbs_smc_across_samples_and_trueposts,
-        list_of_stuff_across_trueposts_only_largest_n_samples
-    )
+            rng_key, start, n_trueposts_for_evals, n_samples_for_plots,
+            inspect_and_record_evidence_setting_fn,
+            prompt, params_p, params_twist,
+            output_len, log_true_final_twist,
+            true_posterior_samples,
+            smc_procedure_type, proposal_is_p,
+            condition_twist_on_tokens, huggingface_model,
+            params_proposal, tokenizer,
+            logZ_ubs_iwae_across_samples_and_trueposts,
+            logZ_lbs_iwae_across_samples_and_trueposts,
+            logZ_ubs_smc_across_samples_and_trueposts,
+            logZ_lbs_smc_across_samples_and_trueposts,
+            list_of_stuff_across_trueposts_only_largest_n_samples,
+            OpenRLHF_ckpt
+        )
 
     for n in range(len(n_samples_for_plots)):
         logZ_ubs_iwae_across_samples_and_trueposts[n] = np.stack(logZ_ubs_iwae_across_samples_and_trueposts[n])
@@ -1777,8 +1783,7 @@ def setup_model_and_params(
 
 def setup_cfg(
     n_vocab, twist_learn_type, rm_type, seed, hface_model_type, lr_twist,
-    beta1, beta2, weight_decay, n_layers_twist,
-    output_len, n_samples_at_a_time,
+    beta1, beta2, weight_decay, n_layers_twist, output_len, n_samples_at_a_time,
     beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_OpenRLHF_ckpt=False, load_dirs=None,
     load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
     num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
@@ -1796,7 +1801,8 @@ def setup_cfg(
         num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
         sentiment_class=sentiment_class,
         n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
-        train_on_true_posterior_samples=train_on_true_posterior_samples
+        train_on_true_posterior_samples=train_on_true_posterior_samples,
+        OpenRLHF_ckpt=load_OpenRLHF_ckpt
     )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
@@ -1889,8 +1895,15 @@ def setup_cfg(
             for x in model.named_parameters():
                 print(x)
 
-            1/0
-            params_twist = None #TODO
+            params_twist = {'model': model, 'value_head': new_state_dict['value_head.weight']}
+
+            # TODO also load the value head weight...
+            print("params_twist loaded using OpenRLHF model")
+            print(params_twist)
+            # params_twist = None
+            # Can try just setting params_twist as a custom class and handle that with some checks
+            # Or should I instead redefine the huggingface model? Start from the innermost function call and work outwards
+            # See what structure would make the most sense
         else:
             params_twist, params_proposal = load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model,
                   separate_proposal_and_twist, params_twist, params_proposal)
@@ -1927,7 +1940,7 @@ def do_inspection_and_plotting_of_test_info(
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir, seed,
-    exp_num_twist_updates, twist_updates_per_epoch
+    exp_num_twist_updates, twist_updates_per_epoch, OpenRLHF_ckpt
 ):
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
@@ -1945,7 +1958,8 @@ def do_inspection_and_plotting_of_test_info(
             indices_of_continuation, tokenizer,
             proposal_is_p=proposal_is_p,
             huggingface_model=huggingface_model,
-            params_proposal=params_proposal
+            params_proposal=params_proposal,
+            OpenRLHF_ckpt=OpenRLHF_ckpt
         )
         if proposal_scores is None:
             proposal_scores = proposal_scores_for_seed
@@ -2009,8 +2023,12 @@ def do_inspection_and_plotting_of_test_info(
             "save_dir": save_dir,
             "seed": seed,
             "exp_num_twist_updates": exp_num_twist_updates,
-            "twist_updates_per_epoch": twist_updates_per_epoch
+            "twist_updates_per_epoch": twist_updates_per_epoch,
+            "OpenRLHF_ckpt": OpenRLHF_ckpt
         }
+
+        if args.load_OpenRLHF_ckpt:
+            assert args.proposal_is_p_for_plots # Only use proposal p in this setting
 
         if args.proposal_is_p_for_plots and args.hface_model_type in [
             "gpt2medium", "gpt2large"]:
@@ -2019,12 +2037,13 @@ def do_inspection_and_plotting_of_test_info(
         rng_key, plot_over_time_list = experiment_cfg.get_and_plot_logZ_bounds_based_on_cfg(
             **plot_args)
 
-        if args.hface_model_type not in ["gpt2medium", "gpt2large"]:
+        if not plot_args['proposal_is_p']:
+            if args.hface_model_type not in ["gpt2medium", "gpt2large"]:
 
-            plot_args['proposal_is_p'] = True
-            plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
-            rng_key, plot_over_time_list_p_proposal = experiment_cfg.get_and_plot_logZ_bounds_based_on_cfg(
-                **plot_args)  # Use the same unchanged rng_key
+                plot_args['proposal_is_p'] = True
+                plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
+                rng_key, plot_over_time_list_p_proposal = experiment_cfg.get_and_plot_logZ_bounds_based_on_cfg(
+                    **plot_args)  # Use the same unchanged rng_key
 
     return rng_key, plot_over_time_list, plot_over_time_list_p_proposal
 
@@ -2044,7 +2063,7 @@ def do_twist_updates(
     replay_buffers_by_prompt, replay_buffer_log_w_ts_by_prompt,
     replay_buffer_log_prob_eval_by_prompt,
     print_every_twist_updates,
-    n_twist, optimizer_twist, optim_twist_state
+    n_twist, optimizer_twist, optim_twist_state, OpenRLHF_ckpt=False
 ):
     num_twist_updates_to_do = twist_updates_per_epoch
 
@@ -2055,6 +2074,10 @@ def do_twist_updates(
             num_twist_updates_to_do = 2 ** epoch
 
     for twist_update in range(num_twist_updates_to_do):
+
+        if OpenRLHF_ckpt:
+            raise NotImplementedError # Twist training not yet setup for this PPO critic...
+
 
         if use_replay_buffer:
             from sandbox.experimental_code import \
@@ -2106,7 +2129,8 @@ def do_twist_updates(
             "optim_twist_state": optim_twist_state,
             "tempered_twist": tempered_twist, "beta_prop": beta_prop,
             "replay_buffer": replay_buffer,
-            "params_proposal": params_proposal
+            "params_proposal": params_proposal,
+            "OpenRLHF_ckpt": OpenRLHF_ckpt
         }
 
         if "ebm" in experiment_cfg.twist_learn_type:
@@ -2326,7 +2350,7 @@ def main():
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
                     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
                     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.seed,
-                    args.exp_num_twist_updates, args.twist_updates_per_epoch
+                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.load_OpenRLHF_ckpt
                 )
 
             # ----- DO TWIST UPDATES -----
@@ -2350,7 +2374,7 @@ def main():
                 replay_buffers_by_prompt, replay_buffer_log_w_ts_by_prompt,
                 replay_buffer_log_prob_eval_by_prompt,
                 args.print_every_twist_updates,
-                args.n_twist, optimizer_twist, optim_twist_state
+                args.n_twist, optimizer_twist, optim_twist_state, args.load_OpenRLHF_ckpt
             )
 
             plot_and_print_at_end = True
@@ -2370,7 +2394,8 @@ def main():
                         plot_over_time_list_p_proposal, args.save_dir,
                         args.seed,
                         args.exp_num_twist_updates,
-                        args.twist_updates_per_epoch
+                        args.twist_updates_per_epoch,
+                        args.load_OpenRLHF_ckpt
                     )
 
             prompt_num += 1
