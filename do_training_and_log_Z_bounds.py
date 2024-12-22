@@ -1850,7 +1850,7 @@ def setup_cfg(
             assert separate_hface_twist_model
             params_proposal = None
             import torch
-            from transformers import AutoModelForSequenceClassification
+            from transformers import AutoModel
             x = torch.load(f"{load_dir_ckpt}/{load_prefix}")
 
             state_dict = x['module']
@@ -1858,14 +1858,21 @@ def setup_cfg(
             print(state_dict)
 
             # Initialize the Hugging Face model
-            model = AutoModelForSequenceClassification.from_pretrained(
+            model = AutoModel.from_pretrained(
                 'roneneldan/TinyStories-33M') # TODO later make this dynamic
+
+            print("Model before")
+            print(model)
+            for x in model.named_parameters():
+                print(x)
 
             # Load state_dict into the Hugging Face model
             model.load_state_dict(state_dict, strict=False)
 
-            print("Model")
+            print("Model after")
             print(model)
+            for x in model.named_parameters():
+                print(x)
 
             1/0
             params_twist = None #TODO
