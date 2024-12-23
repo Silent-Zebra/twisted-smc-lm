@@ -2359,6 +2359,21 @@ def main():
             else:
                 true_posterior_samples_by_token = None
 
+
+            if args.load_OpenRLHF_ckpt:
+                import torch
+                import numpy as np
+                print("--Using PPO Critic as Twist--")
+                torch_full_seq = torch.tensor(np.array(true_posterior_samples_by_token))
+                model_output = params_twist['model'](torch_full_seq)
+                final_activations = model_output.last_hidden_state.to(
+                    params_twist['value_head'].device)
+                log_psi = final_activations[:, prompt.shape[-1]:] @ params_twist[
+                    'value_head'].squeeze()
+                print("VALUE ON TRUE POSTERIOR SAMPLES FOR EVERY PARTIAL SEQUENCE")
+                print(log_psi) # TODO DEBUG ONLY REMOVE LATER
+                1/0
+
             # ----- DO plotting and inspection of test info before the twist updates -----
             if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
                 rng_key, plot_over_time_list, plot_over_time_list_p_proposal = \
