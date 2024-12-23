@@ -64,10 +64,18 @@ elif plot_type == "toxthresh":
     load_pref_p_1_8_ppo = "logZ_bounds_pproposal_2024-12-22_02-55_seed1_ppo_nsamples1_8"
     load_pref_p_4_16_ppo = "logZ_bounds_pproposal_2024-12-22_02-58_seed1_ppo_nsamples4_16"
     load_pref_p_32_512_ppo = "logZ_bounds_pproposal_2024-12-22_04-38_seed1_ppo_nsamples32_512"
-    load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_2024-12-22_04-38_seed1_ppo_nsamples32_512" # TODO UPDATE
+    load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_2024-12-22_09-18_seed1_ppo_nsamples128_2048"
 
+    # load_pref_p_1_8_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr0.0_criticlr0.0001__seed1_critic_nsamples1_8_0"
+    # load_pref_p_4_16_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr0.0_criticlr0.0001__seed1_critic_nsamples4_16_0"
+    # load_pref_p_32_512_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr0.0_criticlr0.0001__seed1_critic_nsamples32_512_0"
+    # load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_2024-12-22_09-18_seed1_ppo_nsamples128_2048" # TODO EDIT
+    load_pref_p_1_8_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples1_8_0"
+    load_pref_p_4_16_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples4_16_0"
+    load_pref_p_32_512_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples32_512_0"
+    load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_2024-12-22_09-18_seed1_ppo_nsamples128_2048"  # TODO EDIT
     plot_ess = True
-    figname = f"./fig_bounds_with_ess_ppo_toxt_-5_12-22.pdf"
+    figname = f"./fig_bounds_with_ess_ppo_toxt_-5_12-23.pdf"
 
     # figname = f"./fig_bounds_with_ess_toxt_-5_04-03.pdf"
 
