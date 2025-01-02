@@ -283,7 +283,7 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt,
                           )
     print("Inputs")
     print(inputs)
-    print(inputs.shape)
+    print(inputs['input_ids'].shape)
 
     score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
     score = jnp.array(score.numpy())
