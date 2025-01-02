@@ -138,6 +138,46 @@ load_prefixes_toxc = [
 
 ]
 
+
+load_prefixes_toxc_ppo = [
+    load_prefixes_toxc[0],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0_adambetas0.9_0.95__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0_adambetas0.9_0.95__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0_adambetas0.9_0.95__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0_criticlossmse_adambetas0.9_0.95__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0_criticlossmse_adambetas0.9_0.95__seed5"
+    ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse_adambetas0.9_0.95__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse_adambetas0.9_0.95__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse_adambetas0.9_0.95__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse_adambetas0.9_0.95__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse_adambetas0.9_0.95__seed5"
+
+    ],
+    # [
+    #     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossctl_adambetas0.9_0.95__seed1",
+    #     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossctl_adambetas0.9_0.95__seed2",
+    #     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossctl_adambetas0.9_0.95__seed3",
+    #     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossctl_adambetas0.9_0.95__seed5"
+    # ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-05_criticlossctl_adambetas0.9_0.95__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-05_criticlossctl_adambetas0.9_0.95__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-05_criticlossctl_adambetas0.9_0.95__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-05_criticlossctl_adambetas0.9_0.95__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-05_criticlossctl_adambetas0.9_0.95__seed5"
+    ],
+    [
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_criticlosssixo_adambetas0.9_0.95__seed1",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_criticlosssixo_adambetas0.9_0.95__seed2",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_criticlosssixo_adambetas0.9_0.95__seed3",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_criticlosssixo_adambetas0.9_0.95__seed4",
+        "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr1e-06_criticlosssixo_adambetas0.9_0.95__seed5"
+    ]
+]
+
 load_prefixes_sent1_nnonly = [
     ["f_q_g_q_logZbestmidpoint_info_2024-04-22_01-34_seed0_ebm_one_sample_nsamples11",
     "f_q_g_q_logZbestmidpoint_info_2024-04-22_01-57_seed2_ebm_one_sample_nsamples11",
@@ -599,42 +639,67 @@ proposal_names = [
 # make_table(load_prefixes_plasttok2_1, twist_learn_method_names, proposal_names, "plast2_1_04-22")
 # NOTE THE FIG NAME MATTERS FOR INFILLING
 
-make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_11-30")
+
+# make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_11-30")
+# -------------
 
 
-twist_learn_method_names = [
-    r"Contrastive",
-    r"",
-    r"RL",
-    r"",
-    r"SIXO",
-    r"",
-    "--",
-    "",
-]
-proposal_names = [
-    "Twisted",
-    "Twisted",
-    "Twisted",
-    "Twisted",
-    "Twisted",
-    "Twisted",
-    "DPG",
-    "DPG",
-]
 
-plot_names = [
-    r"Twisted Proposal (Contrastive, Exact $\sigma$)",
-    r"Twisted Proposal (Contrastive)",
-    r"Twisted Proposal (RL, Exact $\sigma$)",
-    r"Twisted Proposal (RL)",
-    r"Twisted Proposal (SIXO, Exact $\sigma$)",
-    r"Twisted Proposal (SIXO)",
-    r"DPG Proposal (Exact $\sigma$)",
-    r"DPG Proposal",
-]
-
+#
+# twist_learn_method_names = [
+#     r"Contrastive",
+#     r"",
+#     r"RL",
+#     r"",
+#     r"SIXO",
+#     r"",
+#     "--",
+#     "",
+# ]
+# proposal_names = [
+#     "Twisted",
+#     "Twisted",
+#     "Twisted",
+#     "Twisted",
+#     "Twisted",
+#     "Twisted",
+#     "DPG",
+#     "DPG",
+# ]
+#
+# plot_names = [
+#     r"Twisted Proposal (Contrastive, Exact $\sigma$)",
+#     r"Twisted Proposal (Contrastive)",
+#     r"Twisted Proposal (RL, Exact $\sigma$)",
+#     r"Twisted Proposal (RL)",
+#     r"Twisted Proposal (SIXO, Exact $\sigma$)",
+#     r"Twisted Proposal (SIXO)",
+#     r"DPG Proposal (Exact $\sigma$)",
+#     r"DPG Proposal",
+# ]
 
 # make_table(load_prefixes_tox_truepost_comparison, twist_learn_method_names, proposal_names, "toxc_truepost_04-22", exact_num_epochs=6, legendsize=6)
 # make_table(load_prefixes_sent_truepost_comparison, twist_learn_method_names, proposal_names, "sent_truepost_04-22", exact_num_epochs=9, legendsize=6)
 
+
+
+
+twist_learn_method_names = [
+    "Twisted",
+    "--",
+    "--",
+    "--",
+    "--",
+
+]
+
+# All constant LR for now
+proposal_names = [
+    r"Twisted Proposal (Contrastive, Exact $\sigma$)",
+    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Critic LR 0.0)",
+    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Squared Error (RL) Critic Loss, LR 1e-4)",
+    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, CTL Critic Loss, LR 1e-5)",
+    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, SIXO Critic Loss, LR 1e-6)",
+]
+
+make_table(load_prefixes_toxc_ppo, twist_learn_method_names, proposal_names, "toxc_ppo_12-31")

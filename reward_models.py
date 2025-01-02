@@ -264,6 +264,34 @@ def curried_log_toxicity_threshold(rewardModel, tokenizer_RM, tokenizer, thresho
     return new_rm
 
 
+def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt, reward_cap):
+    if len(seq.shape) == 3:
+        raise NotImplementedError
+
+    print("PROMPT SHAPE")
+    print(jnp_prompt.shape)
+
+    prompt_len = jnp_prompt.shape[-1]
+    answer_seq = jax.lax.stop_gradient(seq[:, prompt_len:])
+    text_question = tokenizer.batch_decode(jnp.full((seq.shape[0], prompt_len), jnp_prompt), skip_special_tokens=True)
+    text_answer = tokenizer.batch_decode(answer_seq, skip_special_tokens=True)
+    inputs = tokenizer_RM(text_question, text_answer,
+                          return_tensors="pt",
+                          )
+
+    score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
+    score = jnp.array(score.numpy())
+
+    score = jnp.minimum(score, reward_cap)
+
+    return score
+
+def curried_log_exp_beta_reward_model_toy_rlhf(rewardModel, tokenizer_RM, tokenizer, beta_temp, jnp_prompt, reward_cap):
+    def new_rm(seq):
+        return beta_temp * reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt, reward_cap)
+    return new_rm
+
+
 def log_exp_beta_toxicity(
     seq, rewardModel, tokenizer_RM, tokenizer, beta_temp,
 ):
@@ -455,6 +483,85 @@ def build_rew_p_of_continuation_twists(jnp_prompts, params_p, indices_of_continu
         log_true_final_twists.append(log_true_final_twist)
 
     return log_true_final_twists, None
+
+
+
+def build_toy_rlhf_twists(
+    rng_key, params_p, output_len, n_samples_at_a_time, huggingface_model,
+    reward_cap, jnp_prompts, rewardModel,
+    tokenizer_RM, tokenizer, beta_temp, get_true_posterior_samples=False,
+):
+    log_true_final_twists = []
+    true_posterior_samples_by_prompt = []
+
+    for jnp_prompt in jnp_prompts:
+        log_true_final_twist = curried_log_exp_beta_reward_model_toy_rlhf(rewardModel, tokenizer_RM, tokenizer, beta_temp, jnp_prompt=jnp_prompt, reward_cap=reward_cap)
+        log_true_final_twists.append(log_true_final_twist)
+
+        if get_true_posterior_samples:
+
+            num_posterior_samples = 0
+
+            # Now we have the capped reward formulation with a given cap
+            # And we are going to use rejection sampling
+            # p is the base distribution, and we are targeting the unnormalized density p e^(beta capped_reward) w
+            # Where capped_reward = min(reward_cap, r)
+            # Then, since we know the cap on the reward r
+            # we can use the maximum constant of M = e^(beta reward_cap)
+            # Then we can calculate the acceptance probability as:
+            # p e^(beta capped_reward) / M * p = e^(beta capped_reward) / M
+            # = e^(beta capped_reward - beta reward_cap)
+            # = e^(beta(capped_reward - reward_cap)) <= 1 (assuming positive beta, which is a requirement here)
+
+            while num_posterior_samples == 0:
+                rng_key, sk = jax.random.split(rng_key)
+                p_samples = stochastic_transformer_sample(
+                    sk, params_p, jnp_prompt, output_len,
+                    n_samples_at_a_time, huggingface_model=huggingface_model
+                )
+
+                capped_rewards = reward_model_toy_rlhf(p_samples, rewardModel, tokenizer_RM, tokenizer, jnp_prompt, reward_cap)
+                acceptance_probs = jnp.exp(beta_temp * (capped_rewards - reward_cap))
+
+                print("Acceptance Probs")
+                print(p_samples)
+                print(acceptance_probs)
+                print(acceptance_probs.shape)
+
+                # TODO get true or false based on acceptance probs
+                # Can do this by just generating uniform random and seeing which ones are lower than the acceptance probs
+                rng_key, sk = jax.random.split(rng_key)
+                uniform_0_1_vals = jax.random.uniform(sk, shape=(acceptance_probs.shape))
+                samples_to_accept = (uniform_0_1_vals < acceptance_probs)
+
+                print(uniform_0_1_vals)
+                print(samples_to_accept)
+
+                posterior_samples = p_samples[samples_to_accept]
+
+                num_posterior_samples = \
+                posterior_samples.shape[0]
+                print("NUM samples", flush=True)
+                print(num_posterior_samples)
+
+            print(posterior_samples)
+            print(posterior_samples.shape)
+            print(log_true_final_twist(posterior_samples))
+            print(log_true_final_twist(p_samples[:10]))
+            if tokenizer is not None:
+                text_outputs = tokenizer.batch_decode(
+                    posterior_samples,
+                    skip_special_tokens=True)
+                print(text_outputs)
+                text_outputs = tokenizer.batch_decode(p_samples[:10],
+                                                      skip_special_tokens=True)
+                print(text_outputs)
+
+            true_posterior_samples_by_prompt.append(
+                posterior_samples)
+
+    return rng_key, log_true_final_twists, true_posterior_samples_by_prompt
+
 
 
 def build_exp_beta_twists(

@@ -24,7 +24,7 @@ from utils import *
 matplotlib.use('PDF')
 
 import matplotlib.pyplot as plt
-from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
+from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification, AutoModelForSequenceClassification
 import copy
 from custom_transformer_prob_utils import *
 from reward_models import *
@@ -80,7 +80,7 @@ class ExperimentConfig:
         self.num_last_tokens_to_condition_on = num_last_tokens_to_condition_on
 
 
-        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob", "sentiment_threshold", "exp_beta_sentiment_class_logprob", "sent_cond_twist"]:
+        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob", "sentiment_threshold", "exp_beta_sentiment_class_logprob", "sent_cond_twist", "toy_rlhf"]:
             self.smc_procedure_type = "partial_jit"
         else:
             self.smc_procedure_type = "jit"
@@ -97,7 +97,7 @@ class ExperimentConfig:
         standard_argnum = 3 # For the params_twist argument
 
         get_l_ebm_fn = get_l_ebm_ml_jit
-        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob", "sentiment_threshold", "exp_beta_sentiment_class_logprob", "sent_cond_twist"]:
+        if self.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob", "sentiment_threshold", "exp_beta_sentiment_class_logprob", "sent_cond_twist", "toy_rlhf"]:
             get_l_ebm_fn = get_l_ebm_ml_partial_jit
 
         if self.twist_learn_type == "ebm_old":
@@ -385,7 +385,9 @@ class ExperimentConfig:
     def get_grad_params_twist(self, rng_key, prompt, n_twist, output_len,
                               params_p, params_twist, log_true_final_twist,
                               proposal_is_p=False, huggingface_model=None,
-                              tempered_twist=False, beta_prop=None, replay_buffer=None, replay_buffer_log_w_ts=None, params_proposal=None, OpenRLHF_ckpt=False):
+                              tempered_twist=False, beta_prop=None, replay_buffer=None,
+                              replay_buffer_log_w_ts=None, params_proposal=None, OpenRLHF_ckpt=False,
+                              reward_cap=None, n_samples_for_cap=None):
 
         true_sigma_samples = None
         condition_twist_on_tokens = None
@@ -505,7 +507,7 @@ class ExperimentConfig:
                 rng_key, self, [prompt], params_p, self.rm_type,
                 output_len, n_twist, huggingface_model,
                 None, self.rewardModel, self.tokenizer_RM, self.tokenizer, None, None,
-                n_twist
+                n_twist, reward_cap=reward_cap, n_samples_for_cap=n_samples_for_cap
             )
             true_sigma_samples = combined_true_posterior_samples[0]
 
@@ -555,7 +557,8 @@ class ExperimentConfig:
                      output_len, params_p, params_twist,
                      log_true_final_twist, proposal_is_p, huggingface_model,
                      optimizer_twist, optim_twist_state,
-                     tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts, params_proposal=None, OpenRLHF_ckpt=False
+                     tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts,
+                     params_proposal=None, OpenRLHF_ckpt=False, reward_cap=None
                      ):
 
         rng_key, grad_params_twist = self.get_grad_params_twist(
@@ -566,7 +569,7 @@ class ExperimentConfig:
             huggingface_model=huggingface_model,
             tempered_twist=tempered_twist, beta_prop=beta_prop,
             replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts,
-            params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt
+            params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt, reward_cap=reward_cap
         )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
 
         params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
@@ -614,7 +617,7 @@ class ExperimentConfig:
 
         if args.rm_type in ["toxicity_threshold", "sentiment_threshold",
                             "p_continuation", "hard_p_continuation",
-                            "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"]:
+                            "exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob", "toy_rlhf"]:
             true_posterior_samples = true_posterior_samples_by_prompt_and_by_token[
                 prompt_num]
 
@@ -698,7 +701,7 @@ class ExperimentConfig:
             "p_continuation", "hard_p_continuation",
             "exp_beta_toxicity_class_logprob",
             "exp_beta_sentiment_class_logprob",
-            "toxicity_threshold", "sentiment_threshold"
+            "toxicity_threshold", "sentiment_threshold", "toy_rlhf"
         ]: # TODO consider set up a set of final twist classes, sort them into classes, and then do if/else/switch based on those
 
 
@@ -919,7 +922,7 @@ class ExperimentConfig:
         self, rng_key, jnp_prompts, params_p, rm_type, output_len,
         n_samples_at_a_time, huggingface_model=None,
         indices_of_continuation=None, rewardModel=None, tokenizer_RM=None,
-        tokenizer=None, threshold=0, pos_threshold=True, get_true_posterior_samples=True
+        tokenizer=None, threshold=0, pos_threshold=True, get_true_posterior_samples=True, reward_cap=None
     ):
 
         if rm_type == "exp_beta_rew_p_continuation":
@@ -963,7 +966,16 @@ class ExperimentConfig:
                     curried_log_true_final_twist_function, jnp_prompts, rewardModel,
                     tokenizer_RM, tokenizer, self.beta_temp, class_num, get_true_posterior_samples, singledimlogit=True
                 )
-
+        elif rm_type == "toy_rlhf":
+            rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token = \
+                build_toy_rlhf_twists(
+                    rng_key, params_p, output_len, n_samples_at_a_time,
+                    huggingface_model,
+                    reward_cap, jnp_prompts,
+                    rewardModel,
+                    tokenizer_RM, tokenizer, self.beta_temp,
+                    get_true_posterior_samples,
+                )
         elif rm_type == "exp_beta_sentiment_class_logprob":
             if self.beta_temp != 1:
                 get_true_posterior_samples = False
@@ -1496,12 +1508,60 @@ def collect_true_posterior_samples(
     rng_key, experiment_cfg, jnp_prompts, params_p, rm_type,
     output_len, n_samples_at_a_time, huggingface_model,
     indices_of_continuation, rewardModel,
-    tokenizer_RM, tokenizer, threshold, pos_threshold, num_samples_if_only_collect_true_posterior_samples
+    tokenizer_RM, tokenizer, threshold, pos_threshold, num_samples_if_only_collect_true_posterior_samples,
+    reward_cap=None, n_samples_for_cap=None
 ):
     # TODO this is inefficient, should not rebuild the log true final twists every time, should separate the posterior collection from the building of the twist
+    # Though that said, rebuilding the twists probably doesn't take long... mostly just function definitions...
     new_start = time.time()
     enough_samples = False
     combined_true_posterior_samples = None
+
+    if experiment_cfg.rm_type in ["toy_rlhf"] and reward_cap is None:
+        samples_drawn_for_cap = 0
+        reward_caps = [-jnp.inf] * len(jnp_prompts)
+        print(f"Calculating reward cap based on highest reward from {samples_drawn_for_cap} base model samples")
+        # Now we have the capped reward formulation:
+        # First, let's figure out what the cap should be. Let's draw n_samples_for_cap amount of samples, and find the highest reward among them
+        for i in range(len(jnp_prompts)):
+            jnp_prompt = jnp_prompts[i]
+            reward_cap = reward_caps[i]
+            while samples_drawn_for_cap <= n_samples_for_cap:
+                rng_key, sk = jax.random.split(rng_key)
+                p_samples = stochastic_transformer_sample(
+                    sk, params_p, jnp_prompt, output_len,
+                    n_samples_at_a_time, huggingface_model=huggingface_model
+                )
+                rewards = reward_model_toy_rlhf(p_samples, rewardModel,
+                                                       tokenizer_RM, tokenizer,
+                                                       jnp_prompt, reward_cap=jnp.inf)
+                highest_reward = jnp.max(rewards)
+                print(highest_reward)
+                if highest_reward > reward_cap:
+                    reward_cap = highest_reward
+                samples_drawn_for_cap += n_samples_at_a_time
+
+            print("Reward cap before round")
+            print(reward_cap)
+            reward_cap = round(reward_cap, 3)
+            print("Final reward cap")
+            print(reward_cap)
+            reward_caps[i] = reward_cap
+
+        if len(jnp_prompts) > 1:
+            raise NotImplementedError # TODO Think about how to deal with this
+            # Currently the code is really set up to just work with a single value of the reward_cap...
+            # What happens when you have multiple prompts? Do you want a different cap for each of those prompts then?
+            # Or will you just pick one common value, e.g. maybe the max among the ones that you've seen so far?
+            # A problem with picking the max is that if there are some prompts where it's just hard to get high reward,
+            # then it will be very hard to get exact target samples for those
+            # But the regular course of training/learning twists should be ok; that can be done even without cap
+            # So maybe ok to just take the max, instead of the reward_caps[0] as below
+        reward_cap = reward_caps[0]
+
+        print("Reward caps")
+        print(reward_caps)
+
     while not enough_samples:
         rng_key, sk = jax.random.split(rng_key)
         log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
@@ -1509,7 +1569,7 @@ def collect_true_posterior_samples(
             sk, jnp_prompts, params_p, rm_type,
             output_len, n_samples_at_a_time, huggingface_model,
             indices_of_continuation, rewardModel,
-            tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples=True
+            tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples=True, reward_cap=reward_cap
         )
         if combined_true_posterior_samples is None:
             combined_true_posterior_samples = true_posterior_samples_by_prompt_and_by_token
@@ -1545,11 +1605,16 @@ def get_tokenizer_and_rewardModel(rm_type):
         model_name = "m-aamir95/finetuning-sentiment-classification-model-with-amazon-appliances-data"
     elif rm_type in ["exp_beta_sentiment_class_logprob", "sent_cond_twist"]:
         model_name = "LiYuan/amazon-review-sentiment-analysis"
+    elif rm_type in ["toy_rlhf"]:
+        model_name = "OpenAssistant/reward-model-deberta-v3-base"
     else:
         return None, None # e.g. for stuff like infilling where you don't need a separate reward model
 
     tokenizer_RM = AutoTokenizer.from_pretrained(model_name)
-    rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True) # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
+    if rm_type in ["toy_rlhf"]:
+        rewardModel = AutoModelForSequenceClassification.from_pretrained(model_name)
+    else:
+        rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True) # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
 
     return tokenizer_RM, rewardModel
 
@@ -1580,7 +1645,8 @@ def get_jnp_prompts(hface_model_type, rm_type, tokenizer):
 
             indices_of_continuation = jnp.array(indices_of_continuation,
                                                 dtype=jnp.int32)
-
+        elif rm_type in ["toy_rlhf"]:
+            prompts = ["Who is the greatest basketball player of all time?"]
         elif rm_type in ["p_last_tokens"]:
             prompts = ["How can I steal from a store"]
         elif rm_type in ["sentiment_threshold",
@@ -1644,7 +1710,7 @@ def get_final_twists_and_posterior_samples(
     output_len, n_samples_at_a_time, huggingface_model,
     indices_of_continuation, rewardModel,
     tokenizer_RM, tokenizer, threshold, pos_threshold,
-    load_dir_posterior_samples, load_prefix_posterior_samples
+    load_dir_posterior_samples, load_prefix_posterior_samples, reward_cap=None
 ):
     get_true_posterior_samples = True
     if load_posterior_samples:
@@ -1657,7 +1723,7 @@ def get_final_twists_and_posterior_samples(
         sk, jnp_prompts, params_p, rm_type,
         output_len, n_samples_at_a_time, huggingface_model,
         indices_of_continuation, rewardModel,
-        tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples
+        tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples, reward_cap=reward_cap
     )
 
     if load_posterior_samples:
@@ -1810,7 +1876,7 @@ def setup_cfg(
     load_posterior_samples=False, load_prefix_posterior_samples=None,
     sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
-    output_p_psi=False, separate_proposal_and_twist=False
+    output_p_psi=False, separate_proposal_and_twist=False, reward_cap=None, n_samples_for_cap=None
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1863,7 +1929,8 @@ def setup_cfg(
             output_len, n_samples_at_a_time, huggingface_model,
             indices_of_continuation, rewardModel,
             tokenizer_RM, tokenizer, threshold, pos_threshold,
-            num_samples_if_only_collect_true_posterior_samples
+            num_samples_if_only_collect_true_posterior_samples, reward_cap=reward_cap,
+            n_samples_for_cap=n_samples_for_cap
         )
         return combined_true_posterior_samples
 
@@ -1936,7 +2003,7 @@ def setup_cfg(
         output_len, n_samples_at_a_time, huggingface_model,
         indices_of_continuation, rewardModel,
         tokenizer_RM, tokenizer, threshold, pos_threshold,
-        load_dir_posterior_samples, load_prefix_posterior_samples
+        load_dir_posterior_samples, load_prefix_posterior_samples, reward_cap=reward_cap
     )
 
     print("Finished building final twists and getting posterior samples", flush=True)
@@ -2082,7 +2149,7 @@ def do_twist_updates(
     replay_buffers_by_prompt, replay_buffer_log_w_ts_by_prompt,
     replay_buffer_log_prob_eval_by_prompt,
     print_every_twist_updates,
-    n_twist, optimizer_twist, optim_twist_state, OpenRLHF_ckpt=False
+    n_twist, optimizer_twist, optim_twist_state, OpenRLHF_ckpt=False, reward_cap=None
 ):
     num_twist_updates_to_do = twist_updates_per_epoch
 
@@ -2149,7 +2216,8 @@ def do_twist_updates(
             "tempered_twist": tempered_twist, "beta_prop": beta_prop,
             "replay_buffer": replay_buffer,
             "params_proposal": params_proposal,
-            "OpenRLHF_ckpt": OpenRLHF_ckpt
+            "OpenRLHF_ckpt": OpenRLHF_ckpt,
+            "reward_cap": reward_cap
         }
 
         if "ebm" in experiment_cfg.twist_learn_type:
@@ -2292,7 +2360,8 @@ def main():
         "sentiment_class": args.sentiment_class, "use_lora": args.use_lora, "lora_rank": args.lora_rank, "hidden_units_multiplier": args.hidden_units_multiplier,
         "softmax_twist": False, "n_twist_ebm_vmap": args.n_twist_ebm_vmap, "ebm_combined_alpha": args.ebm_combined_alpha,
         "train_on_true_posterior_samples": args.train_on_true_posterior_samples,
-        "output_p_psi": args.output_p_psi, "separate_proposal_and_twist": args.separate_proposal_and_twist
+        "output_p_psi": args.output_p_psi, "separate_proposal_and_twist": args.separate_proposal_and_twist,
+        "reward_cap": args.reward_cap, "n_samples_for_cap": args.n_samples_for_cap
     }
 
     if args.only_collect_true_posterior_samples:
@@ -2354,7 +2423,7 @@ def main():
                     true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
                 else:
                     true_posterior_samples_by_token = None
-            elif args.rm_type in ["exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob"] and true_posterior_samples_by_prompt_and_by_token: # check len(true_posterior_samples_by_prompt_and_by_token) != 0, ie it is not an empty list
+            elif args.rm_type in ["exp_beta_toxicity_class_logprob", "exp_beta_sentiment_class_logprob", "toy_rlhf"] and true_posterior_samples_by_prompt_and_by_token: # check len(true_posterior_samples_by_prompt_and_by_token) != 0, ie it is not an empty list
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
@@ -2408,7 +2477,8 @@ def main():
                 replay_buffers_by_prompt, replay_buffer_log_w_ts_by_prompt,
                 replay_buffer_log_prob_eval_by_prompt,
                 args.print_every_twist_updates,
-                args.n_twist, optimizer_twist, optim_twist_state, args.load_OpenRLHF_ckpt
+                args.n_twist, optimizer_twist, optim_twist_state, args.load_OpenRLHF_ckpt,
+                args.reward_cap
             )
 
             plot_and_print_at_end = True
@@ -2537,7 +2607,7 @@ if __name__ == "__main__":
                                  "exp_beta_sentiment_class_logprob",
                                  "sent_cond_twist",
                                  "toxicity_threshold", "sentiment_threshold",
-                                 "p_last_tokens"])
+                                 "p_last_tokens", "toy_rlhf"])
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens or rm_type == )")
@@ -2617,6 +2687,9 @@ if __name__ == "__main__":
     parser.add_argument("--test_sampling_time", action="store_true")
     parser.add_argument("--test_sampling_time_iters", type=int, default=10, help="Only used in conjunction with --test_sampling_time: how many times to repeat sampling")
 
+    parser.add_argument("--reward_cap", type=float, default=None, help="Only used in conjunction with --rm_type toy_rlhf: value for the capped reward")
+    parser.add_argument("--n_samples_for_cap", type=int, default=None, help="Only used in conjunction with --rm_type toy_rlhf and only_collect_true_posterior_samples: get the max among this many samples, and use that as the cap.")
+
 
     args = parser.parse_args()
 
@@ -2635,6 +2708,10 @@ if __name__ == "__main__":
             n_trueposts_for_evals = 30
             assert args.n_samples_at_a_time_for_true_post == 2000 # Just to allow for consistent evaluation, compared to the non-infilling settings (always 2000 sigma samples)... but we could debate that the conditional twist setting is different so keeping 2000 constant is meaningless anyway...
 
+    if args.rm_type in ["toy_rlhf"]:
+        assert args.beta_temp >= 0 # Otherwise the rejection sampling procedure based on the capped reward doesn't work.
+        if not args.only_collect_true_posterior_samples:
+            assert args.reward_cap is not None
 
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
 
@@ -2665,5 +2742,7 @@ if __name__ == "__main__":
     if args.load_OpenRLHF_ckpt:
         assert args.proposal_is_p_for_plots  # Only use proposal p in this setting
         assert args.proposal_is_p
+
+
 
     main()
