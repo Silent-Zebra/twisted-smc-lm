@@ -1520,7 +1520,7 @@ def collect_true_posterior_samples(
     if experiment_cfg.rm_type in ["toy_rlhf"] and reward_cap is None:
         samples_drawn_for_cap = 0
         reward_caps = [-jnp.inf] * len(jnp_prompts)
-        print(f"Calculating reward cap based on highest reward from {samples_drawn_for_cap} base model samples")
+        print(f"Calculating reward cap based on highest reward from {n_samples_for_cap} base model samples")
         # Now we have the capped reward formulation:
         # First, let's figure out what the cap should be. Let's draw n_samples_for_cap amount of samples, and find the highest reward among them
         for i in range(len(jnp_prompts)):
@@ -1536,15 +1536,17 @@ def collect_true_posterior_samples(
                                                        tokenizer_RM, tokenizer,
                                                        jnp_prompt, reward_cap=jnp.inf)
                 highest_reward = jnp.max(rewards)
-                print(highest_reward)
+                print("highest_reward")
+                print(highest_reward, flush=True)
                 if highest_reward > reward_cap:
                     reward_cap = highest_reward
                 samples_drawn_for_cap += n_samples_at_a_time
 
-            print("Reward cap before round")
+
+            print("Reward cap before round", flush=True)
             print(reward_cap)
             reward_cap = round(reward_cap, 2)
-            print("Final reward cap")
+            print("Final reward cap", flush=True)
             print(reward_cap)
             reward_caps[i] = reward_cap
 
@@ -1559,7 +1561,7 @@ def collect_true_posterior_samples(
             # So maybe ok to just take the max, instead of the reward_caps[0] as below
         reward_cap = reward_caps[0]
 
-        print("Reward caps")
+        print("Reward caps", flush=True)
         print(reward_caps)
 
     while not enough_samples:
