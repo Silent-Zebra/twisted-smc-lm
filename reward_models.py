@@ -494,6 +494,9 @@ def build_toy_rlhf_twists(
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
 
+    print("reward cap")
+    print(reward_cap)
+
     for jnp_prompt in jnp_prompts:
         log_true_final_twist = curried_log_exp_beta_reward_model_toy_rlhf(rewardModel, tokenizer_RM, tokenizer, beta_temp, jnp_prompt=jnp_prompt, reward_cap=reward_cap)
         log_true_final_twists.append(log_true_final_twist)
