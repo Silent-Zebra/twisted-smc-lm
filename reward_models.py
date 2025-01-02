@@ -270,7 +270,7 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt,
 
     prompt_len = jnp_prompt.shape[-1]
 
-    print("PROMPT SHAPE")
+    print("PROMPT SHAPE", flush=True)
     print(jnp_prompt.shape)
     print(prompt_len)
 
@@ -281,7 +281,7 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt,
                           return_tensors="pt",
                           padding=True
                           )
-    print("Inputs")
+    print("Inputs", flush=True)
     print(inputs)
     print(inputs['input_ids'].shape)
 
