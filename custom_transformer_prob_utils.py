@@ -239,7 +239,7 @@ def get_p_logits_and_log_psi_all_vocab(
 
         p_logits2, log_psi_all_vocab2 = huggingface_model(input_ids=full_seq, ret="both", hface_model_params=params_p, params_twist_head=params_twist, condition_twist_on_tokens=condition_twist_on_tokens)
 
-        print(p_logits2 - p_logits)
+        print((p_logits2 - p_logits).sum())
         1/0
 
         log_psi_all_vocab = log_psi_all_vocab[:, prompt_len - 1: -1]
