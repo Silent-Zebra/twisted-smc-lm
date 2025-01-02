@@ -2379,7 +2379,7 @@ def main():
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                     target=(true_posterior_samples_by_prompt,),
                                     step=true_posterior_samples_by_prompt[0].shape[0],
-                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_nsamples")
+                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_{args.rm_type}_beta{args.beta_temp}_{args.hface_model_type}_len{args.output_len}_seed{args.seed}_nsamples")
         for true_posterior_samples in true_posterior_samples_by_prompt:
             inspect_text_samples(tokenizer, true_posterior_samples,
                                  None, "TRUE TARGET")
