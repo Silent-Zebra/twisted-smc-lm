@@ -1543,7 +1543,7 @@ def collect_true_posterior_samples(
 
             print("Reward cap before round")
             print(reward_cap)
-            reward_cap = round(reward_cap, 3)
+            reward_cap = round(reward_cap, 2)
             print("Final reward cap")
             print(reward_cap)
             reward_caps[i] = reward_cap
