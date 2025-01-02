@@ -1,10 +1,14 @@
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
+
 
 
 from transformers import FlaxAutoModelForCausalLM, FlaxAutoModel
 from transformers import AutoTokenizer
+
+from transformers.models.gpt2.modeling_flax_gpt2 import FlaxGPT2Attention
 from utils import linear_init_normal, linear
+
 
 
 @jax.jit
@@ -16,21 +20,17 @@ def mlp(inputs, params):
             x = jax.nn.relu(x)
     return x
 
-@jax.jit
+# @jax.jit
 def attention(Q, K, V, d_k, mask):
-    # print(Q.shape, K.shape, V.shape)
     attn_scores = jnp.einsum("bnid, bnjd -> bnij", Q, K) / (d_k**0.5)
-    # print(attn_scores.shape)
-    result = jnp.einsum("bnik, bnkj -> bnij", jax.nn.softmax(attn_scores, axis=-1), V)
-    # print(result.shape)
-
-    # attn_scores = jnp.einsum("bid, bjd -> bij", Q, K) / (d_k**0.5)
-    # print(attn_scores.shape)
-    # result = jnp.einsum("bik, bkj -> bij", jax.nn.softmax(attn_scores, axis=-1), V)
-    # print(result.shape)
+    attn_scores = jax.nn.softmax(attn_scores, axis=-1)
+    attn_scores = jnp.tril(attn_scores)
+    # attn_scores = jnp.triu(attn_scores)
+    result = jnp.einsum("bnik, bnkj -> bnij", attn_scores, V)
     return result
 
 
+    mask = jnp.tile(jnp.expand_dims(mask, 0),[attn_scores.shape[0], attn_scores.shape[1], 1, 1])
 def layernorm(x, beta, gamma, d_model, eps=1e-8):
     # print(x.shape, beta.shape, gamma.shape)
     mu = jnp.mean(x, axis=-1)
@@ -55,10 +55,10 @@ class CustomLMWithTwistHead:
         self.d_model = d_model
         self.twist_head_params = {}
         self.twist_head_params['attention_in'] = []
-        self.twist_head_params['attention_q'] = []
-        self.twist_head_params['attention_k'] = []
-        self.twist_head_params['attention_v'] = []
         self.twist_head_params['attention_out'] = []
+
+        # self.flax_mha = MultiHeadAttention(num_heads=8, in_features=self.d_model, qkv_features=self.d_model, out_features=self.d_model, rngs=Rngs(0))
+        # self.twist_head_params['attention_flax'] =
         self.twist_head_params['out_mlp'] = []
 
         self.twist_head_params['ln1_beta'] = jnp.zeros(d_model)
@@ -69,11 +69,10 @@ class CustomLMWithTwistHead:
         if output_size == -1:
             output_size, d_model = self.huggingface_model._params['wte']['embedding'].shape
         else:  # basically allow for custom choice of the output size of the twist head
-            _, d_model = self.huggingface_model._params['wte']['embedding'].shape
+            _, d_model = self.huggingface_model._params['wte']['embedding'].shap
 
-        attn_mlp_layers = [(d_model, d_model), (d_model, d_model), (d_model, d_model)]
-        attn_in_layers = [(d_model, d_model)]
-        twist_head_out_layers = [(d_model, d_model), (d_model, d_model), (d_model, output_size)]
+        attn_mlp_layers = [(d_model, d_model), (d_model, d_model)]
+        twist_head_out_layers = [(d_model, output_size)]
 
         for i in range(len(attn_mlp_layers)):
             key, linear_layer = linear_init_normal(key, attn_mlp_layers[i][0], attn_mlp_layers[i][1],
@@ -85,15 +84,14 @@ class CustomLMWithTwistHead:
             self.twist_head_params['attention_out'].append(linear_layer)
 
 
-        for i in range(len(attn_in_layers)):
-            key, linear_layer = linear_init_normal(key, attn_in_layers[i][0], attn_in_layers[i][1], d_model + d_model)
-            self.twist_head_params['attention_q'].append(linear_layer)
+        key, linear_layer = linear_init_normal(key, d_model, d_model, d_model + d_model)
+        self.twist_head_params['attention_q'] = linear_layer
 
-            key, linear_layer = linear_init_normal(key, attn_in_layers[i][0], attn_in_layers[i][1], d_model + d_model)
-            self.twist_head_params['attention_k'].append(linear_layer)
+        key, linear_layer = linear_init_normal(key, d_model, d_model, d_model + d_model)
+        self.twist_head_params['attention_k'] = linear_layer
 
-            key, linear_layer = linear_init_normal(key, attn_in_layers[i][0], attn_in_layers[i][1], d_model + d_model)
-            self.twist_head_params['attention_v'].append(linear_layer)
+        key, linear_layer = linear_init_normal(key, d_model, d_model, d_model + d_model)
+        self.twist_head_params['attention_v'] = linear_layer
 
         for i in range(len(twist_head_out_layers)):
             key, linear_layer = linear_init_normal(key, twist_head_out_layers[i][0], twist_head_out_layers[i][1],
@@ -104,35 +102,36 @@ class CustomLMWithTwistHead:
     def _get_model_log_psi(self, params_twist_head, embeddings, mask=None):
         # apply self attention to hidden state
         # embeddings = jnp.expand_dims(embeddings, 0)
-        print(mask)
 
-        num_heads = 1
-        d_head = self.d_model
+        num_heads = 8
+        d_head = self.d_model // num_heads
         batch_size = embeddings.shape[0]
 
-        ln1 = layernorm(embeddings, params_twist_head['ln1_beta'], params_twist_head['ln1_sigma'], self.d_model)
-        pre_attn_emb = mlp(ln1, params_twist_head['attention_in'])
+        e1 = layernorm(embeddings, params_twist_head['ln1_beta'], params_twist_head['ln1_sigma'], self.d_model)
 
-        q = mlp(pre_attn_emb, params_twist_head['attention_q'])
+        q = linear(params_twist_head['attention_q'], e1) + e1
         q1 = jnp.reshape(q, [batch_size, -1, num_heads, d_head])
         q2 = jnp.einsum("blnh -> bnlh", q1)
-
-        k = mlp(pre_attn_emb, params_twist_head['attention_k'])
+        #
+        k = linear(params_twist_head['attention_k'], e1) + e1
         k1 = jnp.reshape(k, [batch_size, -1, num_heads, d_head])
         k2 = jnp.einsum("blnh -> bnlh", k1)
-
-        v = mlp(pre_attn_emb, params_twist_head['attention_v'])
+        #
+        v = linear(params_twist_head['attention_v'], e1) + e1
         v1 = jnp.reshape(v, [batch_size, -1, num_heads, d_head])
         v2 = jnp.einsum("blnh -> bnlh", v1)
-
-        # apply attention to q,k,v with pre_attn_emb residual stream
+        #
+        # # apply attention to q,k,v with pre_attn_emb residual stream
+        #
         attn = jnp.einsum("bnlh -> blnh", attention(q2, k2, v2, d_head, mask))
-        attn1 = jnp.reshape(attn, [batch_size, -1, self.d_model]) + embeddings
+        attn = jnp.reshape(attn, [batch_size, -1, self.d_model])
+        #
+        # attn_out = layernorm(attn, params_twist_head['ln2_beta'], params_twist_head['ln2_sigma'], self.d_model)
+        attn_out = mlp(attn, params_twist_head['attention_out']) + embeddings
 
-        attn_ln = layernorm(attn1, params_twist_head['ln2_beta'], params_twist_head['ln2_sigma'], self.d_model)
-        attn_out = mlp(attn_ln, params_twist_head['attention_out']) + attn1
+        attn_out = layernorm(attn, params_twist_head['ln2_beta'], params_twist_head['ln2_sigma'], self.d_model)
 
-        psi_logits = mlp(attn1, params_twist_head['out_mlp'])
+        psi_logits = mlp(attn_out, params_twist_head['out_mlp'])
 
         if self.log_sigmoid_twist:
             assert not self.softmax_twist
@@ -141,8 +140,6 @@ class CustomLMWithTwistHead:
             assert not self.log_sigmoid_twist
             return jax.nn.log_softmax(psi_logits, dim=-1)
 
-        print("unconditioned")
-        # print(psi_logits.shape)
         return psi_logits
 
     def __call__(self, ret="both", train=False, params_twist_head=None, hface_model_params=None, input_ids=None, condition_twist_on_tokens=None, attention_mask=None, **kwargs):
@@ -158,7 +155,6 @@ class CustomLMWithTwistHead:
             hface_model_params = self.huggingface_model._params
 
         model_out = self.huggingface_model(train=train, params=hface_model_params, input_ids=input_ids, **kwargs, attention_mask=attention_mask)
-        print(model_out)
         embeddings_p = model_out.last_hidden_state
         embeddings_twist = model_out.last_hidden_state
 
@@ -249,7 +245,7 @@ class CustomLMWithTwistHead1:
 
 
     def _get_model_log_psi(self, params_twist_head, embeddings):
-        print(embeddings.shape)
+        # print(embeddings.shape)
         if self.hface_nn_twist:
             if 'linear_layers' in params_twist_head:
                 x = embeddings
@@ -276,7 +272,7 @@ class CustomLMWithTwistHead1:
             assert not self.softmax_twist
             model_log_psi = jax.nn.log_sigmoid(model_log_psi)
 
-        print(model_log_psi.shape)
+        # print(model_log_psi.shape)
         return model_log_psi
 
     def __call__(self, ret="both", train=False, params_twist_head=None, hface_model_params=None, input_ids=None, condition_twist_on_tokens=None, **kwargs):
@@ -309,7 +305,7 @@ class CustomLMWithTwistHead1:
                 raise NotImplementedError
             embeddings_twist = jnp.concatenate((prompt_plus_output_embeddings, condition_on_embeddings), axis=-1)
 
-            print(embeddings_twist.shape)
+            # print(embeddings_twist.shape)
 
         else:
             # embeddings have d_model shape. Attribute name of the [0] element is "last_hidden_state"
