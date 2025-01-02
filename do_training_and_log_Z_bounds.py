@@ -1595,6 +1595,9 @@ def collect_true_posterior_samples(
             print("reduce to n true post samples size")
             print(combined_true_posterior_samples[i].shape)
 
+    print("Finished collecting true posterior (target) samples")
+    print(combined_true_posterior_samples)
+
     return rng_key, combined_true_posterior_samples
 
 
@@ -1932,7 +1935,7 @@ def setup_cfg(
             num_samples_if_only_collect_true_posterior_samples, reward_cap=reward_cap,
             n_samples_for_cap=n_samples_for_cap
         )
-        return combined_true_posterior_samples
+        return combined_true_posterior_samples, tokenizer
 
     if separate_proposal_and_twist:
         assert load_ckpt # must load the proposal, as we are not training it.
@@ -2369,12 +2372,16 @@ def main():
         setup_args["num_samples_if_only_collect_true_posterior_samples"] = args.num_samples_if_only_collect_true_posterior_samples
         setup_args["load_posterior_samples"] = False
 
-        true_posterior_samples_by_prompt = setup_cfg(**setup_args)
+        true_posterior_samples_by_prompt, tokenizer = setup_cfg(**setup_args)
         print(true_posterior_samples_by_prompt)
         checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
                                     target=(true_posterior_samples_by_prompt,),
                                     step=true_posterior_samples_by_prompt[0].shape[0],
                                     prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_seed{args.seed}_nsamples")
+        for true_posterior_samples in true_posterior_samples_by_prompt:
+            inspect_text_samples(tokenizer, true_posterior_samples,
+                                 None, "TRUE TARGET")
+
         raise SystemExit(0) # Finished
 
     experiment_cfg, rng_key, huggingface_model, params_p, \

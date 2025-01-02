@@ -30,11 +30,16 @@ def hist_by_token_index(samples, n_vocab, token_index=-1):
     return samples_hist
 
 
-def inspect_text_samples(tokenizer, samples, n_samples_to_print, name):
+def inspect_text_samples(tokenizer, samples, n_samples_to_print=None, name=None):
     text_outputs = tokenizer.batch_decode(samples, skip_special_tokens=True)
     print(f"INSPECTION OF {name} SAMPLES")
-    for s in text_outputs[:n_samples_to_print]:
-        print(s)
+    if n_samples_to_print is None:
+        # Print all
+        for s in text_outputs:
+            print(s)
+    else:
+        for s in text_outputs[:n_samples_to_print]:
+            print(s)
 
 
 def print_scores_with_averages(score_func, list_of_samples, list_of_names, n_samples_to_print, log_prob_text=False):
