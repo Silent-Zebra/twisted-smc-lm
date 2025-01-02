@@ -2710,8 +2710,11 @@ if __name__ == "__main__":
 
     if args.rm_type in ["toy_rlhf"]:
         assert args.beta_temp >= 0 # Otherwise the rejection sampling procedure based on the capped reward doesn't work.
-        if not args.only_collect_true_posterior_samples:
+        if args.only_collect_true_posterior_samples:
+            assert args.n_samples_for_cap is not None
+        else:
             assert args.reward_cap is not None
+
 
     n_samples_for_plots = [args.n_samples_for_plots_smaller, args.n_samples_for_plots_larger]
 
