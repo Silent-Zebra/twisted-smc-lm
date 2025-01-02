@@ -2457,14 +2457,6 @@ def main():
             #     1/0
 
 
-            # TODO DEBUG ONLY REMOVE LATER
-            get_p_logits_and_log_psi_all_vocab(
-                true_posterior_samples_by_token, params_p, params_twist,
-                condition_twist_on_tokens=None, huggingface_model=huggingface_model,
-                params_proposal=None, prompt_len=prompt.shape[-1]
-            )
-            1/0
-
             # ----- DO plotting and inspection of test info before the twist updates -----
             if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
                 rng_key, plot_over_time_list, plot_over_time_list_p_proposal = \
