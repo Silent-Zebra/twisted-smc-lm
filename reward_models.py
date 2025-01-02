@@ -268,16 +268,22 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt,
     if len(seq.shape) == 3:
         raise NotImplementedError
 
+    prompt_len = jnp_prompt.shape[-1]
+
     print("PROMPT SHAPE")
     print(jnp_prompt.shape)
+    print(prompt_len)
 
-    prompt_len = jnp_prompt.shape[-1]
     answer_seq = jax.lax.stop_gradient(seq[:, prompt_len:])
     text_question = tokenizer.batch_decode(jnp.full((seq.shape[0], prompt_len), jnp_prompt), skip_special_tokens=True)
     text_answer = tokenizer.batch_decode(answer_seq, skip_special_tokens=True)
     inputs = tokenizer_RM(text_question, text_answer,
                           return_tensors="pt",
+                          padding=True
                           )
+    print("Inputs")
+    print(inputs)
+    print(inputs.shape)
 
     score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
     score = jnp.array(score.numpy())
