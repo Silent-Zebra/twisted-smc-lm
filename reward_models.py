@@ -271,46 +271,32 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt,
     prompt_len = jnp_prompt.shape[-1]
 
     print("PROMPT SHAPE", flush=True)
-    import time # TODO DEBUG ONLY REMOVE LATER
-    print("REWARD MODEL TIME", flush=True)
-    start = time.time()
+    # import time
+    # print("REWARD MODEL TIME", flush=True)
+    # start = time.time()
     print(jnp_prompt.shape)
     print(prompt_len)
 
     answer_seq = jax.lax.stop_gradient(seq[:, prompt_len:])
-    print(time.time() - start, flush=True)
-
     text_question = tokenizer.batch_decode(jnp.full((seq.shape[0], prompt_len), jnp_prompt), skip_special_tokens=True)
-    print(time.time() - start, flush=True)
-
     text_answer = tokenizer.batch_decode(answer_seq, skip_special_tokens=True)
-    print(time.time() - start, flush=True)
-
     inputs = tokenizer_RM(text_question, text_answer,
                           return_tensors="pt",
                           padding=True
                           )
 
-    print(time.time() - start, flush=True)
     device = rewardModel.device
-    print(f"Device: {device}")
-
+    # print(f"Device: {device}")
     inputs = {key: value.to(device) for key, value in inputs.items()}
 
-    print("Inputs", flush=True)
-    print(inputs)
-    print(inputs['input_ids'].shape)
-    print(time.time() - start, flush=True)
+    # print("Inputs", flush=True)
+    # print(inputs)
+    # print(inputs['input_ids'].shape)
 
     score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
-    print(time.time() - start, flush=True)
-
     score = jnp.array(score.numpy())
-    print(time.time() - start, flush=True)
-
     score = jnp.minimum(score, reward_cap)
-    print(time.time() - start, flush=True)
-    print("END OF REWARD MODEL TIME", flush=True)
+    # print("END OF REWARD MODEL TIME", flush=True)
 
     return score
 
