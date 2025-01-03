@@ -1499,11 +1499,12 @@ def main():
     print(adv_rewards)
     print(p_rewards)
 
-    checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                target=(indist_probs, ood_probs,
-                                        adv_rewards, p_rewards),
-                                step=epoch + 1,
-                                prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
+    checkpoints.save_checkpoint(
+        overwrite=True,
+        ckpt_dir=args.save_dir,
+        target=(indist_probs, ood_probs, adv_rewards, p_rewards),
+        step=epoch + 1,
+        prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_epoch")
     end = time.time()
     total_time = end - start
     print("TIME: " + str(total_time))

@@ -53,6 +53,7 @@ def save_kl_div_plot(
         assert kl_to_prior_list[0] is not None
 
         checkpoints.save_checkpoint(
+            overwrite=True,
             ckpt_dir=save_dir,
             target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
                     np.transpose(np.stack(proposal_scores_list)), logZ_midpoint_estimate, np.transpose(np.stack(kl_to_prior_list))),
@@ -163,14 +164,18 @@ def save_logZ_bounds_plot(
 
     if do_checkpoint_of_plot_info:
 
-        checkpoints.save_checkpoint(ckpt_dir=save_dir,
-                                    target=(
-                                        logZ_ubs_iwae_across_samples_time_trueposts,
-                                        logZ_lbs_iwae_across_samples_time_trueposts,
-                                        logZ_ubs_smc_across_samples_time_trueposts,
-                                        logZ_lbs_smc_across_samples_time_trueposts),
-                                    step=epoch_starting_from_0,
-                                    prefix=ckpt_name)
+        checkpoints.save_checkpoint(
+            overwrite=True,
+            ckpt_dir=save_dir,
+            target=(
+                logZ_ubs_iwae_across_samples_time_trueposts,
+                logZ_lbs_iwae_across_samples_time_trueposts,
+                logZ_ubs_smc_across_samples_time_trueposts,
+                logZ_lbs_smc_across_samples_time_trueposts
+            ),
+            step=epoch_starting_from_0,
+            prefix=ckpt_name
+        )
 
 
 def setup_plot_over_time_lists(n_samples_for_plots):

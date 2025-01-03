@@ -516,6 +516,7 @@ def main():
             np.transpose(np.stack(kl_vals_list)))
 
         checkpoints.save_checkpoint(
+            overwrite=True,
             ckpt_dir=args.save_dir,
             target=target_to_save,
             step=len(g_q_estimates_list) - 1,

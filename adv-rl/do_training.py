@@ -2465,6 +2465,7 @@ def main():
 
         if (epoch + 1) % args.ckpt_every == 0:
             checkpoints.save_checkpoint(
+                overwrite=True,
                 ckpt_dir=args.save_dir,
                 target=(params_twist, optim_twist_state), step=epoch + 1,
                 prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_epoch"
@@ -2478,12 +2479,14 @@ def main():
     if save_ckpt_at_end:
         if last_ckpt_epoch != epoch:
             checkpoints.save_checkpoint(
+                overwrite=True,
                 ckpt_dir=args.save_dir,
                 target=(params_twist, optim_twist_state), step=epoch + 1,
                 prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_{args.twist_learn_type}_seed{args.seed}_epoch"
             )
 
     checkpoints.save_checkpoint(
+        overwrite=True,
         ckpt_dir=args.save_info_dir,
         target=plot_over_time_list, step=epoch + 1,
         prefix=f"info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_len{args.output_len}_{args.rl_loss_type}_alpha{args.alpha_adv}_a0epochs{args.alpha_adv_zero_epochs}_seed{args.seed}_epoch"

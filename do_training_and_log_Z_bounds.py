@@ -2402,10 +2402,12 @@ def main():
         if args.reward_cap is not None:
             reward_cap_str = f"_rewardcap{args.reward_cap}"
 
-        checkpoints.save_checkpoint(ckpt_dir=args.save_dir,
-                                    target=(true_posterior_samples_by_prompt,),
-                                    step=true_posterior_samples_by_prompt[0].shape[0],
-                                    prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_{args.rm_type}_beta{args.beta_temp}{reward_cap_str}_{args.hface_model_type}_len{args.output_len}_seed{args.seed}_nsamples")
+        checkpoints.save_checkpoint(
+            overwrite=True, ckpt_dir=args.save_dir,
+            target=(true_posterior_samples_by_prompt,),
+            step=true_posterior_samples_by_prompt[0].shape[0],
+            prefix=f"true_posterior_samples_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_{args.rm_type}_beta{args.beta_temp}{reward_cap_str}_{args.hface_model_type}_len{args.output_len}_seed{args.seed}_nsamples"
+        )
         for true_posterior_samples in true_posterior_samples_by_prompt:
             inspect_text_samples(tokenizer, true_posterior_samples,
                                  None, "TRUE TARGET")
@@ -2545,6 +2547,7 @@ def main():
 
         if (epoch + 1) % args.ckpt_every == 0:
             checkpoints.save_checkpoint(
+                overwrite=True,
                 ckpt_dir=args.save_dir,
                 target=(params_twist, optim_twist_state), step=epoch + 1,
                 prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_epoch"
@@ -2558,6 +2561,7 @@ def main():
     if save_ckpt_at_end:
         if last_ckpt_epoch != epoch:
             checkpoints.save_checkpoint(
+                overwrite=True,
                 ckpt_dir=args.save_dir,
                 target=(params_twist, optim_twist_state), step=epoch + 1,
                 prefix=f"checkpoint_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{args.seed}_{args.twist_learn_type}_epoch"

@@ -222,6 +222,7 @@ def main():
         print(text_output)
 
     checkpoints.save_checkpoint(
+        overwrite=True,
         ckpt_dir=args.save_dir,
         target=(params_p, optim_p_state), step=epoch + 1,
         prefix=f"checkpoint_adv_p_epoch"
