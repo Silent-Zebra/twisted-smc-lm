@@ -74,64 +74,66 @@ def get_xrange_and_xlabel(epoch_starting_from_1, exp_num_twist_updates, twist_up
 
 
 def save_logZ_bounds_plot(
-    plt_xlabel_text, x_range, save_dir, epoch_starting_from_0, load_prefix_ckpt,
+    plt_xlabel_text, x_range, save_dir, lr_twist, seed, twist_learn_type, epoch_starting_from_0, load_prefix_ckpt,
     n_samples_for_plots,
     logZ_ubs_iwae_across_samples_time_trueposts,
     logZ_lbs_iwae_across_samples_time_trueposts,
     logZ_ubs_smc_across_samples_time_trueposts,
     logZ_lbs_smc_across_samples_time_trueposts,
     proposal_is_p,
-    do_checkpoint_of_plot_info=True
+    do_checkpoint_of_plot_info=True,
+    do_plot_and_save_plot=False
 ):
-    color_list_for_iwae_ub_plots = ['xkcd:blue', 'xkcd:green']
-    color_list_for_iwae_lb_plots = ['xkcd:light blue', 'xkcd:light green']
-    color_list_for_smc_ub_plots = ['xkcd:orange', 'xkcd:red']
-    color_list_for_smc_lb_plots = ['xkcd:light orange', 'xkcd:light red']
+    if do_plot_and_save_plot:
+        color_list_for_iwae_ub_plots = ['xkcd:blue', 'xkcd:green']
+        color_list_for_iwae_lb_plots = ['xkcd:light blue', 'xkcd:light green']
+        color_list_for_smc_ub_plots = ['xkcd:orange', 'xkcd:red']
+        color_list_for_smc_lb_plots = ['xkcd:light orange', 'xkcd:light red']
 
-    linestyle_list_for_iwae_ub_plots = ['dashed', 'dashed']
-    linestyle_list_for_iwae_lb_plots = ['solid', 'solid']
-    linestyle_list_for_smc_ub_plots = ['dashed', 'dashed']
-    linestyle_list_for_smc_lb_plots = ['solid', 'solid']
+        linestyle_list_for_iwae_ub_plots = ['dashed', 'dashed']
+        linestyle_list_for_iwae_lb_plots = ['solid', 'solid']
+        linestyle_list_for_smc_ub_plots = ['dashed', 'dashed']
+        linestyle_list_for_smc_lb_plots = ['solid', 'solid']
 
-    plt.clf()
-    # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
-    plt.xlabel(plt_xlabel_text)
+        plt.clf()
+        # x_range = np.arange(1, len(kl_ubs_iwae) + 1)
+        plt.xlabel(plt_xlabel_text)
 
-    print(logZ_ubs_iwae_across_samples_time_trueposts)
+        print(logZ_ubs_iwae_across_samples_time_trueposts)
 
-    for n in range(len(n_samples_for_plots)):
-        print(np.stack(logZ_ubs_iwae_across_samples_time_trueposts[n]).shape)
-        print(x_range.shape)
+        for n in range(len(n_samples_for_plots)):
+            print(np.stack(logZ_ubs_iwae_across_samples_time_trueposts[n]).shape)
+            print(x_range.shape)
 
-        plot_with_conf_bounds(
-            np.transpose(np.stack(logZ_ubs_iwae_across_samples_time_trueposts[n])),
-            x_range, label=f"Log(Z) IWAE UB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_iwae_ub_plots[n],
-            linestyle=linestyle_list_for_iwae_ub_plots[n]
-        )
-        plot_with_conf_bounds(
-            np.transpose(np.stack(logZ_lbs_iwae_across_samples_time_trueposts[n])),
-            x_range, label=f"Log(Z) IWAE LB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_iwae_lb_plots[n],
-            linestyle=linestyle_list_for_iwae_lb_plots[n]
-        )
-        plot_with_conf_bounds(
-            np.transpose(np.stack(logZ_ubs_smc_across_samples_time_trueposts[n])),
-            x_range, label=f"Log(Z) SMC UB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_smc_ub_plots[n],
-            linestyle=linestyle_list_for_smc_ub_plots[n]
-        )
-        plot_with_conf_bounds(
-            np.transpose(np.stack(logZ_lbs_smc_across_samples_time_trueposts[n])),
-            x_range, label=f"Log(Z) SMC LB ({n_samples_for_plots[n]} Samples)",
-            color=color_list_for_smc_lb_plots[n],
-            linestyle=linestyle_list_for_smc_lb_plots[n]
-        )
+            plot_with_conf_bounds(
+                np.transpose(np.stack(logZ_ubs_iwae_across_samples_time_trueposts[n])),
+                x_range, label=f"Log(Z) IWAE UB ({n_samples_for_plots[n]} Samples)",
+                color=color_list_for_iwae_ub_plots[n],
+                linestyle=linestyle_list_for_iwae_ub_plots[n]
+            )
+            plot_with_conf_bounds(
+                np.transpose(np.stack(logZ_lbs_iwae_across_samples_time_trueposts[n])),
+                x_range, label=f"Log(Z) IWAE LB ({n_samples_for_plots[n]} Samples)",
+                color=color_list_for_iwae_lb_plots[n],
+                linestyle=linestyle_list_for_iwae_lb_plots[n]
+            )
+            plot_with_conf_bounds(
+                np.transpose(np.stack(logZ_ubs_smc_across_samples_time_trueposts[n])),
+                x_range, label=f"Log(Z) SMC UB ({n_samples_for_plots[n]} Samples)",
+                color=color_list_for_smc_ub_plots[n],
+                linestyle=linestyle_list_for_smc_ub_plots[n]
+            )
+            plot_with_conf_bounds(
+                np.transpose(np.stack(logZ_lbs_smc_across_samples_time_trueposts[n])),
+                x_range, label=f"Log(Z) SMC LB ({n_samples_for_plots[n]} Samples)",
+                color=color_list_for_smc_lb_plots[n],
+                linestyle=linestyle_list_for_smc_lb_plots[n]
+            )
 
-    # plt.xlabel(f"Epoch")
-    plt.ylabel(f"Log(Z) Bound")
+        # plt.xlabel(f"Epoch")
+        plt.ylabel(f"Log(Z) Bound")
 
-    plt.legend()
+        plt.legend()
 
     print("load_prefix_ckpt")
     print(load_prefix_ckpt)
@@ -139,16 +141,25 @@ def save_logZ_bounds_plot(
     if load_prefix_ckpt != ".":
         load_prefix_ckpt_split = load_prefix_ckpt.split("/")
         load_prefix_str = f"_{load_prefix_ckpt_split[0]}_{load_prefix_ckpt_split[1]}"
+
+    logZ_bounds_str = f"{load_prefix_str}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_lr{lr_twist}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
+
     if proposal_is_p:
         figname = f"{save_dir}/fig_pproposal_logZ_bounds_by_samples_over_time_epoch{epoch_starting_from_0}.pdf"
+
         # ckpt_name = f"logZ_bounds_pproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_nsamples"
-        ckpt_name = f"logZ_bounds_pproposal{load_prefix_str}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
+        # ckpt_name = f"logZ_bounds_pproposal{load_prefix_str}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
+        ckpt_name = f"logZ_bounds_pproposal{logZ_bounds_str}"
     else:
         figname = f"{save_dir}/fig_twistproposal_logZ_bounds_by_samples_over_time_epoch{epoch_starting_from_0}.pdf"
-        # ckpt_name = f"logZ_bounds_twistproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_nsamples"
-        ckpt_name = f"logZ_bounds_twistproposal{load_prefix_str}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
 
-    plt.savefig(figname)
+        # ckpt_name = f"logZ_bounds_twistproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_nsamples"
+        # ckpt_name = f"logZ_bounds_twistproposal{load_prefix_str}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
+        # ckpt_name = f"logZ_bounds_twistproposal{load_prefix_str}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_lr{lr_twist}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
+        ckpt_name = f"logZ_bounds_twistproposal{logZ_bounds_str}"
+
+    if do_plot_and_save_plot:
+        plt.savefig(figname) # Don't bother with this saving anymore, haven't used this for a while
 
     if do_checkpoint_of_plot_info:
 

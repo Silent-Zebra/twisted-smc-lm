@@ -580,7 +580,7 @@ class ExperimentConfig:
         self, rng_key, prompt, output_len, params_p, params_twist,
         log_true_final_twist, start, epoch, huggingface_model, proposal_is_p,
         true_posterior_samples_by_prompt_and_by_token, prompt_num,
-        plot_over_time_list, save_dir, seed, exp_num_twist_updates, twist_updates_per_epoch,
+        plot_over_time_list, save_dir, lr_twist, seed, exp_num_twist_updates, twist_updates_per_epoch,
         tokenizer=None, proposal_scores_list=None,
         kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_ckpt=False, load_prefix_ckpt=None
     ):
@@ -612,6 +612,7 @@ class ExperimentConfig:
             "twist_updates_per_epoch": twist_updates_per_epoch,
             "OpenRLHF_ckpt": OpenRLHF_ckpt,
             "load_prefix_ckpt": load_prefix_ckpt,
+            "lr_twist": lr_twist
         }
 
 
@@ -1399,7 +1400,7 @@ def collect_and_print_info_over_largest_n_samples(
 def get_and_plot_logZ_bounds(
     rng_key, true_posterior_samples, prompt, output_len,
     params_p, params_twist, log_true_final_twist, start, epoch,
-    plot_over_time_list, smc_procedure_type, save_dir, twist_learn_type, rm_type, seed,
+    plot_over_time_list, smc_procedure_type, save_dir, lr_twist, twist_learn_type, rm_type, seed,
     exp_num_twist_updates, twist_updates_per_epoch, load_prefix_ckpt,
     proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
@@ -1507,7 +1508,7 @@ def get_and_plot_logZ_bounds(
         )
 
     save_logZ_bounds_plot(
-        plt_xlabel_text, x_range, save_dir, epoch_starting_from_0, load_prefix_ckpt,
+        plt_xlabel_text, x_range, save_dir, lr_twist, seed, twist_learn_type, epoch_starting_from_0, load_prefix_ckpt,
         n_samples_for_plots,
         logZ_ubs_iwae_across_samples_time_trueposts,
         logZ_lbs_iwae_across_samples_time_trueposts,
@@ -2049,7 +2050,7 @@ def do_inspection_and_plotting_of_test_info(
     indices_of_continuation, tokenizer, proposal_is_p, huggingface_model,
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
-    prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir, seed,
+    prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir, lr_twist, seed,
     exp_num_twist_updates, twist_updates_per_epoch, OpenRLHF_ckpt, load_prefix_ckpt
 ):
     print(f"TEST INFO STARTING", flush=True)
@@ -2138,7 +2139,8 @@ def do_inspection_and_plotting_of_test_info(
             "exp_num_twist_updates": exp_num_twist_updates,
             "twist_updates_per_epoch": twist_updates_per_epoch,
             "OpenRLHF_ckpt": OpenRLHF_ckpt,
-            "load_prefix_ckpt": load_prefix_ckpt
+            "load_prefix_ckpt": load_prefix_ckpt,
+            "lr_twist": lr_twist
         }
 
 
@@ -2486,7 +2488,7 @@ def main():
                     indices_of_continuation, tokenizer, args.proposal_is_p, huggingface_model,
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
                     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
-                    prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.seed,
+                    prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.lr_twist, args.seed,
                     args.exp_num_twist_updates, args.twist_updates_per_epoch, args.load_OpenRLHF_ckpt, args.load_prefix_ckpt
                 )
 
@@ -2531,7 +2533,7 @@ def main():
                         true_posterior_samples_by_token, epoch,
                         true_posterior_samples_by_prompt_and_by_token,
                         prompt_num, plot_over_time_list,
-                        plot_over_time_list_p_proposal, args.save_dir,
+                        plot_over_time_list_p_proposal, args.save_dir, args.lr_twist,
                         args.seed,
                         args.exp_num_twist_updates,
                         args.twist_updates_per_epoch,
