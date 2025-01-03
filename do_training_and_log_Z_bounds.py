@@ -1503,7 +1503,7 @@ def get_and_plot_logZ_bounds(
             f_q_estimates_list_of_arrays,
             g_q_estimates_list_of_arrays, save_dir, proposal_scores_list,
             kl_to_prior_list, rm_type,
-            epoch_starting_from_0, seed, twist_learn_type,
+            epoch_starting_from_0, seed, twist_learn_type, lr_twist,
             do_checkpoint_of_plot_info=True
         )
 

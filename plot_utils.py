@@ -30,7 +30,7 @@ def plot_with_conf_bounds(record, x_range, label, z_score=1.96, **kwargs):
 def save_kl_div_plot(
     plt_xlabel_text, x_range, logZ_midpoint_estimate, f_q_estimates_list_of_arrays,
     g_q_estimates_list_of_arrays, save_dir, proposal_scores_list, kl_to_prior_list, rm_type,
-    epoch_starting_from_0, seed, twist_learn_type,
+    epoch_starting_from_0, seed, twist_learn_type, lr_twist,
     do_checkpoint_of_plot_info=True
 ):
     numpost = np.stack(g_q_estimates_list_of_arrays).shape[-1]
@@ -57,7 +57,7 @@ def save_kl_div_plot(
             target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
                     np.transpose(np.stack(proposal_scores_list)), logZ_midpoint_estimate, np.transpose(np.stack(kl_to_prior_list))),
             step=epoch_starting_from_0,
-            prefix=f"f_q_g_q_logZbestmidpoint_info_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_nsamples")
+            prefix=f"f_q_g_q_logZbestmidpoint_info_{rm_type}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_lr{lr_twist}_nsamples")
 
     return f_q_estimates_list_of_arrays
 
