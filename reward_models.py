@@ -270,12 +270,12 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt,
 
     prompt_len = jnp_prompt.shape[-1]
 
-    print("PROMPT SHAPE", flush=True)
+    # print("PROMPT SHAPE", flush=True)
     # import time
     # print("REWARD MODEL TIME", flush=True)
     # start = time.time()
-    print(jnp_prompt.shape)
-    print(prompt_len)
+    # print(jnp_prompt.shape)
+    # print(prompt_len)
 
     answer_seq = jax.lax.stop_gradient(seq[:, prompt_len:])
     text_question = tokenizer.batch_decode(jnp.full((seq.shape[0], prompt_len), jnp_prompt), skip_special_tokens=True)
