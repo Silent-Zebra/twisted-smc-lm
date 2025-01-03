@@ -1263,8 +1263,8 @@ def smc_partial_jit(
     no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
     params_proposal=None, prompt_len=None, resample_criterion="every_step", OpenRLHF_ckpt=False
 ):
-    print("SMC TIME", flush=True)
-    start = time.time()
+    # print("SMC TIME", flush=True)
+    # start = time.time()
 
     print_ess_stats = False
 
@@ -1289,8 +1289,6 @@ def smc_partial_jit(
     if no_final_resample:
         resample_for_final = False
 
-    print("SMC TIME 2", flush=True)
-    print(time.time() - start, flush=True)
 
     (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_learned_psi_T_eval), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = \
         smc_scan_iter_final(
@@ -1300,11 +1298,6 @@ def smc_partial_jit(
         huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
         tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc, params_proposal=params_proposal)
 
-    print("SMC TIME 3", flush=True)
-    print(time.time() - start, flush=True)
-    # start = time.time()
-
-    # print(time.time() - start)
 
     if get_intermediate_sample_history_based_on_learned_twists:
         full_seq_list = jnp.concatenate(
@@ -1320,8 +1313,6 @@ def smc_partial_jit(
         #     return (None, None, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list, log_w_t_before_resample_list)
         return (log_w_t, log_z_hat_t, log_psi_t_eval_list), full_seq_based_on_true_twist, (full_seq_list, log_w_t_list, log_w_t_before_resample_list)
 
-    print("SMC TIME 4", flush=True)
-    print(time.time() - start, flush=True)
 
     # This should be fine, shouldn't be needed now
     # if condition_twist_on_tokens is not None:
