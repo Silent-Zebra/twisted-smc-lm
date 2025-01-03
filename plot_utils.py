@@ -132,16 +132,21 @@ def save_logZ_bounds_plot(
     plt.ylabel(f"Log(Z) Bound")
 
     plt.legend()
-    load_prefix_ckpt_split = load_prefix_ckpt.split("/")
-    load_prefix_str = f"{load_prefix_ckpt_split[0]}_{load_prefix_ckpt_split[1]}"
+
+    print("load_prefix_ckpt")
+    print(load_prefix_ckpt)
+    load_prefix_str = ""
+    if load_prefix_ckpt != ".":
+        load_prefix_ckpt_split = load_prefix_ckpt.split("/")
+        load_prefix_str = f"_{load_prefix_ckpt_split[0]}_{load_prefix_ckpt_split[1]}"
     if proposal_is_p:
         figname = f"{save_dir}/fig_pproposal_logZ_bounds_by_samples_over_time_epoch{epoch_starting_from_0}.pdf"
         # ckpt_name = f"logZ_bounds_pproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_nsamples"
-        ckpt_name = f"logZ_bounds_pproposal_{load_prefix_str}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
+        ckpt_name = f"logZ_bounds_pproposal{load_prefix_str}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
     else:
         figname = f"{save_dir}/fig_twistproposal_logZ_bounds_by_samples_over_time_epoch{epoch_starting_from_0}.pdf"
         # ckpt_name = f"logZ_bounds_twistproposal_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_nsamples"
-        ckpt_name = f"logZ_bounds_twistproposal_{load_prefix_str}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
+        ckpt_name = f"logZ_bounds_twistproposal{load_prefix_str}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
 
     plt.savefig(figname)
 
