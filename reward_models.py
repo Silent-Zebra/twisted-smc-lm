@@ -290,7 +290,10 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt,
                           return_tensors="pt",
                           padding=True
                           )
+
     print(time.time() - start, flush=True)
+    device = rewardModel.device
+    inputs = {key: value.to(device) for key, value in inputs.items()}
 
     print("Inputs", flush=True)
     print(inputs)

@@ -1635,6 +1635,9 @@ def get_tokenizer_and_rewardModel(rm_type):
     tokenizer_RM = AutoTokenizer.from_pretrained(model_name)
     if rm_type in ["toy_rlhf"]:
         rewardModel = AutoModelForSequenceClassification.from_pretrained(model_name)
+        import torch
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        rewardModel = rewardModel.to(device)
     else:
         rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True) # Throws a warning message but as far as I can see in my testing, there's no difference in the outputs under this flax version vs the pytorch original version
 
