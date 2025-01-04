@@ -287,20 +287,20 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt,
                           )
 
     output_len = answer_seq.shape[-1]
-    print("output_len")
-    print(output_len)
+    # print("output_len")
+    # print(output_len)
 
-    print("Inputs", flush=True)
+    # print("Inputs", flush=True)
     # print(inputs)
-    print(inputs['input_ids'].shape)
+    # print(inputs['input_ids'].shape)
 
     device = rewardModel.device
     # print(f"Device: {device}")
     inputs = {key: value[:, :output_len * 2].to(device) for key, value in inputs.items()} # Truncate to no more than 2x output len, otherwise can have some crazy tokenizations.
 
-    print("Inputs", flush=True)
+    # print("Inputs", flush=True)
     # print(inputs)
-    print(inputs['input_ids'].shape)
+    # print(inputs['input_ids'].shape)
 
     with torch.no_grad():
         score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
