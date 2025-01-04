@@ -1078,7 +1078,7 @@ def inspect_and_record_evidence_setting_for_index(
         print(condition_twist_on_tokens_broadcasted.shape)
 
 
-    print(f"TIME: {time.time() - start}", flush=True)
+    # print(f"TIME: {time.time() - start}", flush=True)
 
     rng_key, sk_i = jax.random.split(rng_key)
     iwae_log_w_lower, iwae_log_w_upper, f_q_estimate = iwae_forward_and_backward(
@@ -1100,8 +1100,8 @@ def inspect_and_record_evidence_setting_for_index(
 
     f_qs = iwae_log_w_lower
 
-    print("iwae_forward_and_backward Done")
-    print(f"TIME: {time.time() - start}", flush=True)
+    # print("iwae_forward_and_backward Done")
+    # print(f"TIME: {time.time() - start}", flush=True)
 
     # kl_q_sigma_estimate = true_all_post_upper_bound_estimate - lower_bound_estimate
     # print(f"Gap in bounds: (KL(q||sigma) upper bound (using avg over samples)): {kl_q_sigma_estimate}")
@@ -1116,8 +1116,8 @@ def inspect_and_record_evidence_setting_for_index(
 
 
     if print_smc_samples:
-        print("Printing SMC Samples")
-        print(f"TIME: {time.time() - start}", flush=True)
+        # print("Printing SMC Samples")
+        # print(f"TIME: {time.time() - start}", flush=True)
 
         (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list,
                                            log_w_t_before_resample_list) = smc_procedure(
@@ -1157,8 +1157,8 @@ def inspect_and_record_evidence_setting_for_index(
                 text_outputs = tokenizer.batch_decode(full_seq, skip_special_tokens=True)
                 print(text_outputs)
     else:
-        print("Running SMC Procedure")
-        print(f"TIME: {time.time() - start}", flush=True)
+        # print("Running SMC Procedure")
+        # print(f"TIME: {time.time() - start}", flush=True)
 
         (_, log_z_hat_t, _), smc_samples = smc_procedure(
             sk_smc, prompt, params_p,
@@ -1175,8 +1175,8 @@ def inspect_and_record_evidence_setting_for_index(
         )
     smc_lower_bound_estimate = log_z_hat_t
 
-    print("Starting SMC Backward")
-    print(f"TIME: {time.time() - start}", flush=True)
+    # print("Starting SMC Backward")
+    # print(f"TIME: {time.time() - start}", flush=True)
 
     rng_key, sk_smc = jax.random.split(rng_key)
     smc_upper_bound_estimate = smc_backward(sk_smc, posterior_sample,
@@ -1193,8 +1193,8 @@ def inspect_and_record_evidence_setting_for_index(
     kl_q_sigma_smc_upper_bound_estimate = smc_upper_bound_estimate - f_q_estimate
     kl_q_sigma_smc_lower_bound_estimate = smc_lower_bound_estimate - f_q_estimate
 
-    print("Finished SMC Backward")
-    print(f"TIME: {time.time() - start}", flush=True)
+    # print("Finished SMC Backward")
+    # print(f"TIME: {time.time() - start}", flush=True)
 
     list_of_things_to_append_for_record_list = \
         [iwae_upper_bound_estimate, iwae_lower_bound_estimate,
