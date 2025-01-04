@@ -2,6 +2,7 @@ import jax
 from jax import vmap
 import jax.numpy as jnp
 from functools import partial
+import torch
 
 from custom_transformer_prob_utils import evaluate_log_p_theta_t, \
     stochastic_transformer_sample, evaluate_log_p_selected_tokens
@@ -293,7 +294,8 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, jnp_prompt,
     # print(inputs)
     # print(inputs['input_ids'].shape)
 
-    score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
+    with torch.no_grad():
+        score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
     score = jnp.array(score.numpy())
     score = jnp.minimum(score, reward_cap)
     # print("END OF REWARD MODEL TIME", flush=True)
