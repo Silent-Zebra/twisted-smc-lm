@@ -58,7 +58,9 @@ def save_kl_div_plot(
             target=(np.transpose(np.stack(f_q_estimates_list_of_arrays)), np.transpose(np.stack(g_q_estimates_list_of_arrays)),
                     np.transpose(np.stack(proposal_scores_list)), logZ_midpoint_estimate, np.transpose(np.stack(kl_to_prior_list))),
             step=epoch_starting_from_0,
-            prefix=f"f_q_g_q_logZbestmidpoint_info_{rm_type}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_lr{lr_twist}_nsamples")
+            prefix=f"f_q_g_q_logZbestmidpoint_info_{rm_type}_{twist_learn_type}_lr{lr_twist}_seed{seed}_nsamples"
+            # prefix=f"f_q_g_q_logZbestmidpoint_info_{rm_type}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_lr{lr_twist}_nsamples"
+        )
 
     return f_q_estimates_list_of_arrays
 
