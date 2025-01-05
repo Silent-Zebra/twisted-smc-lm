@@ -780,7 +780,7 @@ if __name__ == "__main__":
                                  "p_continuation", "exp_beta_toxicity", "exp_beta_toxicity_class_logprob",
                                  "exp_beta_sentiment_class_logprob",
                                  "toxicity_threshold", "sentiment_threshold",
-                                 "p_last_tokens", "toy_test"])
+                                 "p_last_tokens", "toy_test", "toy_rlhf"])
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens)")
