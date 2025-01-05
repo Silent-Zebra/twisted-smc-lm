@@ -781,6 +781,7 @@ if __name__ == "__main__":
                                  "exp_beta_sentiment_class_logprob",
                                  "toxicity_threshold", "sentiment_threshold",
                                  "p_last_tokens", "toy_test", "toy_rlhf"])
+    parser.add_argument("--reward_cap", type=float, default=None, help="Only used in conjunction with --rm_type toy_rlhf: value for the capped reward")
 
     parser.add_argument("--num_last_tokens_to_condition_on", type=int, default=0,
                         help="Number of last tokens to condition on (only for the rm_type == p_last_tokens)")
