@@ -100,7 +100,7 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, prompt_len,
 
     with torch.no_grad():
         score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
-    score = torch.minimum(score, reward_cap)
+    score = torch.minimum(score, reward_cap * torch.ones_like(score))
 
     return score
 
