@@ -575,7 +575,8 @@ def main():
             ckpt_dir=args.save_dir,
             target=target_to_save,
             step=len(g_q_estimates_list) - 1,
-            prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_ppo_{save_str}_nsamples"
+            prefix=f"f_q_g_q_estimates_ppo_{save_str}_nsamples"
+            # prefix=f"f_q_g_q_estimates_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_ppo_{save_str}_nsamples"
         )
 
     f_q_estimates_list = []
