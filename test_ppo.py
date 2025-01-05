@@ -99,8 +99,9 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, prompt_len,
     inputs = {key: value[:, :output_len * 2].to(device) for key, value in inputs.items()} # Truncate to no more than 2x output len, otherwise can have some crazy tokenizations.
 
     with torch.no_grad():
-        score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
+        score = rewardModel(**inputs).logits.squeeze(-1).detach()
     score = torch.minimum(score, reward_cap * torch.ones_like(score))
+    # score = score.to(device)
 
     return score
 
