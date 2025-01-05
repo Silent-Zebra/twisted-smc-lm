@@ -76,6 +76,34 @@ def reward_model_toxicity(seq, rewardModel, tokenizer_RM, tokenizer):
     return score
 
 
+def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, prompt_len, reward_cap):
+    if len(seq.shape) == 3:
+        raise NotImplementedError
+
+    question_seq = seq[:, :prompt_len]
+    answer_seq = seq[:, prompt_len:]
+
+    text_question = tokenizer.batch_decode(question_seq, skip_special_tokens=True)
+    text_answer = tokenizer.batch_decode(answer_seq, skip_special_tokens=True)
+
+    print(text_question)
+    print(text_answer)
+    1/0
+
+    inputs = tokenizer_RM(text_question, text_answer,
+                          return_tensors="pt",
+                          padding=True
+                          )
+
+    output_len = answer_seq.shape[-1]
+    device = rewardModel.device
+    inputs = {key: value[:, :output_len * 2].to(device) for key, value in inputs.items()} # Truncate to no more than 2x output len, otherwise can have some crazy tokenizations.
+
+    with torch.no_grad():
+        score = rewardModel(**inputs).logits.squeeze(-1).cpu().detach()
+    score = torch.minimum(score, reward_cap)
+
+    return score
 
 
 def main():
@@ -151,6 +179,16 @@ def main():
         score = (seq[:, -1] == 1263) * 1. - 2
         return score.to(device)
 
+    def capped_rm(
+        seq, rewardModel, tokenizer_RM, tokenizer, ref_model,
+        condition_twist_on_tokens=None, reward_cap=None, prompt_len=None
+    ):
+        assert reward_cap is not None
+        assert batch_prompt_pt is not None
+        return reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer,
+                              prompt_len=prompt_len, reward_cap=reward_cap)
+
+
 
     n_samples_f_q = 500
     if args.rm_type == "toxicity_threshold":
@@ -202,6 +240,17 @@ def main():
         class_num = 0
         rm_function = toy_test_rm
         prompts = ["Once upon a time, there was a", ]
+    elif args.rm_type in ["toy_rlhf"]:
+        rewardModel = AutoModelForSequenceClassification.from_pretrained(
+            "OpenAssistant/reward-model-deberta-v3-base")
+        tokenizer_RM = AutoTokenizer.from_pretrained(
+            "OpenAssistant/reward-model-deberta-v3-base")
+        model_config = 'gpt2-medium'
+
+        # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        prompts = ["Who is the greatest basketball player of all time?"]
+
+        # rm_function defined later
 
     else:
         raise NotImplementedError
@@ -263,12 +312,18 @@ def main():
 
     np_prompts = input_ids_and_mask['input_ids'][0]
 
+    if len(prompts) > 1:
+        raise NotImplementedError # TODO check that the below code all works in this setting
+
     batch_prompt = np.full((batch_size, np_prompts.shape[-1]), np_prompts)
 
     batch_prompt_pt = torch.tensor(batch_prompt, dtype=torch.int64, device=device)
 
     prompt_len = batch_prompt_pt.shape[-1]
 
+    if args.rm_type in ["toy_rlhf"]:
+        rm_function = partial(capped_rm, reward_cap=args.reward_cap,
+                              prompt_len=prompt_len)
 
     gen_kwargs = {"min_length": -1, "top_k": 0.0, "top_p": 1.0,
                   "do_sample": True, "pad_token_id": tokenizer.eos_token_id, "num_beams": 1,
