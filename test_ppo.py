@@ -86,9 +86,8 @@ def reward_model_toy_rlhf(seq, rewardModel, tokenizer_RM, tokenizer, prompt_len,
     text_question = tokenizer.batch_decode(question_seq, skip_special_tokens=True)
     text_answer = tokenizer.batch_decode(answer_seq, skip_special_tokens=True)
 
-    print(text_question)
-    print(text_answer)
-    1/0
+    # print(text_question)
+    # print(text_answer)
 
     inputs = tokenizer_RM(text_question, text_answer,
                           return_tensors="pt",
