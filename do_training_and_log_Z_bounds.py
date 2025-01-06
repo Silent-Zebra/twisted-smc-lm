@@ -394,8 +394,14 @@ class ExperimentConfig:
 
         if "bce" in self.twist_learn_type:
             # TODO definitely can move this to another function, but before doing that, remove duplicate code here
-            assert self.beta_temp == 1. # because otherwise the Bayesian formulation doesn't work right? In any case, not considered here
+
+
             rng_key, sk2, sk3 = jax.random.split(rng_key, 3)
+
+            if self.rm_type not in ["toy_rlhf"]:
+                assert self.beta_temp == 1. # Should be able to deal with beta != 1, just have to use the prob / M formulation with constant M like in rejection sampling. But I haven't implemented this and it hasn't been tested yet
+
+
 
             if self.rm_type in ["p_last_tokens",]:
                 p_samples = stochastic_transformer_sample(sk2,
@@ -478,8 +484,21 @@ class ExperimentConfig:
                 else:
                     raise NotImplementedError
 
-                log_prob_class = log_true_final_twist(
-                    samples_to_evaluate_over)  # This also works for something like toxicity threshold: the class then has either 0 or 1 (+ eps) probability
+                if self.rm_type in ["toy_rlhf"]:
+                    # The formulation we'll use here is: sigma(o_T | s) = e^(beta capped_reward)/e^(beta reward_cap) (this is our probability of being according to the class 1)
+                    # Therefore the log prob of the class = log sigma(o_T | s) = beta (capped_reward - reward_cap) (ranges from -inf to 0 as capped_reward <= reward_cap)
+                    # And so by training the discriminator/classifier, at optimality, the twist reflects sum of p_0(s_{t+1:T}|s_{1:T}) * sigma(o_T | s), where the division by M doesn't matter because it's a constant multiplier on the optimal twists, and we only need proportionality for twists anyway
+                    beta_times_capped_reward = log_true_final_twist(samples_to_evaluate_over)
+                    log_prob_class = beta_times_capped_reward - args.beta_temp * args.reward_cap
+
+                    print("LOG PROB CLASS")
+                    print(log_prob_class)
+                    print(log_prob_class.max())
+
+                else:
+
+                    log_prob_class = log_true_final_twist(
+                        samples_to_evaluate_over)  # This also works for something like toxicity threshold: the class then has either 0 or 1 (+ eps) probability
 
                 true_sigma_samples = samples_to_evaluate_over # Yeah I know these are not true sigma samples, I just didn't rename. Check the BCE loss, it just needs a set of samples passed in. Kind of like the set of samples we evaluate RL loss over
 

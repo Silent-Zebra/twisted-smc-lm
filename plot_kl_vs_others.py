@@ -77,7 +77,7 @@ color_list = [
     'xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:purple', 'xkcd:red', 'xkcd:black',  'xkcd:gray',  'xkcd:light brown', 'xkcd:pink',
     'xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:purple', 'xkcd:gold', 'xkcd:teal', 'xkcd:dark brown', 'xkcd:magenta'
 ]
-marker_list = ["o", "o", "o", "o", "o", "o", "o", "v", "^", "^", "x", "x", "x", "x", "D", "P", "P", "P"]
+marker_list = ["o", "v", "^", "x", "D", "P"]
 
 # xlimlow = -25
 # xlimhigh = 25
@@ -98,7 +98,7 @@ def dictkey_to_index_mapping(dictkey):
 
 
 def make_frontier_avg(xlabel, ylabel, dictkey_x, dictkey_y, figname, labels, results_list, n_epochs, color_list, marker_list,
-                  xlimlow=None, xlimhigh=None, fontsize=7, alpha=0.3):
+                  xlimlow=None, xlimhigh=None, fontsize=7, alpha=1.0, alpha_error=0.3):
     plt.clf()
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
@@ -119,15 +119,44 @@ def make_frontier_avg(xlabel, ylabel, dictkey_x, dictkey_y, figname, labels, res
         # print(np.stack(y_results).shape)
         # 1/0
 
-        to_plot_x = np.stack(x_results).mean(axis=1)[:, -1].mean(axis=0)
-        to_plot_y = np.stack(y_results).mean(axis=1)[:, -1].mean(axis=0)
+        to_plot_x = np.stack(x_results)
+        to_plot_y = np.stack(y_results)
+
+        # print(to_plot_x.shape)
+        # print(to_plot_y.shape)
+
+        n_samples_x = to_plot_x.shape[0]
+        n_samples_y = to_plot_y.shape[0]
+
+        to_plot_x = to_plot_x.mean(axis=1)[:, -1]
+        to_plot_y = to_plot_y.mean(axis=1)[:, -1]
+
+        z_score = 1.96  # For 95% confidence
+        x_std = np.std(to_plot_x, axis=0, ddof=1)
+        y_std = np.std(to_plot_y, axis=0, ddof=1)
+        x_conf = z_score * x_std / np.sqrt(n_samples_x)
+        y_conf = z_score * y_std / np.sqrt(n_samples_y)
+
+        to_plot_x = to_plot_x.mean(axis=0)
+        to_plot_y = to_plot_y.mean(axis=0)
         # to_plot_x = np.stack(x_results).mean(axis=1).mean(axis=0)
         # to_plot_y = np.stack(y_results).mean(axis=1).mean(axis=0)
 
-        print(to_plot_x.shape)
-        print(to_plot_y.shape)
+        # print(to_plot_x.shape)
+        # print(to_plot_y.shape)
 
         plt.scatter(to_plot_x, to_plot_y, label=labels[i], c=color_list[i], marker=marker_list[i], alpha=alpha)
+
+        plt.errorbar(
+            to_plot_x,
+            to_plot_y,
+            xerr=x_conf,
+            yerr=y_conf,
+            fmt='',
+            ecolor=color_list[i],
+            alpha=alpha_error,
+            capsize=2,
+        )
 
     if (xlimlow is not None) or (xlimhigh is not None):
         plt.xlim(xlimlow, xlimhigh)

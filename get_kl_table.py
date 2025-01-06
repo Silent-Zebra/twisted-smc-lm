@@ -360,6 +360,54 @@ load_prefixes_sent_truepost_comparison = [
 
 
 
+load_prefixes_toy_rlhf = [
+    [
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_20-08_seed0_ebm_one_sample_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_20-06_seed1_ebm_one_sample_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_00-37_seed2_ebm_one_sample_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_00-38_seed3_ebm_one_sample_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_00-20_seed4_ebm_one_sample_lr1e-05_nsamples11"
+    ],
+    [
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr3e-05_seed0_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr3e-05_seed1_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_00-50_seed2_ebm_one_sample_lr3e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_00-37_seed3_ebm_one_sample_lr3e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_00-21_seed4_ebm_one_sample_lr3e-05_nsamples11"
+    ],
+    # [
+    #     ""
+    # ],
+    [
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_05-02_seed0_sixo_partial_jit_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_05-11_seed1_sixo_partial_jit_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_05-14_seed2_sixo_partial_jit_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_20-33_seed3_sixo_partial_jit_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_20-34_seed4_sixo_partial_jit_lr1e-05_nsamples11"
+    ],
+    [
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_07-14_seed0_one_total_kl_partial_jit_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_07-19_seed1_one_total_kl_partial_jit_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_07-20_seed2_one_total_kl_partial_jit_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_21-00_seed3_one_total_kl_partial_jit_lr1e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_21-07_seed4_one_total_kl_partial_jit_lr1e-05_nsamples11"
+    ],
+    [
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_07-08_seed0_one_total_kl_partial_jit_lr3e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_06-17_seed1_one_total_kl_partial_jit_lr3e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_06-17_seed2_one_total_kl_partial_jit_lr3e-05_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr3e-05_seed3_nsamples11",
+        "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr3e-05_seed4_nsamples11"
+    ],
+    [
+        "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed0_nsamples11",
+        "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed1_nsamples11",
+        "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed2_nsamples11",
+        "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed3_nsamples11",
+        "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed4_nsamples11"
+    ]
+]
+
 
 
 
@@ -555,17 +603,21 @@ def load_checkpoint(prefix):
 def get_logZ_midpoint_to_use(fig_name_modifier, load_prefixes):
 
     if "15_10" in fig_name_modifier:
+        print("Using hardcoded/external logZ midpoint estimate")
         logZ_midpoint_to_use = -20.708 # Estimate from thousands of IWAE bounds on the best model (One-Total-KL (DPG)). Should be pretty accurate.
 
     elif "plast2_1" in fig_name_modifier: # Only if there aren't enough samples (e.g. 30 conditioning token samples isn't really enough) to get a good idea of the average log partition function over conditioning tokens
         # median_logZ_midpoint = np.median(np.stack(midpoint_of_last_f_q_g_q_list))
+        print("Using hardcoded/external logZ midpoint estimate")
         logZ_midpoint_to_use = -2.753 # Estimate from thousands of IWAE bounds. Should be pretty accurate.
 
     else:
+        print("Using median of logZ midpoint estimates")
         logZ_midpoint_estimates = get_logZ_midpoint_estimates(load_prefixes)
+        print(logZ_midpoint_estimates)
         # print(np.std(np.stack(logZ_midpoint_estimates), ddof=1) * 1.96 / np.sqrt(np.stack(logZ_midpoint_estimates).shape[0]))
         median_logZ_midpoint = np.median(np.stack(logZ_midpoint_estimates))
-        # print(f"MEDIAN: {median_logZ_midpoint}")
+        print(f"MEDIAN: {median_logZ_midpoint}")
         if "sent_rl_comp" in fig_name_modifier or len(load_prefixes) <= 3:
             median_logZ_midpoint = logZ_midpoint_estimates[
                 0]  # Needed when you have a bunch of unstable estimates.
@@ -591,115 +643,141 @@ def get_logZ_midpoint_estimates(load_prefixes):
                     logZ_midpoint_estimates.append(logZ_midpoint_estimate)
     return logZ_midpoint_estimates
 
-twist_learn_method_names = [
-    "Contrastive",
-    "RL",
-    "SIXO",
-    "FUDGE",
-    "--",
-    "--",
-    "--",
-    "--",
-    "--",
-    "--",
-    # "--",
-    "--",
-    "--",
-    "--",
-    "--",
-    "--",
-    # "--",
-]
 
-# All constant LR for now
-proposal_names = [
-    "Twisted",
-    "Twisted",
-    "Twisted",
-    "Twisted",
-    "DPG",
-    r"PPO (Original (TRL), 4 Steps, Shared Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
-    r"PPO (OpenRLHF, 4 Steps, Shared Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
-    r"PPO (OpenRLHF, 4 Steps, Shared Actor Critic, Adam $\beta_2=0.999$, With Dropout)",
-    r"PPO (OpenRLHF, 4 Steps, Shared Actor Critic, Adam $\beta_2=0.95$, No Dropout)",
-    r"PPO (OpenRLHF, 1 Step, Shared Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
-    # "PPO (OpenRLHF, 1 Step, Cosine LR)",
-    r"PPO (OpenRLHF, 4 Steps, Separate Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
-    r"PPO (OpenRLHF, 4 Steps, Separate Actor Critic, Adam $\beta_2=0.95$, With Dropout)",
-    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
-    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Adam $\beta_2=0.95$, No Dropout)",
-    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Adam $\beta_2=0.95$, With Dropout)",
-    # "PPO (OpenRLHF, Modulation Param)",
+if __name__ == "__main__":
 
-]
+    twist_learn_method_names = [
+        "Contrastive",
+        "RL",
+        "SIXO",
+        "FUDGE",
+        "--",
+        "--",
+        "--",
+        "--",
+        "--",
+        "--",
+        # "--",
+        "--",
+        "--",
+        "--",
+        "--",
+        "--",
+        # "--",
+    ]
 
-# make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_04-22")
-# make_table(load_prefixes_sent1_nnonly, twist_learn_method_names, proposal_names, "sent1_nnonly_04-20")
-# make_table(load_prefixes_plasttok15_10, twist_learn_method_names, proposal_names, "plast15_10_04-22")
-# make_table(load_prefixes_plasttok2_1, twist_learn_method_names, proposal_names, "plast2_1_04-22")
-# NOTE THE FIG NAME MATTERS FOR INFILLING
+    # All constant LR for now
+    proposal_names = [
+        "Twisted",
+        "Twisted",
+        "Twisted",
+        "Twisted",
+        "DPG",
+        r"PPO (Original (TRL), 4 Steps, Shared Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+        r"PPO (OpenRLHF, 4 Steps, Shared Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+        r"PPO (OpenRLHF, 4 Steps, Shared Actor Critic, Adam $\beta_2=0.999$, With Dropout)",
+        r"PPO (OpenRLHF, 4 Steps, Shared Actor Critic, Adam $\beta_2=0.95$, No Dropout)",
+        r"PPO (OpenRLHF, 1 Step, Shared Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+        # "PPO (OpenRLHF, 1 Step, Cosine LR)",
+        r"PPO (OpenRLHF, 4 Steps, Separate Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+        r"PPO (OpenRLHF, 4 Steps, Separate Actor Critic, Adam $\beta_2=0.95$, With Dropout)",
+        r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Adam $\beta_2=0.999$, No Dropout)",
+        r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Adam $\beta_2=0.95$, No Dropout)",
+        r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Adam $\beta_2=0.95$, With Dropout)",
+        # "PPO (OpenRLHF, Modulation Param)",
 
+    ]
 
-# make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_11-30")
-# -------------
-
+    # make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_04-22")
+    # make_table(load_prefixes_sent1_nnonly, twist_learn_method_names, proposal_names, "sent1_nnonly_04-20")
+    # make_table(load_prefixes_plasttok15_10, twist_learn_method_names, proposal_names, "plast15_10_04-22")
+    # make_table(load_prefixes_plasttok2_1, twist_learn_method_names, proposal_names, "plast2_1_04-22")
+    # NOTE THE FIG NAME MATTERS FOR INFILLING
 
 
-#
-# twist_learn_method_names = [
-#     r"Contrastive",
-#     r"",
-#     r"RL",
-#     r"",
-#     r"SIXO",
-#     r"",
-#     "--",
-#     "",
-# ]
-# proposal_names = [
-#     "Twisted",
-#     "Twisted",
-#     "Twisted",
-#     "Twisted",
-#     "Twisted",
-#     "Twisted",
-#     "DPG",
-#     "DPG",
-# ]
-#
-# plot_names = [
-#     r"Twisted Proposal (Contrastive, Exact $\sigma$)",
-#     r"Twisted Proposal (Contrastive)",
-#     r"Twisted Proposal (RL, Exact $\sigma$)",
-#     r"Twisted Proposal (RL)",
-#     r"Twisted Proposal (SIXO, Exact $\sigma$)",
-#     r"Twisted Proposal (SIXO)",
-#     r"DPG Proposal (Exact $\sigma$)",
-#     r"DPG Proposal",
-# ]
-
-# make_table(load_prefixes_tox_truepost_comparison, twist_learn_method_names, proposal_names, "toxc_truepost_04-22", exact_num_epochs=6, legendsize=6)
-# make_table(load_prefixes_sent_truepost_comparison, twist_learn_method_names, proposal_names, "sent_truepost_04-22", exact_num_epochs=9, legendsize=6)
+    # make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_11-30")
+    # -------------
 
 
 
+    #
+    # twist_learn_method_names = [
+    #     r"Contrastive",
+    #     r"",
+    #     r"RL",
+    #     r"",
+    #     r"SIXO",
+    #     r"",
+    #     "--",
+    #     "",
+    # ]
+    # proposal_names = [
+    #     "Twisted",
+    #     "Twisted",
+    #     "Twisted",
+    #     "Twisted",
+    #     "Twisted",
+    #     "Twisted",
+    #     "DPG",
+    #     "DPG",
+    # ]
+    #
+    # plot_names = [
+    #     r"Twisted Proposal (Contrastive, Exact $\sigma$)",
+    #     r"Twisted Proposal (Contrastive)",
+    #     r"Twisted Proposal (RL, Exact $\sigma$)",
+    #     r"Twisted Proposal (RL)",
+    #     r"Twisted Proposal (SIXO, Exact $\sigma$)",
+    #     r"Twisted Proposal (SIXO)",
+    #     r"DPG Proposal (Exact $\sigma$)",
+    #     r"DPG Proposal",
+    # ]
 
-twist_learn_method_names = [
-    "Twisted",
-    "--",
-    "--",
-    "--",
-    "--",
+    # make_table(load_prefixes_tox_truepost_comparison, twist_learn_method_names, proposal_names, "toxc_truepost_04-22", exact_num_epochs=6, legendsize=6)
+    # make_table(load_prefixes_sent_truepost_comparison, twist_learn_method_names, proposal_names, "sent_truepost_04-22", exact_num_epochs=9, legendsize=6)
 
-]
 
-# All constant LR for now
-proposal_names = [
-    r"Twisted Proposal (Contrastive, Exact $\sigma$)",
-    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Critic LR 0.0)",
-    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Squared Error (RL) Critic Loss, LR 1e-4)",
-    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, CTL Critic Loss, LR 1e-5)",
-    r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, SIXO Critic Loss, LR 1e-6)",
-]
 
-make_table(load_prefixes_toxc_ppo, twist_learn_method_names, proposal_names, "toxc_ppo_12-31")
+
+    # twist_learn_method_names = [
+    #     "Twisted",
+    #     "--",
+    #     "--",
+    #     "--",
+    #     "--",
+    #
+    # ]
+    #
+    # # All constant LR for now
+    # proposal_names = [
+    #     r"Twisted Proposal (Contrastive, Exact $\sigma$)",
+    #     r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Critic LR 0.0)",
+    #     r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, Squared Error (RL) Critic Loss, LR 1e-4)",
+    #     r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, CTL Critic Loss, LR 1e-5)",
+    #     r"PPO (OpenRLHF, 1 Step, Separate Actor Critic, SIXO Critic Loss, LR 1e-6)",
+    # ]
+    #
+    # make_table(load_prefixes_toxc_ppo, twist_learn_method_names, proposal_names, "toxc_ppo_12-31")
+
+
+
+    twist_learn_method_names = [
+        r"Contrastive, LR 1e-5",
+        r"Contrastive, LR 3e-5",
+        # r"RL",
+        r"SIXO",
+        "--",
+        "--",
+        "--",
+    ]
+    proposal_names = [
+        "Twisted",
+        "Twisted",
+        # "Twisted",
+        "Twisted",
+        "DPG, LR 1e-5",
+        "DPG, LR 3e-5",
+        "PPO"
+    ]
+
+    make_table(load_prefixes_toy_rlhf, twist_learn_method_names, proposal_names, "toy_rlhf-01-04-2025")
