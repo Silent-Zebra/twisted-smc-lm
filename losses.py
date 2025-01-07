@@ -283,6 +283,32 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         params_proposal=params_proposal
         # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
     )
+
+    log_q = evaluate_normalized_log_q_1_to_t(proposal_samples, params_p, params_twist, prompt_len, condition_twist_on_tokens, huggingface_model, params_proposal=params_proposal)
+    log_tilde_sigma = evaluate_log_p_theta_1_to_t(proposal_samples,
+                                                              params_p,
+                                                              prompt_len,
+                                                              huggingface_model=huggingface_model) \
+                                  + evaluate_log_phi_final(proposal_samples,
+                                                           log_true_final_twist,
+                                                           condition_twist_on_tokens)
+
+    print("INSPECT CTL")
+    print(log_tilde_sigma - log_q)
+    print(log_w_t_sigma_samples)
+    print(log_tilde_sigma - log_q - log_w_t_sigma_samples)
+    print(jnp.abs(log_tilde_sigma - log_q - log_w_t_sigma_samples).mean())
+
+    # Afterwards: return the log q and of course keep the normalized w_t_sigma_samples for future use
+    # Then all that needs to be done is recalculate the negative weights (this needs stop_grad)
+    # And of course re-evaluate the log_psi values (this needs gradient through it)
+    # Then can recalc the loss, and do this in a loop...
+    # TODO Ensure that this converges to 0 loss in the limit of infinite repetition
+    # Also, may want to test this for CTL in the other experiment settings also.
+
+    1/0
+
+
     normalized_w_t_sigma_samples = jax.nn.softmax(
         jax.lax.stop_gradient(log_w_t_sigma_samples))
     log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(

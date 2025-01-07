@@ -2460,6 +2460,7 @@ def main():
     proposal_scores_list = []
     kl_to_prior_list = []
 
+
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
@@ -2483,6 +2484,20 @@ def main():
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
+
+
+            rng_key, sk = jax.random.split(rng_key)
+            # TODO DEBUG ONLY REMOVE LATER
+            get_l_ebm_one_sample(None, huggingface_model,
+                                 log_true_final_twist, args.n_twist, args.output_len,
+                                 params_p,
+                                 params_proposal, params_twist,
+                                 None, prompt,
+                                 prompt.shape[-1], args.proposal_is_p, replay_buffer,
+                                 False, sk,
+                                 experiment_cfg.smc_procedure_type,
+                                 true_sigma_samples=None)
+            1/0
 
 
             # if args.load_OpenRLHF_ckpt:
