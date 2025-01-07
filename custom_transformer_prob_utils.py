@@ -214,6 +214,7 @@ def get_p_logits_and_log_psi_all_vocab(
             # Which is the same, except for a different subtracted constant. But in log space, for sampling, this doesn't matter, this constant will go away
             # That is, we would indeed learn different values of a1 and b1 across the two cases, but they would only differ by a constant
             log_psi_all_vocab = log_p_plus_log_psi_logits_all_vocab - p_logits
+            log_psi_all_vocab = log_psi_all_vocab[:, prompt_len - 1: -1]
 
         else:
             if params_proposal is not None:
@@ -236,7 +237,6 @@ def get_p_logits_and_log_psi_all_vocab(
         # TODO NOTE THAT if not specifying the hface_model_params, it defaults to whatever is in the huggingface_model
         # Which is based on the CustomLMWithTwistHead.huggingface_model._params
         p_logits, log_psi_all_vocab = huggingface_model(input_ids=full_seq, ret="both", hface_model_params=params_p, params_twist_head=params_twist, condition_twist_on_tokens=condition_twist_on_tokens)
-
         log_psi_all_vocab = log_psi_all_vocab[:, prompt_len - 1: -1]
 
 

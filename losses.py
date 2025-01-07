@@ -260,39 +260,45 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
                    params_proposal, params_twist, posterior_sample, prompt,
                    prompt_len, proposal_is_p, replay_buffer,
                    return_proposal_samples, sk2, smc_procedure_type,
-                   true_sigma_samples):
+                   true_sigma_samples, q_samples_to_use=None, log_q_on_samples_to_use=None):
     assert true_sigma_samples is None
     assert replay_buffer is None
     assert posterior_sample is None
-    # assert not p_neg_sample
-    (log_w_t_sigma_samples, _,
-     log_psi_t_eval_list_proposal_samples), proposal_samples, (
-        intermediate_twist_samples_hist,
-        intermediate_log_w_t_hist, _) = smc_procedure(
-        sk2, prompt, params_p, params_twist,
-        log_true_final_twist, output_len, n_twist,
-        smc_procedure_type=smc_procedure_type,
-        get_intermediate_sample_history_based_on_learned_twists=True,
-        condition_twist_on_tokens=condition_twist_on_tokens,
-        proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        resample=False,
-        # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
-        # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
-        resample_for_log_psi_t_eval_list=False,  # NOTE THE FALSE HERE
-        tempered_twist=False,
-        params_proposal=params_proposal
-        # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
-    )
 
-    log_q = evaluate_normalized_log_q_1_to_t(
-        proposal_samples, params_p, params_twist, prompt_len, condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, return_cumsum=True
-    )
-    log_q_single = evaluate_normalized_log_q_1_to_t(
-        proposal_samples, params_p, params_twist, prompt_len,
-        condition_twist_on_tokens,
-        huggingface_model, params_proposal=params_proposal, return_cumsum=False
-    )
+    if q_samples_to_use is not None:
+        assert log_q_on_samples_to_use is not None
+        proposal_samples = q_samples_to_use
+        log_q = log_q_on_samples_to_use
+    else:
+        # assert not p_neg_sample
+        (log_w_t_sigma_samples, _,
+         log_psi_t_eval_list_proposal_samples), proposal_samples, (
+            intermediate_twist_samples_hist,
+            intermediate_log_w_t_hist, _) = smc_procedure(
+            sk2, prompt, params_p, params_twist,
+            log_true_final_twist, output_len, n_twist,
+            smc_procedure_type=smc_procedure_type,
+            get_intermediate_sample_history_based_on_learned_twists=True,
+            condition_twist_on_tokens=condition_twist_on_tokens,
+            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+            resample=False,
+            # ALSO IMPORTANT. No resampling on the proposal distribution (otherwise that changes the distribution, and the resampling steps weren't in my mathematical derivation)
+            # ALSO IMPORTANT: RESAMPLE MUST BE FALSE FOR THE SETTING WHERE YOU HAVE ALL TRUE POSTERIORS AND ARE CONDITIONING ON THE LAST TOKENS FOR THE TWIST (rm_type == p_last_tokens)
+            resample_for_log_psi_t_eval_list=False,  # NOTE THE FALSE HERE
+            tempered_twist=False,
+            params_proposal=params_proposal
+            # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
+        )
+
+        log_q = evaluate_normalized_log_q_1_to_t(
+            proposal_samples, params_p, params_twist, prompt_len, condition_twist_on_tokens,
+            huggingface_model, params_proposal=params_proposal, return_cumsum=True
+        )
+        log_q_single = evaluate_normalized_log_q_1_to_t(
+            proposal_samples, params_p, params_twist, prompt_len,
+            condition_twist_on_tokens,
+            huggingface_model, params_proposal=params_proposal, return_cumsum=False
+        )
     # print("LOG Q inspection")
     # print(log_q[:, -1] - log_q_single)
     # print(jnp.abs(log_q[:, -1] - log_q_single).mean())
@@ -308,9 +314,9 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     print("INSPECT CTL")
     # print(log_q)
     # print(log_q.shape)
-    print(log_tilde_sigma - log_q[:, -1])
-    print(log_w_t_sigma_samples)
-    print(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples)
+    # print(log_tilde_sigma - log_q[:, -1])
+    # print(log_w_t_sigma_samples)
+    # print(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples)
     print(jnp.abs(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples).mean())
 
     # Afterwards: return the log q and of course keep the normalized w_t_sigma_samples for future use
@@ -326,8 +332,8 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     normalized_w_t_sigma_samples_new = jax.nn.softmax(
         jax.lax.stop_gradient(log_tilde_sigma - log_q[:, -1]))
 
-    print(normalized_w_t_sigma_samples)
-    print(normalized_w_t_sigma_samples_new)
+    # print(normalized_w_t_sigma_samples)
+    # print(normalized_w_t_sigma_samples_new)
     print(jnp.abs(normalized_w_t_sigma_samples_new - normalized_w_t_sigma_samples).mean())
 
     print("second term inspection")
@@ -348,9 +354,39 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
 
     print(log_p_new.shape)
     print(log_psi_new.shape)
-    print(log_p_new)
+    # print(log_p_new)
     log_p_new = jnp.cumsum(log_p_new, axis=-1) # TODO make this return_cumsum flag in eval_log_p_theta
-    print(log_p_new)
+    # print(log_p_new)
+
+    print("CHECK DIFFERENCE")
+    p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
+        proposal_samples, params_p, params_twist,
+        condition_twist_on_tokens,
+        huggingface_model,
+        prompt_len=prompt_len)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
+
+    log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
+    print(log_p_t - log_p_new)
+    print(jnp.abs(log_p_t - log_p_new).mean())
+
+    print("CHECK DIFFERENCE")
+    # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+    log_psi = log_psi_all_vocab
+    print(log_psi - log_psi_new)
+    print(jnp.abs(log_psi - log_psi_new).mean())
+
+    log_p_plus_log_psi_all_vocab = log_p_t + log_psi
+    normalized_log_q_t_all_vocab = jax.nn.log_softmax(
+        log_p_plus_log_psi_all_vocab, axis=-1)
+
+    seq_selected = proposal_samples[:, prompt_len:]
+    normalized_log_q_t_across_t = normalized_log_q_t_all_vocab[
+        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+            seq_selected.shape[1]), seq_selected]
+
+    print("CHECK DIFFERENCE")
+    print(normalized_log_q_t_across_t - log_q)
+    print(jnp.abs(normalized_log_q_t_across_t - log_q).mean())
 
     log_p_psi = log_p_new + log_psi_new
     log_w_t_pi = log_p_psi - log_q # LOG Q is the old one!!! Because the samples are from the old one also
@@ -361,8 +397,6 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     print(log_w_t_pi[:, 0])
     print(log_w_t_pi[:, 0] - intermediate_log_w_t_hist[0])
     print(jnp.abs(log_w_t_pi[:, 0] - intermediate_log_w_t_hist[0]).mean())
-
-
 
     log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(
         proposal_samples, prompt_len, params_twist,
@@ -395,7 +429,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     l_ebm_new = -(jnp.dot(log_psi_on_truncated_proposal_samples.mean(axis=-1),
                           normalized_w_t_sigma_samples) - ebm_second_term)
     if return_proposal_samples:
-        return l_ebm_new, proposal_samples
+        return l_ebm_new, (proposal_samples, log_q)
     return l_ebm_new
 
 

@@ -48,7 +48,7 @@ def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twis
 
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
-                 sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False, OpenRLHF_ckpt=False
+                 sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False, OpenRLHF_ckpt=False, twist_updates_per_batch=1
     ):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
@@ -60,6 +60,8 @@ class ExperimentConfig:
         self.n_twist_ebm_vmap = n_twist_ebm_vmap
 
         self.train_on_true_posterior_samples = train_on_true_posterior_samples
+
+        self.twist_updates_per_batch = twist_updates_per_batch
 
         # TODO think about if there's some way to avoid the tons of arguments (params_p, params_twist, etc. that is everywhere - can I have them in one centralized place?)
         # TODO I could wrap all of the arguments in a single tuple, sort of like what I did with "carry" before
@@ -103,7 +105,10 @@ class ExperimentConfig:
         if self.twist_learn_type == "ebm_old":
             twist_grad_fn = jax.grad(get_l_ebm_fn, argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_one_sample":
-            twist_grad_fn = jax.grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=standard_argnum)
+            if self.twist_updates_per_batch > 1:
+                twist_grad_fn = jax.value_and_grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=standard_argnum, has_aux=True)
+            else:
+                twist_grad_fn = jax.grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_reweight":
             twist_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_partial_jit":
@@ -387,7 +392,7 @@ class ExperimentConfig:
                               proposal_is_p=False, huggingface_model=None,
                               tempered_twist=False, beta_prop=None, replay_buffer=None,
                               replay_buffer_log_w_ts=None, params_proposal=None, OpenRLHF_ckpt=False,
-                              reward_cap=None, n_samples_for_cap=None):
+                              reward_cap=None, n_samples_for_cap=None, q_samples_to_use=None, log_q_on_samples_to_use=None):
 
         true_sigma_samples = None
         condition_twist_on_tokens = None
@@ -554,18 +559,38 @@ class ExperimentConfig:
             true_sigma_samples = None
 
         rng_key, sk = jax.random.split(rng_key)
-        grad_params_twist = self.twist_grad_fn(
-            sk, prompt, params_p,
-            params_twist, log_true_final_twist, output_len,
-            n_twist, smc_procedure_type=self.smc_procedure_type,
-            condition_twist_on_tokens=condition_twist_on_tokens,
-            proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-            tempered_twist=tempered_twist, beta_prop=beta_prop,
-            true_sigma_samples=true_sigma_samples, replay_buffer=replay_buffer,
-            replay_buffer_log_w_ts=replay_buffer_log_w_ts,
-            params_proposal=params_proposal
-        )
-        return rng_key, grad_params_twist
+
+        if self.twist_updates_per_batch > 1:
+            stuff, grad_params_twist = self.twist_grad_fn(
+                sk, prompt, params_p,
+                params_twist, log_true_final_twist, output_len,
+                n_twist, smc_procedure_type=self.smc_procedure_type,
+                condition_twist_on_tokens=condition_twist_on_tokens,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                true_sigma_samples=true_sigma_samples,
+                replay_buffer=replay_buffer,
+                replay_buffer_log_w_ts=replay_buffer_log_w_ts,
+                params_proposal=params_proposal, q_samples_to_use=q_samples_to_use, log_q_on_samples_to_use=log_q_on_samples_to_use
+            )
+            value, aux_data = stuff
+            print("LOSS VALUE")
+            print(value)
+            return rng_key, grad_params_twist, aux_data
+        else:
+            grad_params_twist = self.twist_grad_fn(
+                sk, prompt, params_p,
+                params_twist, log_true_final_twist, output_len,
+                n_twist, smc_procedure_type=self.smc_procedure_type,
+                condition_twist_on_tokens=condition_twist_on_tokens,
+                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                true_sigma_samples=true_sigma_samples, replay_buffer=replay_buffer,
+                replay_buffer_log_w_ts=replay_buffer_log_w_ts,
+                params_proposal=params_proposal
+            )
+            return rng_key, grad_params_twist
 
 
     # @partial(jax.jit, static_argnames=[
@@ -580,18 +605,54 @@ class ExperimentConfig:
                      params_proposal=None, OpenRLHF_ckpt=False, reward_cap=None
                      ):
 
-        rng_key, grad_params_twist = self.get_grad_params_twist(
-            rng_key, prompt, n_twist,
-            output_len, params_p,
-            params_twist, log_true_final_twist,
-            proposal_is_p=proposal_is_p,
-            huggingface_model=huggingface_model,
-            tempered_twist=tempered_twist, beta_prop=beta_prop,
-            replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts,
-            params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt, reward_cap=reward_cap
-        )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
+        if self.twist_updates_per_batch > 1:
+            for n_twist_update in range(self.twist_updates_per_batch):
+                print(n_twist_update)
+                if n_twist_update == 0:
+                    rng_key, grad_params_twist, aux_data = self.get_grad_params_twist(
+                        rng_key, prompt, n_twist,
+                        output_len, params_p,
+                        params_twist, log_true_final_twist,
+                        proposal_is_p=proposal_is_p,
+                        huggingface_model=huggingface_model,
+                        tempered_twist=tempered_twist, beta_prop=beta_prop,
+                        replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts,
+                        params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt, reward_cap=reward_cap
+                    )
+                    q_samples_to_use, log_q_on_samples_to_use = aux_data
+                else:
+                    rng_key, grad_params_twist, _ = self.get_grad_params_twist(
+                        rng_key, prompt, n_twist,
+                        output_len, params_p,
+                        params_twist, log_true_final_twist,
+                        proposal_is_p=proposal_is_p,
+                        huggingface_model=huggingface_model,
+                        tempered_twist=tempered_twist, beta_prop=beta_prop,
+                        replay_buffer=replay_buffer,
+                        replay_buffer_log_w_ts=replay_buffer_log_w_ts,
+                        params_proposal=params_proposal,
+                        OpenRLHF_ckpt=OpenRLHF_ckpt, reward_cap=reward_cap,
+                        q_samples_to_use=q_samples_to_use,
+                        log_q_on_samples_to_use=log_q_on_samples_to_use
+                    )
 
-        params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
+                params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
+                    optimizer_twist, grad_params_twist, optim_twist_state,
+                    params_twist)
+        else:
+
+            rng_key, grad_params_twist = self.get_grad_params_twist(
+                rng_key, prompt, n_twist,
+                output_len, params_p,
+                params_twist, log_true_final_twist,
+                proposal_is_p=proposal_is_p,
+                huggingface_model=huggingface_model,
+                tempered_twist=tempered_twist, beta_prop=beta_prop,
+                replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts,
+                params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt, reward_cap=reward_cap
+            )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
+
+            params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
 
         return rng_key, params_twist, optim_twist_state
 
@@ -1921,7 +1982,7 @@ def setup_cfg(
     load_posterior_samples=False, load_prefix_posterior_samples=None,
     sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
-    output_p_psi=False, separate_proposal_and_twist=False, reward_cap=None, n_samples_for_cap=None
+    output_p_psi=False, separate_proposal_and_twist=False, reward_cap=None, n_samples_for_cap=None, twist_updates_per_batch=1
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1932,7 +1993,8 @@ def setup_cfg(
         sentiment_class=sentiment_class,
         n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
         train_on_true_posterior_samples=train_on_true_posterior_samples,
-        OpenRLHF_ckpt=load_OpenRLHF_ckpt
+        OpenRLHF_ckpt=load_OpenRLHF_ckpt,
+        twist_updates_per_batch=twist_updates_per_batch
     )
 
     load_dir_ckpt, load_dir_posterior_samples = load_dirs
@@ -2407,7 +2469,8 @@ def main():
         "softmax_twist": False, "n_twist_ebm_vmap": args.n_twist_ebm_vmap, "ebm_combined_alpha": args.ebm_combined_alpha,
         "train_on_true_posterior_samples": args.train_on_true_posterior_samples,
         "output_p_psi": args.output_p_psi, "separate_proposal_and_twist": args.separate_proposal_and_twist,
-        "reward_cap": args.reward_cap, "n_samples_for_cap": args.n_samples_for_cap
+        "reward_cap": args.reward_cap, "n_samples_for_cap": args.n_samples_for_cap,
+        "twist_updates_per_batch": args.twist_updates_per_batch
     }
 
     if args.only_collect_true_posterior_samples:
@@ -2764,8 +2827,13 @@ if __name__ == "__main__":
     parser.add_argument("--reward_cap", type=float, default=None, help="Only used in conjunction with --rm_type toy_rlhf: value for the capped reward")
     parser.add_argument("--n_samples_for_cap", type=int, default=None, help="Only used in conjunction with --rm_type toy_rlhf and only_collect_true_posterior_samples: get the max among this many samples, and use that as the cap.")
 
+    parser.add_argument("--twist_updates_per_batch", type=int, default=1, help="If >1, then for each batch of n_twist size drawn from the proposal, do twist_updates_per_batch number of twist updates")
 
     args = parser.parse_args()
+
+    assert args.twist_updates_per_batch >= 1
+    if args.twist_updates_per_batch > 1:
+        assert args.twist_learn_type == "ebm_one_sample" # So far only implemented and tested for this particular twist update setting
 
     if args.use_lora:
         assert args.separate_hface_twist_model
