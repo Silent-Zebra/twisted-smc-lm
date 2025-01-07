@@ -319,7 +319,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
 
     print(normalized_w_t_sigma_samples)
     print(normalized_w_t_sigma_samples_new)
-    print(jnp.abs(log_tilde_sigma - log_q - log_w_t_sigma_samples).mean())
+    print(jnp.abs(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples).mean())
 
     print("second term inspection")
 
