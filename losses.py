@@ -306,11 +306,45 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     # TODO Ensure that this converges to 0 loss in the limit of infinite repetition
     # Also, may want to test this for CTL in the other experiment settings also.
 
+    normalized_w_t_sigma_samples = jax.nn.softmax(
+        jax.lax.stop_gradient(log_w_t_sigma_samples))
+
+    normalized_w_t_sigma_samples_new = jax.nn.softmax(
+        jax.lax.stop_gradient(log_tilde_sigma - log_q))
+
+    print(normalized_w_t_sigma_samples)
+    print(normalized_w_t_sigma_samples_new)
+    print(jnp.abs(log_tilde_sigma - log_q - log_w_t_sigma_samples).mean())
+
+    print("second term inspection")
+
+    print(intermediate_log_w_t_hist)
+
+    # TODO ensure below is using the new params_p, whereas the previous evaluation is saved as the old params_p
+    new_params_p = params_p
+    log_p_new = evaluate_log_p_theta_1_to_t(proposal_samples,
+                                new_params_p,
+                                prompt_len,
+                                huggingface_model=huggingface_model,
+                                            output_log_p_for_each_t=True)
+    log_psi_new = evaluate_log_psi_selected_tokens(
+        proposal_samples, prompt_len, params_twist,
+        condition_twist_on_tokens,
+        huggingface_model,
+        params_proposal=params_proposal, params_p=new_params_p)
+
+    print(log_p_new.shape)
+    print(log_psi_new.shape)
+
+    log_p_psi = log_p_new + log_psi_new
+    log_w_t_pi = log_p_psi - log_q # LOG Q is the old one!!! Because the samples are from the old one also
+
+    print(log_w_t_pi)
+
     1/0
 
 
-    normalized_w_t_sigma_samples = jax.nn.softmax(
-        jax.lax.stop_gradient(log_w_t_sigma_samples))
+
     log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(
         proposal_samples, prompt_len, params_twist,
         condition_twist_on_tokens,
