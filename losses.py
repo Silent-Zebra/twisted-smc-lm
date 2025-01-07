@@ -284,7 +284,10 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         # Important; what we are going to do is only use the tempered twist for the sigma samples; again the key point is to maintain exploration. Let's not use it on the negaive samples, because then the negative samples have more focus on random stuff, which is not what we want. The purpose of the randomness is to help sample sigma in a more diverse way, so only modify the sigma SMC sample
     )
 
-    log_q = evaluate_normalized_log_q_1_to_t(proposal_samples, params_p, params_twist, prompt_len, condition_twist_on_tokens, huggingface_model, params_proposal=params_proposal)
+    log_q = evaluate_normalized_log_q_1_to_t(
+        proposal_samples, params_p, params_twist, prompt_len, condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, return_cumsum=True
+    )
     log_tilde_sigma = evaluate_log_p_theta_1_to_t(proposal_samples,
                                                               params_p,
                                                               prompt_len,
@@ -294,10 +297,12 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
                                                            condition_twist_on_tokens)
 
     print("INSPECT CTL")
-    print(log_tilde_sigma - log_q)
+    print(log_q)
+    print(log_q.shape)
+    print(log_tilde_sigma - log_q[:, -1])
     print(log_w_t_sigma_samples)
-    print(log_tilde_sigma - log_q - log_w_t_sigma_samples)
-    print(jnp.abs(log_tilde_sigma - log_q - log_w_t_sigma_samples).mean())
+    print(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples)
+    print(jnp.abs(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples).mean())
 
     # Afterwards: return the log q and of course keep the normalized w_t_sigma_samples for future use
     # Then all that needs to be done is recalculate the negative weights (this needs stop_grad)
@@ -310,7 +315,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         jax.lax.stop_gradient(log_w_t_sigma_samples))
 
     normalized_w_t_sigma_samples_new = jax.nn.softmax(
-        jax.lax.stop_gradient(log_tilde_sigma - log_q))
+        jax.lax.stop_gradient(log_tilde_sigma - log_q[:, -1]))
 
     print(normalized_w_t_sigma_samples)
     print(normalized_w_t_sigma_samples_new)
@@ -335,6 +340,9 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
 
     print(log_p_new.shape)
     print(log_psi_new.shape)
+    print(log_p_new)
+    log_p_new = jnp.cumsum(log_p_new, axis=-1) # TODO make this return_cumsum flag in eval_log_p_theta
+    print(log_p_new)
 
     log_p_psi = log_p_new + log_psi_new
     log_w_t_pi = log_p_psi - log_q # LOG Q is the old one!!! Because the samples are from the old one also
