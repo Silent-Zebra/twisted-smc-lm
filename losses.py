@@ -288,6 +288,15 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         proposal_samples, params_p, params_twist, prompt_len, condition_twist_on_tokens,
         huggingface_model, params_proposal=params_proposal, return_cumsum=True
     )
+    log_q_single = evaluate_normalized_log_q_1_to_t(
+        proposal_samples, params_p, params_twist, prompt_len,
+        condition_twist_on_tokens,
+        huggingface_model, params_proposal=params_proposal, return_cumsum=False
+    )
+    print("LOG Q inspection")
+    print(log_q[:, -1] - log_q_single)
+    print(jnp.abs(log_q[:, -1] - log_q_single).mean())
+
     log_tilde_sigma = evaluate_log_p_theta_1_to_t(proposal_samples,
                                                               params_p,
                                                               prompt_len,
