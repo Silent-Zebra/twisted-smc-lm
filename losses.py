@@ -293,9 +293,9 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         condition_twist_on_tokens,
         huggingface_model, params_proposal=params_proposal, return_cumsum=False
     )
-    print("LOG Q inspection")
-    print(log_q[:, -1] - log_q_single)
-    print(jnp.abs(log_q[:, -1] - log_q_single).mean())
+    # print("LOG Q inspection")
+    # print(log_q[:, -1] - log_q_single)
+    # print(jnp.abs(log_q[:, -1] - log_q_single).mean())
 
     log_tilde_sigma = evaluate_log_p_theta_1_to_t(proposal_samples,
                                                               params_p,
@@ -306,8 +306,8 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
                                                            condition_twist_on_tokens)
 
     print("INSPECT CTL")
-    print(log_q)
-    print(log_q.shape)
+    # print(log_q)
+    # print(log_q.shape)
     print(log_tilde_sigma - log_q[:, -1])
     print(log_w_t_sigma_samples)
     print(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples)
@@ -328,11 +328,10 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
 
     print(normalized_w_t_sigma_samples)
     print(normalized_w_t_sigma_samples_new)
-    print(jnp.abs(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples).mean())
+    print(jnp.abs(normalized_w_t_sigma_samples_new - log_w_t_sigma_samples).mean())
 
     print("second term inspection")
 
-    print(intermediate_log_w_t_hist)
 
     # TODO ensure below is using the new params_p, whereas the previous evaluation is saved as the old params_p
     new_params_p = params_p
@@ -357,6 +356,11 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     log_w_t_pi = log_p_psi - log_q # LOG Q is the old one!!! Because the samples are from the old one also
 
     print(log_w_t_pi)
+    print(intermediate_log_w_t_hist)
+    print(intermediate_log_w_t_hist[0])
+    print(log_w_t_pi[:, 0])
+    print(log_w_t_pi[:, 0] - intermediate_log_w_t_hist[0])
+    print(jnp.abs(log_w_t_pi[:, 0] - intermediate_log_w_t_hist[0]).mean())
 
     1/0
 
