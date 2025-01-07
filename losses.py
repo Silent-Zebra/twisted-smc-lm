@@ -358,6 +358,8 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     log_p_new = jnp.cumsum(log_p_new, axis=-1) # TODO make this return_cumsum flag in eval_log_p_theta
     # print(log_p_new)
 
+    seq_selected = proposal_samples[:, prompt_len:]
+
     print("CHECK DIFFERENCE")
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         proposal_samples, params_p, params_twist,
@@ -366,20 +368,27 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         prompt_len=prompt_len)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
 
     log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
-    print(log_p_t - log_p_new)
-    print(jnp.abs(log_p_t - log_p_new).mean())
+    print(log_p_t[
+        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+            seq_selected.shape[1]), seq_selected] - log_p_new)
+    print(jnp.abs(log_p_t[
+        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+            seq_selected.shape[1]), seq_selected] - log_p_new).mean())
 
     print("CHECK DIFFERENCE")
     # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
     log_psi = log_psi_all_vocab
-    print(log_psi - log_psi_new)
-    print(jnp.abs(log_psi - log_psi_new).mean())
+    print(log_psi[
+        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+            seq_selected.shape[1]), seq_selected] - log_psi_new)
+    print(jnp.abs(log_psi[
+        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+            seq_selected.shape[1]), seq_selected] - log_psi_new).mean())
 
     log_p_plus_log_psi_all_vocab = log_p_t + log_psi
     normalized_log_q_t_all_vocab = jax.nn.log_softmax(
         log_p_plus_log_psi_all_vocab, axis=-1)
 
-    seq_selected = proposal_samples[:, prompt_len:]
     normalized_log_q_t_across_t = normalized_log_q_t_all_vocab[
         jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
             seq_selected.shape[1]), seq_selected]
