@@ -18,8 +18,9 @@ n_epochs = 100
 labels = [
     r"CTL, LR 1e-5",
     r"CTL, LR 3e-5",
-    # r"RL",
+    r"RL",
     r"SIXO",
+    r"FUDGE",
     "DPG, LR 1e-5",
     "DPG, LR 3e-5",
     "PPO",
@@ -74,10 +75,10 @@ for i in range(len(load_prefixes_to_use)):
         results_list[i].append(x)
 
 color_list = [
-    'xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:purple', 'xkcd:red', 'xkcd:black',  'xkcd:gray',  'xkcd:light brown', 'xkcd:pink',
-    'xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:purple', 'xkcd:gold', 'xkcd:teal', 'xkcd:dark brown', 'xkcd:magenta'
+    'xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:purple', 'xkcd:red', 'xkcd:black',  'xkcd:gold',  'xkcd:light brown', 'xkcd:pink',
+    # 'xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:purple', 'xkcd:gold', 'xkcd:teal', 'xkcd:dark brown', 'xkcd:magenta'
 ]
-marker_list = ["o", "v", "^", "x", "D", "P"]
+marker_list = ["o", "X", "v", "^", "x", "D", "P", "<", ">"]
 
 # xlimlow = -25
 # xlimhigh = 25
