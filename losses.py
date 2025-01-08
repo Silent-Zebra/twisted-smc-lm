@@ -358,60 +358,60 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     log_p_new = jnp.cumsum(log_p_new, axis=-1) # TODO make this return_cumsum flag in eval_log_p_theta
     # print(log_p_new)
 
-    seq_selected = proposal_samples[:, prompt_len:]
+    # seq_selected = proposal_samples[:, prompt_len:]
 
     print("CHECK DIFFERENCE 1")
-    p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
-        proposal_samples, params_p, params_twist,
-        condition_twist_on_tokens,
-        huggingface_model,
-        prompt_len=prompt_len)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
+    # p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
+    #     proposal_samples, params_p, params_twist,
+    #     condition_twist_on_tokens,
+    #     huggingface_model,
+    #     prompt_len=prompt_len)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
 
-    log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
-    print(log_p_t[
-        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
-            seq_selected.shape[1]), seq_selected] - log_p_new)
-    print(jnp.abs(log_p_t[
-        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
-            seq_selected.shape[1]), seq_selected] - log_p_new).mean())
+    # log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
+    # print(log_p_t[
+    #     jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+    #         seq_selected.shape[1]), seq_selected] - log_p_new)
+    # print(jnp.abs(log_p_t[
+    #     jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+    #         seq_selected.shape[1]), seq_selected] - log_p_new).mean())
 
-    print("CHECK DIFFERENCE 2")
+    # print("CHECK DIFFERENCE 2")
     # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
-    log_psi = log_psi_all_vocab
-    print(log_psi[
-        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
-            seq_selected.shape[1]), seq_selected] - log_psi_new)
-    print(jnp.abs(log_psi[
-        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
-            seq_selected.shape[1]), seq_selected] - log_psi_new).mean())
+    # log_psi = log_psi_all_vocab
+    # print(log_psi[
+    #     jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+    #         seq_selected.shape[1]), seq_selected] - log_psi_new)
+    # print(jnp.abs(log_psi[
+    #     jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+    #         seq_selected.shape[1]), seq_selected] - log_psi_new).mean())
 
-    log_p_plus_log_psi_all_vocab = log_p_t + log_psi
-    normalized_log_q_t_all_vocab = jax.nn.log_softmax(
-        log_p_plus_log_psi_all_vocab, axis=-1)
+    # log_p_plus_log_psi_all_vocab = log_p_t + log_psi
+    # normalized_log_q_t_all_vocab = jax.nn.log_softmax(
+    #     log_p_plus_log_psi_all_vocab, axis=-1)
 
-    normalized_log_q_t_across_t = normalized_log_q_t_all_vocab[
-        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
-            seq_selected.shape[1]), seq_selected]
+    # normalized_log_q_t_across_t = normalized_log_q_t_all_vocab[
+    #     jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+    #         seq_selected.shape[1]), seq_selected]
 
-    print("CHECK DIFFERENCE 3")
-    print(normalized_log_q_t_across_t - log_q)
-    print(jnp.abs(normalized_log_q_t_across_t - log_q).mean())
+    # print("CHECK DIFFERENCE 3")
+    # print(normalized_log_q_t_across_t - log_q)
+    # print(jnp.abs(normalized_log_q_t_across_t - log_q).mean())
 
     log_p_psi = log_p_new + log_psi_new
     log_w_t_pi = log_p_psi - log_q # LOG Q is the old one!!! Because the samples are from the old one also
 
-    print(log_w_t_pi)
-    print(intermediate_log_w_t_hist)
-    print(intermediate_log_w_t_hist[0])
-    print(log_w_t_pi[:, 0])
-    print(log_w_t_pi[:, 0] - intermediate_log_w_t_hist[0])
-    print(jnp.abs(log_w_t_pi[:, 0] - intermediate_log_w_t_hist[0]).mean())
+    # print(log_w_t_pi)
+    # print(intermediate_log_w_t_hist)
+    # print(intermediate_log_w_t_hist[0])
+    # print(log_w_t_pi[:, 0])
+    # print(log_w_t_pi[:, 0] - intermediate_log_w_t_hist[0])
+    # print(jnp.abs(log_w_t_pi[:, 0] - intermediate_log_w_t_hist[0]).mean())
 
-    log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(
-        proposal_samples, prompt_len, params_twist,
-        condition_twist_on_tokens, huggingface_model,
-        params_proposal=params_proposal, params_p=params_p
-    )
+    # log_psi_on_truncated_proposal_samples = evaluate_log_psi_selected_tokens(
+    #     proposal_samples, prompt_len, params_twist,
+    #     condition_twist_on_tokens, huggingface_model,
+    #     params_proposal=params_proposal, params_p=params_p
+    # )
 
     # ebm_second_term = 0.
     # for i in range(intermediate_log_w_t_hist.shape[0]):
@@ -442,16 +442,16 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     # print(w_ts_new - w_ts)
     # print(jnp.abs(w_ts_new - w_ts).mean())
 
-    print("CHECK DIFFERENCE 5")
+    # print("CHECK DIFFERENCE 5")
     # print(log_psis)
     # print(log_psi_new)
     # print(log_psi_new - log_psis)
     # print(jnp.abs(log_psi_new - log_psis).mean())
 
-    print(log_psi_on_truncated_proposal_samples)
-    print(log_psi_new)
-    print(log_psi_on_truncated_proposal_samples - log_psi_new)
-    print(jnp.abs(log_psi_on_truncated_proposal_samples - log_psi_new).mean())
+    # print(log_psi_on_truncated_proposal_samples)
+    # print(log_psi_new)
+    # print(log_psi_on_truncated_proposal_samples - log_psi_new)
+    # print(jnp.abs(log_psi_on_truncated_proposal_samples - log_psi_new).mean())
     ebm_second_term_new = (w_ts_new * log_psi_new).sum(axis=0).mean()
 
     # print(ebm_second_term_new_prev)
