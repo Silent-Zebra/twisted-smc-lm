@@ -268,7 +268,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     if q_samples_to_use is not None:
         assert log_q_on_samples_to_use is not None
         proposal_samples = q_samples_to_use
-        log_q = log_q_on_samples_to_use
+        log_q = jax.lax.stop_gradient(log_q_on_samples_to_use)
     else:
         # assert not p_neg_sample
         (log_w_t_sigma_samples, _,
@@ -311,13 +311,13 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
                                                            log_true_final_twist,
                                                            condition_twist_on_tokens)
 
-    print("INSPECT CTL")
+    # print("INSPECT CTL")
     # print(log_q)
     # print(log_q.shape)
     # print(log_tilde_sigma - log_q[:, -1])
     # print(log_w_t_sigma_samples)
     # print(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples)
-    print(jnp.abs(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples).mean())
+    # print(jnp.abs(log_tilde_sigma - log_q[:, -1] - log_w_t_sigma_samples).mean())
 
     # Afterwards: return the log q and of course keep the normalized w_t_sigma_samples for future use
     # Then all that needs to be done is recalculate the negative weights (this needs stop_grad)
@@ -326,23 +326,22 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     # TODO Ensure that this converges to 0 loss in the limit of infinite repetition
     # Also, may want to test this for CTL in the other experiment settings also.
 
-    normalized_w_t_sigma_samples = jax.nn.softmax(
-        jax.lax.stop_gradient(log_w_t_sigma_samples))
+    # normalized_w_t_sigma_samples = jax.nn.softmax(
+    #     jax.lax.stop_gradient(log_w_t_sigma_samples))
 
     normalized_w_t_sigma_samples_new = jax.nn.softmax(
         jax.lax.stop_gradient(log_tilde_sigma - log_q[:, -1]))
 
     # print(normalized_w_t_sigma_samples)
     # print(normalized_w_t_sigma_samples_new)
-    print(jnp.abs(normalized_w_t_sigma_samples_new - normalized_w_t_sigma_samples).mean())
+    # print(jnp.abs(normalized_w_t_sigma_samples_new - normalized_w_t_sigma_samples).mean())
 
-    print("second term inspection")
+    # print("second term inspection")
 
 
-    # TODO ensure below is using the new params_p, whereas the previous evaluation is saved as the old params_p
-    new_params_p = params_p
+    # TODO ensure below is using the new params_twist, whereas the previous evaluation is saved as the old ones
     log_p_new = evaluate_log_p_theta_1_to_t(proposal_samples,
-                                new_params_p,
+                                params_p,
                                 prompt_len,
                                 huggingface_model=huggingface_model,
                                             output_log_p_for_each_t=True)
@@ -350,17 +349,17 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         proposal_samples, prompt_len, params_twist,
         condition_twist_on_tokens,
         huggingface_model,
-        params_proposal=params_proposal, params_p=new_params_p)
+        params_proposal=params_proposal, params_p=params_p)
 
     print(log_p_new.shape)
     print(log_psi_new.shape)
     # print(log_p_new)
-    log_p_new = jnp.cumsum(log_p_new, axis=-1) # TODO make this return_cumsum flag in eval_log_p_theta
+    log_p_new = jnp.cumsum(log_p_new, axis=-1) # TODO make this a return_cumsum flag in eval_log_p_theta
     # print(log_p_new)
 
     # seq_selected = proposal_samples[:, prompt_len:]
 
-    print("CHECK DIFFERENCE 1")
+    # print("CHECK DIFFERENCE 1")
     # p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
     #     proposal_samples, params_p, params_twist,
     #     condition_twist_on_tokens,
@@ -462,7 +461,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     # l_ebm_new = -(jnp.dot(log_psi_on_truncated_proposal_samples.mean(axis=-1),
     #                       normalized_w_t_sigma_samples) - ebm_second_term_new)
     l_ebm_new = -(jnp.dot(log_psi_new.mean(axis=-1),
-                          normalized_w_t_sigma_samples) - ebm_second_term_new)
+                          normalized_w_t_sigma_samples_new) - ebm_second_term_new)
     if return_proposal_samples:
         return l_ebm_new, (proposal_samples, log_q)
     return l_ebm_new
