@@ -106,7 +106,7 @@ class ExperimentConfig:
             twist_grad_fn = jax.grad(get_l_ebm_fn, argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_one_sample":
             if self.twist_updates_per_batch > 1:
-                twist_grad_fn = jax.value_and_grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=standard_argnum, has_aux=True)
+                twist_grad_fn = jax.value_and_grad(partial(get_l_ebm_fn, only_one_sample=True, return_proposal_samples=True), argnums=standard_argnum, has_aux=True)
             else:
                 twist_grad_fn = jax.grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=standard_argnum)
         elif self.twist_learn_type == "ebm_reweight":
@@ -607,7 +607,7 @@ class ExperimentConfig:
 
         if self.twist_updates_per_batch > 1:
             for n_twist_update in range(self.twist_updates_per_batch):
-                print(n_twist_update)
+                print(f"n_twist_update: {n_twist_update}")
                 if n_twist_update == 0:
                     rng_key, grad_params_twist, aux_data = self.get_grad_params_twist(
                         rng_key, prompt, n_twist,
