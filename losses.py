@@ -455,7 +455,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     ebm_second_term_new = (w_ts_new * log_psi_new).sum(axis=0).mean()
 
     # print(ebm_second_term_new_prev)
-    print(ebm_second_term_new)
+    # print(ebm_second_term_new)
 
     # l_ebm_new = -(jnp.dot(log_psi_on_truncated_proposal_samples.mean(axis=-1),
     #                       normalized_w_t_sigma_samples) - ebm_second_term)
