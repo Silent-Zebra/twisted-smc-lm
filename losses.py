@@ -412,31 +412,46 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         condition_twist_on_tokens,
         huggingface_model,
         params_proposal=params_proposal, params_p=params_p)
-    ebm_second_term = 0.
-    for i in range(intermediate_log_w_t_hist.shape[0]):
-        ebm_second_term += jnp.dot(
-            jax.nn.softmax(jax.lax.stop_gradient(intermediate_log_w_t_hist[i])),
-            # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
-            log_psi_t_eval_list_proposal_samples[i])
-    ebm_second_term /= intermediate_log_w_t_hist.shape[0]
+    # ebm_second_term = 0.
+    # for i in range(intermediate_log_w_t_hist.shape[0]):
+    #     ebm_second_term += jnp.dot(
+    #         jax.nn.softmax(jax.lax.stop_gradient(intermediate_log_w_t_hist[i])),
+    #         # IMPORTANT!! We should not have gradients flowing through these weights. Compare e.g. vs resampling
+    #         log_psi_t_eval_list_proposal_samples[i])
+    # ebm_second_term /= intermediate_log_w_t_hist.shape[0]
 
-    print("New CTL/EBM")
-    print(log_psi_t_eval_list_proposal_samples)
+    # print("New CTL/EBM")
+    # print(log_psi_t_eval_list_proposal_samples)
     # log_w_ts = jax.lax.stop_gradient(jnp.stack(intermediate_log_w_t_hist, axis=1))
     # log_psis = jnp.stack(log_psi_t_eval_list_proposal_samples, axis=1)
     log_w_ts = jax.lax.stop_gradient(jnp.transpose(intermediate_log_w_t_hist))
     log_psis = jnp.transpose(log_psi_t_eval_list_proposal_samples)
-    print(log_w_ts.shape)
-    print(log_psis.shape)
+    # print(log_w_ts.shape)
+    # print(log_psis.shape)
     w_ts = jax.nn.softmax(log_w_ts, axis=0)
-    print(w_ts.shape)
+    # print(w_ts.shape)
     ebm_second_term_new = (w_ts * log_psis).sum(axis=0).mean()
-    print(ebm_second_term_new)
-    print(ebm_second_term)
+    # print(ebm_second_term_new)
+    # print(ebm_second_term)
+
+    print("CHECK DIFFERENCE 4")
+    w_ts_new = jax.nn.softmax(log_w_t_pi, axis=0)
+    print(w_ts_new)
+    print(w_ts)
+    print(w_ts_new - w_ts)
+    print(jnp.abs(w_ts_new - w_ts).mean())
+
+    print("CHECK DIFFERENCE 5")
+    print(log_psis)
+    print(log_psi_new)
+    print(log_psi_new - log_psis)
+    print(jnp.abs(log_psi_new - log_psis).mean())
 
 
+    # l_ebm_new = -(jnp.dot(log_psi_on_truncated_proposal_samples.mean(axis=-1),
+    #                       normalized_w_t_sigma_samples) - ebm_second_term)
     l_ebm_new = -(jnp.dot(log_psi_on_truncated_proposal_samples.mean(axis=-1),
-                          normalized_w_t_sigma_samples) - ebm_second_term)
+                          normalized_w_t_sigma_samples) - ebm_second_term_new)
     if return_proposal_samples:
         return l_ebm_new, (proposal_samples, log_q)
     return l_ebm_new
