@@ -2549,18 +2549,18 @@ def main():
                 true_posterior_samples_by_token = None
 
 
-            rng_key, sk = jax.random.split(rng_key)
-            # TODO DEBUG ONLY REMOVE LATER
-            get_l_ebm_one_sample(None, huggingface_model,
-                                 log_true_final_twist, args.n_twist, args.output_len,
-                                 params_p,
-                                 params_proposal, params_twist,
-                                 None, prompt,
-                                 prompt.shape[-1], args.proposal_is_p, replay_buffer,
-                                 False, sk,
-                                 experiment_cfg.smc_procedure_type,
-                                 true_sigma_samples=None)
-            1/0
+            # rng_key, sk = jax.random.split(rng_key)
+            # # TODO DEBUG ONLY REMOVE LATER
+            # get_l_ebm_one_sample(None, huggingface_model,
+            #                      log_true_final_twist, args.n_twist, args.output_len,
+            #                      params_p,
+            #                      params_proposal, params_twist,
+            #                      None, prompt,
+            #                      prompt.shape[-1], args.proposal_is_p, replay_buffer,
+            #                      False, sk,
+            #                      experiment_cfg.smc_procedure_type,
+            #                      true_sigma_samples=None)
+            # 1/0
 
 
             # if args.load_OpenRLHF_ckpt:

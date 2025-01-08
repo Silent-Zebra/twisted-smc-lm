@@ -435,6 +435,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     # print(ebm_second_term)
 
     # print("CHECK DIFFERENCE 4")
+    log_w_t_pi = jax.lax.stop_gradient(log_w_t_pi)
     w_ts_new = jax.nn.softmax(log_w_t_pi, axis=0)
     # print(w_ts_new)
     # print(w_ts)
