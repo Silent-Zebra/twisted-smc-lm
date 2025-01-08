@@ -606,8 +606,10 @@ class ExperimentConfig:
                      ):
 
         if self.twist_updates_per_batch > 1:
+
             for n_twist_update in range(self.twist_updates_per_batch):
                 print(f"n_twist_update: {n_twist_update}")
+                start = time.time()
                 if n_twist_update == 0:
                     rng_key, grad_params_twist, aux_data = self.get_grad_params_twist(
                         rng_key, prompt, n_twist,
@@ -636,9 +638,12 @@ class ExperimentConfig:
                         log_q_on_samples_to_use=log_q_on_samples_to_use
                     )
 
+                print(f"TIME1: {time.time() - start}", flush=True)
                 params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(
                     optimizer_twist, grad_params_twist, optim_twist_state,
                     params_twist)
+                print(f"TIME2: {time.time() - start}", flush=True)
+
         else:
 
             rng_key, grad_params_twist = self.get_grad_params_twist(
