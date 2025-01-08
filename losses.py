@@ -360,7 +360,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
 
     seq_selected = proposal_samples[:, prompt_len:]
 
-    print("CHECK DIFFERENCE")
+    print("CHECK DIFFERENCE 1")
     p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
         proposal_samples, params_p, params_twist,
         condition_twist_on_tokens,
@@ -375,7 +375,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
             seq_selected.shape[1]), seq_selected] - log_p_new).mean())
 
-    print("CHECK DIFFERENCE")
+    print("CHECK DIFFERENCE 2")
     # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
     log_psi = log_psi_all_vocab
     print(log_psi[
@@ -393,7 +393,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
         jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
             seq_selected.shape[1]), seq_selected]
 
-    print("CHECK DIFFERENCE")
+    print("CHECK DIFFERENCE 3")
     print(normalized_log_q_t_across_t - log_q)
     print(jnp.abs(normalized_log_q_t_across_t - log_q).mean())
 
@@ -430,7 +430,7 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
     print(log_psis.shape)
     w_ts = jax.nn.softmax(log_w_ts, axis=0)
     print(w_ts.shape)
-    ebm_second_term_new = (w_ts * log_psis).sum(axis=0).mean(axis=1)
+    ebm_second_term_new = (w_ts * log_psis).sum(axis=0).mean()
     print(ebm_second_term_new)
     print(ebm_second_term)
 
