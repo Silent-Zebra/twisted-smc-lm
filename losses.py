@@ -81,7 +81,7 @@ def get_l_ebm_ml_partial_jit(
     proposal_is_p=False, huggingface_model=None,
     tempered_twist=False, beta_prop=None, mixed_p_q_sample=False, true_sigma_samples=None,
     replay_buffer=None, replay_buffer_log_w_ts=None, reweight_for_second_term=False, only_one_sample=False,
-    posterior_sample=None, return_proposal_samples=False, params_proposal=None
+    posterior_sample=None, return_proposal_samples=False, params_proposal=None, q_samples_to_use=None, log_q_on_samples_to_use=None
 ):
 
     if condition_twist_on_tokens is not None:
@@ -99,7 +99,7 @@ def get_l_ebm_ml_partial_jit(
                               posterior_sample, prompt, prompt_len,
                               proposal_is_p, replay_buffer,
                               return_proposal_samples, sk2, smc_procedure_type,
-                              true_sigma_samples)
+                              true_sigma_samples, q_samples_to_use=q_samples_to_use, log_q_on_samples_to_use=log_q_on_samples_to_use)
 
     if true_sigma_samples is not None:
         # if we have true posteriors (e.g. one true posterior, every example is from the
@@ -294,11 +294,11 @@ def get_l_ebm_one_sample(condition_twist_on_tokens, huggingface_model,
             proposal_samples, params_p, params_twist, prompt_len, condition_twist_on_tokens,
             huggingface_model, params_proposal=params_proposal, return_cumsum=True
         )
-        log_q_single = evaluate_normalized_log_q_1_to_t(
-            proposal_samples, params_p, params_twist, prompt_len,
-            condition_twist_on_tokens,
-            huggingface_model, params_proposal=params_proposal, return_cumsum=False
-        )
+        # log_q_single = evaluate_normalized_log_q_1_to_t(
+        #     proposal_samples, params_p, params_twist, prompt_len,
+        #     condition_twist_on_tokens,
+        #     huggingface_model, params_proposal=params_proposal, return_cumsum=False
+        # )
     # print("LOG Q inspection")
     # print(log_q[:, -1] - log_q_single)
     # print(jnp.abs(log_q[:, -1] - log_q_single).mean())
