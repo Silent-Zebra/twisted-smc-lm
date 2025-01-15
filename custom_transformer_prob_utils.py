@@ -1529,10 +1529,17 @@ def iwae_backward(
                                                               prompt_len,
                                                               huggingface_model=huggingface_model)
     else:
-        log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
-            seqs, params_p, params_twist,
-            prompt_len, condition_twist_on_tokens,
-             huggingface_model=huggingface_model, params_proposal=params_proposal)
+        if isinstance(params_proposal, HashableDict):
+            log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t_nojit(
+                seqs, params_p, params_twist,
+                prompt_len, condition_twist_on_tokens,
+                huggingface_model=huggingface_model,
+                params_proposal=params_proposal)
+        else:
+            log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
+                seqs, params_p, params_twist,
+                prompt_len, condition_twist_on_tokens,
+                 huggingface_model=huggingface_model, params_proposal=params_proposal)
 
     target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
     return target_dist_weights
@@ -1608,7 +1615,7 @@ def iwae_forward_and_backward(
     target_dist_weights = iwae_backward(
         combined_seqs, prompt, params_p, params_twist, output_len,
         log_true_final_twist, condition_twist_on_tokens,
-        proposal_is_p, huggingface_model, params_proposal=params_proposal
+        proposal_is_p, huggingface_model, params_proposal=params_proposal, OpenRLHF_actor_ckpt=OpenRLHF_actor_ckpt
     )
 
     # alternate_f_q_calc = iwae_backward(full_seq_from_twist_since_no_resample, prompt, params_p, params_twist, output_len,
