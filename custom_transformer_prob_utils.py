@@ -352,10 +352,6 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         # print(final_activations)
         # print(final_activations.shape)
         print(params_proposal['lm_head'].t().shape)
-        print("--Last generated token--")
-        # print(torch_full_seq[:, prompt_len + t - 1])
-        print(torch_full_seq[:, prompt_len + t])
-        # print(torch_full_seq[:, prompt_len + t + 1])
 
         final_activation = final_activations[:, prompt_len + t]
 
@@ -383,6 +379,13 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         log_p_eval_of_new_seqs = log_p[jnp.arange(full_seq.shape[0]), indices_to_use]
 
         log_psi_eval_of_new_seqs = None
+
+        full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
+
+        print("--Last generated token--")
+        # print(full_seq[:, prompt_len + t - 1])
+        print(full_seq[:, prompt_len + t])
+
 
         return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
 
