@@ -384,9 +384,6 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
 
         log_psi_eval_of_new_seqs = None
 
-        # TODO test IWAE/SIS bounds first to ensure they are reasonable, because they should be.
-        1/0
-
         return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
 
 
