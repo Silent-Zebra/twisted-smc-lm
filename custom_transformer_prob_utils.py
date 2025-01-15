@@ -339,7 +339,7 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         import numpy as np
 
         print("--Using PPO Actor as Proposal--")
-        print(full_seq)
+        # print(full_seq)
         # print("--HERE2--")
         # print(params_twist['model'])
         # print("--HERE3--")
@@ -350,15 +350,15 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         final_activations = model_output.last_hidden_state.to(
             params_proposal['lm_head'].device)
         # print(final_activations)
-        print(final_activations.shape)
+        # print(final_activations.shape)
         # print(params_proposal['lm_head'].t().shape)
 
         final_activation = final_activations[:, prompt_len + t - 1]
 
         q_logits = final_activation @ params_proposal[
             'lm_head'].t()
-        print("--Final PPO Actor Evaluation--")
-        print(q_logits.shape)
+        # print("--Final PPO Actor Evaluation--")
+        # print(q_logits.shape)
         # convert back to jax afterwards
         q_logits = jnp.array(q_logits.cpu().detach().numpy())
         log_q_all_tokens = jax.nn.log_softmax(q_logits, axis=-1)
@@ -369,8 +369,8 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         indices_to_use = jax.random.categorical(subkey, log_q_all_tokens,
                                                 shape=(log_q_all_tokens.shape[0],))
 
-        print(indices_to_use)
-        print(indices_to_use.shape)
+        # print(indices_to_use)
+        # print(indices_to_use.shape)
         normalized_log_q_t = log_q_all_tokens[
             jnp.arange(indices_to_use.shape[0]), indices_to_use]
         # print(normalized_log_q_t)
@@ -382,9 +382,9 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
 
         full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
 
-        print("--Last generated token--")
+        # print("--Last generated token--")
         # print(full_seq[:, prompt_len + t - 1])
-        print(full_seq[:, prompt_len + t])
+        # print(full_seq[:, prompt_len + t])
 
 
         return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
