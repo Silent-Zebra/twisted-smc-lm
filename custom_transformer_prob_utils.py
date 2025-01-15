@@ -509,76 +509,121 @@ get_proposal_q_sample = partial(
 # Which is equivalent to p(s_1) psi(s_1) / (sum of p(s_1) psi(s_1)) * p(s_2|s_1) psi(s_1:2) / (sum of p(s_2|s_1) psi(s_1:2)) ...
 # which is NOT the same as evaluating p(s_{1:t}) psi(s_{1:t}) / (sum of p(s_{1:t}) psi(s_{1:t})) in general. Only would be the same if "normalization consistency" holds.
 
-@partial(jax.jit, static_argnames=["prompt_len",
-                                   "huggingface_model", "return_cumsum", "return_cumsum_w_last_all"])
-def evaluate_normalized_log_q_1_to_t(
+
+def evaluate_normalized_log_q_1_to_t_nojit(
     full_seq, params_p, params_twist, prompt_len,
     condition_twist_on_tokens,
     huggingface_model=None, return_cumsum=False, return_cumsum_w_last_all=False, params_proposal=None):
 
-    if params_proposal is None:
-        params_to_use = params_twist
-    else:
-        params_to_use = params_proposal
+    if isinstance(params_proposal, HashableDict):
+        if return_cumsum or return_cumsum_w_last_all:
+            raise NotImplementedError
+        import torch
+        import numpy as np
 
-    p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
-        full_seq, params_p, params_to_use,
-        condition_twist_on_tokens,
-        huggingface_model, prompt_len=prompt_len)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
+        print("--Using PPO Actor as Proposal evaluation--")
+        torch_full_seq = torch.tensor(np.array(full_seq))
+        print(torch_full_seq)
+        model_output = params_proposal['model'](
+            torch_full_seq)
+        # print(model_output)
+        final_activations = model_output.last_hidden_state.to(
+            params_proposal['lm_head'].device)
+        # print(final_activations)
+        # print(final_activations.shape)
+        # print(params_proposal['lm_head'].t().shape)
 
-    log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
-    # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
-    log_psi = log_psi_all_vocab
-    log_p_plus_log_psi_all_vocab = log_p_t + log_psi
-    normalized_log_q_t_all_vocab = jax.nn.log_softmax(log_p_plus_log_psi_all_vocab, axis=-1)
+        q_logits = final_activations @ params_proposal[
+            'lm_head'].t()
+        # print("--Final PPO Actor Evaluation--")
+        # print(q_logits.shape)
+        # convert back to jax afterwards
+        q_logits = jnp.array(q_logits.cpu().detach().numpy())
+        print(q_logits.shape)
+        normalized_log_q_t_all_vocab = jax.nn.log_softmax(q_logits, axis=-1)[:, prompt_len - 1: -1]
+        print(normalized_log_q_t_all_vocab.shape)
 
-    seq_selected = full_seq[:, prompt_len:]
-    normalized_log_q_t_across_t = normalized_log_q_t_all_vocab[
-        jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
-            seq_selected.shape[1]), seq_selected]
-
-    if return_cumsum_w_last_all:
-        assert not return_cumsum
-        # print("return_cumsum_w_last_all")
-        normalized_log_q_1_to_t_cumsum = jnp.cumsum(normalized_log_q_t_across_t, axis=-1)
-        # print(normalized_log_q_1_to_t_cumsum.shape)
-        normalized_log_q_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((normalized_log_q_1_to_t_cumsum.shape[0], 1)), normalized_log_q_1_to_t_cumsum[:, :-1]), axis=-1)
-        # print(normalized_log_q_1_to_t_minus_1)
-        normalized_log_q_1_to_t_minus_1_with_t_all_vocab = normalized_log_q_t_all_vocab + normalized_log_q_1_to_t_minus_1[:, :, None]
-        # print(normalized_log_q_1_to_t_minus_1_with_t_all_vocab)
-        # print(normalized_log_q_1_to_t_cumsum)
-
-        log_p_t_across_t = log_p_t[
+        seq_selected = full_seq[:, prompt_len:]
+        normalized_log_q_t_across_t = normalized_log_q_t_all_vocab[
             jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
                 seq_selected.shape[1]), seq_selected]
-        log_p_1_to_t_cumsum = jnp.cumsum(log_p_t_across_t, axis=-1)
-        # print(log_p_1_to_t_cumsum.shape)
-        log_p_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((log_p_1_to_t_cumsum.shape[0], 1)), log_p_1_to_t_cumsum[:, :-1]), axis=-1)
-        # print(log_p_1_to_t_minus_1)
-        log_p_1_to_t_minus_1_with_t_all_vocab = log_p_t + log_p_1_to_t_minus_1[:, :, None]
-        # print(log_p_1_to_t_minus_1_with_t_all_vocab)
 
-        # print(log_p_1_to_t_cumsum)
-        # print("end return_cumsum_w_last_all")
+        print(normalized_log_q_t_across_t.shape)
 
-        return normalized_log_q_1_to_t_minus_1_with_t_all_vocab, log_p_1_to_t_minus_1_with_t_all_vocab
-        # takes cumsum added with the normalized_log_q_1_to_t_all_vocab (check indexing, make sure about the appropriate off by one or not offset)
-        # Once we have this, that gives q(1_to_t) for the selected tokens 1 to t-1 but for all tokens t
-        # TEST THIS, MAKE SURE IT DOES WHAT YOU WANT. INSPECT IT.
-        # Then we can do something similar for p(1 to t), also need this cumsum structure
-        # then we can do log psi = log (q/p psi') = log q - log p + log psi' where we directly parameterize log psi' (50257 output). Then this gets plugged into everywhere we have log psi normally.
+        normalized_log_q_1_to_t = normalized_log_q_t_across_t.sum(axis=-1)
+        print(normalized_log_q_1_to_t.shape)
+        1/0
 
-    if return_cumsum:
-        normalized_log_q_1_to_t_cumsum = jnp.cumsum(normalized_log_q_t_across_t, axis=-1)
-        return normalized_log_q_1_to_t_cumsum
+        return normalized_log_q_1_to_t
 
 
-
-    normalized_log_q_1_to_t = normalized_log_q_t_across_t.sum(axis=-1)
-
-    return normalized_log_q_1_to_t
+    else:
 
 
+        if params_proposal is None:
+            params_to_use = params_twist
+        else:
+            params_to_use = params_proposal
+
+        p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
+            full_seq, params_p, params_to_use,
+            condition_twist_on_tokens,
+            huggingface_model, prompt_len=prompt_len)  # NOTE: purposefully do not send in params_proposal here. Because this is only called within the q sampling, and that should be the original twisted proposal p psi, not q/p * psi'
+
+        log_p_t = jax.nn.log_softmax(p_logits, axis=-1)[:, prompt_len - 1: -1]
+        # log_psi = log_psi_all_vocab[:, prompt_len - 1: -1]
+        log_psi = log_psi_all_vocab
+        log_p_plus_log_psi_all_vocab = log_p_t + log_psi
+        normalized_log_q_t_all_vocab = jax.nn.log_softmax(log_p_plus_log_psi_all_vocab, axis=-1)
+
+        seq_selected = full_seq[:, prompt_len:]
+        normalized_log_q_t_across_t = normalized_log_q_t_all_vocab[
+            jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+                seq_selected.shape[1]), seq_selected]
+
+        if return_cumsum_w_last_all:
+            assert not return_cumsum
+            # print("return_cumsum_w_last_all")
+            normalized_log_q_1_to_t_cumsum = jnp.cumsum(normalized_log_q_t_across_t, axis=-1)
+            # print(normalized_log_q_1_to_t_cumsum.shape)
+            normalized_log_q_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((normalized_log_q_1_to_t_cumsum.shape[0], 1)), normalized_log_q_1_to_t_cumsum[:, :-1]), axis=-1)
+            # print(normalized_log_q_1_to_t_minus_1)
+            normalized_log_q_1_to_t_minus_1_with_t_all_vocab = normalized_log_q_t_all_vocab + normalized_log_q_1_to_t_minus_1[:, :, None]
+            # print(normalized_log_q_1_to_t_minus_1_with_t_all_vocab)
+            # print(normalized_log_q_1_to_t_cumsum)
+
+            log_p_t_across_t = log_p_t[
+                jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
+                    seq_selected.shape[1]), seq_selected]
+            log_p_1_to_t_cumsum = jnp.cumsum(log_p_t_across_t, axis=-1)
+            # print(log_p_1_to_t_cumsum.shape)
+            log_p_1_to_t_minus_1 = jnp.concatenate((jnp.zeros((log_p_1_to_t_cumsum.shape[0], 1)), log_p_1_to_t_cumsum[:, :-1]), axis=-1)
+            # print(log_p_1_to_t_minus_1)
+            log_p_1_to_t_minus_1_with_t_all_vocab = log_p_t + log_p_1_to_t_minus_1[:, :, None]
+            # print(log_p_1_to_t_minus_1_with_t_all_vocab)
+
+            # print(log_p_1_to_t_cumsum)
+            # print("end return_cumsum_w_last_all")
+
+            return normalized_log_q_1_to_t_minus_1_with_t_all_vocab, log_p_1_to_t_minus_1_with_t_all_vocab
+            # takes cumsum added with the normalized_log_q_1_to_t_all_vocab (check indexing, make sure about the appropriate off by one or not offset)
+            # Once we have this, that gives q(1_to_t) for the selected tokens 1 to t-1 but for all tokens t
+            # TEST THIS, MAKE SURE IT DOES WHAT YOU WANT. INSPECT IT.
+            # Then we can do something similar for p(1 to t), also need this cumsum structure
+            # then we can do log psi = log (q/p psi') = log q - log p + log psi' where we directly parameterize log psi' (50257 output). Then this gets plugged into everywhere we have log psi normally.
+
+        if return_cumsum:
+            normalized_log_q_1_to_t_cumsum = jnp.cumsum(normalized_log_q_t_across_t, axis=-1)
+            return normalized_log_q_1_to_t_cumsum
+
+
+
+        normalized_log_q_1_to_t = normalized_log_q_t_across_t.sum(axis=-1)
+
+        return normalized_log_q_1_to_t
+
+evaluate_normalized_log_q_1_to_t = partial(jax.jit, static_argnames=[
+    "prompt_len", "huggingface_model", "return_cumsum", "return_cumsum_w_last_all"])(evaluate_normalized_log_q_1_to_t_nojit)
 
 def evaluate_log_psi_t(seq, params_twist, condition_twist_on_tokens,   huggingface_model=None):
     # Takes in sequences s_{1:t} of (n_batch, seq_length) shape
@@ -1534,7 +1579,7 @@ def iwae_forward_and_backward(
     rng_key, posterior_sample, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_smc_samples,
     condition_twist_on_tokens, smc_procedure_type,
-    proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_critic_ckpt=False
+    proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_critic_ckpt=False, OpenRLHF_actor_ckpt=False
 ):
 
     assert len(posterior_sample.shape) == 1 # single posterior sample
