@@ -318,8 +318,11 @@ def stochastic_transformer_sample(rng_key, params, prompt: jnp.ndarray, output_l
 
     return full_seq
 
-@partial(jax.jit, static_argnames=["proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop", "prompt_len"])
-def get_proposal_q_sample(rng_key, full_seq, params_p, params_twist, prompt_len, t,
+
+
+
+# @partial(jax.jit, static_argnames=["proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop", "prompt_len"])
+def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, prompt_len, t,
                           condition_twist_on_tokens, proposal_is_p=False,
                           huggingface_model=None, true_posterior_sample=None, tempered_twist=False, beta_prop=None, params_proposal=None):
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
@@ -457,6 +460,10 @@ def get_proposal_q_sample(rng_key, full_seq, params_p, params_twist, prompt_len,
 
         return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
 
+get_proposal_q_sample = partial(
+    jax.jit,
+    static_argnames=["proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop", "prompt_len"]
+)(get_proposal_q_sample_nojit)
 
 
 # NOTE that what this does is evaluate q(s_1) q(s_2 | s_1) q(s_3 | s_1:2)...
@@ -688,7 +695,8 @@ def evaluate_log_p_theta_t_full_seq(full_seq, params_p, prompt_len_plus_t, huggi
 def smc_scan_iter_non_final(
     carry, t, condition_twist_on_tokens, resample=True,
     true_posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-    tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None, resample_criterion="every_step", OpenRLHF_critic_ckpt=False,
+    tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None, resample_criterion="every_step",
+    OpenRLHF_critic_ckpt=False,
 ):
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     output_len, params_p, params_twist, \
@@ -701,12 +709,22 @@ def smc_scan_iter_non_final(
     if OpenRLHF_critic_ckpt:
         params_twist_to_use = None
 
-    rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
-        rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
-        condition_twist_on_tokens,  proposal_is_p=proposal_is_p,
-        huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample,
-        tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal
-    )
+    if isinstance(params_proposal, HashableDict):
+        rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample_nojit(
+            rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
+            condition_twist_on_tokens, proposal_is_p=proposal_is_p,
+            huggingface_model=huggingface_model,
+            true_posterior_sample=true_posterior_sample,
+            tempered_twist=tempered_twist, beta_prop=beta_prop,
+            params_proposal=params_proposal
+        )
+    else:
+        rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
+            rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
+            condition_twist_on_tokens,  proposal_is_p=proposal_is_p,
+            huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample,
+            tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal
+        )
 
     log_p_theta_t_eval = log_p_eval_of_new_seqs
 
