@@ -346,12 +346,12 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         torch_full_seq = torch.tensor(np.array(full_seq))
         # print(torch_full_seq)
         model_output = params_proposal['model'](torch_full_seq)
-        print(model_output)
+        # print(model_output)
         final_activations = model_output.last_hidden_state.to(
             params_proposal['lm_head'].device)
         # print(final_activations)
         # print(final_activations.shape)
-        print(params_proposal['lm_head'].t().shape)
+        # print(params_proposal['lm_head'].t().shape)
 
         final_activation = final_activations[:, prompt_len + t]
 
@@ -373,8 +373,8 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         print(indices_to_use.shape)
         normalized_log_q_t = log_q_all_tokens[
             jnp.arange(indices_to_use.shape[0]), indices_to_use]
-        print(normalized_log_q_t)
-        print(normalized_log_q_t.shape)
+        # print(normalized_log_q_t)
+        # print(normalized_log_q_t.shape)
 
         log_p_eval_of_new_seqs = log_p[jnp.arange(full_seq.shape[0]), indices_to_use]
 
