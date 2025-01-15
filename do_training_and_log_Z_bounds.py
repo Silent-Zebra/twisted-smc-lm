@@ -2150,11 +2150,10 @@ def setup_cfg(
         # for x in model.named_parameters():
         #     print(x)
 
-        params_proposal = HashableDict({'model': model })
+        params_proposal = HashableDict({'model': model, 'lm_head': new_state_dict['lm_head.weight'] })
 
         print("params_proposal loaded using OpenRLHF model")
         # print(params_proposal)
-        1/0
 
 
     print("Starting building final twists and getting posterior samples", flush=True)

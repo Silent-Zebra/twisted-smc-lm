@@ -344,29 +344,28 @@ def get_proposal_q_sample(rng_key, full_seq, params_p, params_twist, prompt_len,
         # print(torch_full_seq)
         model_output = params_proposal['model'](torch_full_seq)
         print(model_output)
-        1/0
-        # final_activations = model_output.last_hidden_state.to(
-        #     params_twist['value_head'].device)
-        # # print(final_activations)
-        # # print(final_activations.shape)
-        # print(params_twist['value_head'].t().shape)
-        # print("--Last generated token--")
-        # # print(torch_full_seq[:, prompt_len + t - 1])
-        # print(torch_full_seq[:, prompt_len + t])
-        # # print(torch_full_seq[:, prompt_len + t + 1])
-        #
-        # final_activation = final_activations[:, prompt_len + t]
-        #
-        # log_r_psi_t_eval = final_activation @ params_twist[
-        #     'value_head'].squeeze()
-        # print("--Final PPO Critic Evaluation--")
-        # print(log_p_theta_1_to_t_eval.shape)
-        # print(log_r_psi_t_eval.shape)  # should be same
-        # print(log_r_psi_t_eval)
-        # # convert back to jax afterwards
-        # log_r_psi_t_eval = jnp.array(log_r_psi_t_eval.cpu().detach().numpy())
+        final_activations = model_output.last_hidden_state.to(
+            params_twist['lm_head'].device)
+        # print(final_activations)
+        # print(final_activations.shape)
+        print(params_twist['lm_head'].t().shape)
+        print("--Last generated token--")
+        # print(torch_full_seq[:, prompt_len + t - 1])
+        print(torch_full_seq[:, prompt_len + t])
+        # print(torch_full_seq[:, prompt_len + t + 1])
 
-        # sample indices based on those q logits
+        final_activation = final_activations[:, prompt_len + t]
+
+        q_logits = final_activation @ params_twist[
+            'lm_head'].squeeze()
+        print("--Final PPO Actor Evaluation--")
+        print(q_logits.shape)
+        # convert back to jax afterwards
+        q_logits = jnp.array(q_logits.cpu().detach().numpy())
+
+        # sample indices based on those q logits, also calculate normalized_log_q_t based on those
+
+        1/0
 
         # TODO test IWAE/SIS bounds first to ensure they are reasonable, because they should be.
 
