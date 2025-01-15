@@ -2135,20 +2135,20 @@ def setup_cfg(
         for name, _ in model.named_parameters():
             print(name)
 
-        print("Model before")
-        print(model)
-        for x in model.named_parameters():
-            print(x)
+        # print("Model before")
+        # print(model)
+        # for x in model.named_parameters():
+        #     print(x)
 
         missing_keys, unexpected_keys = model.load_state_dict(new_state_dict,
                                                               strict=False)
         print("Missing keys:", missing_keys)
         print("Unexpected keys:", unexpected_keys)
 
-        print("Model after")
-        print(model)
-        for x in model.named_parameters():
-            print(x)
+        # print("Model after")
+        # print(model)
+        # for x in model.named_parameters():
+        #     print(x)
 
         params_proposal = HashableDict({'model': model })
 
