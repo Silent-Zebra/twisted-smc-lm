@@ -2947,8 +2947,11 @@ if __name__ == "__main__":
         assert args.separate_hface_twist_model
 
     if args.load_OpenRLHF_critic_ckpt:
-        assert args.proposal_is_p_for_plots  # Only use proposal p in this setting
-        assert args.proposal_is_p
+        # if not args.proposal_is_p or not args.proposal_is_p_for_plots:
+        #     assert args.load_OpenRLHF_actor_ckpt
+        if not args.load_OpenRLHF_actor_ckpt:
+            assert args.proposal_is_p_for_plots  # Only use proposal p in this setting, unless loading the actor for the proposal
+            assert args.proposal_is_p
 
 
 
