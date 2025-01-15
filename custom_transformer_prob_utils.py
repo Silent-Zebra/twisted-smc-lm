@@ -1586,7 +1586,7 @@ def iwae_forward_and_backward(
     rng_key, posterior_sample, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_smc_samples,
     condition_twist_on_tokens, smc_procedure_type,
-    proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_critic_ckpt=False, OpenRLHF_actor_ckpt=False
+    proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_critic_ckpt=False
 ):
 
     assert len(posterior_sample.shape) == 1 # single posterior sample
@@ -1615,7 +1615,7 @@ def iwae_forward_and_backward(
     target_dist_weights = iwae_backward(
         combined_seqs, prompt, params_p, params_twist, output_len,
         log_true_final_twist, condition_twist_on_tokens,
-        proposal_is_p, huggingface_model, params_proposal=params_proposal, OpenRLHF_actor_ckpt=OpenRLHF_actor_ckpt
+        proposal_is_p, huggingface_model, params_proposal=params_proposal
     )
 
     # alternate_f_q_calc = iwae_backward(full_seq_from_twist_since_no_resample, prompt, params_p, params_twist, output_len,

@@ -668,7 +668,7 @@ class ExperimentConfig:
         true_posterior_samples_by_prompt_and_by_token, prompt_num,
         plot_over_time_list, save_dir, lr_twist, seed, exp_num_twist_updates, twist_updates_per_epoch,
         tokenizer=None, proposal_scores_list=None,
-        kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_critic_ckpt=False, OpenRLHF_actor_ckpt=False, load_prefix_ckpt=None
+        kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_critic_ckpt=False, load_prefix_ckpt=None
     ):
         # prompt_len = prompt.shape[-1]
         rng_key, sk = jax.random.split(rng_key)
@@ -697,7 +697,6 @@ class ExperimentConfig:
             "exp_num_twist_updates": exp_num_twist_updates,
             "twist_updates_per_epoch": twist_updates_per_epoch,
             "OpenRLHF_critic_ckpt": OpenRLHF_critic_ckpt,
-            "OpenRLHF_actor_ckpt": OpenRLHF_actor_ckpt,
             "load_prefix_ckpt": load_prefix_ckpt,
             "lr_twist": lr_twist
         }
@@ -1138,7 +1137,7 @@ def inspect_and_record_evidence_setting_for_index(
     smc_procedure_type,
     proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None, tokenizer=None,
-    OpenRLHF_critic_ckpt=False, OpenRLHF_actor_ckpt=False):
+    OpenRLHF_critic_ckpt=False):
 
     assert true_posterior_samples.shape[0] > 0
 
@@ -1176,7 +1175,7 @@ def inspect_and_record_evidence_setting_for_index(
         smc_procedure_type=smc_procedure_type,
          condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt, OpenRLHF_actor_ckpt=OpenRLHF_actor_ckpt
+        params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
     )
     iwae_lower_bound_estimate = jax.nn.logsumexp(
         iwae_log_w_lower) - jnp.log(
@@ -1493,7 +1492,7 @@ def get_and_plot_logZ_bounds(
     proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
     proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None,
-    OpenRLHF_critic_ckpt=False, OpenRLHF_actor_ckpt=False
+    OpenRLHF_critic_ckpt=False
 ):
 
     print(f"Sampling Runs Starting")
@@ -1536,7 +1535,6 @@ def get_and_plot_logZ_bounds(
             logZ_lbs_smc_across_samples_and_trueposts,
             list_of_stuff_across_trueposts_only_largest_n_samples,
             OpenRLHF_critic_ckpt,
-            OpenRLHF_actor_ckpt
         )
 
     for n in range(len(n_samples_for_plots)):
@@ -2280,7 +2278,6 @@ def do_inspection_and_plotting_of_test_info(
             "exp_num_twist_updates": exp_num_twist_updates,
             "twist_updates_per_epoch": twist_updates_per_epoch,
             "OpenRLHF_critic_ckpt": OpenRLHF_critic_ckpt,
-            "OpenRLHF_actor_ckpt": OpenRLHF_actor_ckpt,
             "load_prefix_ckpt": load_prefix_ckpt,
             "lr_twist": lr_twist
         }
