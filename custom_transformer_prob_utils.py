@@ -396,14 +396,13 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
                                                       huggingface_model=huggingface_model)
 
 
-
-
-        if tempered_twist:
-            log_psi = beta_prop * log_psi
-        log_p_plus_log_psi = log_p + log_psi
+        # log_p_plus_log_psi = log_p + log_psi
 
         log_psi_eval_of_new_seqs = None
         if log_psi is not None:
+            if tempered_twist:
+                log_psi = beta_prop * log_psi
+
             log_psi_eval_of_new_seqs = log_psi[
                 jnp.arange(full_seq.shape[0]), indices_to_use]
 
