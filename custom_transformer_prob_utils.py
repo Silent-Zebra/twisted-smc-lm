@@ -360,7 +360,7 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         final_activation = final_activations[:, prompt_len + t]
 
         q_logits = final_activation @ params_proposal[
-            'lm_head'].squeeze()
+            'lm_head'].t()
         print("--Final PPO Actor Evaluation--")
         print(q_logits.shape)
         # convert back to jax afterwards
