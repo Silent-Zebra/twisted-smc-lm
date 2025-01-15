@@ -344,13 +344,14 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         # print(params_twist['model'])
         # print("--HERE3--")
         torch_full_seq = torch.tensor(np.array(full_seq))
-        # print(torch_full_seq)
+        print(torch_full_seq)
         model_output = params_proposal['model'](torch_full_seq)
         # print(model_output)
         final_activations = model_output.last_hidden_state.to(
             params_proposal['lm_head'].device)
         # print(final_activations)
-        # print(final_activations.shape)
+        print(final_activations.shape)
+        1/0
         # print(params_proposal['lm_head'].t().shape)
 
         final_activation = final_activations[:, prompt_len + t]
