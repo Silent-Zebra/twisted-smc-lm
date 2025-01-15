@@ -348,10 +348,10 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         model_output = params_proposal['model'](torch_full_seq)
         print(model_output)
         final_activations = model_output.last_hidden_state.to(
-            params_twist['lm_head'].device)
+            params_proposal['lm_head'].device)
         # print(final_activations)
         # print(final_activations.shape)
-        print(params_twist['lm_head'].t().shape)
+        print(params_proposal['lm_head'].t().shape)
         print("--Last generated token--")
         # print(torch_full_seq[:, prompt_len + t - 1])
         print(torch_full_seq[:, prompt_len + t])
@@ -359,7 +359,7 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
 
         final_activation = final_activations[:, prompt_len + t]
 
-        q_logits = final_activation @ params_twist[
+        q_logits = final_activation @ params_proposal[
             'lm_head'].squeeze()
         print("--Final PPO Actor Evaluation--")
         print(q_logits.shape)
