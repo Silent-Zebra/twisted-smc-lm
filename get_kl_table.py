@@ -375,6 +375,11 @@ load_prefixes_toy_rlhf = [
         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_00-37_seed3_ebm_one_sample_lr3e-05_nsamples11",
         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_00-21_seed4_ebm_one_sample_lr3e-05_nsamples11"
     ],
+    # [
+    #     "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr3e-06_seed0_nsamples11",
+    #     "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr3e-06_seed1_nsamples11",
+    #     "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr3e-06_seed2_nsamples11"
+    # ],
     [
         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_18-14_seed0_rl_q_lsq_partial_jit_lr1e-06_nsamples11",
         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_rl_q_lsq_partial_jit_lr1e-06_seed1_nsamples11",
@@ -775,6 +780,7 @@ if __name__ == "__main__":
     twist_learn_method_names = [
         r"Contrastive, LR 1e-5",
         r"Contrastive, LR 3e-5",
+        # r"Contrastive, LR 3e-6, 4 Steps",
         r"RL",
         r"SIXO",
         r"FUDGE",
@@ -785,6 +791,7 @@ if __name__ == "__main__":
     proposal_names = [
         "Twisted",
         "Twisted",
+        # "Twisted",
         "Twisted",
         "Twisted",
         "Twisted",

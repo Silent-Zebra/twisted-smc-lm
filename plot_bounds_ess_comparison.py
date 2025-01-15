@@ -90,7 +90,7 @@ x_range = np.array([0,2,3,4,5,7,9,11])
 xticks_range = x_range
 xticks_labels = 2 ** xticks_range
 plt.ylabel(f"Log Z Bound")
-plt.ylim(-73, 3)
+# plt.ylim(-73, 3)
 
 last, conf_bound = plot_with_conf_bounds(
     t_iwae_ubs, x_range, label=f"SIS/IWAE UB (Base $p_0$ Proposal)",
@@ -117,17 +117,17 @@ last, conf_bound = plot_with_conf_bounds(
 )
 
 
-# last, conf_bound = plot_with_conf_bounds(
-#     p_iwae_ubs, x_range, label=f"SIS/IWAE UB (Base $p_0$ Proposal)",
-#     color=color_list_for_ubs[2],
-#     linestyle=linestyle_list_for_ubs[2],
-# )
-#
-# last, conf_bound = plot_with_conf_bounds(
-#     p_iwae_lbs, x_range, label=f"SIS/IWAE LB (Base $p_0$ Proposal)",
-#     color=color_list_for_lbs[2],
-#     linestyle=linestyle_list_for_lbs[2],
-# )
+last, conf_bound = plot_with_conf_bounds(
+    p_iwae_ubs, x_range, label=f"SIS/IWAE UB (Base $p_0$ Proposal)",
+    color=color_list_for_ubs[2],
+    linestyle=linestyle_list_for_ubs[2],
+)
+
+last, conf_bound = plot_with_conf_bounds(
+    p_iwae_lbs, x_range, label=f"SIS/IWAE LB (Base $p_0$ Proposal)",
+    color=color_list_for_lbs[2],
+    linestyle=linestyle_list_for_lbs[2],
+)
 
 last, conf_bound = plot_with_conf_bounds(
     p_smc_ubs, x_range, label=f"SMC UB (Base $p_0$ Proposal, Every-Step Resampling)",
@@ -147,4 +147,4 @@ plt.legend(loc="lower right")
 # plt.savefig(f"./fig_bounds_toxt_-5_01-14.pdf")
 # plt.savefig(f"./fig_bounds_ess_toxt_-5_02-13.pdf")
 
-plt.savefig(f"./fig_bounds_ess_toxt_-5_03-25.pdf")
+# plt.savefig(f"./fig_bounds_ess_toxt_-5_01-12-2025.pdf")

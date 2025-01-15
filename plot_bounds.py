@@ -90,7 +90,9 @@ elif plot_type == "toxthresh":
 
     plot_ess = True
 
-    figname = f"./fig_bounds_resampleeveryonly_ppo_bc_step50_toxt_-5_12-23.pdf"
+    figname = f"./fig_bounds_ess_toxt_-5_01-12-2025.pdf"
+
+    # figname = f"./fig_bounds_resampleeveryonly_ppo_bc_step50_toxt_-5_12-23.pdf"
 
     # figname = f"./fig_bounds_with_ess_ppo_bc_step50_toxt_-5_12-23.pdf"
     # figname = f"./fig_bounds_with_ess_ppo_bc_step10_toxt_-5_12-23.pdf"
@@ -321,8 +323,8 @@ if plot_type == "sent_dpg_comparison":
 
 else:
 
-    plot_ppo = True
-    only_plot_resample_every = True
+    plot_ppo = False # True
+    only_plot_resample_every = False # True
 
     start_from = 1
     x_range = x_range[start_from:]
@@ -387,7 +389,10 @@ else:
     )
 
     if plot_type == "toxthresh":
-        plt.ylim([-37, 15])
+        if plot_ppo:
+            plt.ylim([-37, 15])
+        else:
+            plt.ylim([-37, 0])
         plt.xlim([2, 11])
 
         if not only_plot_resample_every:
@@ -435,7 +440,10 @@ else:
 
 plt.xticks(xticks_range, xticks_labels)
 
-plt.legend(loc='upper left', bbox_to_anchor=(0, 0.5), fontsize=7)
+if plot_ppo:
+    plt.legend(loc='upper left', bbox_to_anchor=(0, 0.5), fontsize=7)
+else:
+    plt.legend(loc='upper right', bbox_to_anchor=(1, 0.5),fontsize=7)
 # plt.legend(fontsize=6)
 
 plt.savefig(figname)
