@@ -364,10 +364,16 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         print("--Final PPO Actor Evaluation--")
         print(q_logits.shape)
         # convert back to jax afterwards
-        q_logits = jnp.array(q_logits.cpu().detach().numpy())
+        q_logits = jnp.array(q_logits.cpu().detach().numpy()).squeeze(0)
 
         # sample indices based on those q logits, also calculate normalized_log_q_t based on those
 
+        # TODO REMOVE LATER ONLY FOR SHAPE
+        indices_to_use = jax.random.categorical(rng_key, log_p,
+                                                shape=(log_p.shape[0],))
+        unnormalized_log_q_t = log_p[
+            jnp.arange(indices_to_use.shape[0]), indices_to_use]
+        print(unnormalized_log_q_t.shape)
         1/0
 
         # TODO test IWAE/SIS bounds first to ensure they are reasonable, because they should be.
