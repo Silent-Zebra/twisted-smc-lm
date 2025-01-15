@@ -2153,7 +2153,7 @@ def setup_cfg(
         params_proposal = HashableDict({'model': model })
 
         print("params_proposal loaded using OpenRLHF model")
-        print(params_proposal)
+        # print(params_proposal)
         1/0
 
 
