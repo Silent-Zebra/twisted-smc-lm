@@ -2657,7 +2657,7 @@ def main():
                         "output_len": args.output_len,
                         "n_smc_samples": args.test_best_of_n_samples,
                         "smc_procedure_type": experiment_cfg.smc_procedure_type,
-                        "get_intermediate_sample_history_based_on_learned_twists": True,
+                        "get_intermediate_sample_history_based_on_learned_twists": False,
                         "resample": True,
                         "proposal_is_p": args.proposal_is_p,
                         "huggingface_model": huggingface_model,
