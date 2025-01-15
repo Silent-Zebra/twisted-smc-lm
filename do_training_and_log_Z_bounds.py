@@ -2005,7 +2005,7 @@ def setup_cfg(
         twist_updates_per_batch=twist_updates_per_batch
     )
 
-    load_dir_ckpt, load_dir_posterior_samples = load_dirs
+    load_dir_ckpt, load_dir_OpenRLHF_ckpt, load_dir_posterior_samples = load_dirs
 
     rng_key = jax.random.PRNGKey(seed)
 
@@ -2061,7 +2061,7 @@ def setup_cfg(
             params_proposal = None
             import torch
             from transformers import AutoModel
-            x = torch.load(f"{load_dir_ckpt}/{load_prefix}")
+            x = torch.load(f"{load_dir_OpenRLHF_ckpt}/{load_prefix}")
 
             state_dict = x['module']
             print("State dict")
@@ -2114,7 +2114,7 @@ def setup_cfg(
     if load_OpenRLHF_actor_ckpt:
         import torch
         from transformers import AutoModel
-        x = torch.load(f"{load_dir_ckpt}/{load_prefix_actor_ckpt}")
+        x = torch.load(f"{load_dir_OpenRLHF_ckpt}/{load_prefix_actor_ckpt}")
 
         state_dict = x['module']
         # print("State dict")
@@ -2520,7 +2520,7 @@ def main():
         "beta_temp": args.beta_temp, "threshold": args.threshold, "pos_threshold": args.pos_threshold,
         "load_ckpt": args.load_ckpt, "load_OpenRLHF_critic_ckpt": args.load_OpenRLHF_critic_ckpt,
         "load_OpenRLHF_actor_ckpt": args.load_OpenRLHF_actor_ckpt,
-        "load_dirs": (args.load_dir_ckpt, args.load_dir_posterior_samples),
+        "load_dirs": (args.load_dir_ckpt, args.load_dir_OpenRLHF_ckpt, args.load_dir_posterior_samples),
         "load_prefix": args.load_prefix_ckpt, "load_prefix_actor_ckpt": args.load_prefix_actor_ckpt,
         "hface_nn_twist": args.hface_nn_twist, "separate_hface_twist_model": args.separate_hface_twist_model,
         "num_last_tokens_to_condition_on": args.num_last_tokens_to_condition_on, "only_collect_true_posterior_samples": False,
@@ -2876,6 +2876,7 @@ if __name__ == "__main__":
     parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
     parser.add_argument("--load_OpenRLHF_critic_ckpt", action="store_true", help="specifically use OpenRLHF PPO critic as twists")
     parser.add_argument("--load_OpenRLHF_actor_ckpt", action="store_true", help="specifically use OpenRLHF PPO actor as proposal")
+    parser.add_argument("--load_dir_OpenRLHF_ckpt", type=str, default='.', help="Where to load from for OpenRLHF checkpoint")
 
     parser.add_argument("--load_dir_ckpt", type=str, default='.', help="Where to load from for checkpoint")
     parser.add_argument("--load_prefix_ckpt", type=str, default='.')
