@@ -374,6 +374,10 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         indices_to_use = jax.random.categorical(subkey, log_q_all_tokens,
                                                 shape=(log_q_all_tokens.shape[0],))
 
+        if true_posterior_sample is not None:
+            indices_to_use = indices_to_use.at[0].set(true_posterior_sample[
+                                                          prompt_len + t])  # Force the one true posterior sample index
+
         # print(indices_to_use)
         # print(indices_to_use.shape)
         normalized_log_q_t = log_q_all_tokens[
