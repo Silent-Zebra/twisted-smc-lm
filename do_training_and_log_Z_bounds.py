@@ -2644,7 +2644,9 @@ def main():
                 smc_best_of_n_scores = []
                 q_best_of_n_scores = []
 
-                for _ in range(args.test_best_of_n_seeds):
+                for x in range(args.test_best_of_n_seeds):
+
+                    print(f"TIME for iter {x + 1}: {time.time() - start}")
 
                     rng, sk_smc, sk_sis = jax.random.split(rng_key, 3)
 
@@ -2677,8 +2679,9 @@ def main():
                     max_smc_score = jnp.max(score_on_smc_samples)
                     max_q_score = jnp.max(score_on_q_samples)
 
+                    print("Max scores")
                     print(max_smc_score)
-                    print(max_q_score)
+                    print(max_q_score, flush=True)
 
                     smc_best_of_n_scores.append(max_smc_score)
                     q_best_of_n_scores.append(max_q_score)
