@@ -1315,7 +1315,7 @@ def collect_info_across_trueposts(
     logZ_ubs_smc_across_samples_and_trueposts,
     logZ_lbs_smc_across_samples_and_trueposts,
     list_of_stuff_across_trueposts_only_largest_n_samples,
-    OpenRLHF_critic_ckpt=False, OpenRLHF_actor_ckpt=False
+    OpenRLHF_critic_ckpt=False
 ):
     iwae_lbs = []
     iwae_ubs = []

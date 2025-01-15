@@ -1591,6 +1591,9 @@ def iwae_forward_and_backward(
     proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_critic_ckpt=False
 ):
 
+    print("OpenRLHF_critic_ckpt!!!")
+    print(OpenRLHF_critic_ckpt)
+
     assert len(posterior_sample.shape) == 1 # single posterior sample
 
     (log_w_t, _, _), full_seq_from_twist_since_no_resample = smc_procedure(
