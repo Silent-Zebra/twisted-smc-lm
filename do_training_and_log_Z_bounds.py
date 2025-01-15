@@ -49,7 +49,7 @@ def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twis
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
                  sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False,
-                 OpenRLHF_critic_ckpt=False, twist_updates_per_batch=1
+                 OpenRLHF_critic_ckpt=False, OpenRLHF_actor_ckpt=False, twist_updates_per_batch=1
     ):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
@@ -88,7 +88,7 @@ class ExperimentConfig:
         else:
             self.smc_procedure_type = "jit"
 
-        if OpenRLHF_critic_ckpt:
+        if OpenRLHF_critic_ckpt or OpenRLHF_actor_ckpt:
             self.smc_procedure_type = "debug"
 
         self.twist_grad_fn = self._get_twist_grad_fn()
@@ -1999,7 +1999,7 @@ def setup_cfg(
         sentiment_class=sentiment_class,
         n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
         train_on_true_posterior_samples=train_on_true_posterior_samples,
-        OpenRLHF_critic_ckpt=load_OpenRLHF_critic_ckpt,
+        OpenRLHF_critic_ckpt=load_OpenRLHF_critic_ckpt, OpenRLHF_actor_ckpt=load_OpenRLHF_actor_ckpt,
         twist_updates_per_batch=twist_updates_per_batch
     )
 
