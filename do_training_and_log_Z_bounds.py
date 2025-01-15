@@ -1350,7 +1350,6 @@ def collect_info_across_trueposts(
                 index_of_true_posterior_sample=truepost_i,
                 params_proposal=params_proposal, tokenizer=tokenizer,
                 OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt,
-                OpenRLHF_actor_ckpt=OpenRLHF_actor_ckpt
             )
             (iwae_upper_bound_estimate, iwae_lower_bound_estimate,
              smc_upper_bound_estimate, smc_lower_bound_estimate,
