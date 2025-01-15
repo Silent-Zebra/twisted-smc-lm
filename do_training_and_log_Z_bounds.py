@@ -2665,12 +2665,10 @@ def main():
                         "OpenRLHF_critic_ckpt": args.load_OpenRLHF_critic_ckpt
                     }
 
-                    (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list,
-                                                       log_w_t_before_resample_list) = smc_procedure(**smc_args)
+                    (_, log_z_hat_t, _), smc_samples = smc_procedure(**smc_args)
 
                     smc_args["resample"] = False
-                    (_, log_z_hat_t, _), q_samples, (full_seq_list, log_w_t_list,
-                                                       log_w_t_before_resample_list) = smc_procedure(
+                    (_, log_z_hat_t, _), q_samples = smc_procedure(
                         **smc_args)
 
                     score_on_smc_samples = log_true_final_twist(smc_samples) / args.beta_temp # capped_reward
