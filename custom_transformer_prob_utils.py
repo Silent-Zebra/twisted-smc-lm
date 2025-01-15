@@ -1134,7 +1134,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
                          condition_twist_on_tokens,   resample=True,
                         true_posterior_sample=None, proposal_is_p=False, huggingface_model=None,
                         resample_for_log_psi_t_eval_list=False, tempered_twist=False, beta_prop=None,
-                        use_log_true_final_twist_for_final_weight_calc=True, params_proposal=None):
+                        use_log_true_final_twist_for_final_weight_calc=True, params_proposal=None, OpenRLHF_critic_ckpt=False):
 
     log_w_t_minus_1 = log_w_t
 
@@ -1149,7 +1149,7 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     # New implementation: do the below always, (proposal always from twists, to avoid absurd amounts of calculation on n_vocab * batch number of seqs for the reward model)
     # If using final twist (ie. sigma samples, the positive samples), the only difference will be in the psi_t_eval later:
     params_twist_to_use = params_twist
-    if proposal_is_p:
+    if proposal_is_p or OpenRLHF_critic_ckpt:
         params_twist_to_use = None
 
     if isinstance(params_proposal, HashableDict):
@@ -1304,11 +1304,13 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
 
     (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_learned_psi_T_eval), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = \
         smc_scan_iter_final(
-        rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
-        output_len, params_p, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
-        condition_twist_on_tokens,  resample_for_final, true_posterior_sample, proposal_is_p,
-        huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-        tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc, params_proposal=params_proposal)
+            rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
+            output_len, params_p, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
+            condition_twist_on_tokens,  resample_for_final, true_posterior_sample, proposal_is_p,
+            huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
+            tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc,
+            params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
+        )
 
     # print(time.time() - start)
     # start = time.time()
@@ -1461,11 +1463,13 @@ def smc_partial_jit(
 
     (log_w_t, log_w_t_based_on_learned_twist, log_z_hat_t, log_learned_psi_T_eval), full_seq_based_on_true_twist, full_seq_based_on_learned_twist = \
         smc_scan_iter_final(
-        rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
-        output_len, params_p, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
-        condition_twist_on_tokens,  resample_for_final, true_posterior_sample, proposal_is_p,
-        huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
-        tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc, params_proposal=params_proposal)
+            rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval,
+            output_len, params_p, params_twist, prompt_len, log_true_final_twist, log_z_hat_t,
+            condition_twist_on_tokens,  resample_for_final, true_posterior_sample, proposal_is_p,
+            huggingface_model=huggingface_model, resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
+            tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc,
+            params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
+        )
 
 
     if get_intermediate_sample_history_based_on_learned_twists:
@@ -1590,9 +1594,6 @@ def iwae_forward_and_backward(
     condition_twist_on_tokens, smc_procedure_type,
     proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_critic_ckpt=False
 ):
-
-    print("OpenRLHF_critic_ckpt!!!")
-    print(OpenRLHF_critic_ckpt)
 
     assert len(posterior_sample.shape) == 1 # single posterior sample
 
