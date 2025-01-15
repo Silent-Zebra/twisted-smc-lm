@@ -408,8 +408,6 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
 
         log_p_eval_of_new_seqs = log_p[jnp.arange(full_seq.shape[0]), indices_to_use]
 
-        log_psi_eval_of_new_seqs = None
-
         full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
 
         # print("--Last generated token--")
