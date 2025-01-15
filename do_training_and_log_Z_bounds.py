@@ -2569,6 +2569,8 @@ def main():
         )
         raise SystemExit(0)  # Finished
 
+
+
     last_ckpt_epoch = -1
 
     plot_over_time_list, plot_over_time_list_p_proposal = setup_plot_over_time_lists(n_samples_for_plots)
@@ -2636,6 +2638,62 @@ def main():
             #     print("VALUE ON TRUE POSTERIOR SAMPLES FOR EVERY PARTIAL SEQUENCE")
             #     print(log_psi) # DEBUG ONLY
             #     1/0
+
+            if args.test_best_of_n_seeds > 0:
+
+                smc_best_of_n_scores = []
+                q_best_of_n_scores = []
+
+                for _ in range(args.test_best_of_n_seeds):
+
+                    rng, sk_smc, sk_sis = jax.random.split(rng_key, 3)
+
+                    smc_args = {
+                        "rng_key": sk_smc,
+                        "prompt": prompt,
+                        "params_p": params_p,
+                        "params_twist": params_twist,
+                        "log_true_final_twist": log_true_final_twist,
+                        "output_len": args.output_len,
+                        "n_smc_samples": args.test_best_of_n_samples,
+                        "smc_procedure_type": experiment_cfg.smc_procedure_type,
+                        "get_intermediate_sample_history_based_on_learned_twists": True,
+                        "resample": True,
+                        "proposal_is_p": args.proposal_is_p,
+                        "huggingface_model": huggingface_model,
+                        "params_proposal": params_proposal,
+                        "OpenRLHF_critic_ckpt": args.OpenRLHF_critic_ckpt
+                    }
+
+                    (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list,
+                                                       log_w_t_before_resample_list) = smc_procedure(**smc_args)
+
+                    smc_args["resample"] = False
+                    (_, log_z_hat_t, _), q_samples, (full_seq_list, log_w_t_list,
+                                                       log_w_t_before_resample_list) = smc_procedure(
+                        **smc_args)
+
+                    score_on_smc_samples = log_true_final_twist(smc_samples) / args.beta_temp # capped_reward
+                    score_on_q_samples = log_true_final_twist(q_samples) / args.beta_temp
+
+                    max_smc_score = jnp.max(score_on_smc_samples)
+                    max_q_score = jnp.max(score_on_q_samples)
+
+                    print(max_smc_score)
+                    print(max_q_score)
+
+                    smc_best_of_n_scores.append(max_smc_score)
+                    q_best_of_n_scores.append(max_q_score)
+
+                print("SMC best scores")
+                print(smc_best_of_n_scores)
+                print(sum(smc_best_of_n_scores) / len(smc_best_of_n_scores))
+
+                print("No resampling best scores")
+                print(q_best_of_n_scores)
+                print(sum(q_best_of_n_scores) / len(q_best_of_n_scores))
+
+                raise SystemExit(0)  # Finished
 
 
             # ----- DO plotting and inspection of test info before the twist updates -----
@@ -2891,6 +2949,9 @@ if __name__ == "__main__":
     parser.add_argument("--n_samples_for_cap", type=int, default=None, help="Only used in conjunction with --rm_type toy_rlhf and only_collect_true_posterior_samples: get the max among this many samples, and use that as the cap.")
 
     parser.add_argument("--twist_updates_per_batch", type=int, default=1, help="If >1, then for each batch of n_twist size drawn from the proposal, do twist_updates_per_batch number of twist updates")
+
+    parser.add_argument("--test_best_of_n_seeds", type=int, default=0, help="If >0, then only test best of n sampling with and without SMC resampling to see if it helps reward. Do this over test_best_of_n_seeds number of seeds.")
+    parser.add_argument("--test_best_of_n_samples", type=int, default=10, help="Use with test_best_of_n_seeds. Use test_best_of_n_samples number of samples for this.")
 
     args = parser.parse_args()
 

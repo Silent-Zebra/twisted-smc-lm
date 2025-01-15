@@ -86,11 +86,17 @@ elif plot_type == "toxthresh":
     # load_pref_p_32_512_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step10_nsamples32_512_0"
     # load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step10_nsamples128_2048_0"
 
+    load_pref_q_1_8_ppo_actor_critic = "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_global_step50_2025-01-15_00-23_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0"
+    load_pref_q_4_16_ppo_actor_critic = "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_global_step50_2025-01-15_00-47_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0"
 
+    load_pref_q_1_8_ppo_actor_randomtwist = "logZ_bounds_twistproposal_2025-01-15_00-09_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0"
+    load_pref_q_4_16_ppo_actor_randomtwist = "logZ_bounds_twistproposal_2025-01-15_00-47_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0"
 
     plot_ess = True
 
-    figname = f"./fig_bounds_ess_toxt_-5_01-12-2025.pdf"
+    figname = f"./fig_bounds_ppo_toxt_-5_01-15-2025.pdf"
+
+    # figname = f"./fig_bounds_ess_toxt_-5_01-12-2025.pdf"
 
     # figname = f"./fig_bounds_resampleeveryonly_ppo_bc_step50_toxt_-5_12-23.pdf"
 
@@ -104,11 +110,11 @@ elif plot_type == "toxthresh":
     # figname = f"./fig_bounds_toxt_-5_03-24.pdf"
 
 
-color_list_for_lbs = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey', 'xkcd:light brown']
-color_list_for_ubs = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkcd:purple', 'xkcd:black', 'xkcd:brown']
+color_list_for_lbs = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey', 'xkcd:light brown', 'xkcd:light lime green', 'xkcd:light navy blue', 'xkcd:light indigo', ]
+color_list_for_ubs = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkcd:purple', 'xkcd:black', 'xkcd:brown', 'xkcd:lime green', 'xkcd:navy blue', 'xkcd:indigo']
 
-linestyle_list_for_lbs = ['solid'] * 10
-linestyle_list_for_ubs = ['dashed', 'dashed', 'dashed', 'dashed', 'dashed', 'dotted', 'dashdot' ]
+linestyle_list_for_ubs = ['dashed', 'dashed', 'dashed', 'dashed', 'dashed', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot' ]
+linestyle_list_for_lbs = linestyle_list_for_ubs[1:] # ['solid'] * 10
 
 load_dir = "./f_q_g_q_logZ_info"
 
@@ -235,6 +241,88 @@ elif plot_type == "toxthresh":
                                            p_smc_lbs_32_ppo, p_smc_lbs_128_ppo, p_smc_lbs_512_ppo, p_smc_lbs_2048_ppo
                                            ]))
 
+    q_iwae_ubs_1_ppo_actor_critic, q_iwae_ubs_8_ppo_actor_critic, q_iwae_lbs_1_ppo_actor_critic, q_iwae_lbs_8_ppo_actor_critic, q_smc_ubs_1_ppo_actor_critic, q_smc_ubs_8_ppo_actor_critic, q_smc_lbs_1_ppo_actor_critic, q_smc_lbs_8_ppo_actor_critic = load_ckpt(
+        load_pref_q_1_8_ppo_actor_critic)
+    q_iwae_ubs_4_ppo_actor_critic, q_iwae_ubs_16_ppo_actor_critic, q_iwae_lbs_4_ppo_actor_critic, q_iwae_lbs_16_ppo_actor_critic, q_smc_ubs_4_ppo_actor_critic, q_smc_ubs_16_ppo_actor_critic, q_smc_lbs_4_ppo_actor_critic, q_smc_lbs_16_ppo_actor_critic = load_ckpt(
+        load_pref_q_4_16_ppo_actor_critic)
+
+
+    q_smc_ubs_ppo_actor_critic = np.transpose(np.stack(
+        [q_smc_ubs_1_ppo_actor_critic, q_smc_ubs_4_ppo_actor_critic,
+         q_smc_ubs_8_ppo_actor_critic, q_smc_ubs_16_ppo_actor_critic,
+         q_smc_ubs_16_ppo_actor_critic,  q_smc_ubs_16_ppo_actor_critic, # TODO REMOVE LATER
+         q_smc_ubs_16_ppo_actor_critic,  q_smc_ubs_16_ppo_actor_critic,
+         # q_smc_ubs_32_ppo_actor_critic, q_smc_ubs_128_ppo_actor_critic,
+         # q_smc_ubs_512_ppo_actor_critic, q_smc_ubs_2048_ppo_actor_critic
+         ]))
+    q_smc_lbs_ppo_actor_critic = np.transpose(np.stack(
+        [q_smc_lbs_1_ppo_actor_critic, q_smc_lbs_4_ppo_actor_critic,
+         q_smc_lbs_8_ppo_actor_critic, q_smc_lbs_16_ppo_actor_critic,
+         q_smc_lbs_16_ppo_actor_critic, q_smc_lbs_16_ppo_actor_critic, # TODO REMOVE LATER
+         q_smc_lbs_16_ppo_actor_critic, q_smc_lbs_16_ppo_actor_critic,
+         # q_smc_lbs_32_ppo_actor_critic, q_smc_lbs_128_ppo_actor_critic,
+         # q_smc_lbs_512_ppo_actor_critic, q_smc_lbs_2048_ppo_actor_critic
+         ]))
+
+    q_iwae_ubs_ppo_actor_critic = np.transpose(np.stack(
+        [q_iwae_ubs_1_ppo_actor_critic, q_iwae_ubs_4_ppo_actor_critic,
+         q_iwae_ubs_8_ppo_actor_critic, q_iwae_ubs_16_ppo_actor_critic,
+         q_iwae_ubs_16_ppo_actor_critic, q_iwae_ubs_16_ppo_actor_critic,
+         # TODO REMOVE LATER
+         q_iwae_ubs_16_ppo_actor_critic, q_iwae_ubs_16_ppo_actor_critic,
+         # q_iwae_ubs_32_ppo_actor_critic, q_iwae_ubs_128_ppo_actor_critic,
+         # q_iwae_ubs_512_ppo_actor_critic, q_iwae_ubs_2048_ppo_actor_critic
+         ]))
+    q_iwae_lbs_ppo_actor_critic = np.transpose(np.stack(
+        [q_iwae_lbs_1_ppo_actor_critic, q_iwae_lbs_4_ppo_actor_critic,
+         q_iwae_lbs_8_ppo_actor_critic, q_iwae_lbs_16_ppo_actor_critic,
+         q_iwae_lbs_16_ppo_actor_critic, q_iwae_lbs_16_ppo_actor_critic,
+         # TODO REMOVE LATER
+         q_iwae_lbs_16_ppo_actor_critic, q_iwae_lbs_16_ppo_actor_critic,
+         # q_iwae_lbs_32_ppo_actor_critic, q_iwae_lbs_128_ppo_actor_critic,
+         # q_iwae_lbs_512_ppo_actor_critic, q_iwae_lbs_2048_ppo_actor_critic
+         ]))
+
+    q_iwae_ubs_1_ppo_actor_randomtwist, q_iwae_ubs_8_ppo_actor_randomtwist, q_iwae_lbs_1_ppo_actor_randomtwist, q_iwae_lbs_8_ppo_actor_randomtwist, q_smc_ubs_1_ppo_actor_randomtwist, q_smc_ubs_8_ppo_actor_randomtwist, q_smc_lbs_1_ppo_actor_randomtwist, q_smc_lbs_8_ppo_actor_randomtwist = load_ckpt(
+        load_pref_q_1_8_ppo_actor_randomtwist)
+    q_iwae_ubs_4_ppo_actor_randomtwist, q_iwae_ubs_16_ppo_actor_randomtwist, q_iwae_lbs_4_ppo_actor_randomtwist, q_iwae_lbs_16_ppo_actor_randomtwist, q_smc_ubs_4_ppo_actor_randomtwist, q_smc_ubs_16_ppo_actor_randomtwist, q_smc_lbs_4_ppo_actor_randomtwist, q_smc_lbs_16_ppo_actor_randomtwist = load_ckpt(
+        load_pref_q_4_16_ppo_actor_randomtwist)
+    q_smc_ubs_ppo_actor_randomtwist = np.transpose(np.stack(
+        [q_smc_ubs_1_ppo_actor_randomtwist, q_smc_ubs_4_ppo_actor_randomtwist,
+         q_smc_ubs_8_ppo_actor_randomtwist, q_smc_ubs_16_ppo_actor_randomtwist,
+         q_smc_ubs_16_ppo_actor_randomtwist, q_smc_ubs_16_ppo_actor_randomtwist, # TODO REMOVE LATER
+         q_smc_ubs_16_ppo_actor_randomtwist, q_smc_ubs_16_ppo_actor_randomtwist,
+         # q_smc_ubs_32_ppo_actor_randomtwist, q_smc_ubs_128_ppo_actor_randomtwist,
+         # q_smc_ubs_512_ppo_actor_randomtwist, q_smc_ubs_2048_ppo_actor_randomtwist
+         ]))
+    q_smc_lbs_ppo_actor_randomtwist = np.transpose(np.stack(
+        [q_smc_lbs_1_ppo_actor_randomtwist, q_smc_lbs_4_ppo_actor_randomtwist,
+         q_smc_lbs_8_ppo_actor_randomtwist, q_smc_lbs_16_ppo_actor_randomtwist,
+         q_smc_lbs_16_ppo_actor_randomtwist, q_smc_lbs_16_ppo_actor_randomtwist, # TODO REMOVE LATER
+         q_smc_lbs_16_ppo_actor_randomtwist, q_smc_lbs_16_ppo_actor_randomtwist
+         # q_smc_lbs_32_ppo_actor_randomtwist, q_smc_lbs_128_ppo_actor_randomtwist,
+         # q_smc_lbs_512_ppo_actor_randomtwist, q_smc_lbs_2048_ppo_actor_randomtwist
+         ]))
+
+    q_iwae_ubs_ppo_actor_randomtwist = np.transpose(np.stack(
+        [q_iwae_ubs_1_ppo_actor_randomtwist, q_iwae_ubs_4_ppo_actor_randomtwist,
+         q_iwae_ubs_8_ppo_actor_randomtwist, q_iwae_ubs_16_ppo_actor_randomtwist,
+         q_iwae_ubs_16_ppo_actor_randomtwist, q_iwae_ubs_16_ppo_actor_randomtwist,
+         # TODO REMOVE LATER
+         q_iwae_ubs_16_ppo_actor_randomtwist, q_iwae_ubs_16_ppo_actor_randomtwist,
+         # q_iwae_ubs_32_ppo_actor_randomtwist, q_iwae_ubs_128_ppo_actor_randomtwist,
+         # q_iwae_ubs_512_ppo_actor_randomtwist, q_iwae_ubs_2048_ppo_actor_randomtwist
+         ]))
+    q_iwae_lbs_ppo_actor_randomtwist = np.transpose(np.stack(
+        [q_iwae_lbs_1_ppo_actor_randomtwist, q_iwae_lbs_4_ppo_actor_randomtwist,
+         q_iwae_lbs_8_ppo_actor_randomtwist, q_iwae_lbs_16_ppo_actor_randomtwist,
+         q_iwae_lbs_16_ppo_actor_randomtwist, q_iwae_lbs_16_ppo_actor_randomtwist,
+         # TODO REMOVE LATER
+         q_iwae_lbs_16_ppo_actor_randomtwist, q_iwae_lbs_16_ppo_actor_randomtwist,
+         # q_iwae_lbs_32_ppo_actor_randomtwist, q_iwae_lbs_128_ppo_actor_randomtwist,
+         # q_iwae_lbs_512_ppo_actor_randomtwist, q_iwae_lbs_2048_ppo_actor_randomtwist
+         ]))
+
 
 elif plot_type == "sent_dpg_comparison":
     t_iwae_ubs_1_dpg, t_iwae_ubs_8_dpg, t_iwae_lbs_1_dpg, t_iwae_lbs_8_dpg, t_smc_ubs_1_dpg, t_smc_ubs_8_dpg, t_smc_lbs_1_dpg, t_smc_lbs_8_dpg = load_ckpt(
@@ -323,8 +411,9 @@ if plot_type == "sent_dpg_comparison":
 
 else:
 
-    plot_ppo = False # True
-    only_plot_resample_every = False # True
+    plot_ppo = True
+    only_plot_new_ppo = True
+    only_plot_resample_every = True
 
     start_from = 1
     x_range = x_range[start_from:]
@@ -363,30 +452,46 @@ else:
             linestyle=linestyle_list_for_lbs[1],
         )
 
+    if only_plot_new_ppo:
+        last, conf_bound = plot_with_conf_bounds(
+            t_iwae_ubs[:, start_from:], x_range,
+            label=f"SIS/IWAE UB (CTL $q^\pi$ Proposal)",
+            color=color_list_for_ubs[0],
+            linestyle=linestyle_list_for_ubs[0],
+        )
 
-    last, conf_bound = plot_with_conf_bounds(
-        p_iwae_ubs[:, start_from:], x_range, label=f"SIS/IWAE UB ($p_0$ Proposal)",
-        color=color_list_for_ubs[2],
-        linestyle=linestyle_list_for_ubs[2],
-    )
+        last, conf_bound = plot_with_conf_bounds(
+            t_iwae_lbs[:, start_from:], x_range,
+            label=f"SIS/IWAE LB (CTL $q^\pi$ Proposal)",
+            color=color_list_for_lbs[0],
+            linestyle=linestyle_list_for_lbs[0],
+        )
 
-    last, conf_bound = plot_with_conf_bounds(
-        p_iwae_lbs[:, start_from:], x_range, label=f"SIS/IWAE LB ($p_0$ Proposal)",
-        color=color_list_for_lbs[2],
-        linestyle=linestyle_list_for_lbs[2],
-    )
+    if not only_plot_new_ppo:
+        last, conf_bound = plot_with_conf_bounds(
+            p_iwae_ubs[:, start_from:], x_range, label=f"SIS/IWAE UB ($p_0$ Proposal)",
+            color=color_list_for_ubs[2],
+            linestyle=linestyle_list_for_ubs[2],
+        )
 
-    last, conf_bound = plot_with_conf_bounds(
-        p_smc_ubs[:, start_from:], x_range, label=f"SMC CTL UB ($p_0$ Proposal)",
-        color=color_list_for_ubs[3],
-        linestyle=linestyle_list_for_ubs[3],
-    )
+        last, conf_bound = plot_with_conf_bounds(
+            p_iwae_lbs[:, start_from:], x_range, label=f"SIS/IWAE LB ($p_0$ Proposal)",
+            color=color_list_for_lbs[2],
+            linestyle=linestyle_list_for_lbs[2],
+        )
 
-    last, conf_bound = plot_with_conf_bounds(
-        p_smc_lbs[:, start_from:], x_range, label=f"SMC CTL LB ($p_0$ Proposal)",
-        color=color_list_for_lbs[3],
-        linestyle=linestyle_list_for_lbs[3],
-    )
+        last, conf_bound = plot_with_conf_bounds(
+            p_smc_ubs[:, start_from:], x_range, label=f"SMC CTL UB ($p_0$ Proposal)",
+            color=color_list_for_ubs[3],
+            linestyle=linestyle_list_for_ubs[3],
+        )
+
+        last, conf_bound = plot_with_conf_bounds(
+            p_smc_lbs[:, start_from:], x_range, label=f"SMC CTL LB ($p_0$ Proposal)",
+            color=color_list_for_lbs[3],
+            linestyle=linestyle_list_for_lbs[3],
+        )
+
 
     if plot_type == "toxthresh":
         if plot_ppo:
@@ -410,33 +515,90 @@ else:
                 )
 
         if plot_ppo:
+            if not only_plot_new_ppo:
+                last, conf_bound = plot_with_conf_bounds(
+                    p_smc_ubs_ppo_bc[:, start_from:], x_range,
+                    label=f"SMC BC+PPO UB ($p_0$ Proposal)",
+                    color=color_list_for_ubs[5],
+                    linestyle=linestyle_list_for_ubs[5],
+                )
+
+                last, conf_bound = plot_with_conf_bounds(
+                    p_smc_lbs_ppo_bc[:, start_from:], x_range,
+                    label=f"SMC BC+PPO LB ($p_0$ Proposal)",
+                    color=color_list_for_lbs[5],
+                    linestyle=linestyle_list_for_lbs[5],
+                )
+
+                last, conf_bound = plot_with_conf_bounds(
+                    p_smc_ubs_ppo[:, start_from:], x_range,
+                    label=f"SMC PPO UB ($p_0$ Proposal)",
+                    color=color_list_for_ubs[6],
+                    linestyle=linestyle_list_for_ubs[6],
+                )
+
+                last, conf_bound = plot_with_conf_bounds(
+                    p_smc_lbs_ppo[:, start_from:], x_range,
+                    label=f"SMC PPO LB ($p_0$ Proposal)",
+                    color=color_list_for_lbs[6],
+                    linestyle=linestyle_list_for_lbs[6],
+                )
+
             last, conf_bound = plot_with_conf_bounds(
-                p_smc_ubs_ppo_bc[:, start_from:], x_range,
-                label=f"SMC BC+PPO UB ($p_0$ Proposal)",
-                color=color_list_for_ubs[5],
-                linestyle=linestyle_list_for_ubs[5],
+                q_smc_ubs_ppo_actor_critic[:, start_from:], x_range,
+                label=f"SMC UB (PPO Critic Twist) (PPO $q$ Proposal)",
+                color=color_list_for_ubs[7],
+                linestyle=linestyle_list_for_ubs[7],
             )
 
             last, conf_bound = plot_with_conf_bounds(
-                p_smc_lbs_ppo_bc[:, start_from:], x_range,
-                label=f"SMC BC+PPO LB ($p_0$ Proposal)",
-                color=color_list_for_lbs[5],
-                linestyle=linestyle_list_for_lbs[5],
+                q_smc_lbs_ppo_actor_critic[:, start_from:], x_range,
+                label=f"SMC LB (PPO Critic Twist) (PPO $q$ Proposal)",
+                color=color_list_for_lbs[7],
+                linestyle=linestyle_list_for_lbs[7],
             )
 
             last, conf_bound = plot_with_conf_bounds(
-                p_smc_ubs_ppo[:, start_from:], x_range,
-                label=f"SMC PPO UB ($p_0$ Proposal)",
-                color=color_list_for_ubs[6],
-                linestyle=linestyle_list_for_ubs[6],
+                q_smc_ubs_ppo_actor_randomtwist[:, start_from:], x_range,
+                label=f"SMC UB (Random Twist) (PPO $q$ Proposal)",
+                color=color_list_for_ubs[8],
+                linestyle=linestyle_list_for_ubs[8],
             )
 
             last, conf_bound = plot_with_conf_bounds(
-                p_smc_lbs_ppo[:, start_from:], x_range,
-                label=f"SMC PPO LB ($p_0$ Proposal)",
-                color=color_list_for_lbs[6],
-                linestyle=linestyle_list_for_lbs[6],
+                q_smc_lbs_ppo_actor_randomtwist[:, start_from:], x_range,
+                label=f"SMC LB (Random Twist) (PPO $q$ Proposal)",
+                color=color_list_for_lbs[8],
+                linestyle=linestyle_list_for_lbs[8],
             )
+
+            # last, conf_bound = plot_with_conf_bounds(
+            #     q_iwae_ubs_ppo_actor_critic[:, start_from:], x_range,
+            #     label=f"IWAE UB (PPO $q$ Proposal)",
+            #     color=color_list_for_ubs[9],
+            #     linestyle=linestyle_list_for_ubs[9],
+            # )
+            #
+            # last, conf_bound = plot_with_conf_bounds(
+            #     q_iwae_lbs_ppo_actor_critic[:, start_from:], x_range,
+            #     label=f"IWAE LB (PPO $q$ Proposal)",
+            #     color=color_list_for_lbs[9],
+            #     linestyle=linestyle_list_for_lbs[9],
+            # )
+            last, conf_bound = plot_with_conf_bounds(
+                q_iwae_ubs_ppo_actor_randomtwist[:, start_from:], x_range,
+                label=f"IWAE UB (PPO $q$ Proposal)",
+                color=color_list_for_ubs[9],
+                linestyle=linestyle_list_for_ubs[9],
+            )
+
+            last, conf_bound = plot_with_conf_bounds(
+                q_iwae_lbs_ppo_actor_randomtwist[:, start_from:], x_range,
+                label=f"IWAE LB (PPO $q$ Proposal)",
+                color=color_list_for_lbs[9],
+                linestyle=linestyle_list_for_lbs[9],
+            )
+
 
 plt.xticks(xticks_range, xticks_labels)
 
