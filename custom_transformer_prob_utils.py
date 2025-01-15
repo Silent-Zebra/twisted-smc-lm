@@ -325,85 +325,138 @@ def get_proposal_q_sample(rng_key, full_seq, params_p, params_twist, prompt_len,
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
     # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
 
-    if params_proposal is None:
-        params_to_use = params_twist
-    else:
-        params_to_use = params_proposal
-
-    rng_key, subkey = jax.random.split(rng_key)
-
-    log_psi = None
-
-    if proposal_is_p:
+    if isinstance(params_proposal, HashableDict):
+        # This is the OpenRLHF PPO Actor
         p_logits = get_transformer_p_logits(params_p, full_seq,
                                             huggingface_model=huggingface_model)
         log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
 
-        indices_to_use = jax.random.categorical(subkey, log_p, shape=(log_p.shape[0],))
-        if true_posterior_sample is not None:
-            indices_to_use = indices_to_use.at[0].set(true_posterior_sample[prompt_len + t]) # Force the one true posterior sample index
+        # get q logits from transformer
+        import torch
+        import numpy as np
 
-        log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p, axis=-1)
-        # print(log_Z_s_1_to_t_minus_1) # should be 0 everywhere
-        unnormalized_log_q_t = log_p[
-            jnp.arange(indices_to_use.shape[0]), indices_to_use]
+        print("--Using PPO Actor as Proposal--")
+        print(full_seq)
+        # print("--HERE2--")
+        # print(params_twist['model'])
+        # print("--HERE3--")
+        torch_full_seq = torch.tensor(np.array(full_seq))
+        # print(torch_full_seq)
+        model_output = params_proposal['model'](torch_full_seq)
+        print(model_output)
+        1/0
+        # final_activations = model_output.last_hidden_state.to(
+        #     params_twist['value_head'].device)
+        # # print(final_activations)
+        # # print(final_activations.shape)
+        # print(params_twist['value_head'].t().shape)
+        # print("--Last generated token--")
+        # # print(torch_full_seq[:, prompt_len + t - 1])
+        # print(torch_full_seq[:, prompt_len + t])
+        # # print(torch_full_seq[:, prompt_len + t + 1])
+        #
+        # final_activation = final_activations[:, prompt_len + t]
+        #
+        # log_r_psi_t_eval = final_activation @ params_twist[
+        #     'value_head'].squeeze()
+        # print("--Final PPO Critic Evaluation--")
+        # print(log_p_theta_1_to_t_eval.shape)
+        # print(log_r_psi_t_eval.shape)  # should be same
+        # print(log_r_psi_t_eval)
+        # # convert back to jax afterwards
+        # log_r_psi_t_eval = jnp.array(log_r_psi_t_eval.cpu().detach().numpy())
+
+        # sample indices based on those q logits
+
+        # TODO test IWAE/SIS bounds first to ensure they are reasonable, because they should be.
+
+        log_p_eval_of_new_seqs = log_p[jnp.arange(full_seq.shape[0]), indices_to_use]
+
+        log_psi_eval_of_new_seqs = None
+
+        return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
+
 
     else:
-        log_p, log_psi = get_log_p_plus_log_psi_t(full_seq, params_p,
-                                                  params_to_use, prompt_len, t,
-                                                  condition_twist_on_tokens,
-                                                  huggingface_model=huggingface_model)
+        if params_proposal is None:
+            params_to_use = params_twist
+        else:
+            params_to_use = params_proposal
 
-        if tempered_twist:
-            # log_psi = beta_prop * jnp.exp(log_psi) # Now instead of p psi, I will sample from p e^(beta psi)
-            # This means that wherever I had log_psi before, I now need beta psi, which is equal to beta (exp(log_psi))
-            # Essentially, by replacing this calculation, I replace all values of psi with a new twist psi' := e^(beta psi)
-            # Thus we are tempering twists with the temperature parameter beta_prop
-            # What does this do?
-            # log(p e^(beta psi)) = log(p) + beta psi. If beta = 0, simply sample from log(p). If beta -> infty, then samples just from the highest psi value.
-            # Then everything else in the SMC calcs should flow from this... sampling probability matches the q evaluation...
+        rng_key, subkey = jax.random.split(rng_key)
 
-            log_psi = beta_prop * log_psi  # Actually let's try this formulation. This formulation is sampling from p e^(beta log psi). The nice thing about this is
-            # it's very intuitively obvious: when beta_prop = 1, then you just get the original p psi formulation
-            # When beta_prop = 0, you get sampling from p only. For intermediate values, you get a mixture
-            # This is perhaps the closest analog to the RL formulation and avoids me having to figure out how the exponential temperature works
-            # Though later maybe we want to try justifying this more rigorously
-            # Finally, for beta > 1, then we are weighting the twist values more strongly than in q sampling
-            # And for beta < 0, it's like we would be actively moving away from twist values.
+        log_psi = None
 
-        log_p_plus_log_psi = log_p + log_psi
+        if proposal_is_p:
+            p_logits = get_transformer_p_logits(params_p, full_seq,
+                                                huggingface_model=huggingface_model)
+            log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
 
-        # Draw s_t values based on the log(p psi) values (or tempered version of that)
-        indices_to_use = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(log_p_plus_log_psi.shape[0],))
-        if true_posterior_sample is not None:
-            indices_to_use = indices_to_use.at[0].set(true_posterior_sample[prompt_len + t]) # Force the one true posterior sample index
+            indices_to_use = jax.random.categorical(subkey, log_p, shape=(log_p.shape[0],))
+            if true_posterior_sample is not None:
+                indices_to_use = indices_to_use.at[0].set(true_posterior_sample[prompt_len + t]) # Force the one true posterior sample index
 
-        log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
-        unnormalized_log_q_t = log_p_plus_log_psi[
-            jnp.arange(indices_to_use.shape[0]), indices_to_use]
+            log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p, axis=-1)
+            # print(log_Z_s_1_to_t_minus_1) # should be 0 everywhere
+            unnormalized_log_q_t = log_p[
+                jnp.arange(indices_to_use.shape[0]), indices_to_use]
 
-    full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
+        else:
+            log_p, log_psi = get_log_p_plus_log_psi_t(full_seq, params_p,
+                                                      params_to_use, prompt_len, t,
+                                                      condition_twist_on_tokens,
+                                                      huggingface_model=huggingface_model)
 
-    normalized_log_q_t = unnormalized_log_q_t - log_Z_s_1_to_t_minus_1
+            if tempered_twist:
+                # log_psi = beta_prop * jnp.exp(log_psi) # Now instead of p psi, I will sample from p e^(beta psi)
+                # This means that wherever I had log_psi before, I now need beta psi, which is equal to beta (exp(log_psi))
+                # Essentially, by replacing this calculation, I replace all values of psi with a new twist psi' := e^(beta psi)
+                # Thus we are tempering twists with the temperature parameter beta_prop
+                # What does this do?
+                # log(p e^(beta psi)) = log(p) + beta psi. If beta = 0, simply sample from log(p). If beta -> infty, then samples just from the highest psi value.
+                # Then everything else in the SMC calcs should flow from this... sampling probability matches the q evaluation...
 
-    log_p_eval_of_new_seqs = log_p[jnp.arange(full_seq.shape[0]), indices_to_use]
-    log_psi_eval_of_new_seqs = None
-    if log_psi is not None:
-        log_psi_eval_of_new_seqs = log_psi[jnp.arange(full_seq.shape[0]), indices_to_use]
+                log_psi = beta_prop * log_psi  # Actually let's try this formulation. This formulation is sampling from p e^(beta log psi). The nice thing about this is
+                # it's very intuitively obvious: when beta_prop = 1, then you just get the original p psi formulation
+                # When beta_prop = 0, you get sampling from p only. For intermediate values, you get a mixture
+                # This is perhaps the closest analog to the RL formulation and avoids me having to figure out how the exponential temperature works
+                # Though later maybe we want to try justifying this more rigorously
+                # Finally, for beta > 1, then we are weighting the twist values more strongly than in q sampling
+                # And for beta < 0, it's like we would be actively moving away from twist values.
 
-    if params_proposal is not None: # do the q/p for the twist value for resampling/reweighting/SMC intermediate distribution only
+            log_p_plus_log_psi = log_p + log_psi
 
-        log_psi_eval = evaluate_log_psi_selected_tokens(full_seq, prompt_len, params_twist,
-                                     condition_twist_on_tokens,  huggingface_model=huggingface_model,
-                                     params_proposal=params_proposal, params_p=params_p
-                                     )
+            # Draw s_t values based on the log(p psi) values (or tempered version of that)
+            indices_to_use = jax.random.categorical(subkey, log_p_plus_log_psi, shape=(log_p_plus_log_psi.shape[0],))
+            if true_posterior_sample is not None:
+                indices_to_use = indices_to_use.at[0].set(true_posterior_sample[prompt_len + t]) # Force the one true posterior sample index
 
-        log_psi_eval_of_new_seqs = log_psi_eval[:, t]
+            log_Z_s_1_to_t_minus_1 = jax.nn.logsumexp(log_p_plus_log_psi, axis=-1)
+            unnormalized_log_q_t = log_p_plus_log_psi[
+                jnp.arange(indices_to_use.shape[0]), indices_to_use]
 
-        # print(log_psi_eval.shape)
-        # print(log_psi_eval_of_new_seqs.shape)
+        full_seq = full_seq.at[:, prompt_len + t].set(indices_to_use)
 
-    return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
+        normalized_log_q_t = unnormalized_log_q_t - log_Z_s_1_to_t_minus_1
+
+        log_p_eval_of_new_seqs = log_p[jnp.arange(full_seq.shape[0]), indices_to_use]
+        log_psi_eval_of_new_seqs = None
+        if log_psi is not None:
+            log_psi_eval_of_new_seqs = log_psi[jnp.arange(full_seq.shape[0]), indices_to_use]
+
+        if params_proposal is not None: # do the q/p for the twist value for resampling/reweighting/SMC intermediate distribution only
+
+            log_psi_eval = evaluate_log_psi_selected_tokens(full_seq, prompt_len, params_twist,
+                                         condition_twist_on_tokens,  huggingface_model=huggingface_model,
+                                         params_proposal=params_proposal, params_p=params_p
+                                         )
+
+            log_psi_eval_of_new_seqs = log_psi_eval[:, t]
+
+            # print(log_psi_eval.shape)
+            # print(log_psi_eval_of_new_seqs.shape)
+
+        return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
 
 
 
@@ -636,7 +689,7 @@ def evaluate_log_p_theta_t_full_seq(full_seq, params_p, prompt_len_plus_t, huggi
 def smc_scan_iter_non_final(
     carry, t, condition_twist_on_tokens, resample=True,
     true_posterior_sample=None, proposal_is_p=False, huggingface_model=None, resample_for_log_psi_t_eval_list=False,
-    tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None, resample_criterion="every_step", OpenRLHF_ckpt=False,
+    tempered_twist=False, beta_prop=None, params_proposal=None, prompt_len=None, resample_criterion="every_step", OpenRLHF_critic_ckpt=False,
 ):
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     output_len, params_p, params_twist, \
@@ -646,7 +699,7 @@ def smc_scan_iter_non_final(
 
     # print(log_w_t)
     params_twist_to_use = params_twist
-    if OpenRLHF_ckpt:
+    if OpenRLHF_critic_ckpt:
         params_twist_to_use = None
 
     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
@@ -666,7 +719,7 @@ def smc_scan_iter_non_final(
 
 
 
-    if OpenRLHF_ckpt:
+    if OpenRLHF_critic_ckpt:
         # plug in the PPO critic evaluation as the twists
 
         # May have to do some conversions between torch and numpy/jax
@@ -1066,7 +1119,7 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
             resample=True, true_posterior_sample=None, proposal_is_p=False,
             huggingface_model=None, resample_for_log_psi_t_eval_list=False,
                     no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
-              params_proposal=None, prompt_len=None, resample_criterion="every_step", OpenRLHF_ckpt=False):
+              params_proposal=None, prompt_len=None, resample_criterion="every_step", OpenRLHF_critic_ckpt=False):
     # print("SMC TIME")
     # start = time.time()
 
@@ -1104,7 +1157,7 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
                     tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal,
                     prompt_len=prompt_len,
                     resample_criterion=resample_criterion,
-                    OpenRLHF_ckpt=OpenRLHF_ckpt
+                    OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
                     )(carry, t)
         full_seq_list.append(full_seq)
         log_w_t_list.append(log_w_t)
@@ -1160,7 +1213,7 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
 @partial(jax.jit, static_argnames=[
     'output_len', 'n_smc_samples', "resample", "proposal_is_p",
     "huggingface_model", "resample_for_log_psi_t_eval_list",
-    "tempered_twist", "beta_prop", "prompt_len", "resample_criterion", "OpenRLHF_ckpt"])
+    "tempered_twist", "beta_prop", "prompt_len", "resample_criterion", "OpenRLHF_critic_ckpt"])
 def smc_jitted_part(
     rng_key, prompt, prompt_len, params_p, params_twist, output_len,
     n_smc_samples,
@@ -1168,7 +1221,7 @@ def smc_jitted_part(
     resample=True, true_posterior_sample=None, proposal_is_p=False,
     huggingface_model=None, resample_for_log_psi_t_eval_list=False,
     tempered_twist=False, beta_prop=None, params_proposal=None,
-    resample_criterion="every_step", OpenRLHF_ckpt=False
+    resample_criterion="every_step", OpenRLHF_critic_ckpt=False
 ):
     # Generate samples using SMC with twists (learned and final, if use_log_true_final_twist_for_final_weight_calc)
     # IF RESAMPLE=FALSE, MAKE SURE THAT WHATEVER END RESULT RESAMPLES OR REWEIGHTS BASED ON THE RETURNED WEIGHTS (do I even return the weights always though??)
@@ -1191,7 +1244,7 @@ def smc_jitted_part(
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
                 resample_for_log_psi_t_eval_list=resample_for_log_psi_t_eval_list,
                 tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal, prompt_len=prompt_len,
-                resample_criterion=resample_criterion, OpenRLHF_ckpt=OpenRLHF_ckpt),
+                resample_criterion=resample_criterion, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt),
         carry, jnp.arange(output_len - 1, dtype=jnp.int32), output_len - 1)
 
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
@@ -1261,7 +1314,7 @@ def smc_partial_jit(
     resample=True, true_posterior_sample=None, proposal_is_p=False,
     huggingface_model=None, resample_for_log_psi_t_eval_list=False,
     no_final_resample=False, tempered_twist=False, beta_prop=None, use_log_true_final_twist_for_final_weight_calc=True,
-    params_proposal=None, prompt_len=None, resample_criterion="every_step", OpenRLHF_ckpt=False
+    params_proposal=None, prompt_len=None, resample_criterion="every_step", OpenRLHF_critic_ckpt=False
 ):
     # print("SMC TIME", flush=True)
     # start = time.time()
@@ -1278,7 +1331,7 @@ def smc_partial_jit(
                         resample, true_posterior_sample, proposal_is_p,
                         huggingface_model, resample_for_log_psi_t_eval_list,
                         tempered_twist, beta_prop, params_proposal=params_proposal,
-                        resample_criterion=resample_criterion, OpenRLHF_ckpt=OpenRLHF_ckpt)
+                        resample_criterion=resample_criterion, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt)
 
     if print_ess_stats:
         print("ESS STATS")
@@ -1326,7 +1379,7 @@ smc_jit = partial(jax.jit,
                                    "resample", "proposal_is_p",
                                    "huggingface_model", "resample_for_log_psi_t_eval_list", "no_final_resample",
                                    "tempered_twist", "beta_prop", "use_log_true_final_twist_for_final_weight_calc",
-                                   "prompt_len", "resample_criterion", "OpenRLHF_ckpt"])(smc_partial_jit)
+                                   "prompt_len", "resample_criterion", "OpenRLHF_critic_ckpt"])(smc_partial_jit)
 
 
 
@@ -1412,7 +1465,7 @@ def iwae_forward_and_backward(
     rng_key, posterior_sample, prompt, params_p, params_twist, log_true_final_twist,
     output_len, n_smc_samples,
     condition_twist_on_tokens, smc_procedure_type,
-    proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_ckpt=False
+    proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_critic_ckpt=False
 ):
 
     assert len(posterior_sample.shape) == 1 # single posterior sample
@@ -1425,7 +1478,7 @@ def iwae_forward_and_backward(
         condition_twist_on_tokens=condition_twist_on_tokens,
         resample=False, # NO resample is very important here
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt
+        params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
     )
 
     f_q_estimate = log_w_t.mean() # Get the F_q estimate here, without resampling, because sampling truly from the proposal distribution
@@ -1458,7 +1511,7 @@ def iwae_forward_and_backward(
 def smc_backward(rng_key, true_posterior_sample, prompt, params_p, params_twist, log_true_final_twist,
                                   output_len, n_smc_samples,
                                   condition_twist_on_tokens, smc_procedure_type,
-                 proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_ckpt=False):
+                 proposal_is_p=False, huggingface_model=None, params_proposal=None, OpenRLHF_critic_ckpt=False):
 
     assert len(true_posterior_sample.shape) == 1 # single posterior sample
 
@@ -1468,7 +1521,7 @@ def smc_backward(rng_key, true_posterior_sample, prompt, params_p, params_twist,
                                                condition_twist_on_tokens=condition_twist_on_tokens,
                                                resample=True, true_posterior_sample=true_posterior_sample,
                                                proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                                                       params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt
+                                                       params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
                                                        ) # resample is very important here, otherwise is just IWAE bound
 
     upper_bound_estimate = log_z_hat_t

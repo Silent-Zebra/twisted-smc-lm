@@ -48,7 +48,8 @@ def get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twis
 
 class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
-                 sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False, OpenRLHF_ckpt=False, twist_updates_per_batch=1
+                 sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False,
+                 OpenRLHF_critic_ckpt=False, twist_updates_per_batch=1
     ):
         self.n_vocab = n_vocab
         self.twist_learn_type = twist_learn_type.lower()
@@ -87,7 +88,7 @@ class ExperimentConfig:
         else:
             self.smc_procedure_type = "jit"
 
-        if OpenRLHF_ckpt:
+        if OpenRLHF_critic_ckpt:
             self.smc_procedure_type = "debug"
 
         self.twist_grad_fn = self._get_twist_grad_fn()
@@ -283,7 +284,7 @@ class ExperimentConfig:
     def _get_sigma_samples_and_cond_tokens_infilling(
         self, rng_key, params_p, prompt, output_len, n_twist, huggingface_model,
         params_twist, log_true_final_twist,
-        proposal_is_p, params_proposal, OpenRLHF_ckpt=False
+        proposal_is_p, params_proposal, OpenRLHF_critic_ckpt=False
     ):
         if self.beta_temp != 1.:
             assert "ebm" in self.twist_learn_type
@@ -337,7 +338,7 @@ class ExperimentConfig:
                     proposal_is_p=proposal_is_p,
                     huggingface_model=huggingface_model,
                     params_proposal=params_proposal,
-                    OpenRLHF_ckpt=OpenRLHF_ckpt
+                    OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
                 )  # Note these are not really true sigma samples, but whatever, I just call them true_sigma_samples
 
             else:
@@ -391,7 +392,7 @@ class ExperimentConfig:
                               params_p, params_twist, log_true_final_twist,
                               proposal_is_p=False, huggingface_model=None,
                               tempered_twist=False, beta_prop=None, replay_buffer=None,
-                              replay_buffer_log_w_ts=None, params_proposal=None, OpenRLHF_ckpt=False,
+                              replay_buffer_log_w_ts=None, params_proposal=None, OpenRLHF_critic_ckpt=False,
                               reward_cap=None, n_samples_for_cap=None, q_samples_to_use=None, log_q_on_samples_to_use=None):
 
         true_sigma_samples = None
@@ -545,7 +546,7 @@ class ExperimentConfig:
                 rng_key, params_p, prompt, output_len, n_twist,
                 huggingface_model,
                 params_twist, log_true_final_twist,
-                proposal_is_p, params_proposal, OpenRLHF_ckpt
+                proposal_is_p, params_proposal, OpenRLHF_critic_ckpt
             )
 
         elif self.rm_type == "sent_cond_twist":
@@ -602,7 +603,7 @@ class ExperimentConfig:
                      log_true_final_twist, proposal_is_p, huggingface_model,
                      optimizer_twist, optim_twist_state,
                      tempered_twist, beta_prop, replay_buffer, replay_buffer_log_w_ts,
-                     params_proposal=None, OpenRLHF_ckpt=False, reward_cap=None
+                     params_proposal=None, OpenRLHF_critic_ckpt=False, reward_cap=None
                      ):
 
         if self.twist_updates_per_batch > 1:
@@ -619,7 +620,7 @@ class ExperimentConfig:
                         huggingface_model=huggingface_model,
                         tempered_twist=tempered_twist, beta_prop=beta_prop,
                         replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts,
-                        params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt, reward_cap=reward_cap
+                        params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt, reward_cap=reward_cap
                     )
                     q_samples_to_use, log_q_on_samples_to_use = aux_data
                 else:
@@ -633,7 +634,7 @@ class ExperimentConfig:
                         replay_buffer=replay_buffer,
                         replay_buffer_log_w_ts=replay_buffer_log_w_ts,
                         params_proposal=params_proposal,
-                        OpenRLHF_ckpt=OpenRLHF_ckpt, reward_cap=reward_cap,
+                        OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt, reward_cap=reward_cap,
                         q_samples_to_use=q_samples_to_use,
                         log_q_on_samples_to_use=log_q_on_samples_to_use
                     )
@@ -654,7 +655,7 @@ class ExperimentConfig:
                 huggingface_model=huggingface_model,
                 tempered_twist=tempered_twist, beta_prop=beta_prop,
                 replay_buffer=replay_buffer, replay_buffer_log_w_ts=replay_buffer_log_w_ts,
-                params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt, reward_cap=reward_cap
+                params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt, reward_cap=reward_cap
             )  # Train each particular twist one at a time. Prepend the token of interest (the one we're trying to train the twist for), as that provides the context to the twist network to output twist values corresponding to the final twist corresponding to that token.
 
             params_twist, optim_twist_state = get_new_params_twist_and_optim_twist_state(optimizer_twist, grad_params_twist, optim_twist_state, params_twist)
@@ -667,7 +668,7 @@ class ExperimentConfig:
         true_posterior_samples_by_prompt_and_by_token, prompt_num,
         plot_over_time_list, save_dir, lr_twist, seed, exp_num_twist_updates, twist_updates_per_epoch,
         tokenizer=None, proposal_scores_list=None,
-        kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_ckpt=False, load_prefix_ckpt=None
+        kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_critic_ckpt=False, load_prefix_ckpt=None
     ):
         # prompt_len = prompt.shape[-1]
         rng_key, sk = jax.random.split(rng_key)
@@ -695,7 +696,7 @@ class ExperimentConfig:
             "seed": seed,
             "exp_num_twist_updates": exp_num_twist_updates,
             "twist_updates_per_epoch": twist_updates_per_epoch,
-            "OpenRLHF_ckpt": OpenRLHF_ckpt,
+            "OpenRLHF_critic_ckpt": OpenRLHF_critic_ckpt,
             "load_prefix_ckpt": load_prefix_ckpt,
             "lr_twist": lr_twist
         }
@@ -752,7 +753,7 @@ class ExperimentConfig:
     def inspect_results(
         self, rng_key, prompt, params_p, params_twist,
         log_true_final_twist, output_len, n_samples, indices_of_continuation, tokenizer,
-        proposal_is_p, huggingface_model, params_proposal=None, OpenRLHF_ckpt=False):
+        proposal_is_p, huggingface_model, params_proposal=None, OpenRLHF_critic_ckpt=False):
 
         rng_key, sk1, sk2 = jax.random.split(rng_key, 3)
 
@@ -779,7 +780,7 @@ class ExperimentConfig:
             "proposal_is_p": proposal_is_p,
             "huggingface_model": huggingface_model,
             "params_proposal": params_proposal,
-            "OpenRLHF_ckpt": OpenRLHF_ckpt
+            "OpenRLHF_critic_ckpt": OpenRLHF_critic_ckpt
         }
 
         if self.rm_type in [
@@ -1136,7 +1137,7 @@ def inspect_and_record_evidence_setting_for_index(
     n_test_smc_samples, true_posterior_samples,
     smc_procedure_type,
     proposal_is_p=False,
-    condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None, tokenizer=None, OpenRLHF_ckpt=False):
+    condition_twist_on_tokens=None, huggingface_model=None, index_of_true_posterior_sample=0, params_proposal=None, tokenizer=None, OpenRLHF_critic_ckpt=False):
 
     assert true_posterior_samples.shape[0] > 0
 
@@ -1174,7 +1175,7 @@ def inspect_and_record_evidence_setting_for_index(
         smc_procedure_type=smc_procedure_type,
          condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
         proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-        params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt
+        params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
     )
     iwae_lower_bound_estimate = jax.nn.logsumexp(
         iwae_log_w_lower) - jnp.log(
@@ -1216,7 +1217,7 @@ def inspect_and_record_evidence_setting_for_index(
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
             params_proposal=params_proposal, resample=True,
             get_intermediate_sample_history_based_on_learned_twists=True,
-            OpenRLHF_ckpt=OpenRLHF_ckpt
+            OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
         )
 
         print("log wts")
@@ -1256,7 +1257,7 @@ def inspect_and_record_evidence_setting_for_index(
             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
             params_proposal=params_proposal, resample=True,
             get_intermediate_sample_history_based_on_learned_twists=False,
-            OpenRLHF_ckpt=OpenRLHF_ckpt
+            OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
         )
     smc_lower_bound_estimate = log_z_hat_t
 
@@ -1273,7 +1274,7 @@ def inspect_and_record_evidence_setting_for_index(
                                             smc_procedure_type=smc_procedure_type,
                                              condition_twist_on_tokens=condition_twist_on_tokens_broadcasted,
                                             proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
-                                            params_proposal=params_proposal, OpenRLHF_ckpt=OpenRLHF_ckpt)
+                                            params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt)
 
     kl_q_sigma_smc_upper_bound_estimate = smc_upper_bound_estimate - f_q_estimate
     kl_q_sigma_smc_lower_bound_estimate = smc_lower_bound_estimate - f_q_estimate
@@ -1294,7 +1295,7 @@ def inspect_and_record_evidence_setting_for_index(
 
 inspect_and_record_evidence_setting_for_index_jit = partial(jax.jit, static_argnames=[
     "log_true_final_twist", 'output_len', 'n_test_smc_samples', "proposal_is_p",
-    "huggingface_model", "smc_procedure_type", "tokenizer", "OpenRLHF_ckpt"
+    "huggingface_model", "smc_procedure_type", "tokenizer", "OpenRLHF_critic_ckpt"
 ])(inspect_and_record_evidence_setting_for_index)
 
 
@@ -1314,7 +1315,7 @@ def collect_info_across_trueposts(
     logZ_ubs_smc_across_samples_and_trueposts,
     logZ_lbs_smc_across_samples_and_trueposts,
     list_of_stuff_across_trueposts_only_largest_n_samples,
-    OpenRLHF_ckpt=False
+    OpenRLHF_critic_ckpt=False
 ):
     iwae_lbs = []
     iwae_ubs = []
@@ -1348,7 +1349,7 @@ def collect_info_across_trueposts(
                 huggingface_model=huggingface_model,
                 index_of_true_posterior_sample=truepost_i,
                 params_proposal=params_proposal, tokenizer=tokenizer,
-                OpenRLHF_ckpt=OpenRLHF_ckpt
+                OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
             )
             (iwae_upper_bound_estimate, iwae_lower_bound_estimate,
              smc_upper_bound_estimate, smc_lower_bound_estimate,
@@ -1489,7 +1490,7 @@ def get_and_plot_logZ_bounds(
     exp_num_twist_updates, twist_updates_per_epoch, load_prefix_ckpt,
     proposal_is_p=False,
     condition_twist_on_tokens=None, huggingface_model=None, tokenizer=None,
-    proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_ckpt=False
+    proposal_scores_list=None, kl_to_prior_list=None, f_q_estimates_list=None, params_proposal=None, OpenRLHF_critic_ckpt=False
 ):
 
     print(f"Sampling Runs Starting")
@@ -1531,7 +1532,7 @@ def get_and_plot_logZ_bounds(
             logZ_ubs_smc_across_samples_and_trueposts,
             logZ_lbs_smc_across_samples_and_trueposts,
             list_of_stuff_across_trueposts_only_largest_n_samples,
-            OpenRLHF_ckpt
+            OpenRLHF_critic_ckpt
         )
 
     for n in range(len(n_samples_for_plots)):
@@ -1980,8 +1981,8 @@ def setup_model_and_params(
 def setup_cfg(
     n_vocab, twist_learn_type, rm_type, seed, hface_model_type, lr_twist,
     beta1, beta2, weight_decay, n_layers_twist, output_len, n_samples_at_a_time,
-    beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_OpenRLHF_ckpt=False, load_dirs=None,
-    load_prefix=None, hface_nn_twist=False, separate_hface_twist_model=False,
+    beta_temp=1., threshold=0, pos_threshold=True, load_ckpt=False, load_OpenRLHF_critic_ckpt=False, load_OpenRLHF_actor_ckpt=False,
+    load_dirs=None, load_prefix=None, load_prefix_actor_ckpt=None, hface_nn_twist=False, separate_hface_twist_model=False,
     num_last_tokens_to_condition_on=0, only_collect_true_posterior_samples=False,
     num_samples_if_only_collect_true_posterior_samples=100,
     load_posterior_samples=False, load_prefix_posterior_samples=None,
@@ -1998,7 +1999,7 @@ def setup_cfg(
         sentiment_class=sentiment_class,
         n_twist_ebm_vmap=n_twist_ebm_vmap, alpha=ebm_combined_alpha,
         train_on_true_posterior_samples=train_on_true_posterior_samples,
-        OpenRLHF_ckpt=load_OpenRLHF_ckpt,
+        OpenRLHF_critic_ckpt=load_OpenRLHF_critic_ckpt,
         twist_updates_per_batch=twist_updates_per_batch
     )
 
@@ -2049,8 +2050,11 @@ def setup_cfg(
     if separate_proposal_and_twist:
         assert load_ckpt # must load the proposal, as we are not training it.
 
+    if load_OpenRLHF_critic_ckpt:
+        assert load_ckpt
+
     if load_ckpt:
-        if load_OpenRLHF_ckpt:
+        if load_OpenRLHF_critic_ckpt:
             assert separate_hface_twist_model
             params_proposal = None
             import torch
@@ -2070,9 +2074,9 @@ def setup_cfg(
             for key in new_state_dict.keys():
                 print(key)
 
-            # Initialize the Hugging Face model
+            assert hface_model_type == "TinyStories" # TODO later make this dynamic
             model = AutoModel.from_pretrained(
-                'roneneldan/TinyStories-33M') # TODO later make this dynamic
+                'roneneldan/TinyStories-33M')
 
             print("Keys in Hugging Face model:")
             for name, _ in model.named_parameters():
@@ -2104,6 +2108,54 @@ def setup_cfg(
         else:
             params_twist, params_proposal = load_params_from_ckpt(load_dir_ckpt, load_prefix, separate_hface_twist_model,
                   separate_proposal_and_twist, params_twist, params_proposal)
+
+    if load_OpenRLHF_actor_ckpt:
+        import torch
+        from transformers import AutoModel
+        x = torch.load(f"{load_dir_ckpt}/{load_prefix_actor_ckpt}")
+
+        state_dict = x['module']
+        print("State dict")
+        print(state_dict)
+
+        new_state_dict = {}
+        for key, value in state_dict.items():
+            new_key = key.replace('transformer.', '')
+            new_state_dict[new_key] = value
+
+        print("Keys in state_dict:")
+        for key in new_state_dict.keys():
+            print(key)
+
+        assert hface_model_type == "TinyStories"  # TODO later make this dynamic
+        model = AutoModel.from_pretrained(
+            'roneneldan/TinyStories-33M')  # TODO later make this dynamic
+
+        print("Keys in Hugging Face model:")
+        for name, _ in model.named_parameters():
+            print(name)
+
+        print("Model before")
+        print(model)
+        for x in model.named_parameters():
+            print(x)
+
+        missing_keys, unexpected_keys = model.load_state_dict(new_state_dict,
+                                                              strict=False)
+        print("Missing keys:", missing_keys)
+        print("Unexpected keys:", unexpected_keys)
+
+        print("Model after")
+        print(model)
+        for x in model.named_parameters():
+            print(x)
+
+        params_proposal = HashableDict({'model': model })
+
+        print("params_proposal loaded using OpenRLHF model")
+        print(params_proposal)
+        1/0
+
 
     print("Starting building final twists and getting posterior samples", flush=True)
     print(f"TIME: {time.time()}", flush=True)
@@ -2137,7 +2189,7 @@ def do_inspection_and_plotting_of_test_info(
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir, lr_twist, seed,
-    exp_num_twist_updates, twist_updates_per_epoch, OpenRLHF_ckpt, load_prefix_ckpt
+    exp_num_twist_updates, twist_updates_per_epoch, OpenRLHF_critic_ckpt, load_prefix_ckpt
 ):
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
@@ -2147,7 +2199,7 @@ def do_inspection_and_plotting_of_test_info(
     f_qs = None
 
 
-    if not OpenRLHF_ckpt: # Don't do inspection for PPO critic
+    if not OpenRLHF_critic_ckpt: # Don't do inspection for PPO critic
         for truepost_i in range(n_trueposts_for_evals):
             # DO inspect samples regardless of whether we plot logZ bounds or not
             rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
@@ -2159,7 +2211,7 @@ def do_inspection_and_plotting_of_test_info(
                 proposal_is_p=proposal_is_p,
                 huggingface_model=huggingface_model,
                 params_proposal=params_proposal,
-                OpenRLHF_ckpt=OpenRLHF_ckpt
+                OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
             )
             if proposal_scores is None:
                 proposal_scores = proposal_scores_for_seed
@@ -2224,7 +2276,7 @@ def do_inspection_and_plotting_of_test_info(
             "seed": seed,
             "exp_num_twist_updates": exp_num_twist_updates,
             "twist_updates_per_epoch": twist_updates_per_epoch,
-            "OpenRLHF_ckpt": OpenRLHF_ckpt,
+            "OpenRLHF_critic_ckpt": OpenRLHF_critic_ckpt,
             "load_prefix_ckpt": load_prefix_ckpt,
             "lr_twist": lr_twist
         }
@@ -2262,7 +2314,7 @@ def do_twist_updates(
     replay_buffers_by_prompt, replay_buffer_log_w_ts_by_prompt,
     replay_buffer_log_prob_eval_by_prompt,
     print_every_twist_updates,
-    n_twist, optimizer_twist, optim_twist_state, OpenRLHF_ckpt=False, reward_cap=None
+    n_twist, optimizer_twist, optim_twist_state, OpenRLHF_critic_ckpt=False, reward_cap=None
 ):
     num_twist_updates_to_do = twist_updates_per_epoch
 
@@ -2274,7 +2326,7 @@ def do_twist_updates(
 
     for twist_update in range(num_twist_updates_to_do):
 
-        if OpenRLHF_ckpt:
+        if OpenRLHF_critic_ckpt:
             raise NotImplementedError # Twist training not yet setup for this PPO critic...
 
 
@@ -2329,7 +2381,7 @@ def do_twist_updates(
             "tempered_twist": tempered_twist, "beta_prop": beta_prop,
             "replay_buffer": replay_buffer,
             "params_proposal": params_proposal,
-            "OpenRLHF_ckpt": OpenRLHF_ckpt,
+            "OpenRLHF_critic_ckpt": OpenRLHF_critic_ckpt,
             "reward_cap": reward_cap
         }
 
@@ -2465,9 +2517,11 @@ def main():
         "beta1": args.beta1, "beta2": args.beta2, "weight_decay": args.weight_decay,
         "n_layers_twist": args.n_layers_twist, "output_len": args.output_len, "n_samples_at_a_time": args.n_samples_at_a_time_for_true_post,
         "beta_temp": args.beta_temp, "threshold": args.threshold, "pos_threshold": args.pos_threshold,
-        "load_ckpt": args.load_ckpt, "load_OpenRLHF_ckpt": args.load_OpenRLHF_ckpt,
+        "load_ckpt": args.load_ckpt, "load_OpenRLHF_critic_ckpt": args.load_OpenRLHF_critic_ckpt,
+        "load_OpenRLHF_actor_ckpt": args.load_OpenRLHF_actor_ckpt,
         "load_dirs": (args.load_dir_ckpt, args.load_dir_posterior_samples),
-        "load_prefix": args.load_prefix_ckpt, "hface_nn_twist": args.hface_nn_twist, "separate_hface_twist_model": args.separate_hface_twist_model,
+        "load_prefix": args.load_prefix_ckpt, "load_prefix_actor_ckpt": args.load_prefix_actor_ckpt,
+        "hface_nn_twist": args.hface_nn_twist, "separate_hface_twist_model": args.separate_hface_twist_model,
         "num_last_tokens_to_condition_on": args.num_last_tokens_to_condition_on, "only_collect_true_posterior_samples": False,
         "load_posterior_samples": args.load_posterior_samples, "load_prefix_posterior_samples": args.load_prefix_posterior_samples,
         "sentiment_class": args.sentiment_class, "use_lora": args.use_lora, "lora_rank": args.lora_rank, "hidden_units_multiplier": args.hidden_units_multiplier,
@@ -2568,7 +2622,7 @@ def main():
             # 1/0
 
 
-            # if args.load_OpenRLHF_ckpt:
+            # if args.load_OpenRLHF_critic_ckpt:
             #     import torch
             #     import numpy as np
             #     print("--Using PPO Critic as Twist--")
@@ -2593,7 +2647,7 @@ def main():
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
                     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
                     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.lr_twist, args.seed,
-                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.load_OpenRLHF_ckpt, args.load_prefix_ckpt
+                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.load_OpenRLHF_critic_ckpt, args.load_prefix_ckpt
                 )
 
             # ----- DO TWIST UPDATES -----
@@ -2617,7 +2671,7 @@ def main():
                 replay_buffers_by_prompt, replay_buffer_log_w_ts_by_prompt,
                 replay_buffer_log_prob_eval_by_prompt,
                 args.print_every_twist_updates,
-                args.n_twist, optimizer_twist, optim_twist_state, args.load_OpenRLHF_ckpt,
+                args.n_twist, optimizer_twist, optim_twist_state, args.load_OpenRLHF_critic_ckpt,
                 args.reward_cap
             )
 
@@ -2641,7 +2695,7 @@ def main():
                         args.seed,
                         args.exp_num_twist_updates,
                         args.twist_updates_per_epoch,
-                        args.load_OpenRLHF_ckpt,
+                        args.load_OpenRLHF_critic_ckpt,
                         args.load_prefix_ckpt
                     )
 
@@ -2760,10 +2814,13 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_every", type=int, default=100000, help="Epochs between checkpoint save")
     parser.add_argument("--save_dir", type=str, default='.', help="Where to save checkpoints and figures")
     parser.add_argument("--load_ckpt", action="store_true", help="load from checkpoint instead of setting up new params")
-    parser.add_argument("--load_OpenRLHF_ckpt", action="store_true", help="specifically use OpenRLHF PPO")
+    parser.add_argument("--load_OpenRLHF_critic_ckpt", action="store_true", help="specifically use OpenRLHF PPO critic as twists")
+    parser.add_argument("--load_OpenRLHF_actor_ckpt", action="store_true", help="specifically use OpenRLHF PPO actor as proposal")
 
     parser.add_argument("--load_dir_ckpt", type=str, default='.', help="Where to load from for checkpoint")
     parser.add_argument("--load_prefix_ckpt", type=str, default='.')
+    parser.add_argument("--load_prefix_actor_ckpt", type=str, default='.', help="Only with load_OpenRLHF_actor_ckpt")
+
     parser.add_argument("--load_posterior_samples", action="store_true", help="load posterior samples from saved checkpoint instead of creating new ones")
     parser.add_argument("--load_dir_posterior_samples", type=str, default='.', help="Where to load from for posterior samples")
     parser.add_argument("--load_prefix_posterior_samples", type=str, default='.')
@@ -2889,7 +2946,7 @@ if __name__ == "__main__":
     if args.output_p_psi:
         assert args.separate_hface_twist_model
 
-    if args.load_OpenRLHF_ckpt:
+    if args.load_OpenRLHF_critic_ckpt:
         assert args.proposal_is_p_for_plots  # Only use proposal p in this setting
         assert args.proposal_is_p
 
