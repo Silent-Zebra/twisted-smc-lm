@@ -2662,7 +2662,7 @@ def main():
                         "proposal_is_p": args.proposal_is_p,
                         "huggingface_model": huggingface_model,
                         "params_proposal": params_proposal,
-                        "OpenRLHF_critic_ckpt": args.OpenRLHF_critic_ckpt
+                        "OpenRLHF_critic_ckpt": args.load_OpenRLHF_critic_ckpt
                     }
 
                     (_, log_z_hat_t, _), smc_samples, (full_seq_list, log_w_t_list,
