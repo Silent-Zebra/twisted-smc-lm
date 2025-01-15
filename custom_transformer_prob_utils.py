@@ -389,14 +389,13 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
                                                   huggingface_model=huggingface_model)
 
 
-        p_logits = get_transformer_p_logits(params_p,
-                                            full_seq[:, :prompt_len + t],
-                                            huggingface_model=huggingface_model)
-        log_p2 = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
-
-        print(log_p)
-        print(log_p2)
-        1/0
+        # p_logits = get_transformer_p_logits(params_p,
+        #                                     full_seq[:, :prompt_len + t],
+        #                                     huggingface_model=huggingface_model)
+        # log_p2 = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
+        #
+        # print(log_p)
+        # print(log_p2)
 
         if tempered_twist:
             log_psi = beta_prop * log_psi
