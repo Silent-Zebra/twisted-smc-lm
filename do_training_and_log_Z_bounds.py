@@ -2115,25 +2115,25 @@ def setup_cfg(
         x = torch.load(f"{load_dir_ckpt}/{load_prefix_actor_ckpt}")
 
         state_dict = x['module']
-        print("State dict")
-        print(state_dict)
+        # print("State dict")
+        # print(state_dict)
 
         new_state_dict = {}
         for key, value in state_dict.items():
             new_key = key.replace('transformer.', '')
             new_state_dict[new_key] = value
 
-        print("Keys in state_dict:")
-        for key in new_state_dict.keys():
-            print(key)
+        # print("Keys in state_dict:")
+        # for key in new_state_dict.keys():
+        #     print(key)
 
         assert hface_model_type == "TinyStories"  # TODO later make this dynamic
         model = AutoModel.from_pretrained(
             'roneneldan/TinyStories-33M')  # TODO later make this dynamic
 
-        print("Keys in Hugging Face model:")
-        for name, _ in model.named_parameters():
-            print(name)
+        # print("Keys in Hugging Face model:")
+        # for name, _ in model.named_parameters():
+        #     print(name)
 
         # print("Model before")
         # print(model)

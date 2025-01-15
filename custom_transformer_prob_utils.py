@@ -377,14 +377,15 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         print(indices_to_use.shape)
         normalized_log_q_t = log_q_all_tokens[
             jnp.arange(indices_to_use.shape[0]), indices_to_use]
+        print(normalized_log_q_t)
         print(normalized_log_q_t.shape)
-        1/0
-
-        # TODO test IWAE/SIS bounds first to ensure they are reasonable, because they should be.
 
         log_p_eval_of_new_seqs = log_p[jnp.arange(full_seq.shape[0]), indices_to_use]
 
         log_psi_eval_of_new_seqs = None
+
+        # TODO test IWAE/SIS bounds first to ensure they are reasonable, because they should be.
+        1/0
 
         return rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs
 
