@@ -330,9 +330,14 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
 
     if isinstance(params_proposal, HashableDict):
         # This is the OpenRLHF PPO Actor
-        p_logits = get_transformer_p_logits(params_p, full_seq[:, :prompt_len + t],
-                                            huggingface_model=huggingface_model)
-        log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
+
+
+        # p_logits = get_transformer_p_logits(params_p,
+        #                                     full_seq[:, :prompt_len + t],
+        #                                     huggingface_model=huggingface_model)
+        # log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
+
+
 
         # get q logits from transformer
         import torch
@@ -375,6 +380,32 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
             jnp.arange(indices_to_use.shape[0]), indices_to_use]
         # print(normalized_log_q_t)
         # print(normalized_log_q_t.shape)
+
+
+
+        log_p, log_psi = get_log_p_plus_log_psi_t(full_seq, params_p,
+                                                  params_twist, prompt_len, t,
+                                                  condition_twist_on_tokens,
+                                                  huggingface_model=huggingface_model)
+
+
+        p_logits = get_transformer_p_logits(params_p,
+                                            full_seq[:, :prompt_len + t],
+                                            huggingface_model=huggingface_model)
+        log_p2 = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
+
+        print(log_p)
+        print(log_p2)
+        1/0
+
+        if tempered_twist:
+            log_psi = beta_prop * log_psi
+        log_p_plus_log_psi = log_p + log_psi
+
+        log_psi_eval_of_new_seqs = None
+        if log_psi is not None:
+            log_psi_eval_of_new_seqs = log_psi[
+                jnp.arange(full_seq.shape[0]), indices_to_use]
 
         log_p_eval_of_new_seqs = log_p[jnp.arange(full_seq.shape[0]), indices_to_use]
 
