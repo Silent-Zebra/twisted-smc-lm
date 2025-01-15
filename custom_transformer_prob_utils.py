@@ -330,7 +330,7 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
 
     if isinstance(params_proposal, HashableDict):
         # This is the OpenRLHF PPO Actor
-        p_logits = get_transformer_p_logits(params_p, full_seq,
+        p_logits = get_transformer_p_logits(params_p, full_seq[:, :prompt_len + t],
                                             huggingface_model=huggingface_model)
         log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
 
@@ -345,16 +345,15 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         # print("--HERE3--")
         torch_full_seq = torch.tensor(np.array(full_seq))
         print(torch_full_seq)
-        model_output = params_proposal['model'](torch_full_seq)
+        model_output = params_proposal['model'](torch_full_seq[:, :prompt_len + t])
         # print(model_output)
         final_activations = model_output.last_hidden_state.to(
             params_proposal['lm_head'].device)
         # print(final_activations)
         print(final_activations.shape)
-        1/0
         # print(params_proposal['lm_head'].t().shape)
 
-        final_activation = final_activations[:, prompt_len + t]
+        final_activation = final_activations[:, prompt_len + t - 1]
 
         q_logits = final_activation @ params_proposal[
             'lm_head'].t()
