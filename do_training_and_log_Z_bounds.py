@@ -1583,8 +1583,9 @@ def get_and_plot_logZ_bounds(
     if rm_type == "p_last_tokens":
         f_q_estimates_list_of_arrays = f_q_estimates_list # TODO check that this reordering doesn't mess up the plasttokens plots (or does it fix it?)
 
-    if not proposal_is_p:
+    if not proposal_is_p and not isinstance(params_proposal, HashableDict):
         # Save KL DIV Plot, only do this if not proposal_is_p
+        # Also skip if using the load_OpenRLHF_actor_ckpt... doing this by checking isinstance(params_proposal, HashableDict) seems like a very bad obscure software engineering practice...
         save_kl_div_plot(
             plt_xlabel_text, x_range, logZ_midpoint_estimate,
             f_q_estimates_list_of_arrays,
