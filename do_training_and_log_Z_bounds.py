@@ -994,7 +994,6 @@ class ExperimentConfig:
                 no_intermediate_resample_proposal_samples,
                 params_p, params_twist,
                 prompt_len, output_len,
-
                 condition_twist_on_tokens=condition_twist_on_tokens,
                 huggingface_model=huggingface_model,
                 params_proposal=params_proposal)
@@ -2188,7 +2187,7 @@ def do_inspection_and_plotting_of_test_info(
     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, save_dir, lr_twist, seed,
-    exp_num_twist_updates, twist_updates_per_epoch, OpenRLHF_critic_ckpt, load_prefix_ckpt
+    exp_num_twist_updates, twist_updates_per_epoch, OpenRLHF_critic_ckpt, OpenRLHF_actor_ckpt, load_prefix_ckpt
 ):
     print(f"TEST INFO STARTING", flush=True)
     print(f"TIME: {time.time() - start}", flush=True)
@@ -2198,7 +2197,7 @@ def do_inspection_and_plotting_of_test_info(
     f_qs = None
 
 
-    if not OpenRLHF_critic_ckpt: # Don't do inspection for PPO critic
+    if not OpenRLHF_critic_ckpt and not OpenRLHF_actor_ckpt: # Don't do inspection for PPO critic
         for truepost_i in range(n_trueposts_for_evals):
             # DO inspect samples regardless of whether we plot logZ bounds or not
             rng_key, aux_info, proposal_scores_for_seed, kl_vals_for_seed = experiment_cfg.inspect_results(
@@ -2646,7 +2645,7 @@ def main():
                     params_proposal, f_q_estimates_list, proposal_scores_list, kl_to_prior_list,
                     true_posterior_samples_by_token, epoch, true_posterior_samples_by_prompt_and_by_token,
                     prompt_num, plot_over_time_list, plot_over_time_list_p_proposal, args.save_dir, args.lr_twist, args.seed,
-                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.load_OpenRLHF_critic_ckpt, args.load_prefix_ckpt
+                    args.exp_num_twist_updates, args.twist_updates_per_epoch, args.load_OpenRLHF_critic_ckpt, args.load_OpenRLHF_actor_ckpt, args.load_prefix_ckpt
                 )
 
             # ----- DO TWIST UPDATES -----
@@ -2694,7 +2693,7 @@ def main():
                         args.seed,
                         args.exp_num_twist_updates,
                         args.twist_updates_per_epoch,
-                        args.load_OpenRLHF_critic_ckpt,
+                        args.load_OpenRLHF_critic_ckpt, args.load_OpenRLHF_actor_ckpt,
                         args.load_prefix_ckpt
                     )
 
