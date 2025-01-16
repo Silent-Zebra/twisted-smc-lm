@@ -2135,10 +2135,10 @@ def setup_cfg(
         # print("State dict")
         # print(state_dict)
 
-        new_state_dict = {}
-        for key, value in state_dict.items():
-            new_key = key.replace('transformer.', '')
-            new_state_dict[new_key] = value
+        # new_state_dict = {}
+        # for key, value in state_dict.items():
+        #     new_key = key.replace('transformer.', '')
+        #     new_state_dict[new_key] = value
 
         # print("Keys in state_dict:")
         # for key in new_state_dict.keys():
@@ -2157,7 +2157,7 @@ def setup_cfg(
         # for x in model.named_parameters():
         #     print(x)
 
-        missing_keys, unexpected_keys = model.load_state_dict(new_state_dict,
+        missing_keys, unexpected_keys = model.load_state_dict(state_dict,
                                                               strict=False)
         print("Missing keys:", missing_keys)
         print("Unexpected keys:", unexpected_keys)
@@ -2168,7 +2168,7 @@ def setup_cfg(
         # for x in model.named_parameters():
         #     print(x)
 
-        params_proposal = HashableDict({'model': model, 'lm_head': new_state_dict['lm_head.weight'] })
+        # params_proposal = HashableDict({'model': model, 'lm_head': new_state_dict['lm_head.weight'] })
 
         model.save_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_actor_model")
 
@@ -2177,7 +2177,7 @@ def setup_cfg(
         flax_model = FlaxAutoModelForCausalLM.from_pretrained(
             f"{load_dir_OpenRLHF_ckpt}/pt_actor_model", from_pt=from_pt)
 
-        params_proposal = HashableDict({'model': flax_model, 'lm_head': jnp.array(new_state_dict['lm_head.weight'].cpu().detach().numpy())})
+        # params_proposal = HashableDict({'model': flax_model, 'lm_head': jnp.array(new_state_dict['lm_head.weight'].cpu().detach().numpy())})
         params_proposal = HashableDict({'model': flax_model})
 
         # params_proposal = flax_model
