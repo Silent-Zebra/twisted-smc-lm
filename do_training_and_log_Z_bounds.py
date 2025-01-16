@@ -2128,7 +2128,7 @@ def setup_cfg(
 
     if load_OpenRLHF_actor_ckpt:
         import torch
-        from transformers import AutoModel
+        from transformers import AutoModelForCausalLM
         x = torch.load(f"{load_dir_OpenRLHF_ckpt}/{load_prefix_actor_ckpt}")
 
         state_dict = x['module']
@@ -2145,7 +2145,7 @@ def setup_cfg(
         #     print(key)
 
         assert hface_model_type == "TinyStories"  # TODO later make this dynamic
-        model = AutoModel.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained(
             'roneneldan/TinyStories-33M')  # TODO later make this dynamic
 
         # print("Keys in Hugging Face model:")
@@ -2161,6 +2161,7 @@ def setup_cfg(
                                                               strict=False)
         print("Missing keys:", missing_keys)
         print("Unexpected keys:", unexpected_keys)
+        1/0
 
         # print("Model after")
         # print(model)
