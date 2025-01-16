@@ -514,7 +514,7 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
 
 get_proposal_q_sample = partial(
     jax.jit,
-    static_argnames=["proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop", "prompt_len"]
+    static_argnames=["proposal_is_p", "huggingface_model", "tempered_twist", "beta_prop", "prompt_len", "params_proposal"]
 )(get_proposal_q_sample_nojit)
 
 
@@ -817,22 +817,22 @@ def smc_scan_iter_non_final(
     if OpenRLHF_critic_ckpt:
         params_twist_to_use = None
 
-    if isinstance(params_proposal, dict):
-        rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample_nojit(
-            rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
-            condition_twist_on_tokens, proposal_is_p=proposal_is_p,
-            huggingface_model=huggingface_model,
-            true_posterior_sample=true_posterior_sample,
-            tempered_twist=tempered_twist, beta_prop=beta_prop,
-            params_proposal=params_proposal
-        )
-    else:
-        rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
-            rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
-            condition_twist_on_tokens,  proposal_is_p=proposal_is_p,
-            huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample,
-            tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal
-        )
+    # if isinstance(params_proposal, dict):
+    #     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample_nojit(
+    #         rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
+    #         condition_twist_on_tokens, proposal_is_p=proposal_is_p,
+    #         huggingface_model=huggingface_model,
+    #         true_posterior_sample=true_posterior_sample,
+    #         tempered_twist=tempered_twist, beta_prop=beta_prop,
+    #         params_proposal=params_proposal
+    #     )
+    # else:
+    rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
+        rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
+        condition_twist_on_tokens,  proposal_is_p=proposal_is_p,
+        huggingface_model=huggingface_model, true_posterior_sample=true_posterior_sample,
+        tempered_twist=tempered_twist, beta_prop=beta_prop, params_proposal=params_proposal
+    )
 
     log_p_theta_t_eval = log_p_eval_of_new_seqs
 
@@ -1188,24 +1188,24 @@ def smc_scan_iter_final(rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p
     if proposal_is_p or OpenRLHF_critic_ckpt:
         params_twist_to_use = None
 
-    if isinstance(params_proposal, dict):
-        rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample_nojit(
-            rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
-            condition_twist_on_tokens, proposal_is_p=proposal_is_p,
-            huggingface_model=huggingface_model,
-            true_posterior_sample=true_posterior_sample,
-            tempered_twist=tempered_twist, beta_prop=beta_prop,
-            params_proposal=params_proposal
-        )
-    else:
-        rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
-            rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
-            condition_twist_on_tokens, proposal_is_p=proposal_is_p,
-            huggingface_model=huggingface_model,
-            true_posterior_sample=true_posterior_sample,
-            tempered_twist=tempered_twist, beta_prop=beta_prop,
-            params_proposal=params_proposal
-        )
+    # if isinstance(params_proposal, dict):
+    #     rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample_nojit(
+    #         rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
+    #         condition_twist_on_tokens, proposal_is_p=proposal_is_p,
+    #         huggingface_model=huggingface_model,
+    #         true_posterior_sample=true_posterior_sample,
+    #         tempered_twist=tempered_twist, beta_prop=beta_prop,
+    #         params_proposal=params_proposal
+    #     )
+    # else:
+    rng_key, full_seq, normalized_log_q_t, log_p_eval_of_new_seqs, log_psi_eval_of_new_seqs = get_proposal_q_sample(
+        rng_key, full_seq, params_p, params_twist_to_use, prompt_len, t,
+        condition_twist_on_tokens, proposal_is_p=proposal_is_p,
+        huggingface_model=huggingface_model,
+        true_posterior_sample=true_posterior_sample,
+        tempered_twist=tempered_twist, beta_prop=beta_prop,
+        params_proposal=params_proposal
+    )
 
     log_p_theta_t_eval = log_p_eval_of_new_seqs
 
@@ -1571,17 +1571,17 @@ def iwae_backward(
                                                               prompt_len,
                                                               huggingface_model=huggingface_model)
     else:
-        if isinstance(params_proposal, dict):
-            log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t_nojit(
-                seqs, params_p, params_twist,
-                prompt_len, condition_twist_on_tokens,
-                huggingface_model=huggingface_model,
-                params_proposal=params_proposal)
-        else:
-            log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
-                seqs, params_p, params_twist,
-                prompt_len, condition_twist_on_tokens,
-                 huggingface_model=huggingface_model, params_proposal=params_proposal)
+        # if isinstance(params_proposal, dict):
+        #     log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t_nojit(
+        #         seqs, params_p, params_twist,
+        #         prompt_len, condition_twist_on_tokens,
+        #         huggingface_model=huggingface_model,
+        #         params_proposal=params_proposal)
+        # else:
+        log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
+            seqs, params_p, params_twist,
+            prompt_len, condition_twist_on_tokens,
+             huggingface_model=huggingface_model, params_proposal=params_proposal)
 
     target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
     return target_dist_weights
