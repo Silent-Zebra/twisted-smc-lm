@@ -2109,11 +2109,9 @@ def setup_cfg(
             flax_model = FlaxAutoModel.from_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model", from_pt=from_pt)
 
             params_twist = [flax_model,
-                            new_state_dict['value_head.weight'].cpu().detach().numpy()]
+                            jnp.array(new_state_dict['value_head.weight'].cpu().detach().numpy())]
 
-            print(new_state_dict['value_head.weight'].cpu().detach().numpy())
-            1/0
-
+            # print(jnp.array(new_state_dict['value_head.weight'].cpu().detach().numpy()))
             # print("params_twist loaded using OpenRLHF model")
             # print(params_twist)
             #
