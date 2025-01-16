@@ -368,12 +368,12 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         # q_logits = jnp.array(q_logits.cpu().detach().numpy())
 
 
-        print(params_proposal['lm_head'].shape)
+        # print(params_proposal['lm_head'].shape)
         model_output = params_proposal['model'](
             input_ids=full_seq).last_hidden_state[:, prompt_len + t - 1]
-        print(model_output.shape)
+        # print(model_output.shape)
         q_logits = model_output @ jnp.transpose(params_proposal['lm_head'])
-        print(q_logits.shape)
+        # print(q_logits.shape)
 
         log_q_all_tokens = jax.nn.log_softmax(q_logits, axis=-1)
         # sample indices based on those q logits, also calculate normalized_log_q_t based on those
@@ -531,28 +531,37 @@ def evaluate_normalized_log_q_1_to_t_nojit(
     if isinstance(params_proposal, HashableDict):
         if return_cumsum or return_cumsum_w_last_all:
             raise NotImplementedError
-        import torch
-        import numpy as np
+        # import torch
+        # import numpy as np
+        #
+        # print("--Using PPO Actor as Proposal evaluation--")
+        # torch_full_seq = torch.tensor(np.array(full_seq))
+        # print(torch_full_seq)
+        # model_output = params_proposal['model'](
+        #     torch_full_seq)
+        # # print(model_output)
+        # final_activations = model_output.last_hidden_state.to(
+        #     params_proposal['lm_head'].device)
+        # # print(final_activations)
+        # # print(final_activations.shape)
+        # # print(params_proposal['lm_head'].t().shape)
+        #
+        # q_logits = final_activations @ params_proposal[
+        #     'lm_head'].t()
+        # # print("--Final PPO Actor Evaluation--")
+        # # print(q_logits.shape)
+        # # convert back to jax afterwards
+        # q_logits = jnp.array(q_logits.cpu().detach().numpy())
+        # # print(q_logits.shape)
 
-        print("--Using PPO Actor as Proposal evaluation--")
-        torch_full_seq = torch.tensor(np.array(full_seq))
-        print(torch_full_seq)
+        print(params_proposal['lm_head'].shape)
         model_output = params_proposal['model'](
-            torch_full_seq)
-        # print(model_output)
-        final_activations = model_output.last_hidden_state.to(
-            params_proposal['lm_head'].device)
-        # print(final_activations)
-        # print(final_activations.shape)
-        # print(params_proposal['lm_head'].t().shape)
+            input_ids=full_seq).last_hidden_state
+        print(model_output.shape)
+        q_logits = model_output @ jnp.transpose(params_proposal['lm_head'])
+        print(q_logits.shape)
 
-        q_logits = final_activations @ params_proposal[
-            'lm_head'].t()
-        # print("--Final PPO Actor Evaluation--")
-        # print(q_logits.shape)
-        # convert back to jax afterwards
-        q_logits = jnp.array(q_logits.cpu().detach().numpy())
-        # print(q_logits.shape)
+
         normalized_log_q_t_all_vocab = jax.nn.log_softmax(q_logits, axis=-1)[:, prompt_len - 1: -1]
         # print(normalized_log_q_t_all_vocab.shape)
 
@@ -568,6 +577,9 @@ def evaluate_normalized_log_q_1_to_t_nojit(
         # print(normalized_log_q_1_to_t.shape)
 
         print(normalized_log_q_1_to_t)
+
+        1/0
+
 
         return normalized_log_q_1_to_t
 
