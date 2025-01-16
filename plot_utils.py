@@ -141,9 +141,12 @@ def save_logZ_bounds_plot(
     print("load_prefix_ckpt")
     print(load_prefix_ckpt)
     load_prefix_str = ""
-    if load_prefix_ckpt != ".":
+    # if load_prefix_ckpt != ".":
+    if "/" in load_prefix_ckpt:
         load_prefix_ckpt_split = load_prefix_ckpt.split("/")
         load_prefix_str = f"_{load_prefix_ckpt_split[0]}_{load_prefix_ckpt_split[1]}"
+    else:
+        load_prefix_str = load_prefix_ckpt
 
     logZ_bounds_str = f"{load_prefix_str}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')}_seed{seed}_{twist_learn_type}_lr{lr_twist}_nsamples{n_samples_for_plots[0]}_{n_samples_for_plots[1]}_"
 
