@@ -378,7 +378,7 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         model_output = params_proposal['model'](
             input_ids=full_seq)
         print(model_output)
-        q_logits = model_output
+        q_logits = model_output.logits
         # 1 / 0
 
         log_q_all_tokens = jax.nn.log_softmax(q_logits, axis=-1)
@@ -570,7 +570,7 @@ def evaluate_normalized_log_q_1_to_t_nojit(
         model_output = params_proposal['model'](
             input_ids=full_seq)
         print(model_output)
-        q_logits = model_output
+        q_logits = model_output.logits
 
         normalized_log_q_t_all_vocab = jax.nn.log_softmax(q_logits, axis=-1)[:, prompt_len - 1: -1]
         # print(normalized_log_q_t_all_vocab.shape)
