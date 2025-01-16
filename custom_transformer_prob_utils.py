@@ -883,6 +883,11 @@ def smc_scan_iter_non_final(
         model_output = flax_model(input_ids=full_seq).last_hidden_state
         print(model_output.shape)
 
+        print(huggingface_model.params)
+        print(flax_model.params)
+        1/0
+        # print(get_log_psi_all_vocab(full_seq, flax_model.))
+
         final_activation = model_output[:, prompt_len + t]
         print(final_activation.shape)
         print(value_head.shape)

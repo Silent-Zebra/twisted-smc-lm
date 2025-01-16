@@ -89,8 +89,8 @@ class ExperimentConfig:
             self.smc_procedure_type = "jit"
 
         if OpenRLHF_critic_ckpt or OpenRLHF_actor_ckpt:
-            # self.smc_procedure_type = "debug"
-            self.smc_procedure_type = "partial_jit"
+            self.smc_procedure_type = "debug"
+            # self.smc_procedure_type = "partial_jit"
 
 
         self.twist_grad_fn = self._get_twist_grad_fn()
