@@ -554,13 +554,18 @@ def evaluate_normalized_log_q_1_to_t_nojit(
         # q_logits = jnp.array(q_logits.cpu().detach().numpy())
         # # print(q_logits.shape)
 
-        # print(params_proposal['lm_head'].shape)
-        model_output = params_proposal['model'](
-            input_ids=full_seq).last_hidden_state
-        # print(model_output.shape)
-        q_logits = model_output @ jnp.transpose(params_proposal['lm_head'])
-        # print(q_logits.shape)
+        # # print(params_proposal['lm_head'].shape)
+        # model_output = params_proposal['model'](
+        #     input_ids=full_seq).last_hidden_state
+        # # print(model_output.shape)
+        # q_logits = model_output @ jnp.transpose(params_proposal['lm_head'])
+        # # print(q_logits.shape)
 
+        model_output = params_proposal['model'](
+            input_ids=full_seq)
+        print(model_output)
+        q_logits = model_output
+        1/0
 
         normalized_log_q_t_all_vocab = jax.nn.log_softmax(q_logits, axis=-1)[:, prompt_len - 1: -1]
         # print(normalized_log_q_t_all_vocab.shape)

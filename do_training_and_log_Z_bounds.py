@@ -2171,13 +2171,15 @@ def setup_cfg(
 
         model.save_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_actor_model")
 
-        from transformers import FlaxAutoModel
+        from transformers import FlaxAutoModelForCausalLM
 
-        flax_model = FlaxAutoModel.from_pretrained(
+        flax_model = FlaxAutoModelForCausalLM.from_pretrained(
             f"{load_dir_OpenRLHF_ckpt}/pt_actor_model", from_pt=from_pt)
 
         params_proposal = HashableDict({'model': flax_model, 'lm_head': jnp.array(new_state_dict['lm_head.weight'].cpu().detach().numpy())})
-        params_proposal = HashableDict({'model': flax_model, 'lm_head': None})
+        params_proposal = HashableDict({'model': flax_model})
+
+        # params_proposal = flax_model
 
         print("params_proposal loaded using OpenRLHF model")
         # print(params_proposal)
