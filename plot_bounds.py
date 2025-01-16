@@ -56,48 +56,62 @@ elif plot_type == "toxthresh":
     load_pref_twist_128_2048 = "logZ_bounds_twistproposal_2024-01-15_12-59_seed1_ebm_one_sample_nsamples1_2"
     load_pref_p_128_2048 = "logZ_bounds_pproposal_2024-01-15_13-10_seed1_ebm_one_sample_nsamples1_2"
 
-    load_pref_p_1_8_ess = "logZ_bounds_pproposal_2024-03-25_15-00_seed1_ebm_one_sample_nsamples1"
-    load_pref_p_4_16_ess = "logZ_bounds_pproposal_2024-03-25_14-59_seed1_ebm_one_sample_nsamples1"
-    load_pref_p_32_512_ess = "logZ_bounds_pproposal_2024-02-12_23-43_seed1_ebm_one_sample_nsamples1_1"
-    load_pref_p_128_2048_ess = "logZ_bounds_pproposal_2024-02-12_23-52_seed1_ebm_one_sample_nsamples1_2"
+    # load_pref_twist = [
+    #     "logZ_bounds_twistproposal_2024-03-24_18-44_seed1_ebm_one_sample_nsamples1",
+    #     "logZ_bounds_twistproposal_2024-03-25_14-23_seed1_ebm_one_sample_nsamples1",
+    #     "logZ_bounds_twistproposal_2024-01-15_12-52_seed1_ebm_one_sample_nsamples1_1",
+    #     "logZ_bounds_twistproposal_2024-01-15_12-59_seed1_ebm_one_sample_nsamples1_2"
+    # ]
+    #
+    # load_pref_p = [
+    #     "logZ_bounds_pproposal_2024-03-24_18-48_seed1_ebm_one_sample_nsamples1",
+    #     "logZ_bounds_pproposal_2024-03-25_14-27_seed1_ebm_one_sample_nsamples1",
+    #     "logZ_bounds_pproposal_2024-01-15_12-58_seed1_ebm_one_sample_nsamples1_1",
+    #     "logZ_bounds_pproposal_2024-01-15_13-10_seed1_ebm_one_sample_nsamples1_2"
+    # ]
 
-    # load_pref_p_1_8_ppo = "logZ_bounds_pproposal_2024-12-22_02-55_seed1_ppo_nsamples1_8"
-    # load_pref_p_4_16_ppo = "logZ_bounds_pproposal_2024-12-22_02-58_seed1_ppo_nsamples4_16"
-    # load_pref_p_32_512_ppo = "logZ_bounds_pproposal_2024-12-22_04-38_seed1_ppo_nsamples32_512"
-    # load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_2024-12-22_09-18_seed1_ppo_nsamples128_2048"
+    load_pref_p_ess = [
+        "logZ_bounds_pproposal_2024-03-25_15-00_seed1_ebm_one_sample_nsamples1",
+        "logZ_bounds_pproposal_2024-03-25_14-59_seed1_ebm_one_sample_nsamples1",
+        "logZ_bounds_pproposal_2024-02-12_23-43_seed1_ebm_one_sample_nsamples1_1",
+        "logZ_bounds_pproposal_2024-02-12_23-52_seed1_ebm_one_sample_nsamples1_2",
+    ]
 
-    load_pref_p_1_8_ppo_bc = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples1_8_0"
-    load_pref_p_4_16_ppo_bc = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples4_16_0"
-    load_pref_p_32_512_ppo_bc = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples32_512_0"
-    load_pref_p_128_2048_ppo_bc = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples128_2048_0"
+
+    load_pref_p_ppo_bc = [
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples1_8_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples4_16_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples32_512_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples128_2048_0",
+    ]
     # step50 for the above
 
-    # load_pref_p_1_8_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr0.0_criticlr0.0001__seed1_critic_nsamples1_8_0"
-    # load_pref_p_4_16_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr0.0_criticlr0.0001__seed1_critic_nsamples4_16_0"
-    # load_pref_p_32_512_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr0.0_criticlr0.0001__seed1_critic_nsamples32_512_0"
-    # load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_2024-12-22_09-18_seed1_ppo_nsamples128_2048" # TODO EDIT
-    load_pref_p_1_8_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples1_8_0"
-    load_pref_p_4_16_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples4_16_0"
-    load_pref_p_32_512_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples32_512_0"
-    load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples128_2048_0"
+    load_pref_p_ppo = [
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples1_8_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples4_16_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples32_512_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples128_2048_0"
+    ]
 
-    # load_pref_p_1_8_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step10_nsamples1_8_0"
-    # load_pref_p_4_16_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step10_nsamples4_16_0"
-    # load_pref_p_32_512_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step10_nsamples32_512_0"
-    # load_pref_p_128_2048_ppo = "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step10_nsamples128_2048_0"
+    load_pref_q_ppo_actor_critic = [
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_global_step50_2025-01-15_23-29_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_global_step50_2025-01-16_00-56_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_global_step50_2025-01-16_01-33_seed1_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_global_step50_2025-01-16_01-49_seed1_ebm_one_sample_lr0.0001_nsamples128_2048_0"
+    ]
 
-    load_pref_q_1_8_ppo_actor_critic = "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_global_step50_2025-01-15_00-23_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0"
-    load_pref_q_4_16_ppo_actor_critic = "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_global_step50_2025-01-15_00-47_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0"
-    load_pref_q_32_512_ppo_actor_critic = "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_global_step50_2025-01-15_07-51_seed1_ebm_one_sample_lr0.0001_nsamples32_512_0"
-
-    load_pref_q_1_8_ppo_actor_randomtwist = "logZ_bounds_twistproposal_2025-01-15_00-09_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0"
-    load_pref_q_4_16_ppo_actor_randomtwist = "logZ_bounds_twistproposal_2025-01-15_00-47_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0"
-    load_pref_q_32_512_ppo_actor_randomtwist = "logZ_bounds_twistproposal_2025-01-15_05-34_seed1_ebm_one_sample_lr0.0001_nsamples32_512_0"
-    load_pref_q_128_2048_ppo_actor_randomtwist = "logZ_bounds_twistproposal_2025-01-15_08-04_seed1_ebm_one_sample_lr0.0001_nsamples128_2048_0"
+    load_pref_q_ppo_actor_randomtwist = [
+        "logZ_bounds_twistproposal_2025-01-15_18-48_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposal_2025-01-16_00-53_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposal_2025-01-16_01-11_seed1_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposal_2025-01-16_01-36_seed1_ebm_one_sample_lr0.0001_nsamples128_2048_0"
+    ]
 
     plot_ess = True
 
-    figname = f"./fig_bounds_ppo_toxt_-5_01-15-2025.pdf"
+    figname = f"./fig_bounds_ppo_toxt_-5_test.pdf"
+
+    # figname = f"./fig_bounds_ppo_toxt_-5_01-15-2025.pdf"
 
     # figname = f"./fig_bounds_ess_toxt_-5_01-12-2025.pdf"
 
@@ -146,6 +160,30 @@ t_iwae_ubs_4, t_iwae_ubs_16, t_iwae_lbs_4, t_iwae_lbs_16, t_smc_ubs_4, t_smc_ubs
 p_iwae_ubs_4, p_iwae_ubs_16, p_iwae_lbs_4, p_iwae_lbs_16, p_smc_ubs_4, p_smc_ubs_16, p_smc_lbs_4, p_smc_lbs_16 = load_ckpt(load_pref_p_4_16)
 
 
+def setup_ubs_and_lbs(load_list):
+    load_1_8, load_4_16, load_32_512, load_128_2048 = load_list
+    iwae_ubs_1, iwae_ubs_8, iwae_lbs_1, iwae_lbs_8, smc_ubs_1, smc_ubs_8, smc_lbs_1, smc_lbs_8 = load_ckpt(load_1_8)
+    iwae_ubs_4, iwae_ubs_16, iwae_lbs_4, iwae_lbs_16, smc_ubs_4, smc_ubs_16, smc_lbs_4, smc_lbs_16 = load_ckpt(load_4_16)
+    iwae_ubs_32, iwae_ubs_512, iwae_lbs_32, iwae_lbs_512, smc_ubs_32, smc_ubs_512, smc_lbs_32, smc_lbs_512 = load_ckpt(load_32_512)
+    iwae_ubs_128, iwae_ubs_2048, iwae_lbs_128, iwae_lbs_2048, smc_ubs_128, smc_ubs_2048, smc_lbs_128, smc_lbs_2048 = load_ckpt(load_128_2048)
+    smc_ubs = np.transpose(np.stack(
+        [smc_ubs_1, smc_ubs_4, smc_ubs_8, smc_ubs_16,
+         smc_ubs_32, smc_ubs_128, smc_ubs_512, smc_ubs_2048
+         ]))
+    smc_lbs = np.transpose(np.stack(
+        [smc_lbs_1, smc_lbs_4, smc_lbs_8, smc_lbs_16,
+         smc_lbs_32, smc_lbs_128, smc_lbs_512, smc_lbs_2048
+         ]))
+    iwae_ubs = np.transpose(np.stack(
+        [iwae_ubs_1, iwae_ubs_4, iwae_ubs_8, iwae_ubs_16,
+         iwae_ubs_32, iwae_ubs_128, iwae_ubs_512, iwae_ubs_2048
+         ]))
+    iwae_lbs = np.transpose(np.stack(
+        [iwae_lbs_1, iwae_lbs_4, iwae_lbs_8, iwae_lbs_16,
+         iwae_lbs_32, iwae_lbs_128, iwae_lbs_512, iwae_lbs_2048
+         ]))
+    return smc_ubs, smc_lbs, iwae_ubs, iwae_lbs
+
 if plot_type in ["toxclass", "sent"]:
     x_range = np.array([0,2,3,4])
     t_iwae_ubs = np.transpose(np.stack([t_iwae_ubs_1, t_iwae_ubs_4, t_iwae_ubs_8, t_iwae_ubs_16]))
@@ -181,7 +219,6 @@ elif plot_type == "toxthresh":
     t_iwae_ubs_128, t_iwae_ubs_2048, t_iwae_lbs_128, t_iwae_lbs_2048, t_smc_ubs_128, t_smc_ubs_2048, t_smc_lbs_128, t_smc_lbs_2048 = load_ckpt(load_pref_twist_128_2048)
     p_iwae_ubs_128, p_iwae_ubs_2048, p_iwae_lbs_128, p_iwae_lbs_2048, p_smc_ubs_128, p_smc_ubs_2048, p_smc_lbs_128, p_smc_lbs_2048 = load_ckpt(load_pref_p_128_2048)
 
-
     t_iwae_ubs = np.transpose(np.stack([t_iwae_ubs_1, t_iwae_ubs_4, t_iwae_ubs_8, t_iwae_ubs_16, t_iwae_ubs_32, t_iwae_ubs_128, t_iwae_ubs_512, t_iwae_ubs_2048]))
     t_iwae_lbs = np.transpose(np.stack([t_iwae_lbs_1, t_iwae_lbs_4, t_iwae_lbs_8, t_iwae_lbs_16, t_iwae_lbs_32, t_iwae_lbs_128, t_iwae_lbs_512, t_iwae_lbs_2048]))
 
@@ -194,127 +231,18 @@ elif plot_type == "toxthresh":
     p_smc_ubs = np.transpose(np.stack([p_smc_ubs_1, p_smc_ubs_4, p_smc_ubs_8, p_smc_ubs_16, p_smc_ubs_32, p_smc_ubs_128, p_smc_ubs_512, p_smc_ubs_2048]))
     p_smc_lbs = np.transpose(np.stack([p_smc_lbs_1, p_smc_lbs_4, p_smc_lbs_8, p_smc_lbs_16, p_smc_lbs_32, p_smc_lbs_128, p_smc_lbs_512, p_smc_lbs_2048]))
 
-    p_iwae_ubs_1_ess, p_iwae_ubs_8_ess, p_iwae_lbs_1_ess, p_iwae_lbs_8_ess, p_smc_ubs_1_ess, p_smc_ubs_8_ess, p_smc_lbs_1_ess, p_smc_lbs_8_ess = load_ckpt(
-        load_pref_p_1_8_ess)
-    p_iwae_ubs_4_ess, p_iwae_ubs_16_ess, p_iwae_lbs_4_ess, p_iwae_lbs_16_ess, p_smc_ubs_4_ess, p_smc_ubs_16_ess, p_smc_lbs_4_ess, p_smc_lbs_16_ess = load_ckpt(
-        load_pref_p_4_16_ess)
-    p_iwae_ubs_32_ess, p_iwae_ubs_512_ess, p_iwae_lbs_32_ess, p_iwae_lbs_512_ess, p_smc_ubs_32_ess, p_smc_ubs_512_ess, p_smc_lbs_32_ess, p_smc_lbs_512_ess = load_ckpt(
-        load_pref_p_32_512_ess)
-    p_iwae_ubs_128_ess, p_iwae_ubs_2048_ess, p_iwae_lbs_128_ess, p_iwae_lbs_2048_ess, p_smc_ubs_128_ess, p_smc_ubs_2048_ess, p_smc_lbs_128_ess, p_smc_lbs_2048_ess = load_ckpt(
-        load_pref_p_128_2048_ess)
-    p_smc_ubs_ess = np.transpose(np.stack(
-        [p_smc_ubs_1_ess, p_smc_ubs_4_ess, p_smc_ubs_8_ess, p_smc_ubs_16_ess,
-         p_smc_ubs_32_ess, p_smc_ubs_128_ess, p_smc_ubs_512_ess,
-         p_smc_ubs_2048_ess]))
-    p_smc_lbs_ess = np.transpose(np.stack(
-        [p_smc_lbs_1_ess, p_smc_lbs_4_ess, p_smc_lbs_8_ess, p_smc_lbs_16_ess,
-         p_smc_lbs_32_ess, p_smc_lbs_128_ess, p_smc_lbs_512_ess,
-         p_smc_lbs_2048_ess]))
 
-    p_iwae_ubs_1_ppo_bc, p_iwae_ubs_8_ppo_bc, p_iwae_lbs_1_ppo_bc, p_iwae_lbs_8_ppo_bc, p_smc_ubs_1_ppo_bc, p_smc_ubs_8_ppo_bc, p_smc_lbs_1_ppo_bc, p_smc_lbs_8_ppo_bc = load_ckpt(
-        load_pref_p_1_8_ppo_bc)
-    p_iwae_ubs_4_ppo_bc, p_iwae_ubs_16_ppo_bc, p_iwae_lbs_4_ppo_bc, p_iwae_lbs_16_ppo_bc, p_smc_ubs_4_ppo_bc, p_smc_ubs_16_ppo_bc, p_smc_lbs_4_ppo_bc, p_smc_lbs_16_ppo_bc = load_ckpt(
-        load_pref_p_4_16_ppo_bc)
-    p_iwae_ubs_32_ppo_bc, p_iwae_ubs_512_ppo_bc, p_iwae_lbs_32_ppo_bc, p_iwae_lbs_512_ppo_bc, p_smc_ubs_32_ppo_bc, p_smc_ubs_512_ppo_bc, p_smc_lbs_32_ppo_bc, p_smc_lbs_512_ppo_bc = load_ckpt(
-        load_pref_p_32_512_ppo_bc)
-    p_iwae_ubs_128_ppo_bc, p_iwae_ubs_2048_ppo_bc, p_iwae_lbs_128_ppo_bc, p_iwae_lbs_2048_ppo_bc, p_smc_ubs_128_ppo_bc, p_smc_ubs_2048_ppo_bc, p_smc_lbs_128_ppo_bc, p_smc_lbs_2048_ppo_bc = load_ckpt(
-        load_pref_p_128_2048_ppo_bc)
-    p_smc_ubs_ppo_bc = np.transpose(np.stack(
-        [p_smc_ubs_1_ppo_bc, p_smc_ubs_4_ppo_bc, p_smc_ubs_8_ppo_bc, p_smc_ubs_16_ppo_bc,
-         p_smc_ubs_32_ppo_bc, p_smc_ubs_128_ppo_bc, p_smc_ubs_512_ppo_bc,
-         p_smc_ubs_2048_ppo_bc
-         ]))
-    p_smc_lbs_ppo_bc = np.transpose(np.stack(
-        [p_smc_lbs_1_ppo_bc, p_smc_lbs_4_ppo_bc, p_smc_lbs_8_ppo_bc, p_smc_lbs_16_ppo_bc,
-         p_smc_lbs_32_ppo_bc, p_smc_lbs_128_ppo_bc, p_smc_lbs_512_ppo_bc,
-         p_smc_lbs_2048_ppo_bc
-         ]))
+    p_smc_ubs_ess, p_smc_lbs_ess, p_iwae_ubs_ess, p_iwae_lbs_ess = setup_ubs_and_lbs(load_pref_p_ess)
 
-    p_iwae_ubs_1_ppo, p_iwae_ubs_8_ppo, p_iwae_lbs_1_ppo, p_iwae_lbs_8_ppo, p_smc_ubs_1_ppo, p_smc_ubs_8_ppo, p_smc_lbs_1_ppo, p_smc_lbs_8_ppo = load_ckpt(
-        load_pref_p_1_8_ppo)
-    p_iwae_ubs_4_ppo, p_iwae_ubs_16_ppo, p_iwae_lbs_4_ppo, p_iwae_lbs_16_ppo, p_smc_ubs_4_ppo, p_smc_ubs_16_ppo, p_smc_lbs_4_ppo, p_smc_lbs_16_ppo = load_ckpt(
-        load_pref_p_4_16_ppo)
-    p_iwae_ubs_32_ppo, p_iwae_ubs_512_ppo, p_iwae_lbs_32_ppo, p_iwae_lbs_512_ppo, p_smc_ubs_32_ppo, p_smc_ubs_512_ppo, p_smc_lbs_32_ppo, p_smc_lbs_512_ppo = load_ckpt(
-        load_pref_p_32_512_ppo)
-    p_iwae_ubs_128_ppo, p_iwae_ubs_2048_ppo, p_iwae_lbs_128_ppo, p_iwae_lbs_2048_ppo, p_smc_ubs_128_ppo, p_smc_ubs_2048_ppo, p_smc_lbs_128_ppo, p_smc_lbs_2048_ppo = load_ckpt(
-        load_pref_p_128_2048_ppo)
-    p_smc_ubs_ppo = np.transpose(np.stack([p_smc_ubs_1_ppo, p_smc_ubs_4_ppo, p_smc_ubs_8_ppo, p_smc_ubs_16_ppo,
-                                           p_smc_ubs_32_ppo, p_smc_ubs_128_ppo, p_smc_ubs_512_ppo, p_smc_ubs_2048_ppo
-                                           ]))
-    p_smc_lbs_ppo = np.transpose(np.stack([p_smc_lbs_1_ppo, p_smc_lbs_4_ppo, p_smc_lbs_8_ppo, p_smc_lbs_16_ppo,
-                                           p_smc_lbs_32_ppo, p_smc_lbs_128_ppo, p_smc_lbs_512_ppo, p_smc_lbs_2048_ppo
-                                           ]))
+    p_smc_ubs_ppo_bc, p_smc_lbs_ppo_bc, p_iwae_ubs_ppo_bc, p_iwae_lbs_ppo_bc = setup_ubs_and_lbs(load_pref_p_ppo_bc)
 
-    q_iwae_ubs_1_ppo_actor_critic, q_iwae_ubs_8_ppo_actor_critic, q_iwae_lbs_1_ppo_actor_critic, q_iwae_lbs_8_ppo_actor_critic, q_smc_ubs_1_ppo_actor_critic, q_smc_ubs_8_ppo_actor_critic, q_smc_lbs_1_ppo_actor_critic, q_smc_lbs_8_ppo_actor_critic = load_ckpt(
-        load_pref_q_1_8_ppo_actor_critic)
-    q_iwae_ubs_4_ppo_actor_critic, q_iwae_ubs_16_ppo_actor_critic, q_iwae_lbs_4_ppo_actor_critic, q_iwae_lbs_16_ppo_actor_critic, q_smc_ubs_4_ppo_actor_critic, q_smc_ubs_16_ppo_actor_critic, q_smc_lbs_4_ppo_actor_critic, q_smc_lbs_16_ppo_actor_critic = load_ckpt(
-        load_pref_q_4_16_ppo_actor_critic)
-    q_iwae_ubs_32_ppo_actor_critic, q_iwae_ubs_512_ppo_actor_critic, q_iwae_lbs_32_ppo_actor_critic, q_iwae_lbs_512_ppo_actor_critic, q_smc_ubs_32_ppo_actor_critic, q_smc_ubs_512_ppo_actor_critic, q_smc_lbs_32_ppo_actor_critic, q_smc_lbs_512_ppo_actor_critic = load_ckpt(
-        load_pref_q_32_512_ppo_actor_critic)
-    # q_iwae_ubs_128_ppo_actor_critic, q_iwae_ubs_2048_ppo_actor_critic, q_iwae_lbs_128_ppo_actor_critic, q_iwae_lbs_2048_ppo_actor_critic, q_smc_ubs_128_ppo_actor_critic, q_smc_ubs_2048_ppo_actor_critic, q_smc_lbs_128_ppo_actor_critic, q_smc_lbs_2048_ppo_actor_critic = load_ckpt(
-    #     load_pref_q_128_2048_ppo_actor_critic)
-    q_iwae_ubs_128_ppo_actor_critic, q_iwae_ubs_2048_ppo_actor_critic, q_iwae_lbs_128_ppo_actor_critic, q_iwae_lbs_2048_ppo_actor_critic, q_smc_ubs_128_ppo_actor_critic, q_smc_ubs_2048_ppo_actor_critic, q_smc_lbs_128_ppo_actor_critic, q_smc_lbs_2048_ppo_actor_critic = load_ckpt(
-            load_pref_q_32_512_ppo_actor_critic) # TODO FIX LATER
+    p_smc_ubs_ppo, p_smc_lbs_ppo, p_iwae_ubs_ppo, p_iwae_lbs_ppo = setup_ubs_and_lbs(load_pref_p_ppo)
 
-    q_smc_ubs_ppo_actor_critic = np.transpose(np.stack(
-        [q_smc_ubs_1_ppo_actor_critic, q_smc_ubs_4_ppo_actor_critic,
-         q_smc_ubs_8_ppo_actor_critic, q_smc_ubs_16_ppo_actor_critic,
-         q_smc_ubs_32_ppo_actor_critic, q_smc_ubs_128_ppo_actor_critic,
-         q_smc_ubs_512_ppo_actor_critic, q_smc_ubs_2048_ppo_actor_critic
-         ]))
-    q_smc_lbs_ppo_actor_critic = np.transpose(np.stack(
-        [q_smc_lbs_1_ppo_actor_critic, q_smc_lbs_4_ppo_actor_critic,
-         q_smc_lbs_8_ppo_actor_critic, q_smc_lbs_16_ppo_actor_critic,
-         q_smc_lbs_32_ppo_actor_critic, q_smc_lbs_128_ppo_actor_critic,
-         q_smc_lbs_512_ppo_actor_critic, q_smc_lbs_2048_ppo_actor_critic
-         ]))
+    q_smc_ubs_ppo_actor_critic, q_smc_lbs_ppo_actor_critic, q_iwae_ubs_ppo_actor_critic, q_iwae_lbs_ppo_actor_critic = \
+        setup_ubs_and_lbs(load_pref_q_ppo_actor_critic)
 
-    q_iwae_ubs_ppo_actor_critic = np.transpose(np.stack(
-        [q_iwae_ubs_1_ppo_actor_critic, q_iwae_ubs_4_ppo_actor_critic,
-         q_iwae_ubs_8_ppo_actor_critic, q_iwae_ubs_16_ppo_actor_critic,
-         q_iwae_ubs_32_ppo_actor_critic, q_iwae_ubs_128_ppo_actor_critic,
-         q_iwae_ubs_512_ppo_actor_critic, q_iwae_ubs_2048_ppo_actor_critic
-         ]))
-    q_iwae_lbs_ppo_actor_critic = np.transpose(np.stack(
-        [q_iwae_lbs_1_ppo_actor_critic, q_iwae_lbs_4_ppo_actor_critic,
-         q_iwae_lbs_8_ppo_actor_critic, q_iwae_lbs_16_ppo_actor_critic,
-         q_iwae_lbs_32_ppo_actor_critic, q_iwae_lbs_128_ppo_actor_critic,
-         q_iwae_lbs_512_ppo_actor_critic, q_iwae_lbs_2048_ppo_actor_critic
-         ]))
-
-    q_iwae_ubs_1_ppo_actor_randomtwist, q_iwae_ubs_8_ppo_actor_randomtwist, q_iwae_lbs_1_ppo_actor_randomtwist, q_iwae_lbs_8_ppo_actor_randomtwist, q_smc_ubs_1_ppo_actor_randomtwist, q_smc_ubs_8_ppo_actor_randomtwist, q_smc_lbs_1_ppo_actor_randomtwist, q_smc_lbs_8_ppo_actor_randomtwist = load_ckpt(
-        load_pref_q_1_8_ppo_actor_randomtwist)
-    q_iwae_ubs_4_ppo_actor_randomtwist, q_iwae_ubs_16_ppo_actor_randomtwist, q_iwae_lbs_4_ppo_actor_randomtwist, q_iwae_lbs_16_ppo_actor_randomtwist, q_smc_ubs_4_ppo_actor_randomtwist, q_smc_ubs_16_ppo_actor_randomtwist, q_smc_lbs_4_ppo_actor_randomtwist, q_smc_lbs_16_ppo_actor_randomtwist = load_ckpt(
-        load_pref_q_4_16_ppo_actor_randomtwist)
-    q_iwae_ubs_32_ppo_actor_randomtwist, q_iwae_ubs_512_ppo_actor_randomtwist, q_iwae_lbs_32_ppo_actor_randomtwist, q_iwae_lbs_512_ppo_actor_randomtwist, q_smc_ubs_32_ppo_actor_randomtwist, q_smc_ubs_512_ppo_actor_randomtwist, q_smc_lbs_32_ppo_actor_randomtwist, q_smc_lbs_512_ppo_actor_randomtwist = load_ckpt(
-        load_pref_q_32_512_ppo_actor_randomtwist)
-    q_iwae_ubs_128_ppo_actor_randomtwist, q_iwae_ubs_2048_ppo_actor_randomtwist, q_iwae_lbs_128_ppo_actor_randomtwist, q_iwae_lbs_2048_ppo_actor_randomtwist, q_smc_ubs_128_ppo_actor_randomtwist, q_smc_ubs_2048_ppo_actor_randomtwist, q_smc_lbs_128_ppo_actor_randomtwist, q_smc_lbs_2048_ppo_actor_randomtwist = load_ckpt(
-        load_pref_q_128_2048_ppo_actor_randomtwist)
-    q_smc_ubs_ppo_actor_randomtwist = np.transpose(np.stack(
-        [q_smc_ubs_1_ppo_actor_randomtwist, q_smc_ubs_4_ppo_actor_randomtwist,
-         q_smc_ubs_8_ppo_actor_randomtwist, q_smc_ubs_16_ppo_actor_randomtwist,
-         q_smc_ubs_32_ppo_actor_randomtwist, q_smc_ubs_128_ppo_actor_randomtwist,
-         q_smc_ubs_512_ppo_actor_randomtwist, q_smc_ubs_2048_ppo_actor_randomtwist
-         ]))
-    q_smc_lbs_ppo_actor_randomtwist = np.transpose(np.stack(
-        [q_smc_lbs_1_ppo_actor_randomtwist, q_smc_lbs_4_ppo_actor_randomtwist,
-         q_smc_lbs_8_ppo_actor_randomtwist, q_smc_lbs_16_ppo_actor_randomtwist,
-         q_smc_lbs_32_ppo_actor_randomtwist, q_smc_lbs_128_ppo_actor_randomtwist,
-         q_smc_lbs_512_ppo_actor_randomtwist, q_smc_lbs_2048_ppo_actor_randomtwist
-         ]))
-
-    q_iwae_ubs_ppo_actor_randomtwist = np.transpose(np.stack(
-        [q_iwae_ubs_1_ppo_actor_randomtwist, q_iwae_ubs_4_ppo_actor_randomtwist,
-         q_iwae_ubs_8_ppo_actor_randomtwist, q_iwae_ubs_16_ppo_actor_randomtwist,
-         q_iwae_ubs_32_ppo_actor_randomtwist, q_iwae_ubs_128_ppo_actor_randomtwist,
-         q_iwae_ubs_512_ppo_actor_randomtwist, q_iwae_ubs_2048_ppo_actor_randomtwist
-         ]))
-    q_iwae_lbs_ppo_actor_randomtwist = np.transpose(np.stack(
-        [q_iwae_lbs_1_ppo_actor_randomtwist, q_iwae_lbs_4_ppo_actor_randomtwist,
-         q_iwae_lbs_8_ppo_actor_randomtwist, q_iwae_lbs_16_ppo_actor_randomtwist,
-         q_iwae_lbs_32_ppo_actor_randomtwist, q_iwae_lbs_128_ppo_actor_randomtwist,
-         q_iwae_lbs_512_ppo_actor_randomtwist, q_iwae_lbs_2048_ppo_actor_randomtwist
-         ]))
+    q_smc_ubs_ppo_actor_randomtwist, q_smc_lbs_ppo_actor_randomtwist, q_iwae_ubs_ppo_actor_randomtwist, q_iwae_lbs_ppo_actor_randomtwist = \
+        setup_ubs_and_lbs(load_pref_q_ppo_actor_randomtwist)
 
 
 elif plot_type == "sent_dpg_comparison":
@@ -405,10 +333,10 @@ if plot_type == "sent_dpg_comparison":
 else:
 
     plot_ppo = True
-    only_plot_new_ppo = True
-    only_plot_resample_every = True
+    only_plot_new_ppo = False
+    only_plot_resample_every = False
 
-    start_from = 1
+    start_from = 0
     x_range = x_range[start_from:]
     xticks_range = xticks_range[start_from:]
     xticks_labels = xticks_labels[start_from:]
