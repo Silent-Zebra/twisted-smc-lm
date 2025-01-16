@@ -817,8 +817,7 @@ def smc_scan_iter_non_final(
     OpenRLHF_critic_ckpt=False,
 ):
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
-    output_len, params_p, params_twist, \
-    log_z_hat_t = carry
+    output_len, params_p, params_twist, log_z_hat_t = carry
 
     log_w_t_minus_1 = log_w_t
 
@@ -1311,6 +1310,7 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
     log_w_t_before_resample_list = []
     do_resample_record = []
     ess_record = []
+    log_z_hat_t_record = []
 
     for t in range(output_len - 1):
         carry, (full_seq, log_w_t, log_psi_t_eval, log_w_t_before_resample, do_resample, ess) =\
@@ -1332,6 +1332,10 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
         log_w_t_before_resample_list.append(log_w_t_before_resample)
         do_resample_record.append(do_resample)
         ess_record.append(ess)
+
+        _, _, _, _, _, _, _, _, log_z_hat_t = carry
+        log_z_hat_t_record.append(log_z_hat_t)
+
 
     # TODO FEB Remove/comment out later
     print("ESS STATS")
@@ -1362,6 +1366,20 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
             tempered_twist=tempered_twist, beta_prop=beta_prop, use_log_true_final_twist_for_final_weight_calc=use_log_true_final_twist_for_final_weight_calc,
             params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
         )
+    log_z_hat_t_record.append(log_z_hat_t)
+
+    print("full_seq_list")
+    print(full_seq_list) # TODO later consider passing in a tokenizer to decode this too.
+
+    print("log_z_hat_t_record")
+    print(log_z_hat_t_record)
+
+    print("log_w_t_list")
+    print(log_w_t_list)
+
+    print("log_psi_t_eval_list")
+    print(log_psi_t_eval_list)
+    1/0
 
     # print(time.time() - start)
     # start = time.time()
