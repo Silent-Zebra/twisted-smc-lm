@@ -2100,9 +2100,33 @@ def setup_cfg(
                 print(x)
 
             params_twist = {'model': model, 'value_head': new_state_dict['value_head.weight']}
+            # This was the old formulation above
+
+            model.save_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model")
+
+            # flax_model = FlaxAutoModel.from_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model", from_pt=True)
+            rng_key, sk = jax.random.split(rng_key, 2)
+            model_twist = CustomLMWithTwistHead(
+                sk, f"{load_dir_OpenRLHF_ckpt}/pt_model", hface_nn_twist=False,
+                softmax_twist=False,
+                conditional_twist_type=conditional_twist_type,
+                num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
+                from_pt=from_pt,
+                n_layers_twist=1,
+                hidden_units_multiplier=hidden_units_multiplier,
+                one_hot_dim=one_hot_dim, log_sigmoid_twist=False
+            )
+            params_twist = [model_twist.huggingface_model.params,
+                            model_twist.twist_head_params]
 
             print("params_twist loaded using OpenRLHF model")
             print(params_twist)
+
+            print("params_twist comparison")
+            print(params_twist[1])
+            print(new_state_dict['value_head.weight'])
+
+            1/0
             # params_twist = None
             # Can try just setting params_twist as a custom class and handle that with some checks
             # Or should I instead redefine the huggingface model? Start from the innermost function call and work outwards
