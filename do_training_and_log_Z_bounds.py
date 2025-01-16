@@ -2104,27 +2104,18 @@ def setup_cfg(
 
             model.save_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model")
 
-            # flax_model = FlaxAutoModel.from_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model", from_pt=True)
-            rng_key, sk = jax.random.split(rng_key, 2)
-            model_twist = CustomLMWithTwistHead(
-                sk, f"{load_dir_OpenRLHF_ckpt}/pt_model", hface_nn_twist=False,
-                softmax_twist=False,
-                conditional_twist_type=conditional_twist_type,
-                num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
-                from_pt=from_pt,
-                n_layers_twist=1,
-                hidden_units_multiplier=hidden_units_multiplier,
-                one_hot_dim=one_hot_dim, log_sigmoid_twist=False
-            )
-            params_twist = [model_twist.huggingface_model.params,
-                            model_twist.twist_head_params]
+            from transformers import FlaxAutoModel
+
+            huggingface_model = FlaxAutoModel.from_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model", from_pt=from_pt)
+
+            params_twist = [huggingface_model.params,
+                            new_state_dict['value_head.weight']]
 
             print("params_twist loaded using OpenRLHF model")
             print(params_twist)
 
             print("params_twist comparison")
             print(params_twist[1])
-            print(new_state_dict['value_head.weight'])
 
             1/0
             # params_twist = None
