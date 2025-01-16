@@ -2177,6 +2177,7 @@ def setup_cfg(
             f"{load_dir_OpenRLHF_ckpt}/pt_actor_model", from_pt=from_pt)
 
         params_proposal = HashableDict({'model': flax_model, 'lm_head': jnp.array(new_state_dict['lm_head.weight'].cpu().detach().numpy())})
+        params_proposal = HashableDict({'model': flax_model, 'lm_head': None})
 
         print("params_proposal loaded using OpenRLHF model")
         # print(params_proposal)
