@@ -2111,6 +2111,9 @@ def setup_cfg(
             params_twist = [flax_model,
                             new_state_dict['value_head.weight']]
 
+            print(new_state_dict['value_head.weight'])
+            1/0
+
             # print("params_twist loaded using OpenRLHF model")
             # print(params_twist)
             #
