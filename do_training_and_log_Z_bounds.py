@@ -2113,21 +2113,21 @@ def setup_cfg(
             params_twist = [flax_model,
                             jnp.array(new_state_dict['value_head.weight'].cpu().detach().numpy())]
 
-            rng_key, sk = jax.random.split(rng_key, 2)
-            model = CustomLMWithTwistHead(
-                sk, f"{load_dir_OpenRLHF_ckpt}/pt_critic_model", hface_nn_twist=hface_nn_twist,
-                softmax_twist=False,
-                conditional_twist_type=conditional_twist_type,
-                num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
-                from_pt=from_pt, n_layers_twist=n_layers_twist,
-                hidden_units_multiplier=hidden_units_multiplier,
-                one_hot_dim=one_hot_dim, log_sigmoid_twist=False
-            )
-            params_p = model.huggingface_model.params
-            params_twist = model.twist_head_params
-
-            print(params_twist)
-            1/0
+            # rng_key, sk = jax.random.split(rng_key, 2)
+            # model = CustomLMWithTwistHead(
+            #     sk, f"{load_dir_OpenRLHF_ckpt}/pt_critic_model", hface_nn_twist=hface_nn_twist,
+            #     softmax_twist=False,
+            #     conditional_twist_type=conditional_twist_type,
+            #     num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
+            #     from_pt=from_pt, n_layers_twist=n_layers_twist,
+            #     hidden_units_multiplier=hidden_units_multiplier,
+            #     one_hot_dim=one_hot_dim, log_sigmoid_twist=False
+            # )
+            # params_p = model.huggingface_model.params
+            # params_twist = model.twist_head_params
+            #
+            # print(params_twist)
+            # 1/0
 
             # print(jnp.array(new_state_dict['value_head.weight'].cpu().detach().numpy()))
             # print("params_twist loaded using OpenRLHF model")

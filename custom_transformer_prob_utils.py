@@ -881,19 +881,19 @@ def smc_scan_iter_non_final(
 
         flax_model, value_head = params_twist
         model_output = flax_model(input_ids=full_seq).last_hidden_state
-        print(model_output.shape)
+        # print(model_output.shape)
 
         # print(huggingface_model.params)
-        print(flax_model.params)
-        print(get_log_psi_all_vocab(full_seq, [flax_model.params, value_head], condition_twist_on_tokens, huggingface_model, params_p=params_p, prompt_len=prompt_len))
-        1/0
+        # print(flax_model.params)
+        # print(get_log_psi_all_vocab(full_seq, [flax_model.params, value_head], condition_twist_on_tokens, huggingface_model, params_p=params_p, prompt_len=prompt_len))
+
 
         final_activation = model_output[:, prompt_len + t]
-        print(final_activation.shape)
-        print(value_head.shape)
+        # print(final_activation.shape)
+        # print(value_head.shape)
         log_r_psi_t_eval = final_activation @ value_head.squeeze()
 
-        print(log_r_psi_t_eval.shape)
+        # print(log_r_psi_t_eval.shape)
 
 
         # final_activation = final_activations[:, prompt_len + t]
