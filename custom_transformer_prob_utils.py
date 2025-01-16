@@ -1377,7 +1377,7 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
 @partial(jax.jit, static_argnames=[
     'output_len', 'n_smc_samples', "resample", "proposal_is_p",
     "huggingface_model", "resample_for_log_psi_t_eval_list",
-    "tempered_twist", "beta_prop", "prompt_len", "resample_criterion", "OpenRLHF_critic_ckpt"])
+    "tempered_twist", "beta_prop", "prompt_len", "resample_criterion", "OpenRLHF_critic_ckpt", "params_proposal"])
 def smc_jitted_part(
     rng_key, prompt, prompt_len, params_p, params_twist, output_len,
     n_smc_samples,
