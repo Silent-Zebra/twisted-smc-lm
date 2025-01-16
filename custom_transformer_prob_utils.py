@@ -370,9 +370,9 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
 
         print(params_proposal['lm_head'].shape)
         model_output = params_proposal['model'](
-            input_ids=full_seq).last_hidden_state
+            input_ids=full_seq).last_hidden_state[:, prompt_len + t - 1]
         print(model_output.shape)
-        q_logits = model_output @ params_proposal['lm_head']
+        q_logits = model_output @ jnp.transpose(params_proposal['lm_head'])
         print(q_logits.shape)
         1/0
 
