@@ -404,7 +404,7 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         if params_twist is None:
             log_psi = None
             p_logits = get_transformer_p_logits(params_p,
-                                                full_seq[:, :prompt_len + t],
+                                                full_seq,
                                                 huggingface_model=huggingface_model)
             log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
 
