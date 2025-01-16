@@ -1581,17 +1581,17 @@ def iwae_backward(
                                                               prompt_len,
                                                               huggingface_model=huggingface_model)
     else:
-        # if isinstance(params_proposal, dict):
-        #     log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t_nojit(
-        #         seqs, params_p, params_twist,
-        #         prompt_len, condition_twist_on_tokens,
-        #         huggingface_model=huggingface_model,
-        #         params_proposal=params_proposal)
-        # else:
-        log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
-            seqs, params_p, params_twist,
-            prompt_len, condition_twist_on_tokens,
-             huggingface_model=huggingface_model, params_proposal=params_proposal)
+        if params_proposal is not None:
+            log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t_nojit(
+                seqs, params_p, params_twist,
+                prompt_len, condition_twist_on_tokens,
+                huggingface_model=huggingface_model,
+                params_proposal=params_proposal)
+        else:
+            log_normalized_q_1_to_t = evaluate_normalized_log_q_1_to_t(
+                seqs, params_p, params_twist,
+                prompt_len, condition_twist_on_tokens,
+                 huggingface_model=huggingface_model, params_proposal=params_proposal)
 
     target_dist_weights = log_unnormalized_sigma_vals - log_normalized_q_1_to_t
     return target_dist_weights
