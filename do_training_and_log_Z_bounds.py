@@ -2335,9 +2335,14 @@ def do_inspection_and_plotting_of_test_info(
         rng_key, plot_over_time_list = experiment_cfg.get_and_plot_logZ_bounds_based_on_cfg(
             **plot_args)
 
-        if not plot_args['proposal_is_p']:
-            if args.hface_model_type not in ["gpt2medium", "gpt2large"]:
+        also_do_p_proposal_plot = False
 
+        if args.hface_model_type in ["gpt2medium", "gpt2large"]:
+            also_do_p_proposal_plot = False # otherwise big memory usage
+
+        if also_do_p_proposal_plot:
+
+            if not plot_args['proposal_is_p']:
                 plot_args['proposal_is_p'] = True
                 plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
                 rng_key, plot_over_time_list_p_proposal = experiment_cfg.get_and_plot_logZ_bounds_based_on_cfg(
