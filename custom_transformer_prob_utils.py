@@ -647,7 +647,7 @@ def evaluate_normalized_log_q_1_to_t_nojit(
         return normalized_log_q_1_to_t
 
 evaluate_normalized_log_q_1_to_t = partial(jax.jit, static_argnames=[
-    "prompt_len", "huggingface_model", "return_cumsum", "return_cumsum_w_last_all"])(evaluate_normalized_log_q_1_to_t_nojit)
+    "prompt_len", "huggingface_model", "return_cumsum", "return_cumsum_w_last_all", "params_proposal"])(evaluate_normalized_log_q_1_to_t_nojit)
 
 def evaluate_log_psi_t(seq, params_twist, condition_twist_on_tokens,   huggingface_model=None):
     # Takes in sequences s_{1:t} of (n_batch, seq_length) shape
