@@ -226,7 +226,6 @@ def get_p_logits_and_log_psi_all_vocab(
             else:
                 assert prompt_len is not None
                 log_psi_all_vocab = get_log_psi_all_vocab(full_seq,
-
                                                           params_twist,
                                                           condition_twist_on_tokens,
                                                           huggingface_model, prompt_len=prompt_len
@@ -827,39 +826,48 @@ def smc_scan_iter_non_final(
 
 
     if OpenRLHF_critic_ckpt:
-        # plug in the PPO critic evaluation as the twists
+        # # plug in the PPO critic evaluation as the twists
+        #
+        # # May have to do some conversions between torch and numpy/jax
+        # import torch
+        # import numpy as np
+        #
+        # print("--Using PPO Critic as Twist--")
+        # print(full_seq)
+        # # print("--HERE2--")
+        # # print(params_twist['model'])
+        # # print("--HERE3--")
+        # torch_full_seq = torch.tensor(np.array(full_seq))
+        # # print(torch_full_seq)
+        # model_output = params_twist['model'](torch_full_seq)
+        # # print(model_output)
+        # final_activations = model_output.last_hidden_state.to(params_twist['value_head'].device)
+        # # print(final_activations)
+        # # print(final_activations.shape)
+        # print(params_twist['value_head'].t().shape)
+        # print("--Last generated token--")
+        # # print(torch_full_seq[:, prompt_len + t - 1])
+        # print(torch_full_seq[:, prompt_len + t])
+        # # print(torch_full_seq[:, prompt_len + t + 1])
 
-        # May have to do some conversions between torch and numpy/jax
-        import torch
-        import numpy as np
+        flax_model, value_head = params_twist
+        model_output = flax_model(input_ids=full_seq)
 
-        print("--Using PPO Critic as Twist--")
-        print(full_seq)
-        # print("--HERE2--")
-        # print(params_twist['model'])
-        # print("--HERE3--")
-        torch_full_seq = torch.tensor(np.array(full_seq))
-        # print(torch_full_seq)
-        model_output = params_twist['model'](torch_full_seq)
-        # print(model_output)
-        final_activations = model_output.last_hidden_state.to(params_twist['value_head'].device)
-        # print(final_activations)
-        # print(final_activations.shape)
-        print(params_twist['value_head'].t().shape)
-        print("--Last generated token--")
-        # print(torch_full_seq[:, prompt_len + t - 1])
-        print(torch_full_seq[:, prompt_len + t])
-        # print(torch_full_seq[:, prompt_len + t + 1])
+        print(model_output.shape)
+        1/0
 
-        final_activation = final_activations[:, prompt_len + t]
 
-        log_r_psi_t_eval = final_activation @ params_twist['value_head'].squeeze()
-        print("--Final PPO Critic Evaluation--")
-        print(log_p_theta_1_to_t_eval.shape)
-        print(log_r_psi_t_eval.shape) # should be same
-        print(log_r_psi_t_eval)
-        # convert back to jax afterwards
-        log_r_psi_t_eval = jnp.array(log_r_psi_t_eval.cpu().detach().numpy())
+        # final_activation = final_activations[:, prompt_len + t]
+        #
+        # log_r_psi_t_eval = final_activation @ params_twist['value_head'].squeeze()
+        # print("--Final PPO Critic Evaluation--")
+        # print(log_p_theta_1_to_t_eval.shape)
+        # print(log_r_psi_t_eval.shape) # should be same
+        # print(log_r_psi_t_eval)
+        # # convert back to jax afterwards
+        # log_r_psi_t_eval = jnp.array(log_r_psi_t_eval.cpu().detach().numpy())
+
+
 
     else:
 

@@ -2106,18 +2106,17 @@ def setup_cfg(
 
             from transformers import FlaxAutoModel
 
-            huggingface_model = FlaxAutoModel.from_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model", from_pt=from_pt)
+            flax_model = FlaxAutoModel.from_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model", from_pt=from_pt)
 
-            params_twist = [huggingface_model.params,
+            params_twist = [flax_model,
                             new_state_dict['value_head.weight']]
 
-            print("params_twist loaded using OpenRLHF model")
-            print(params_twist)
+            # print("params_twist loaded using OpenRLHF model")
+            # print(params_twist)
+            #
+            # print("params_twist comparison")
+            # print(params_twist[1])
 
-            print("params_twist comparison")
-            print(params_twist[1])
-
-            1/0
             # params_twist = None
             # Can try just setting params_twist as a custom class and handle that with some checks
             # Or should I instead redefine the huggingface model? Start from the innermost function call and work outwards
