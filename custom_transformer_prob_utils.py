@@ -327,7 +327,7 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
     # See comments in get_proposal_q_sample. Same function but rewritten to work well with jit and lax.scan
     # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
 
-    if isinstance(params_proposal, dict):
+    if isinstance(params_proposal, HashableDict):
         # # This is the OpenRLHF PPO Actor
         #
         #
@@ -528,7 +528,7 @@ def evaluate_normalized_log_q_1_to_t_nojit(
     condition_twist_on_tokens,
     huggingface_model=None, return_cumsum=False, return_cumsum_w_last_all=False, params_proposal=None):
 
-    if isinstance(params_proposal, dict):
+    if isinstance(params_proposal, HashableDict):
         if return_cumsum or return_cumsum_w_last_all:
             raise NotImplementedError
         # import torch
