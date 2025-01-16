@@ -851,9 +851,11 @@ def smc_scan_iter_non_final(
         # # print(torch_full_seq[:, prompt_len + t + 1])
 
         flax_model, value_head = params_twist
-        model_output = flax_model(input_ids=full_seq)
-
+        model_output = flax_model(input_ids=full_seq).last_hidden_state
         print(model_output.shape)
+
+        final_activation = model_output[:, prompt_len + t]
+        print(final_activation.shape)
         1/0
 
 
