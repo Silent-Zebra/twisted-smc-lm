@@ -181,6 +181,8 @@ def save_logZ_bounds_plot(
             step=epoch_starting_from_0,
             prefix=ckpt_name
         )
+        print(f"Saved checkpoint {ckpt_name} in dir {save_dir}", flush=True)
+
 
 
 def setup_plot_over_time_lists(n_samples_for_plots):
