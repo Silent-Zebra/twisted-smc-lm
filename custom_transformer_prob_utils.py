@@ -328,43 +328,54 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
     # Wastes some computation (as with all the other such functions) but should still be faster with jit+scan
 
     if isinstance(params_proposal, HashableDict):
-        # This is the OpenRLHF PPO Actor
+        # # This is the OpenRLHF PPO Actor
+        #
+        #
+        # # p_logits = get_transformer_p_logits(params_p,
+        # #                                     full_seq[:, :prompt_len + t],
+        # #                                     huggingface_model=huggingface_model)
+        # # log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
+        #
+        #
+        #
+        # # get q logits from transformer
+        # import torch
+        # import numpy as np
+        #
+        # print("--Using PPO Actor as Proposal--")
+        # # print(full_seq)
+        # # print("--HERE2--")
+        # # print(params_twist['model'])
+        # # print("--HERE3--")
+        # torch_full_seq = torch.tensor(np.array(full_seq))
+        # print(torch_full_seq)
+        # model_output = params_proposal['model'](torch_full_seq[:, :prompt_len + t])
+        # # print(model_output)
+        # final_activations = model_output.last_hidden_state.to(
+        #     params_proposal['lm_head'].device)
+        # # print(final_activations)
+        # # print(final_activations.shape)
+        # # print(params_proposal['lm_head'].t().shape)
+        #
+        # final_activation = final_activations[:, prompt_len + t - 1]
+        # print(final_activation.shape)
+        #
+        # q_logits = final_activation @ params_proposal[
+        #     'lm_head'].t()
+        # # print("--Final PPO Actor Evaluation--")
+        # # print(q_logits.shape)
+        # # convert back to jax afterwards
+        # q_logits = jnp.array(q_logits.cpu().detach().numpy())
 
 
-        # p_logits = get_transformer_p_logits(params_p,
-        #                                     full_seq[:, :prompt_len + t],
-        #                                     huggingface_model=huggingface_model)
-        # log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
+        print(params_proposal['lm_head'].shape)
+        model_output = params_proposal['model'](
+            input_ids=full_seq).last_hidden_state
+        print(model_output.shape)
+        q_logits = model_output @ params_proposal['lm_head']
+        print(q_logits.shape)
+        1/0
 
-
-
-        # get q logits from transformer
-        import torch
-        import numpy as np
-
-        print("--Using PPO Actor as Proposal--")
-        # print(full_seq)
-        # print("--HERE2--")
-        # print(params_twist['model'])
-        # print("--HERE3--")
-        torch_full_seq = torch.tensor(np.array(full_seq))
-        print(torch_full_seq)
-        model_output = params_proposal['model'](torch_full_seq[:, :prompt_len + t])
-        # print(model_output)
-        final_activations = model_output.last_hidden_state.to(
-            params_proposal['lm_head'].device)
-        # print(final_activations)
-        # print(final_activations.shape)
-        # print(params_proposal['lm_head'].t().shape)
-
-        final_activation = final_activations[:, prompt_len + t - 1]
-
-        q_logits = final_activation @ params_proposal[
-            'lm_head'].t()
-        # print("--Final PPO Actor Evaluation--")
-        # print(q_logits.shape)
-        # convert back to jax afterwards
-        q_logits = jnp.array(q_logits.cpu().detach().numpy())
         log_q_all_tokens = jax.nn.log_softmax(q_logits, axis=-1)
         # sample indices based on those q logits, also calculate normalized_log_q_t based on those
 

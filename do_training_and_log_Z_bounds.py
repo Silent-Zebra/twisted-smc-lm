@@ -2102,11 +2102,11 @@ def setup_cfg(
             params_twist = {'model': model, 'value_head': new_state_dict['value_head.weight']}
             # This was the old formulation above
 
-            model.save_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model")
+            model.save_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_critic_model")
 
             from transformers import FlaxAutoModel
 
-            flax_model = FlaxAutoModel.from_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_model", from_pt=from_pt)
+            flax_model = FlaxAutoModel.from_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_critic_model", from_pt=from_pt)
 
             params_twist = [flax_model,
                             jnp.array(new_state_dict['value_head.weight'].cpu().detach().numpy())]
@@ -2168,6 +2168,15 @@ def setup_cfg(
         #     print(x)
 
         params_proposal = HashableDict({'model': model, 'lm_head': new_state_dict['lm_head.weight'] })
+
+        model.save_pretrained(f"{load_dir_OpenRLHF_ckpt}/pt_actor_model")
+
+        from transformers import FlaxAutoModel
+
+        flax_model = FlaxAutoModel.from_pretrained(
+            f"{load_dir_OpenRLHF_ckpt}/pt_actor_model", from_pt=from_pt)
+
+        params_proposal = HashableDict({'model': flax_model, 'lm_head': jnp.array(new_state_dict['lm_head.weight'].cpu().detach().numpy())})
 
         print("params_proposal loaded using OpenRLHF model")
         # print(params_proposal)
