@@ -1379,7 +1379,6 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
 
     print("log_psi_t_eval_list")
     print(log_psi_t_eval_list)
-    1/0
 
     # print(time.time() - start)
     # start = time.time()
