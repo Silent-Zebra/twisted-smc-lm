@@ -856,7 +856,10 @@ def smc_scan_iter_non_final(
 
         final_activation = model_output[:, prompt_len + t]
         print(final_activation.shape)
-        1/0
+        print(value_head.shape)
+        log_r_psi_t_eval = final_activation @ value_head.squeeze()
+
+        print(log_r_psi_t_eval.shape)
 
 
         # final_activation = final_activations[:, prompt_len + t]
