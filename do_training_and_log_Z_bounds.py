@@ -2622,6 +2622,7 @@ def main():
 
 
 
+
     last_ckpt_epoch = -1
 
     plot_over_time_list, plot_over_time_list_p_proposal = setup_plot_over_time_lists(n_samples_for_plots)
@@ -2661,6 +2662,53 @@ def main():
             else:
                 true_posterior_samples_by_token = None
 
+            if args.inspect_policy:
+                n_samples = 100
+                jnp_prompts = [
+                    jnp.array([7454, 2402, 257, 640, 11, 612, 373, 257, 442,
+                               38393, 3797, 3706, 350, 1046, 13]),
+                    jnp.array([7454, 2402, 257, 640, 11, 612, 373, 257, 442,
+                               38393, 3797, 3706, 350, 1046, 13, 350]),
+                    jnp.array([7454, 2402, 257, 640, 11, 612, 373, 257, 442,
+                               38393, 3797, 3706, 350, 1046, 13, 350, 1046])
+                ]
+                # batch_prompt = jnp.full((n_samples, jnp_prompt.shape[-1]), jnp_prompt)
+                init_prompt_len = prompt.shape[-1]
+
+                for prompt in jnp_prompts:
+
+                    rng, sk_smc, sk_sis = jax.random.split(rng_key, 3)
+
+                    smc_args = {
+                        "rng_key": sk_smc,
+                        "prompt": prompt,
+                        "params_p": params_p,
+                        "params_twist": params_twist,
+                        "log_true_final_twist": log_true_final_twist,
+                        "output_len": args.output_len - (prompt.shape[-1] - init_prompt_len),
+                        "n_smc_samples": n_samples,
+                        "smc_procedure_type": experiment_cfg.smc_procedure_type,
+                        "get_intermediate_sample_history_based_on_learned_twists": False,
+                        "resample": False,
+                        "proposal_is_p": args.proposal_is_p,
+                        "huggingface_model": huggingface_model,
+                        "params_proposal": params_proposal,
+                        "OpenRLHF_critic_ckpt": args.load_OpenRLHF_critic_ckpt
+                    }
+
+                    (_, log_z_hat_t, _), q_samples = smc_procedure(
+                        **smc_args)
+
+                    score_on_q_samples = log_true_final_twist(
+                        q_samples) / args.beta_temp
+
+                    print("Samples")
+                    print(q_samples)
+                    print(score_on_q_samples)
+                    print("Average score")
+                    print(score_on_q_samples.mean())
+
+                raise SystemExit(0)  # Finished
 
             # rng_key, sk = jax.random.split(rng_key)
             # # TODO DEBUG ONLY REMOVE LATER
@@ -3005,6 +3053,9 @@ if __name__ == "__main__":
 
     parser.add_argument("--test_best_of_n_seeds", type=int, default=0, help="If >0, then only test best of n sampling with and without SMC resampling to see if it helps reward. Do this over test_best_of_n_seeds number of seeds.")
     parser.add_argument("--test_best_of_n_samples", type=int, default=10, help="Use with test_best_of_n_seeds. Use test_best_of_n_samples number of samples for this.")
+
+    parser.add_argument("--inspect_policy", action="store_true", help="Debug/understanding purpose only")
+
 
     args = parser.parse_args()
 
