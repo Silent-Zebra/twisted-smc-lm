@@ -580,12 +580,13 @@ def evaluate_normalized_log_q_1_to_t_nojit(
             jnp.arange(seq_selected.shape[0])[:, None], jnp.arange(
                 seq_selected.shape[1]), seq_selected]
 
-        # print(normalized_log_q_t_across_t.shape)
         # print(normalized_log_q_t_across_t)
+        print(normalized_log_q_t_across_t.shape)
 
         normalized_log_q_1_to_t = normalized_log_q_t_across_t.sum(axis=-1)
 
         print(normalized_log_q_1_to_t.shape)
+
 
         print(normalized_log_q_1_to_t)
 
