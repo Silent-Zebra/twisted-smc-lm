@@ -2721,9 +2721,12 @@ def main():
 
                     log_p = evaluate_log_p_selected_tokens(q_samples, prompt.shape[-1], params_p, huggingface_model)
 
-                    print(log_q.shape)
-                    print(log_p.shape)
-                    1/0
+                    kl_div_to_prior_estimate = log_q - log_p
+                    print("KL to prior estimate")
+                    print(kl_div_to_prior_estimate.mean())
+
+                    print("Score - KL")
+                    print((score_on_q_samples - kl_div_to_prior_estimate).mean())
 
                 raise SystemExit(0)  # Finished
 

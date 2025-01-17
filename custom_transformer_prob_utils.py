@@ -585,10 +585,8 @@ def evaluate_normalized_log_q_1_to_t_nojit(
 
         normalized_log_q_1_to_t = normalized_log_q_t_across_t.sum(axis=-1)
 
-        print(normalized_log_q_1_to_t.shape)
-
-
-        print(normalized_log_q_1_to_t)
+        # print(normalized_log_q_1_to_t.shape)
+        # print(normalized_log_q_1_to_t)
 
         return normalized_log_q_1_to_t
 
