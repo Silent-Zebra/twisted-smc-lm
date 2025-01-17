@@ -1342,9 +1342,12 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
     print(do_resample_record)
     print(ess_record)
 
-    full_seq_list = jnp.stack(full_seq_list)
-    log_w_t_list = jnp.stack(log_w_t_list)
-    log_psi_t_eval_list = jnp.stack(log_psi_t_eval_list)
+    if len(full_seq_list) > 0:
+        full_seq_list = jnp.stack(full_seq_list)
+    if len(log_w_t_list) > 0:
+        log_w_t_list = jnp.stack(log_w_t_list)
+    if len(log_psi_t_eval_list) > 0:
+        log_psi_t_eval_list = jnp.stack(log_psi_t_eval_list)
 
     rng_key, full_seq, log_w_t, log_gamma_1_to_t_eval, log_p_theta_1_to_t_eval, \
     output_len, params_p, params_twist, log_z_hat_t = carry
