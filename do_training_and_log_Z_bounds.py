@@ -2714,7 +2714,7 @@ def main():
                     print("Average score")
                     print(score_on_q_samples.mean())
 
-                    log_q = evaluate_normalized_log_q_1_to_t(
+                    log_q = evaluate_normalized_log_q_1_to_t_nojit(
                         q_samples, params_p, params_twist, prompt.shape[-1],
                         condition_twist_on_tokens=None,
                         huggingface_model=huggingface_model, params_proposal=params_proposal)
