@@ -2719,7 +2719,7 @@ def main():
                         condition_twist_on_tokens=None,
                         huggingface_model=huggingface_model, params_proposal=params_proposal)
 
-                    log_p = evaluate_log_p_selected_tokens(q_samples, prompt.shape[-1], params_p, huggingface_model)
+                    log_p = evaluate_log_p_selected_tokens(q_samples, prompt.shape[-1], params_p, huggingface_model).sum(-1)
 
                     kl_div_to_prior_estimate = log_q - log_p
                     print("KL to prior estimate")
