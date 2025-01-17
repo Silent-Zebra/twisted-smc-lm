@@ -569,7 +569,7 @@ def evaluate_normalized_log_q_1_to_t_nojit(
 
         model_output = params_proposal['model'](
             input_ids=full_seq)
-        print(model_output)
+        # print(model_output)
         q_logits = model_output.logits
 
         normalized_log_q_t_all_vocab = jax.nn.log_softmax(q_logits, axis=-1)[:, prompt_len - 1: -1]
@@ -584,7 +584,8 @@ def evaluate_normalized_log_q_1_to_t_nojit(
         # print(normalized_log_q_t_across_t)
 
         normalized_log_q_1_to_t = normalized_log_q_t_across_t.sum(axis=-1)
-        # print(normalized_log_q_1_to_t.shape)
+
+        print(normalized_log_q_1_to_t.shape)
 
         print(normalized_log_q_1_to_t)
 

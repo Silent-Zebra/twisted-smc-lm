@@ -2714,6 +2714,17 @@ def main():
                     print("Average score")
                     print(score_on_q_samples.mean())
 
+                    log_q = evaluate_normalized_log_q_1_to_t(
+                        q_samples, params_p, params_twist, prompt.shape[-1],
+                        condition_twist_on_tokens=None,
+                        huggingface_model=huggingface_model, params_proposal=params_proposal)
+
+                    log_p = evaluate_log_p_selected_tokens(q_samples, prompt.shape[-1], params_p, huggingface_model)
+
+                    print(log_q.shape)
+                    print(log_p.shape)
+                    1/0
+
                 raise SystemExit(0)  # Finished
 
             # rng_key, sk = jax.random.split(rng_key)
