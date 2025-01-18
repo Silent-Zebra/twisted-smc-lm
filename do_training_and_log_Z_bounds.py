@@ -2341,7 +2341,7 @@ def do_inspection_and_plotting_of_test_info(
             also_do_p_proposal_plot = False # otherwise big memory usage
 
         if also_do_p_proposal_plot:
-
+            # Only do if not already done
             if not plot_args['proposal_is_p']:
                 plot_args['proposal_is_p'] = True
                 plot_args['plot_over_time_list'] = plot_over_time_list_p_proposal
