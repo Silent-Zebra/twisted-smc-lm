@@ -1371,18 +1371,18 @@ def smc_debug(rng_key, prompt, params_p, params_twist, log_true_final_twist, out
         )
     log_z_hat_t_record.append(log_z_hat_t)
 
-    # # Debug only # TODO REMOVE LATER
-    # print("full_seq_list")
-    # print(full_seq_list) # TODO later consider passing in (or hardcoding) a tokenizer to decode this too.
-    #
-    # print("log_z_hat_t_record")
-    # print(log_z_hat_t_record)
-    #
-    # print("log_w_t_list")
-    # print(log_w_t_list)
-    #
-    # print("log_psi_t_eval_list")
-    # print(log_psi_t_eval_list)
+    # Debug only # TODO REMOVE LATER
+    print("full_seq_list")
+    print(full_seq_list) # TODO later consider passing in (or hardcoding) a tokenizer to decode this too.
+
+    print("log_z_hat_t_record")
+    print(log_z_hat_t_record)
+
+    print("log_w_t_list")
+    print(log_w_t_list)
+
+    print("log_psi_t_eval_list")
+    print(log_psi_t_eval_list)
     #
     # print("Inspection of individual samples")
     # for i in range(full_seq_list[-1].shape[0]):
