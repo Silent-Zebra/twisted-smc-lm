@@ -13,7 +13,7 @@ class NNHead(nn.Module):
     Replace a single linear layer with an NN head for better expressivity
     """
 
-    def __init__(self, hidden_size, output_size, **kwargs):
+    def __init__(self, hidden_size, output_size, xavier_init=False, additional_sd_divider=1., **kwargs):
         super().__init__()
         self.linear1 = nn.Linear(hidden_size, hidden_size)
         self.relu1 = nn.ReLU()
@@ -24,6 +24,16 @@ class NNHead(nn.Module):
         self.linear_layers = [self.linear1, self.linear2, self.linear3]
         self.layers = [self.linear1, self.relu1, self.linear2, self.relu2,
                        self.linear3]
+
+        if xavier_init:
+            for linear_layer in self.linear_layers:
+                with torch.no_grad():
+                    torch.nn.init.xavier_uniform_(linear_layer.weight)
+                    if linear_layer.bias is not None:
+                        torch.nn.init.zeros_(linear_layer.bias)
+
+                        linear_layer.weight /= additional_sd_divider
+
 
     def forward(self, hidden_states):
         x = hidden_states

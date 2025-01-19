@@ -3060,7 +3060,7 @@ if __name__ == "__main__":
     parser.add_argument("--hface_nn_twist", action="store_true", help="Use an NN instead of a single linear layer for the twist head for the hface model")
     parser.add_argument("--separate_hface_twist_model", action="store_true", help="Use an entirely new (fine-tuneable) twist model")
 
-    parser.add_argument("--additional_sd_divider", type=float, help="Reduce the SD on initialization of linear layers further; additional divisor on SD", default=1.)
+    parser.add_argument("--additional_sd_divider", type=float, default=1., help="Reduce the SD on initialization of linear layers further; additional divisor on SD")
     # parser.add_argument("--pretrain_final_twist", action="store_true", help="Pretrain the final twists (using RL-style squared error (in log space)) before beginning other twist training")
     # parser.add_argument("--pretrain_twist_epochs", type=int, default=100, help="How many epochs to do the final twist pretraining (total number of pretraining updates = pretrain_twist_epochs * twist_updates_per_epoch)")
 
