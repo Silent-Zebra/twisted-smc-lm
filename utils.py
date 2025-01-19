@@ -9,10 +9,11 @@ class HashableDict(dict):
     def __hash__(self):
         return hash(tuple(sorted(self.items())))
 
-def linear_init_normal(key, in_features, out_features, in_plus_out_for_sd):
+def linear_init_normal(key, in_features, out_features, in_plus_out_for_sd, additional_sd_divider=1.):
     params = {}
     key, sk = jax.random.split(key)
     sd = (2. / (in_plus_out_for_sd)) ** 0.5 # Xavier initialization based on average of in/out
+    sd = sd / additional_sd_divider
     # print(sd)
     params['w'] = jax.random.normal(sk, shape=(in_features, out_features)) * sd
 

@@ -1888,7 +1888,7 @@ def get_model_config_and_conditional_twist_settings(hface_model_type, rm_type):
 def setup_model_and_params(
     rng_key, separate_hface_twist_model, model_config, from_pt, experiment_cfg, hface_nn_twist, softmax_twist,
     conditional_twist_type, num_last_tokens_to_condition_on, n_layers_twist, hidden_units_multiplier,
-    one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi, use_lora, lora_rank
+    one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi, use_lora, lora_rank, additional_sd_divider
 ):
     rng_key, sk = jax.random.split(rng_key, 2)
 
@@ -1904,7 +1904,7 @@ def setup_model_and_params(
             softmax_twist=softmax_twist, conditional_twist_type=conditional_twist_type,
             num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt,
             n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier,
-            one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
+            one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist, additional_sd_divider=additional_sd_divider
         )
 
         params_p = model_p.huggingface_model.params
@@ -1966,7 +1966,7 @@ def setup_model_and_params(
             sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist,
             conditional_twist_type=conditional_twist_type, num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
             from_pt=from_pt, n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier,
-            one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
+            one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist, additional_sd_divider=additional_sd_divider
         )
         params_p = model.huggingface_model.params
         params_twist = model.twist_head_params
@@ -1992,7 +1992,7 @@ def setup_cfg(
     load_posterior_samples=False, load_prefix_posterior_samples=None,
     sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
-    output_p_psi=False, separate_proposal_and_twist=False, reward_cap=None, n_samples_for_cap=None, twist_updates_per_batch=1
+    output_p_psi=False, separate_proposal_and_twist=False, reward_cap=None, n_samples_for_cap=None, twist_updates_per_batch=1, additional_sd_divider=1.
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -2029,7 +2029,7 @@ def setup_cfg(
         conditional_twist_type, num_last_tokens_to_condition_on, n_layers_twist,
         hidden_units_multiplier,
         one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi,
-        use_lora, lora_rank
+        use_lora, lora_rank, additional_sd_divider
     )
 
     tokenizer_RM, rewardModel = get_tokenizer_and_rewardModel(rm_type)
@@ -2581,7 +2581,8 @@ def main():
         "train_on_true_posterior_samples": args.train_on_true_posterior_samples,
         "output_p_psi": args.output_p_psi, "separate_proposal_and_twist": args.separate_proposal_and_twist,
         "reward_cap": args.reward_cap, "n_samples_for_cap": args.n_samples_for_cap,
-        "twist_updates_per_batch": args.twist_updates_per_batch
+        "twist_updates_per_batch": args.twist_updates_per_batch,
+        "additional_sd_divider": args.additional_sd_divider
     }
 
     if args.only_collect_true_posterior_samples:
@@ -3059,6 +3060,7 @@ if __name__ == "__main__":
     parser.add_argument("--hface_nn_twist", action="store_true", help="Use an NN instead of a single linear layer for the twist head for the hface model")
     parser.add_argument("--separate_hface_twist_model", action="store_true", help="Use an entirely new (fine-tuneable) twist model")
 
+    parser.add_argument("--additional_sd_divider", type=float, help="Reduce the SD on initialization of linear layers further; additional divisor on SD", default=1.)
     # parser.add_argument("--pretrain_final_twist", action="store_true", help="Pretrain the final twists (using RL-style squared error (in log space)) before beginning other twist training")
     # parser.add_argument("--pretrain_twist_epochs", type=int, default=100, help="How many epochs to do the final twist pretraining (total number of pretraining updates = pretrain_twist_epochs * twist_updates_per_epoch)")
 
