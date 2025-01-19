@@ -78,13 +78,19 @@ elif plot_type == "toxthresh":
     ]
 
 
-    load_pref_p_ppo_bc = [
-        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples1_8_0",
-        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples4_16_0",
-        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples32_512_0",
-        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples128_2048_0",
-    ]
+    # load_pref_p_ppo_bc = [
+    #     "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples1_8_0",
+    #     "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples4_16_0",
+    #     "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples32_512_0",
+    #     "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_nsamples128_2048_0",
+    # ]
     # step50 for the above
+    load_pref_p_ppo_bc = [
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1_criticlossmse__seed1_critic_global_step50_2025-01-17_19-56_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1_criticlossmse__seed1_critic_global_step50_2025-01-17_20-13_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1_criticlossmse__seed1_critic_global_step50_2025-01-17_20-22_seed1_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1_criticlossmse__seed1_critic_global_step50_2025-01-17_20-32_seed1_ebm_one_sample_lr0.0001_nsamples128_2048_0"
+    ]
 
     load_pref_p_ppo = [
         "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001__seed1_critic_nsamples1_8_0",
@@ -107,30 +113,41 @@ elif plot_type == "toxthresh":
         "logZ_bounds_twistproposal_2025-01-16_01-36_seed1_ebm_one_sample_lr0.0001_nsamples128_2048_0"
     ]
 
+    load_pref_q_ppo_ctltwist = [
+        "logZ_bounds_twistproposalcheckpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10_2025-01-16_02-24_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10_2025-01-16_02-24_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10_2025-01-16_02-29_seed1_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10_2025-01-16_02-37_seed1_ebm_one_sample_lr0.0001_nsamples128_2048_0",
+    ]
+
+    # load_pref_q_ppo_bc = [
+    #     "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step50_2025-01-16_22-51_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0",
+    #     "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step50_2025-01-16_23-02_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0",
+    #     "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step50_2025-01-16_23-18_seed1_ebm_one_sample_lr0.0001_nsamples32_512_0",
+    #     "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1__seed1_critic_global_step50_2025-01-16_23-19_seed1_ebm_one_sample_lr0.0001_nsamples128_2048_0",
+    # ]
+    load_pref_q_ppo_bc = [
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1_criticlossmse__seed1_critic_global_step50_2025-01-17_19-15_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1_criticlossmse__seed1_critic_global_step50_2025-01-17_20-14_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1_criticlossmse__seed1_critic_global_step50_2025-01-17_20-18_seed1_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_bc0.1_criticlossmse__seed1_critic_global_step50_2025-01-17_20-29_seed1_ebm_one_sample_lr0.0001_nsamples128_2048_0"
+    ]
+    load_pref_q_ppo_bc_ctltwist = [
+        "logZ_bounds_twistproposalcheckpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10_2025-01-16_22-47_seed1_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10_2025-01-16_22-59_seed1_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10_2025-01-16_23-21_seed1_ebm_one_sample_lr0.0001_nsamples128_2048_0",
+        "logZ_bounds_twistproposalcheckpoint_2024-04-18_01-46_seed1_ebm_one_sample_epoch10_2025-01-16_23-23_seed1_ebm_one_sample_lr0.0001_nsamples32_512_0",
+    ]
+
     plot_ess = True
 
-    figname = f"./fig_bounds_ppo_toxt_-5_test.pdf"
-
-    # figname = f"./fig_bounds_ppo_toxt_-5_01-15-2025.pdf"
-
-    # figname = f"./fig_bounds_ess_toxt_-5_01-12-2025.pdf"
-
-    # figname = f"./fig_bounds_resampleeveryonly_ppo_bc_step50_toxt_-5_12-23.pdf"
-
-    # figname = f"./fig_bounds_with_ess_ppo_bc_step50_toxt_-5_12-23.pdf"
-    # figname = f"./fig_bounds_with_ess_ppo_bc_step10_toxt_-5_12-23.pdf"
-
-    # figname = f"./fig_bounds_with_ess_toxt_-5_04-03.pdf"
-
-    # plot_ess = False
-    # figname = f"./fig_bounds_no_ess_toxt_-5_04-03.pdf"
-    # figname = f"./fig_bounds_toxt_-5_03-24.pdf"
+    # figname defined later
 
 
-color_list_for_lbs = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey', 'xkcd:light brown', 'xkcd:light lime green', 'xkcd:light navy blue', 'xkcd:light indigo', ]
-color_list_for_ubs = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkcd:purple', 'xkcd:black', 'xkcd:brown', 'xkcd:lime green', 'xkcd:navy blue', 'xkcd:indigo']
+color_list_for_lbs = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey', 'xkcd:light brown', 'xkcd:light lime green', 'xkcd:light navy blue', 'xkcd:light indigo', 'xkcd:olive yellow', 'xkcd:peach', 'xkcd:light lavender', 'xkcd:bright pink' ]
+color_list_for_ubs = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkcd:purple', 'xkcd:black', 'xkcd:brown', 'xkcd:lime green', 'xkcd:navy blue', 'xkcd:indigo', 'xkcd:dark yellow', 'xkcd:dark peach', 'xkcd:lavender', 'xkcd:hot pink']
 
-linestyle_list_for_ubs = ['dashed', 'dashed', 'dashed', 'dashed', 'dashed', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot' ]
+linestyle_list_for_ubs = ['dashed', 'dashed', 'dashed', 'dashed', 'dashed', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot']
 linestyle_list_for_lbs = linestyle_list_for_ubs[1:] # ['solid'] * 10
 linestyle_list_for_lbs[9] = 'dashed'
 
@@ -244,6 +261,14 @@ elif plot_type == "toxthresh":
     q_smc_ubs_ppo_actor_randomtwist, q_smc_lbs_ppo_actor_randomtwist, q_iwae_ubs_ppo_actor_randomtwist, q_iwae_lbs_ppo_actor_randomtwist = \
         setup_ubs_and_lbs(load_pref_q_ppo_actor_randomtwist)
 
+    q_smc_ubs_ppo_actor_ctltwist, q_smc_lbs_ppo_actor_ctltwist, q_iwae_ubs_ppo_actor_ctltwist, q_iwae_lbs_ppo_actor_ctltwist = \
+        setup_ubs_and_lbs(load_pref_q_ppo_ctltwist)
+
+    q_smc_ubs_ppo_bc_actor_bc_twist, q_smc_lbs_ppo_bc_actor_bc_twist, q_iwae_ubs_ppo_bc_actor_bc_twist, q_iwae_lbs_ppo_bc_actor_bc_twist = \
+        setup_ubs_and_lbs(load_pref_q_ppo_bc)
+
+    # q_smc_ubs_ppo_bc_actor_ctltwist, q_smc_lbs_ppo_bc_actor_ctltwist, q_iwae_ubs_ppo_bc_actor_ctltwist, q_iwae_lbs_ppo_bc_actor_ctltwist = \
+    #     setup_ubs_and_lbs(load_pref_q_ppo_bc_ctltwist) # TODO correct with the different set of samples later
 
 elif plot_type == "sent_dpg_comparison":
     t_iwae_ubs_1_dpg, t_iwae_ubs_8_dpg, t_iwae_lbs_1_dpg, t_iwae_lbs_8_dpg, t_smc_ubs_1_dpg, t_smc_ubs_8_dpg, t_smc_lbs_1_dpg, t_smc_lbs_8_dpg = load_ckpt(
@@ -332,9 +357,84 @@ if plot_type == "sent_dpg_comparison":
 
 else:
 
+    assert plot_type == "toxthresh" # Others not yet implemented, but should be able to follow similar structure
+
     plot_ppo = True
-    only_plot_new_ppo = False
-    only_plot_resample_every = False
+    only_plot_new_ppo = True # False
+    only_plot_resample_every = True # False
+    only_plot_bc_ppo = True
+    only_plot_new_ctl = True
+    # TODO instead should just make a list of things to plot, and order by number
+    # Labels ordered by number too
+    # Then each plot configuration is just a selection of numbers, selecting which things you want to plot...
+    # This would remove duplicate code too.
+
+    list_of_ub_lb_pairs = [
+        (t_iwae_ubs, t_iwae_lbs),
+        (t_smc_ubs, t_smc_lbs),
+        (p_iwae_ubs, p_iwae_lbs),
+        (p_smc_ubs, p_smc_lbs),
+        (p_smc_ubs_ess, p_smc_lbs_ess),
+        (p_smc_ubs_ppo_bc, p_smc_lbs_ppo_bc),
+        (p_smc_ubs_ppo, p_smc_lbs_ppo),
+        (q_smc_ubs_ppo_actor_critic, q_smc_lbs_ppo_actor_critic),
+        (q_smc_ubs_ppo_actor_randomtwist, q_smc_lbs_ppo_actor_randomtwist),
+        (q_iwae_ubs_ppo_actor_randomtwist, q_iwae_lbs_ppo_actor_randomtwist),
+        (q_smc_ubs_ppo_actor_ctltwist, q_smc_lbs_ppo_actor_ctltwist),
+        (q_smc_ubs_ppo_bc_actor_bc_twist, q_smc_lbs_ppo_bc_actor_bc_twist),
+        (q_iwae_ubs_ppo_bc_actor_bc_twist, q_iwae_lbs_ppo_bc_actor_bc_twist),
+        # (q_smc_ubs_ppo_bc_actor_ctltwist, q_smc_lbs_ppo_bc_actor_ctltwist)
+    ]
+    list_of_names = [
+        ("SIS/IWAE", "(CTL $q^\pi$ Proposal)"), #0
+        ("SMC CTL", "($q^\pi$ Proposal)"), #1
+        ("SIS/IWAE", "($p_0$ Proposal)"), #2
+        ("SMC CTL", "($p_0$ Proposal)"), #3
+        ("SMC CTL ESS", "($p_0$ Proposal)"), #4
+        ("SMC BC+PPO", "($p_0$ Proposal)"), #5
+        ("SMC PPO", "($p_0$ Proposal)"), #6
+        ("SMC", "(PPO Critic Twist) (PPO $q$ Proposal)"), #7
+        ("SMC", "(Random Twist) (PPO $q$ Proposal)"), #8
+        ("SIS/IWAE", "(PPO $q$ Proposal)"), #9
+        ("SMC", "(CTL Twist) (PPO $q$ Proposal)"), #10
+        ("SMC", "(BC+PPO Critic) (BC+PPO $q$ Proposal)"), #11
+        ("SIS/IWAE", "(BC+PPO $q$ Proposal)"), #12
+        # ("SMC", "(CTL Twist) (BC+PPO $q$ Proposal)"),  # 13
+    ]
+    # Insert UB or LB in between the above
+
+
+    # figname = f"./fig_bounds_ppo_toxt_ctltwist_-5_01-17-2025.pdf"
+    # items_to_plot = [3, 10, 13]
+
+    # figname = f"./fig_bounds_ppo_toxt_-5_01-17-2025_new.pdf"
+
+    figname = f"./fig_bounds_ppobc_toxt_-5_01-17-2025.pdf"
+    items_to_plot = [0, 9, 12, 11]
+
+    # figname = f"./fig_bounds_ppo_toxt_-5_01-17-2025.pdf"
+    # items_to_plot = [2, 3, 5, 6]  # TODO have one config per each figname
+
+    # figname = f"./fig_bounds_ppo_toxt_-5_01-16-2025.pdf"
+    # figname = f"./fig_bounds_ppo_toxt_-5_test.pdf"
+
+    # figname = f"./fig_bounds_ppo_toxt_-5_01-15-2025_corrected.pdf"
+    # items_to_plot = [0, 9, 7, 8]
+
+    # figname = f"./fig_bounds_ess_toxt_-5_01-12-2025.pdf"
+
+    # figname = f"./fig_bounds_resampleeveryonly_ppo_bc_step50_toxt_-5_12-23.pdf"
+
+    # figname = f"./fig_bounds_with_ess_ppo_bc_step50_toxt_-5_12-23.pdf"
+    # figname = f"./fig_bounds_with_ess_ppo_bc_step10_toxt_-5_12-23.pdf"
+
+    # figname = f"./fig_bounds_with_ess_toxt_-5_04-03.pdf"
+
+    # plot_ess = False
+    # figname = f"./fig_bounds_no_ess_toxt_-5_04-03.pdf"
+    # figname = f"./fig_bounds_toxt_-5_03-24.pdf"
+
+
 
     start_from = 0
     x_range = x_range[start_from:]
@@ -347,181 +447,245 @@ else:
     print(x_range.shape)
     # 1 / 0
 
-    if not only_plot_resample_every:
-
+    for ind in items_to_plot:
         last, conf_bound = plot_with_conf_bounds(
-            t_iwae_ubs[:, start_from:], x_range, label=f"SIS/IWAE UB (CTL $q^\pi$ Proposal)",
-            color=color_list_for_ubs[0],
-            linestyle=linestyle_list_for_ubs[0],
+            list_of_ub_lb_pairs[ind][0][:, start_from:], x_range,
+            label=f"{list_of_names[ind][0]} UB {list_of_names[ind][1]}",
+            color=color_list_for_ubs[ind],
+            linestyle=linestyle_list_for_ubs[ind],
         )
-
         last, conf_bound = plot_with_conf_bounds(
-            t_iwae_lbs[:, start_from:], x_range, label=f"SIS/IWAE LB (CTL $q^\pi$ Proposal)",
-            color=color_list_for_lbs[0],
-            linestyle=linestyle_list_for_lbs[0],
+            list_of_ub_lb_pairs[ind][1][:, start_from:], x_range,
+            label=f"{list_of_names[ind][0]} LB {list_of_names[ind][1]}",
+            color=color_list_for_lbs[ind],
+            linestyle=linestyle_list_for_ubs[ind],
         )
-
-        last, conf_bound = plot_with_conf_bounds(
-            t_smc_ubs[:, start_from:], x_range, label=f"SMC CTL UB ($q^\pi$ Proposal)",
-            color=color_list_for_ubs[1],
-            linestyle=linestyle_list_for_ubs[1],
-        )
-
-        last, conf_bound = plot_with_conf_bounds(
-            t_smc_lbs[:, start_from:], x_range, label=f"SMC CTL LB ($q^\pi$ Proposal)",
-            color=color_list_for_lbs[1],
-            linestyle=linestyle_list_for_lbs[1],
-        )
-
-    if only_plot_new_ppo:
-        last, conf_bound = plot_with_conf_bounds(
-            t_iwae_ubs[:, start_from:], x_range,
-            label=f"SIS/IWAE UB (CTL $q^\pi$ Proposal)",
-            color=color_list_for_ubs[0],
-            linestyle=linestyle_list_for_ubs[0],
-        )
-
-        last, conf_bound = plot_with_conf_bounds(
-            t_iwae_lbs[:, start_from:], x_range,
-            label=f"SIS/IWAE LB (CTL $q^\pi$ Proposal)",
-            color=color_list_for_lbs[0],
-            linestyle=linestyle_list_for_lbs[0],
-        )
-
-    if not only_plot_new_ppo:
-        last, conf_bound = plot_with_conf_bounds(
-            p_iwae_ubs[:, start_from:], x_range, label=f"SIS/IWAE UB ($p_0$ Proposal)",
-            color=color_list_for_ubs[2],
-            linestyle=linestyle_list_for_ubs[2],
-        )
-
-        last, conf_bound = plot_with_conf_bounds(
-            p_iwae_lbs[:, start_from:], x_range, label=f"SIS/IWAE LB ($p_0$ Proposal)",
-            color=color_list_for_lbs[2],
-            linestyle=linestyle_list_for_lbs[2],
-        )
-
-        last, conf_bound = plot_with_conf_bounds(
-            p_smc_ubs[:, start_from:], x_range, label=f"SMC CTL UB ($p_0$ Proposal)",
-            color=color_list_for_ubs[3],
-            linestyle=linestyle_list_for_ubs[3],
-        )
-
-        last, conf_bound = plot_with_conf_bounds(
-            p_smc_lbs[:, start_from:], x_range, label=f"SMC CTL LB ($p_0$ Proposal)",
-            color=color_list_for_lbs[3],
-            linestyle=linestyle_list_for_lbs[3],
-        )
-
 
     if plot_type == "toxthresh":
-        if not only_plot_new_ppo:
-            if plot_ppo:
-                plt.ylim([-37, 15])
-            else:
-                plt.ylim([-37, 0])
-
+        plt.ylim([-37, 15])
         plt.xlim([2, 11])
 
-        if not only_plot_resample_every:
-            if plot_ess:
-                last, conf_bound = plot_with_conf_bounds(
-                    p_smc_ubs_ess[:, start_from:], x_range, label=f"SMC CTL ESS UB ($p_0$ Proposal)",
-                    color=color_list_for_ubs[4],
-                    linestyle=linestyle_list_for_ubs[4],
-                )
+        # if not only_plot_new_ppo:
+        #     if plot_ppo:
+        #         plt.ylim([-37, 15])
+        #     else:
+        #         plt.ylim([-37, 0])
 
-                last, conf_bound = plot_with_conf_bounds(
-                    p_smc_lbs_ess[:, start_from:], x_range, label=f"SMC CTL ESS LB ($p_0$ Proposal)",
-                    color=color_list_for_lbs[4],
-                    linestyle=linestyle_list_for_lbs[4],
-                )
 
-        if plot_ppo:
-            if not only_plot_new_ppo:
-                last, conf_bound = plot_with_conf_bounds(
-                    p_smc_ubs_ppo_bc[:, start_from:], x_range,
-                    label=f"SMC BC+PPO UB ($p_0$ Proposal)",
-                    color=color_list_for_ubs[5],
-                    linestyle=linestyle_list_for_ubs[5],
-                )
 
-                last, conf_bound = plot_with_conf_bounds(
-                    p_smc_lbs_ppo_bc[:, start_from:], x_range,
-                    label=f"SMC BC+PPO LB ($p_0$ Proposal)",
-                    color=color_list_for_lbs[5],
-                    linestyle=linestyle_list_for_lbs[5],
-                )
 
-                last, conf_bound = plot_with_conf_bounds(
-                    p_smc_ubs_ppo[:, start_from:], x_range,
-                    label=f"SMC PPO UB ($p_0$ Proposal)",
-                    color=color_list_for_ubs[6],
-                    linestyle=linestyle_list_for_ubs[6],
-                )
+    # if not only_plot_resample_every:
+    #
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         t_iwae_ubs[:, start_from:], x_range, label=f"SIS/IWAE UB (CTL $q^\pi$ Proposal)",
+    #         color=color_list_for_ubs[0],
+    #         linestyle=linestyle_list_for_ubs[0],
+    #     )
+    #
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         t_iwae_lbs[:, start_from:], x_range, label=f"SIS/IWAE LB (CTL $q^\pi$ Proposal)",
+    #         color=color_list_for_lbs[0],
+    #         linestyle=linestyle_list_for_lbs[0],
+    #     )
+    #
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         t_smc_ubs[:, start_from:], x_range, label=f"SMC CTL UB ($q^\pi$ Proposal)",
+    #         color=color_list_for_ubs[1],
+    #         linestyle=linestyle_list_for_ubs[1],
+    #     )
+    #
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         t_smc_lbs[:, start_from:], x_range, label=f"SMC CTL LB ($q^\pi$ Proposal)",
+    #         color=color_list_for_lbs[1],
+    #         linestyle=linestyle_list_for_lbs[1],
+    #     )
+    #
+    # if only_plot_new_ppo or only_plot_new_ctl:
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         t_iwae_ubs[:, start_from:], x_range,
+    #         label=f"SIS/IWAE UB (CTL $q^\pi$ Proposal)",
+    #         color=color_list_for_ubs[0],
+    #         linestyle=linestyle_list_for_ubs[0],
+    #     )
+    #
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         t_iwae_lbs[:, start_from:], x_range,
+    #         label=f"SIS/IWAE LB (CTL $q^\pi$ Proposal)",
+    #         color=color_list_for_lbs[0],
+    #         linestyle=linestyle_list_for_lbs[0],
+    #     )
+    #
+    # if not only_plot_new_ppo:
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         p_iwae_ubs[:, start_from:], x_range, label=f"SIS/IWAE UB ($p_0$ Proposal)",
+    #         color=color_list_for_ubs[2],
+    #         linestyle=linestyle_list_for_ubs[2],
+    #     )
+    #
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         p_iwae_lbs[:, start_from:], x_range, label=f"SIS/IWAE LB ($p_0$ Proposal)",
+    #         color=color_list_for_lbs[2],
+    #         linestyle=linestyle_list_for_lbs[2],
+    #     )
+    #
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         p_smc_ubs[:, start_from:], x_range, label=f"SMC CTL UB ($p_0$ Proposal)",
+    #         color=color_list_for_ubs[3],
+    #         linestyle=linestyle_list_for_ubs[3],
+    #     )
+    #
+    #     last, conf_bound = plot_with_conf_bounds(
+    #         p_smc_lbs[:, start_from:], x_range, label=f"SMC CTL LB ($p_0$ Proposal)",
+    #         color=color_list_for_lbs[3],
+    #         linestyle=linestyle_list_for_lbs[3],
+    #     )
+    #
+    #
 
-                last, conf_bound = plot_with_conf_bounds(
-                    p_smc_lbs_ppo[:, start_from:], x_range,
-                    label=f"SMC PPO LB ($p_0$ Proposal)",
-                    color=color_list_for_lbs[6],
-                    linestyle=linestyle_list_for_lbs[6],
-                )
 
-            last, conf_bound = plot_with_conf_bounds(
-                q_iwae_ubs_ppo_actor_randomtwist[:, start_from:], x_range,
-                label=f"IWAE UB (PPO $q$ Proposal)",
-                color=color_list_for_ubs[9],
-                linestyle=linestyle_list_for_ubs[9],
-            )
-
-            last, conf_bound = plot_with_conf_bounds(
-                q_iwae_lbs_ppo_actor_randomtwist[:, start_from:], x_range,
-                label=f"IWAE LB (PPO $q$ Proposal)",
-                color=color_list_for_lbs[9],
-                linestyle=linestyle_list_for_lbs[9],
-            )
-
-            last, conf_bound = plot_with_conf_bounds(
-                q_smc_ubs_ppo_actor_critic[:, start_from:], x_range,
-                label=f"SMC UB (PPO Critic Twist) (PPO $q$ Proposal)",
-                color=color_list_for_ubs[7],
-                linestyle=linestyle_list_for_ubs[7],
-            )
-
-            last, conf_bound = plot_with_conf_bounds(
-                q_smc_lbs_ppo_actor_critic[:, start_from:], x_range,
-                label=f"SMC LB (PPO Critic Twist) (PPO $q$ Proposal)",
-                color=color_list_for_lbs[7],
-                linestyle=linestyle_list_for_lbs[7],
-            )
-
-            last, conf_bound = plot_with_conf_bounds(
-                q_smc_ubs_ppo_actor_randomtwist[:, start_from:], x_range,
-                label=f"SMC UB (Random Twist) (PPO $q$ Proposal)",
-                color=color_list_for_ubs[8],
-                linestyle=linestyle_list_for_ubs[8],
-            )
-
-            last, conf_bound = plot_with_conf_bounds(
-                q_smc_lbs_ppo_actor_randomtwist[:, start_from:], x_range,
-                label=f"SMC LB (Random Twist) (PPO $q$ Proposal)",
-                color=color_list_for_lbs[8],
-                linestyle=linestyle_list_for_lbs[8],
-            )
-
-            # last, conf_bound = plot_with_conf_bounds(
-            #     q_iwae_ubs_ppo_actor_critic[:, start_from:], x_range,
-            #     label=f"IWAE UB (PPO $q$ Proposal)",
-            #     color=color_list_for_ubs[9],
-            #     linestyle=linestyle_list_for_ubs[9],
-            # )
-            #
-            # last, conf_bound = plot_with_conf_bounds(
-            #     q_iwae_lbs_ppo_actor_critic[:, start_from:], x_range,
-            #     label=f"IWAE LB (PPO $q$ Proposal)",
-            #     color=color_list_for_lbs[9],
-            #     linestyle=linestyle_list_for_lbs[9],
-            # )
+    #     if not only_plot_resample_every:
+    #         if plot_ess:
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 p_smc_ubs_ess[:, start_from:], x_range, label=f"SMC CTL ESS UB ($p_0$ Proposal)",
+    #                 color=color_list_for_ubs[4],
+    #                 linestyle=linestyle_list_for_ubs[4],
+    #             )
+    #
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 p_smc_lbs_ess[:, start_from:], x_range, label=f"SMC CTL ESS LB ($p_0$ Proposal)",
+    #                 color=color_list_for_lbs[4],
+    #                 linestyle=linestyle_list_for_lbs[4],
+    #             )
+    #
+    #     if plot_ppo:
+    #         if not only_plot_new_ppo:
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 p_smc_ubs_ppo_bc[:, start_from:], x_range,
+    #                 label=f"SMC BC+PPO UB ($p_0$ Proposal)",
+    #                 color=color_list_for_ubs[5],
+    #                 linestyle=linestyle_list_for_ubs[5],
+    #             )
+    #
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 p_smc_lbs_ppo_bc[:, start_from:], x_range,
+    #                 label=f"SMC BC+PPO LB ($p_0$ Proposal)",
+    #                 color=color_list_for_lbs[5],
+    #                 linestyle=linestyle_list_for_lbs[5],
+    #             )
+    #
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 p_smc_ubs_ppo[:, start_from:], x_range,
+    #                 label=f"SMC PPO UB ($p_0$ Proposal)",
+    #                 color=color_list_for_ubs[6],
+    #                 linestyle=linestyle_list_for_ubs[6],
+    #             )
+    #
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 p_smc_lbs_ppo[:, start_from:], x_range,
+    #                 label=f"SMC PPO LB ($p_0$ Proposal)",
+    #                 color=color_list_for_lbs[6],
+    #                 linestyle=linestyle_list_for_lbs[6],
+    #             )
+    #         if only_plot_new_ppo:
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 q_iwae_ubs_ppo_actor_randomtwist[:, start_from:], x_range,
+    #                 label=f"IWAE UB (PPO $q$ Proposal)",
+    #                 color=color_list_for_ubs[9],
+    #                 linestyle=linestyle_list_for_ubs[9],
+    #             )
+    #
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 q_iwae_lbs_ppo_actor_randomtwist[:, start_from:], x_range,
+    #                 label=f"IWAE LB (PPO $q$ Proposal)",
+    #                 color=color_list_for_lbs[9],
+    #                 linestyle=linestyle_list_for_lbs[9],
+    #             )
+    #             if not only_plot_bc_ppo:
+    #
+    #
+    #                 last, conf_bound = plot_with_conf_bounds(
+    #                     q_smc_ubs_ppo_actor_critic[:, start_from:], x_range,
+    #                     label=f"SMC UB (PPO Critic Twist) (PPO $q$ Proposal)",
+    #                     color=color_list_for_ubs[7],
+    #                     linestyle=linestyle_list_for_ubs[7],
+    #                 )
+    #
+    #                 last, conf_bound = plot_with_conf_bounds(
+    #                     q_smc_lbs_ppo_actor_critic[:, start_from:], x_range,
+    #                     label=f"SMC LB (PPO Critic Twist) (PPO $q$ Proposal)",
+    #                     color=color_list_for_lbs[7],
+    #                     linestyle=linestyle_list_for_lbs[7],
+    #                 )
+    #
+    #                 # last, conf_bound = plot_with_conf_bounds(
+    #                 #     q_smc_ubs_ppo_actor_randomtwist[:, start_from:], x_range,
+    #                 #     label=f"SMC UB (Random Twist) (PPO $q$ Proposal)",
+    #                 #     color=color_list_for_ubs[8],
+    #                 #     linestyle=linestyle_list_for_ubs[8],
+    #                 # )
+    #                 #
+    #                 # last, conf_bound = plot_with_conf_bounds(
+    #                 #     q_smc_lbs_ppo_actor_randomtwist[:, start_from:], x_range,
+    #                 #     label=f"SMC LB (Random Twist) (PPO $q$ Proposal)",
+    #                 #     color=color_list_for_lbs[8],
+    #                 #     linestyle=linestyle_list_for_lbs[8],
+    #                 # )
+    #
+    #                 last, conf_bound = plot_with_conf_bounds(
+    #                     q_smc_ubs_ppo_actor_ctltwist[:, start_from:], x_range,
+    #                     label=f"SMC UB (CTL Twist) (PPO $q$ Proposal)",
+    #                     color=color_list_for_ubs[10],
+    #                     linestyle=linestyle_list_for_ubs[10],
+    #                 )
+    #
+    #                 last, conf_bound = plot_with_conf_bounds(
+    #                     q_smc_lbs_ppo_actor_ctltwist[:, start_from:], x_range,
+    #                     label=f"SMC LB (CTL Twist) (PPO $q$ Proposal)",
+    #                     color=color_list_for_lbs[10],
+    #                     linestyle=linestyle_list_for_lbs[10],
+    #                 )
+    #
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 q_iwae_ubs_ppo_bc_actor_bc_twist[:, start_from:], x_range,
+    #                 label=f"IWAE UB (BC+PPO $q$ Proposal)",
+    #                 color=color_list_for_ubs[12],
+    #                 linestyle=linestyle_list_for_ubs[12],
+    #             )
+    #
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 q_iwae_lbs_ppo_bc_actor_bc_twist[:, start_from:], x_range,
+    #                 label=f"IWAE LB (BC+PPO $q$ Proposal)",
+    #                 color=color_list_for_lbs[12],
+    #                 linestyle=linestyle_list_for_lbs[12],
+    #             )
+    #
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 q_smc_ubs_ppo_bc_actor_bc_twist[:, start_from:], x_range,
+    #                 label=f"SMC UB (BC+PPO Critic) (BC+PPO $q$ Proposal)",
+    #                 color=color_list_for_ubs[11],
+    #                 linestyle=linestyle_list_for_ubs[11],
+    #             )
+    #
+    #             last, conf_bound = plot_with_conf_bounds(
+    #                 q_smc_lbs_ppo_bc_actor_bc_twist[:, start_from:], x_range,
+    #                 label=f"SMC LB (BC+PPO Critic) (BC+PPO $q$ Proposal)",
+    #                 color=color_list_for_lbs[11],
+    #                 linestyle=linestyle_list_for_lbs[11],
+    #             )
+    #
+    #             # last, conf_bound = plot_with_conf_bounds(
+    #             #     q_smc_ubs_ppo_bc_actor_ctltwist[:, start_from:], x_range,
+    #             #     label=f"SMC UB (CTL Twist) (BC+PPO $q$ Proposal)",
+    #             #     color=color_list_for_ubs[12],
+    #             #     linestyle=linestyle_list_for_ubs[12],
+    #             # )
+    #             #
+    #             # last, conf_bound = plot_with_conf_bounds(
+    #             #     q_smc_lbs_ppo_bc_actor_ctltwist[:, start_from:], x_range,
+    #             #     label=f"SMC LB (CTL Twist) (BC+PPO $q$ Proposal)",
+    #             #     color=color_list_for_lbs[12],
+    #             #     linestyle=linestyle_list_for_lbs[12],
+    #             # )
 
 
 plt.xticks(xticks_range, xticks_labels)
