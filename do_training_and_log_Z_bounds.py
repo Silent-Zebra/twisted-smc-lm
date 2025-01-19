@@ -2662,6 +2662,34 @@ def main():
             else:
                 true_posterior_samples_by_token = None
 
+
+            # TODO DEBUG ONLY REMOVE LATER
+            rng, sk_smc, sk_sis = jax.random.split(rng_key, 3)
+            smc_args = {
+                "rng_key": sk_smc,
+                "prompt": prompt,
+                "params_p": params_p,
+                "params_twist": params_twist,
+                "log_true_final_twist": log_true_final_twist,
+                "output_len": args.output_len,
+                "n_smc_samples": args.n_twist,
+                "smc_procedure_type": experiment_cfg.smc_procedure_type,
+                "get_intermediate_sample_history_based_on_learned_twists": False,
+                "resample": False,
+                "proposal_is_p": args.proposal_is_p,
+                "huggingface_model": huggingface_model,
+                "params_proposal": params_proposal,
+                "OpenRLHF_critic_ckpt": args.load_OpenRLHF_critic_ckpt
+            }
+            (_, log_z_hat_t, _), q_samples = smc_procedure(
+                **smc_args)
+            p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
+                q_samples, params_p, params_twist,
+                None, huggingface_model, prompt_len=prompt.shape[-1]
+            )
+            print(log_psi_all_vocab)
+            1/0
+
             if args.inspect_policy:
                 n_samples = 100
                 jnp_prompts = [

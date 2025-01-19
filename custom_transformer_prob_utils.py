@@ -1550,15 +1550,15 @@ def smc_partial_jit(
             params_proposal=params_proposal, OpenRLHF_critic_ckpt=OpenRLHF_critic_ckpt
         )
 
-    # DEBUG ONLY
-    print("full_seq_list")
-    print(full_seq_list) # TODO later consider passing in (or hardcoding) a tokenizer to decode this too.
-
-    print("log_w_t_list")
-    print(log_w_t_list)
-
-    print("log_psi_t_eval_list")
-    print(log_psi_t_eval_list)
+    # # DEBUG ONLY
+    # print("full_seq_list")
+    # print(full_seq_list) # TODO later consider passing in (or hardcoding) a tokenizer to decode this too.
+    #
+    # print("log_w_t_list")
+    # print(log_w_t_list)
+    #
+    # print("log_psi_t_eval_list")
+    # print(log_psi_t_eval_list)
 
     if get_intermediate_sample_history_based_on_learned_twists:
         full_seq_list = jnp.concatenate(
@@ -1778,6 +1778,11 @@ def get_kl_vals(q_seqs, params_p, params_twist, prompt_len, output_len,
         condition_twist_on_tokens, huggingface_model=huggingface_model, params_proposal=params_proposal)
     log_p = evaluate_log_p_selected_tokens(q_seqs, prompt_len, params_p, huggingface_model).sum(axis=-1)
     kl_vals = log_q - log_p
+
+    # print(log_q)
+    # print(log_p)
+    # print(kl_vals)
+
     return kl_vals
 
 
