@@ -406,6 +406,12 @@ def main():
         log_p = get_logprob_of_generated_tokens(ref_model, q_samples, prompt_len, condition_twist_on_tokens=None)
 
         kl_vals = (log_q - log_p)
+
+        print(log_q)
+        print(log_p)
+        print(kl_vals)
+        1/0
+
         return kl_vals
 
 
