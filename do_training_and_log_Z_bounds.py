@@ -2688,6 +2688,8 @@ def main():
                 None, huggingface_model, prompt_len=prompt.shape[-1]
             )
             print(log_psi_all_vocab)
+            print(log_psi_all_vocab.shape)
+            print(log_psi_all_vocab.mean())
             1/0
 
             if args.inspect_policy:
