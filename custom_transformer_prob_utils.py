@@ -1779,9 +1779,10 @@ def get_kl_vals(q_seqs, params_p, params_twist, prompt_len, output_len,
     log_p = evaluate_log_p_selected_tokens(q_seqs, prompt_len, params_p, huggingface_model).sum(axis=-1)
     kl_vals = log_q - log_p
 
-    # print(log_q)
-    # print(log_p)
-    # print(kl_vals)
+    print("KL VALS")
+    print(log_q)
+    print(log_p)
+    print(kl_vals)
 
     return kl_vals
 

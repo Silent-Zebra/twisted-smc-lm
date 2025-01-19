@@ -2691,6 +2691,11 @@ def main():
             print(log_psi_all_vocab)
             print(log_psi_all_vocab.shape)
             print(jnp.abs(log_psi_all_vocab).mean())
+
+            kl_vals = get_kl_vals(q_samples, params_p, params_twist, prompt.shape[-1], args.output_len,
+                        None, huggingface_model,
+                        params_proposal=None)
+            print(kl_vals.mean())
             1/0
 
             if args.inspect_policy:
