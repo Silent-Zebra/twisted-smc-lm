@@ -2689,7 +2689,7 @@ def main():
             )
             print(log_psi_all_vocab)
             print(log_psi_all_vocab.shape)
-            print(log_psi_all_vocab.mean())
+            print(jnp.abs(log_psi_all_vocab).mean())
             1/0
 
             if args.inspect_policy:
