@@ -407,11 +407,6 @@ def main():
 
         kl_vals = (log_q - log_p)
 
-        print(log_q)
-        print(log_p)
-        print(kl_vals)
-        1/0
-
         return kl_vals
 
 
