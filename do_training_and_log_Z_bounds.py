@@ -1858,6 +1858,21 @@ def get_final_twists_and_posterior_samples(
 
 
 def get_model_config_and_conditional_twist_settings(hface_model_type, rm_type):
+    from_pt, model_config = get_model_config(hface_model_type)
+
+    one_hot_dim = 0
+
+    conditional_twist_type = None
+    if rm_type == "p_last_tokens":
+        conditional_twist_type = "tokens"
+    elif rm_type == "sent_cond_twist":
+        conditional_twist_type = "one_hot"
+        one_hot_dim = 5
+
+    return model_config, from_pt, conditional_twist_type, one_hot_dim
+
+
+def get_model_config(hface_model_type):
     from_pt = False
     if hface_model_type == "distilgpt2":
         model_config = "distilgpt2"
@@ -1872,17 +1887,7 @@ def get_model_config_and_conditional_twist_settings(hface_model_type, rm_type):
         from_pt = True
     else:
         raise NotImplementedError
-
-    one_hot_dim = 0
-
-    conditional_twist_type = None
-    if rm_type == "p_last_tokens":
-        conditional_twist_type = "tokens"
-    elif rm_type == "sent_cond_twist":
-        conditional_twist_type = "one_hot"
-        one_hot_dim = 5
-
-    return model_config, from_pt, conditional_twist_type, one_hot_dim
+    return from_pt, model_config
 
 
 def setup_model_and_params(
@@ -2078,9 +2083,9 @@ def setup_cfg(
             for key in new_state_dict.keys():
                 print(key)
 
-            assert hface_model_type == "TinyStories" # TODO later make this dynamic
-            model = AutoModel.from_pretrained(
-                'roneneldan/TinyStories-33M')
+            _, model_config = get_model_config(hface_model_type)
+
+            model = AutoModel.from_pretrained(model_config)
 
             print("Keys in Hugging Face model:")
             for name, _ in model.named_parameters():
