@@ -2167,9 +2167,9 @@ def setup_cfg(
         # for key in new_state_dict.keys():
         #     print(key)
 
-        assert hface_model_type == "TinyStories"  # TODO later make this dynamic
-        model = AutoModelForCausalLM.from_pretrained(
-            'roneneldan/TinyStories-33M')  # TODO later make this dynamic
+        _, model_config = get_model_config(hface_model_type)
+
+        model = AutoModelForCausalLM.from_pretrained(model_config)
 
         # print("Keys in Hugging Face model:")
         # for name, _ in model.named_parameters():
