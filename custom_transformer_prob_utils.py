@@ -448,15 +448,20 @@ def get_proposal_q_sample_nojit(rng_key, full_seq, params_p, params_twist, promp
         log_psi = None
 
         if proposal_is_p:
-            # p_logits = get_transformer_p_logits(params_p, full_seq,
-            #                                     huggingface_model=huggingface_model)
-            # log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
+            if params_to_use is not None:
+                log_p, log_psi = get_log_p_plus_log_psi_t(full_seq, params_p,
+                                                          params_to_use,
+                                                          prompt_len,
+                                                          t,
+                                                          condition_twist_on_tokens,
+                                                          huggingface_model=huggingface_model)
+            else:
 
-            log_p, log_psi = get_log_p_plus_log_psi_t(full_seq, params_p,
-                                                      params_to_use, prompt_len,
-                                                      t,
-                                                      condition_twist_on_tokens,
-                                                      huggingface_model=huggingface_model)
+                p_logits = get_transformer_p_logits(params_p, full_seq,
+                                                    huggingface_model=huggingface_model)
+                log_p = jax.nn.log_softmax(p_logits[:, prompt_len + t - 1, :])
+
+
 
             indices_to_use = jax.random.categorical(subkey, log_p, shape=(log_p.shape[0],))
             if true_posterior_sample is not None:
