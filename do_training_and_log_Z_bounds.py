@@ -2808,7 +2808,7 @@ def main():
 
                     print(f"TIME for iter {x + 1}: {time.time() - start}")
 
-                    rng, sk_smc, sk_sis = jax.random.split(rng_key, 3)
+                    rng_key, sk_smc, sk_sis = jax.random.split(rng_key, 3)
 
                     smc_args = {
                         "rng_key": sk_smc,
