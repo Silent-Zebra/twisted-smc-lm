@@ -15,16 +15,27 @@ from get_kl_table import load_prefixes_toy_rlhf
 
 n_epochs = 100
 
+# labels = [
+#     r"CTL, LR 1e-5",
+#     r"CTL, LR 3e-5",
+#     r"RL",
+#     r"SIXO",
+#     r"FUDGE",
+#     "DPG, LR 1e-5",
+#     "DPG, LR 3e-5",
+#     "PPO",
+# ]
 labels = [
     r"CTL, LR 1e-5",
-    r"CTL, LR 3e-5",
+    r"CTL, LR 1e-4",
     r"RL",
     r"SIXO",
     r"FUDGE",
     "DPG, LR 1e-5",
-    "DPG, LR 3e-5",
+    "DPG, LR 1e-4",
     "PPO",
 ]
+
 
 load_prefixes_to_use = load_prefixes_toy_rlhf
 
@@ -65,9 +76,12 @@ def make_frontier(xlabel, ylabel, dictkey_x, dictkey_y, figname, labels, results
 from flax.training import checkpoints
 for i in range(len(load_prefixes_to_use)):
 
+
     load_prefixes = load_prefixes_to_use[i]
 
     for load_prefix in load_prefixes:
+        print(load_prefix)
+
         x = checkpoints.restore_checkpoint(ckpt_dir=f'./f_q_g_q_logZ_info/{load_prefix}',
                                            target=None,
                                            prefix='checkpoint')
@@ -168,7 +182,7 @@ def make_frontier_avg(xlabel, ylabel, dictkey_x, dictkey_y, figname, labels, res
 make_frontier_avg(
     xlabel="KL to Prior Estimate", ylabel="Average Reward",
     dictkey_x='kl_to_prior',
-    dictkey_y='rews', figname=f"toy_rlhf_kl_to_prior_vs_rew_frontier_avg",
+    dictkey_y='rews', figname=f"toy_rlhf_kl_to_prior_vs_rew_frontier_avg_01-22-2025",
     labels=labels, results_list=results_list,
     n_epochs=n_epochs, color_list=color_list, marker_list=marker_list,
     fontsize=7

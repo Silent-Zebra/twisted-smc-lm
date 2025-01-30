@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from plot_utils import plot_with_conf_bounds
 
 
-plot_type = "toxthresh" # "sent_dpg_comparison" # "sent" #"toxclass" #
+plot_type = "toxthresh" #  "toy_rlhf" # "sent_dpg_comparison" # "sent" #"toxclass" #
 
 
 if plot_type == "toxclass":
@@ -144,10 +144,92 @@ elif plot_type == "toxthresh":
     # figname defined later
 
 
+elif plot_type == "toy_rlhf":
+    load_pref_twist_ctl = [
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_19-35_seed2_ebm_one_sample_epoch11_2025-01-21_00-32_seed2_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_19-35_seed2_ebm_one_sample_epoch11_2025-01-21_00-33_seed2_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_19-35_seed2_ebm_one_sample_epoch11_2025-01-21_00-41_seed2_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_19-35_seed2_ebm_one_sample_epoch11_2025-01-21_01-11_seed2_ebm_one_sample_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_20-48_seed3_ebm_one_sample_epoch11_2025-01-22_01-46_seed3_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_20-48_seed3_ebm_one_sample_epoch11_2025-01-22_01-47_seed3_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_20-48_seed3_ebm_one_sample_epoch11_2025-01-22_01-55_seed3_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_20-48_seed3_ebm_one_sample_epoch11_2025-01-22_02-05_seed3_ebm_one_sample_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_20-50_seed4_ebm_one_sample_epoch11_2025-01-22_01-46_seed4_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_20-50_seed4_ebm_one_sample_epoch11_2025-01-22_01-48_seed4_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_20-50_seed4_ebm_one_sample_epoch11_2025-01-22_01-55_seed4_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_20-50_seed4_ebm_one_sample_epoch11_2025-01-22_02-05_seed4_ebm_one_sample_lr0.0001_nsamples128_1024_0",
+    ]
+
+    load_pref_twist_sixo = [
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_18-21_seed2_sixo_partial_jit_epoch11_2025-01-20_20-05_seed2_sixo_partial_jit_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_18-21_seed2_sixo_partial_jit_epoch11_2025-01-20_20-16_seed2_sixo_partial_jit_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_18-21_seed2_sixo_partial_jit_epoch11_2025-01-20_20-23_seed2_sixo_partial_jit_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_18-21_seed2_sixo_partial_jit_epoch11_2025-01-21_01-21_seed2_sixo_partial_jit_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-14_seed4_sixo_partial_jit_epoch11_2025-01-22_01-50_seed4_sixo_partial_jit_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-14_seed4_sixo_partial_jit_epoch11_2025-01-22_01-51_seed4_sixo_partial_jit_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-14_seed4_sixo_partial_jit_epoch11_2025-01-22_01-58_seed4_sixo_partial_jit_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-14_seed4_sixo_partial_jit_epoch11_2025-01-22_02-08_seed4_sixo_partial_jit_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-15_seed3_sixo_partial_jit_epoch11_2025-01-22_01-49_seed3_sixo_partial_jit_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-15_seed3_sixo_partial_jit_epoch11_2025-01-22_01-51_seed3_sixo_partial_jit_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-15_seed3_sixo_partial_jit_epoch11_2025-01-22_01-58_seed3_sixo_partial_jit_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-15_seed3_sixo_partial_jit_epoch11_2025-01-22_02-08_seed3_sixo_partial_jit_lr0.0001_nsamples128_1024_0",
+    ]
+
+    load_pref_twist_dpg = [
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_18-46_seed2_one_total_kl_partial_jit_epoch11_2025-01-20_20-05_seed2_one_total_kl_partial_jit_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_18-46_seed2_one_total_kl_partial_jit_epoch11_2025-01-20_20-16_seed2_one_total_kl_partial_jit_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_18-46_seed2_one_total_kl_partial_jit_epoch11_2025-01-20_20-23_seed2_one_total_kl_partial_jit_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-20_18-46_seed2_one_total_kl_partial_jit_epoch11_2025-01-21_01-12_seed2_one_total_kl_partial_jit_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-47_seed3_one_total_kl_partial_jit_epoch11_2025-01-22_01-51_seed3_one_total_kl_partial_jit_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-47_seed3_one_total_kl_partial_jit_epoch11_2025-01-22_01-52_seed3_one_total_kl_partial_jit_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-47_seed3_one_total_kl_partial_jit_epoch11_2025-01-22_02-00_seed3_one_total_kl_partial_jit_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-47_seed3_one_total_kl_partial_jit_epoch11_2025-01-22_02-10_seed3_one_total_kl_partial_jit_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-47_seed4_one_total_kl_partial_jit_epoch11_2025-01-22_01-52_seed4_one_total_kl_partial_jit_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-47_seed4_one_total_kl_partial_jit_epoch11_2025-01-22_01-53_seed4_one_total_kl_partial_jit_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-47_seed4_one_total_kl_partial_jit_epoch11_2025-01-22_02-01_seed4_one_total_kl_partial_jit_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposalcheckpoint_2025-01-21_19-47_seed4_one_total_kl_partial_jit_epoch11_2025-01-22_02-10_seed4_one_total_kl_partial_jit_lr0.0001_nsamples128_1024_0",
+
+    ]
+
+    load_pref_ppo_actor_ppo_critic = [
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed2_critic_global_step11_2025-01-21_02-29_seed2_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed2_critic_global_step11_2025-01-21_02-33_seed2_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed2_critic_global_step11_2025-01-21_02-44_seed2_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed2_critic_global_step11_2025-01-21_03-19_seed2_ebm_one_sample_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed3_critic_global_step11_2025-01-22_00-07_seed3_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed3_critic_global_step11_2025-01-22_00-13_seed3_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed3_critic_global_step11_2025-01-22_00-48_seed3_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed3_critic_global_step11_2025-01-22_01-13_seed3_ebm_one_sample_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed4_critic_global_step11_2025-01-22_00-10_seed4_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed4_critic_global_step11_2025-01-22_02-26_seed4_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed4_critic_global_step11_2025-01-22_00-48_seed4_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_twistproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed4_critic_global_step11_2025-01-22_01-21_seed4_ebm_one_sample_lr0.0001_nsamples128_1024_0",
+
+    ]
+
+    load_pref_p_actor_ppo_critic = [
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed2_critic_global_step11_2025-01-21_03-51_seed2_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed2_critic_global_step11_2025-01-21_04-03_seed2_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed2_critic_global_step11_2025-01-21_05-44_seed2_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed2_critic_global_step11_2025-01-21_05-09_seed2_ebm_one_sample_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed3_critic_global_step11_2025-01-22_00-07_seed3_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed3_critic_global_step11_2025-01-22_00-12_seed3_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed3_critic_global_step11_2025-01-22_00-41_seed3_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed3_critic_global_step11_2025-01-22_01-10_seed3_ebm_one_sample_lr0.0001_nsamples128_1024_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed4_critic_global_step11_2025-01-22_00-08_seed4_ebm_one_sample_lr0.0001_nsamples1_8_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed4_critic_global_step11_2025-01-22_00-33_seed4_ebm_one_sample_lr0.0001_nsamples4_16_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed4_critic_global_step11_2025-01-22_01-01_seed4_ebm_one_sample_lr0.0001_nsamples32_512_0",
+        "logZ_bounds_pproposal_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse__seed4_critic_global_step11_2025-01-22_01-10_seed4_ebm_one_sample_lr0.0001_nsamples128_1024_0",
+    ]
+
+
 color_list_for_lbs = ['xkcd:light blue', 'xkcd:light green', 'xkcd:light orange', 'xkcd:light red', 'xkcd:light purple', 'xkcd:dark grey', 'xkcd:light brown', 'xkcd:light lime green', 'xkcd:light navy blue', 'xkcd:light indigo', 'xkcd:olive yellow', 'xkcd:peach', 'xkcd:light lavender', 'xkcd:bright pink' ]
 color_list_for_ubs = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkcd:purple', 'xkcd:black', 'xkcd:brown', 'xkcd:lime green', 'xkcd:navy blue', 'xkcd:indigo', 'xkcd:dark yellow', 'xkcd:dark peach', 'xkcd:lavender', 'xkcd:hot pink']
 
-linestyle_list_for_ubs = ['dashed', 'dashed', 'dashed', 'dashed', 'dashed', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot']
+# linestyle_list_for_ubs = ['dashed', 'dashed', 'dashed', 'dashed', 'dashed', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot', 'dotted', 'dashdot']
+# linestyle_list_for_ubs = ['solid', 'dashed', 'dotted', 'dashdot', 'loosely dotted', 'densely dotted', 'long dash with offset', 'loosely dashed', 'densely dashed', 'loosely dashdotted', 'densely dashdotted', 'dashdotdotted', 'loosely dashdotdotted', 'densely dashdotdotted']
+linestyle_list_for_ubs = ['solid', 'dashed', 'dotted', 'dashdot'] * 5
+
 linestyle_list_for_lbs = linestyle_list_for_ubs[1:] # ['solid'] * 10
 linestyle_list_for_lbs[9] = 'dashed'
 
@@ -170,11 +252,7 @@ def load_ckpt(load_prefix):
            logZ_ubs_smc_across_samples_time_seeds_smaller[0], logZ_ubs_smc_across_samples_time_seeds_larger[0], \
            logZ_lbs_smc_across_samples_time_seeds_smaller[0], logZ_lbs_smc_across_samples_time_seeds_larger[0]
 
-t_iwae_ubs_1, t_iwae_ubs_8, t_iwae_lbs_1, t_iwae_lbs_8, t_smc_ubs_1, t_smc_ubs_8, t_smc_lbs_1, t_smc_lbs_8 = load_ckpt(load_pref_twist_1_8)
-p_iwae_ubs_1, p_iwae_ubs_8, p_iwae_lbs_1, p_iwae_lbs_8, p_smc_ubs_1, p_smc_ubs_8, p_smc_lbs_1, p_smc_lbs_8 = load_ckpt(load_pref_p_1_8)
 
-t_iwae_ubs_4, t_iwae_ubs_16, t_iwae_lbs_4, t_iwae_lbs_16, t_smc_ubs_4, t_smc_ubs_16, t_smc_lbs_4, t_smc_lbs_16 = load_ckpt(load_pref_twist_4_16)
-p_iwae_ubs_4, p_iwae_ubs_16, p_iwae_lbs_4, p_iwae_lbs_16, p_smc_ubs_4, p_smc_ubs_16, p_smc_lbs_4, p_smc_lbs_16 = load_ckpt(load_pref_p_4_16)
 
 
 def setup_ubs_and_lbs(load_list):
@@ -199,10 +277,46 @@ def setup_ubs_and_lbs(load_list):
         [iwae_lbs_1, iwae_lbs_4, iwae_lbs_8, iwae_lbs_16,
          iwae_lbs_32, iwae_lbs_128, iwae_lbs_512, iwae_lbs_2048
          ]))
+
+
     return smc_ubs, smc_lbs, iwae_ubs, iwae_lbs
+
+def setup_ubs_and_lbs_multi(load_list):
+    assert len(load_list) % 4 == 0
+
+    multi_amount = len(load_list) // 4
+
+    smc_ubs_l, smc_lbs_l, iwae_ubs_l, iwae_lbs_l = [], [], [], []
+
+    for i in range(multi_amount):
+        smc_ubs, smc_lbs, iwae_ubs, iwae_lbs = setup_ubs_and_lbs(load_list[4*i:4*(i+1)])
+        smc_ubs_l.append(smc_ubs)
+        smc_lbs_l.append(smc_lbs)
+        iwae_ubs_l.append(iwae_ubs)
+        iwae_lbs_l.append(iwae_lbs)
+
+    smc_ubs_l = np.concatenate(smc_ubs_l)
+    smc_lbs_l = np.concatenate(smc_lbs_l)
+    iwae_ubs_l = np.concatenate(iwae_ubs_l)
+    iwae_lbs_l = np.concatenate(iwae_lbs_l)
+
+    # print(smc_ubs_l.shape)
+
+    return smc_ubs_l, smc_lbs_l, iwae_ubs_l, iwae_lbs_l
 
 if plot_type in ["toxclass", "sent"]:
     x_range = np.array([0,2,3,4])
+
+    t_iwae_ubs_1, t_iwae_ubs_8, t_iwae_lbs_1, t_iwae_lbs_8, t_smc_ubs_1, t_smc_ubs_8, t_smc_lbs_1, t_smc_lbs_8 = load_ckpt(
+        load_pref_twist_1_8)
+    p_iwae_ubs_1, p_iwae_ubs_8, p_iwae_lbs_1, p_iwae_lbs_8, p_smc_ubs_1, p_smc_ubs_8, p_smc_lbs_1, p_smc_lbs_8 = load_ckpt(
+        load_pref_p_1_8)
+
+    t_iwae_ubs_4, t_iwae_ubs_16, t_iwae_lbs_4, t_iwae_lbs_16, t_smc_ubs_4, t_smc_ubs_16, t_smc_lbs_4, t_smc_lbs_16 = load_ckpt(
+        load_pref_twist_4_16)
+    p_iwae_ubs_4, p_iwae_ubs_16, p_iwae_lbs_4, p_iwae_lbs_16, p_smc_ubs_4, p_smc_ubs_16, p_smc_lbs_4, p_smc_lbs_16 = load_ckpt(
+        load_pref_p_4_16)
+
     t_iwae_ubs = np.transpose(np.stack([t_iwae_ubs_1, t_iwae_ubs_4, t_iwae_ubs_8, t_iwae_ubs_16]))
     t_iwae_lbs = np.transpose(np.stack([t_iwae_lbs_1, t_iwae_lbs_4, t_iwae_lbs_8, t_iwae_lbs_16]))
 
@@ -216,19 +330,18 @@ if plot_type in ["toxclass", "sent"]:
     p_smc_lbs = np.transpose(np.stack([p_smc_lbs_1, p_smc_lbs_4, p_smc_lbs_8, p_smc_lbs_16]))
 
 
-# print("---")
-# for x in [t_iwae_ubs_1, t_iwae_ubs_8, t_iwae_lbs_1, t_iwae_lbs_8, t_smc_ubs_1, t_smc_ubs_8, t_smc_lbs_1, t_smc_lbs_8]:
-#     print(x)
-#     print(jnp.stack(x).mean())
-# print("---")
-# for x in [p_iwae_ubs_1, p_iwae_ubs_8, p_iwae_lbs_1, p_iwae_lbs_8, p_smc_ubs_1, p_smc_ubs_8, p_smc_lbs_1, p_smc_lbs_8]:
-#     print(x)
-#     print(jnp.stack(x).mean())
-# 1/0
-
-
 elif plot_type == "toxthresh":
     x_range = np.array([0, 2, 3, 4, 5, 7, 9, 11])
+
+    t_iwae_ubs_1, t_iwae_ubs_8, t_iwae_lbs_1, t_iwae_lbs_8, t_smc_ubs_1, t_smc_ubs_8, t_smc_lbs_1, t_smc_lbs_8 = load_ckpt(
+        load_pref_twist_1_8)
+    p_iwae_ubs_1, p_iwae_ubs_8, p_iwae_lbs_1, p_iwae_lbs_8, p_smc_ubs_1, p_smc_ubs_8, p_smc_lbs_1, p_smc_lbs_8 = load_ckpt(
+        load_pref_p_1_8)
+
+    t_iwae_ubs_4, t_iwae_ubs_16, t_iwae_lbs_4, t_iwae_lbs_16, t_smc_ubs_4, t_smc_ubs_16, t_smc_lbs_4, t_smc_lbs_16 = load_ckpt(
+        load_pref_twist_4_16)
+    p_iwae_ubs_4, p_iwae_ubs_16, p_iwae_lbs_4, p_iwae_lbs_16, p_smc_ubs_4, p_smc_ubs_16, p_smc_lbs_4, p_smc_lbs_16 = load_ckpt(
+        load_pref_p_4_16)
 
     t_iwae_ubs_32, t_iwae_ubs_512, t_iwae_lbs_32, t_iwae_lbs_512, t_smc_ubs_32, t_smc_ubs_512, t_smc_lbs_32, t_smc_lbs_512 = load_ckpt(load_pref_twist_32_512)
     p_iwae_ubs_32, p_iwae_ubs_512, p_iwae_lbs_32, p_iwae_lbs_512, p_smc_ubs_32, p_smc_ubs_512, p_smc_lbs_32, p_smc_lbs_512 = load_ckpt(load_pref_p_32_512)
@@ -270,7 +383,34 @@ elif plot_type == "toxthresh":
     # q_smc_ubs_ppo_bc_actor_ctltwist, q_smc_lbs_ppo_bc_actor_ctltwist, q_iwae_ubs_ppo_bc_actor_ctltwist, q_iwae_lbs_ppo_bc_actor_ctltwist = \
     #     setup_ubs_and_lbs(load_pref_q_ppo_bc_ctltwist) # TODO correct with the different set of samples later
 
+elif plot_type == "toy_rlhf":
+    x_range = np.array([0, 2, 3, 4, 5, 7, 9, 10])
+
+    twist_smc_ubs_ctl, twist_smc_lbs_ctl, twist_iwae_ubs_ctl, twist_iwae_lbs_ctl = setup_ubs_and_lbs_multi(
+        load_pref_twist_ctl)
+
+    twist_smc_ubs_sixo, twist_smc_lbs_sixo, twist_iwae_ubs_sixo, twist_iwae_lbs_sixo = setup_ubs_and_lbs_multi(
+        load_pref_twist_sixo)
+
+    twist_smc_ubs_dpg, twist_smc_lbs_dpg, twist_iwae_ubs_dpg, twist_iwae_lbs_dpg = setup_ubs_and_lbs_multi(
+        load_pref_twist_dpg)
+
+    q_ppo_smc_ubs, q_ppo_smc_lbs, q_ppo_iwae_ubs, q_ppo_iwae_lbs = setup_ubs_and_lbs_multi(load_pref_ppo_actor_ppo_critic)
+
+    p_ppo_smc_ubs, p_ppo_smc_lbs, p_ppo_iwae_ubs, p_ppo_iwae_lbs = setup_ubs_and_lbs_multi(load_pref_p_actor_ppo_critic)
+
+
 elif plot_type == "sent_dpg_comparison":
+    t_iwae_ubs_1, t_iwae_ubs_8, t_iwae_lbs_1, t_iwae_lbs_8, t_smc_ubs_1, t_smc_ubs_8, t_smc_lbs_1, t_smc_lbs_8 = load_ckpt(
+        load_pref_twist_1_8)
+    p_iwae_ubs_1, p_iwae_ubs_8, p_iwae_lbs_1, p_iwae_lbs_8, p_smc_ubs_1, p_smc_ubs_8, p_smc_lbs_1, p_smc_lbs_8 = load_ckpt(
+        load_pref_p_1_8)
+
+    t_iwae_ubs_4, t_iwae_ubs_16, t_iwae_lbs_4, t_iwae_lbs_16, t_smc_ubs_4, t_smc_ubs_16, t_smc_lbs_4, t_smc_lbs_16 = load_ckpt(
+        load_pref_twist_4_16)
+    p_iwae_ubs_4, p_iwae_ubs_16, p_iwae_lbs_4, p_iwae_lbs_16, p_smc_ubs_4, p_smc_ubs_16, p_smc_lbs_4, p_smc_lbs_16 = load_ckpt(
+        load_pref_p_4_16)
+
     t_iwae_ubs_1_dpg, t_iwae_ubs_8_dpg, t_iwae_lbs_1_dpg, t_iwae_lbs_8_dpg, t_smc_ubs_1_dpg, t_smc_ubs_8_dpg, t_smc_lbs_1_dpg, t_smc_lbs_8_dpg = load_ckpt(
         load_pref_twist_1_8_dpg)
     p_iwae_ubs_1_dpg, p_iwae_ubs_8_dpg, p_iwae_lbs_1_dpg, p_iwae_lbs_8_dpg, p_smc_ubs_1_dpg, p_smc_ubs_8_dpg, p_smc_lbs_1_dpg, p_smc_lbs_8_dpg = load_ckpt(
@@ -353,6 +493,81 @@ if plot_type == "sent_dpg_comparison":
     )
 
 
+elif plot_type == "toy_rlhf":
+
+    list_of_ub_lb_pairs = [
+        (p_ppo_iwae_ubs, p_ppo_iwae_lbs),
+        (twist_iwae_ubs_ctl, twist_iwae_lbs_ctl),
+        (twist_smc_ubs_ctl, twist_smc_lbs_ctl),
+        (twist_iwae_ubs_sixo, twist_iwae_lbs_sixo),
+        (twist_smc_ubs_sixo, twist_smc_lbs_sixo),
+        (twist_iwae_ubs_dpg, twist_iwae_lbs_dpg),
+        (p_ppo_smc_ubs, p_ppo_smc_lbs),
+        (q_ppo_iwae_ubs, q_ppo_iwae_lbs),
+        (q_ppo_smc_ubs, q_ppo_smc_lbs),
+    ]
+    list_of_names = [
+        ("SIS/IWAE", "(Base $p_0$ Proposal)"),  # 0
+        ("SIS/IWAE", "(CTL $q^\pi$ Proposal)"),  #1
+        ("SMC", "(CTL $q^\pi$ Proposal)"),  # 2
+        ("SIS/IWAE", "(SIXO $q^\pi$ Proposal)"),  # 3
+        ("SMC", "(SIXO $q^\pi$ Proposal)"),  # 4
+        ("SIS/IWAE", "(DPG $q$ Proposal)"),  # 5
+        ("SMC", "(PPO Critic Twist) (Base $p_0$ Proposal)"),  # 6
+        ("SIS/IWAE", "(PPO $q$ Proposal)"),  # 7
+        ("SMC", "(PPO Critic Twist) (PPO $q$ Proposal)"),  # 8
+
+        # ("SMC PPO", "($p_0$ Proposal)"),  # 6
+        # ("SMC", "(PPO Critic Twist) (PPO $q$ Proposal)"),  # 7
+        # ("SIS/IWAE", "(PPO $q$ Proposal)"),  # 9
+    ]
+    # figname = f"./fig_bounds_toyrlhf_01-21-2025.pdf"
+    # items_to_plot = [0, 1, 2, 3, 4, 5]
+    # midpoints = []
+    # for ind in items_to_plot:
+    #     midpoint = (list_of_ub_lb_pairs[ind][0][:, -1].mean() + list_of_ub_lb_pairs[ind][1][:, -1].mean()) / 2
+    #     midpoints.append(midpoint)
+    #     # print(list_of_ub_lb_pairs[ind][0][:, -1].mean())
+    #     # print(list_of_ub_lb_pairs[ind][1][:, -1].mean())
+    # print(midpoints)
+    # print(np.median(np.array(midpoints)))
+
+
+    figname = f"./fig_bounds_toyrlhf_01-21-2025_ppo.pdf"
+    items_to_plot = [0, 6, 7, 8]
+
+    # figname = f"./fig_bounds_toyrlhf_01-20-2025.pdf"
+    # items_to_plot = [0, 1, 2, 3, 4, 5]
+    # figname = f"./fig_bounds_toyrlhf_01-20-2025_ppo.pdf"
+    # items_to_plot = [0, 6, 7, 8]
+
+    start_from = 0
+    x_range = x_range[start_from:]
+    xticks_range = xticks_range[start_from:]
+    xticks_labels = xticks_labels[start_from:]
+
+    print(xticks_labels)
+    print(xticks_labels.shape)
+    print(x_range)
+    print(x_range.shape)
+    # 1 / 0
+    plt.xlim([2, 10])
+
+    for ind in items_to_plot:
+        last, conf_bound = plot_with_conf_bounds(
+            list_of_ub_lb_pairs[ind][0][:, start_from:], x_range,
+            label=f"{list_of_names[ind][0]} UB {list_of_names[ind][1]}",
+            color=color_list_for_ubs[ind],
+            linestyle=linestyle_list_for_ubs[ind],
+        )
+        last, conf_bound = plot_with_conf_bounds(
+            list_of_ub_lb_pairs[ind][1][:, start_from:], x_range,
+            label=f"{list_of_names[ind][0]} LB {list_of_names[ind][1]}",
+            color=color_list_for_lbs[ind],
+            linestyle=linestyle_list_for_ubs[ind],
+        )
+
+    # plt.ylim([-37, 15])
 
 
 else:
@@ -403,17 +618,26 @@ else:
     ]
     # Insert UB or LB in between the above
 
+    start_from = 0
+
+    figname = f"./fig_bounds_ppo_toxt_-5_01-22-2025_more.pdf"
+    items_to_plot = [2, 3, 5, 6, 9, 12]
+    start_from = 1
+
+    # figname = f"./fig_bounds_ppo_toxt_-5_01-22-2025.pdf"
+    # items_to_plot = [2, 3, 5, 6]
+    # start_from = 1
 
     # figname = f"./fig_bounds_ppo_toxt_ctltwist_-5_01-17-2025.pdf"
     # items_to_plot = [3, 10, 13]
 
     # figname = f"./fig_bounds_ppo_toxt_-5_01-17-2025_new.pdf"
 
-    figname = f"./fig_bounds_ppobc_toxt_-5_01-17-2025.pdf"
-    items_to_plot = [0, 9, 12, 11]
+    # figname = f"./fig_bounds_ppobc_toxt_-5_01-17-2025.pdf"
+    # items_to_plot = [0, 9, 12, 11]
 
-    # figname = f"./fig_bounds_ppo_toxt_-5_01-17-2025.pdf"
-    # items_to_plot = [2, 3, 5, 6]  # TODO have one config per each figname
+    # figname = f"./fig_bounds_ppo_toxt_-5_01-21-2025.pdf"
+    # items_to_plot = [2, 3, 5, 6]
 
     # figname = f"./fig_bounds_ppo_toxt_-5_01-16-2025.pdf"
     # figname = f"./fig_bounds_ppo_toxt_-5_test.pdf"
@@ -436,7 +660,6 @@ else:
 
 
 
-    start_from = 0
     x_range = x_range[start_from:]
     xticks_range = xticks_range[start_from:]
     xticks_labels = xticks_labels[start_from:]
@@ -446,6 +669,7 @@ else:
     print(x_range)
     print(x_range.shape)
     # 1 / 0
+    plt.xlim([2, 11])
 
     for ind in items_to_plot:
         last, conf_bound = plot_with_conf_bounds(
@@ -461,9 +685,11 @@ else:
             linestyle=linestyle_list_for_ubs[ind],
         )
 
+    plt.xlim([2, 11])
+
     if plot_type == "toxthresh":
         plt.ylim([-37, 15])
-        plt.xlim([2, 11])
+
 
         # if not only_plot_new_ppo:
         #     if plot_ppo:
@@ -690,14 +916,18 @@ else:
 
 plt.xticks(xticks_range, xticks_labels)
 
-if only_plot_new_ppo:
-    plt.legend(fontsize=7)
-else:
-    if plot_ppo:
-        plt.legend(loc='upper left', bbox_to_anchor=(0, 0.5), fontsize=7)
+
+if plot_type == "toxthresh":
+    if only_plot_new_ppo:
+        plt.legend(fontsize=7)
     else:
-        plt.legend(loc='upper right', bbox_to_anchor=(1, 0.5),fontsize=7)
-    # plt.legend(fontsize=6)
+        if plot_ppo:
+            plt.legend(loc='upper left', bbox_to_anchor=(0, 0.5), fontsize=7)
+        else:
+            plt.legend(loc='upper right', bbox_to_anchor=(1, 0.5),fontsize=7)
+
+else:
+    plt.legend(fontsize=6)
 
 plt.savefig(figname)
 

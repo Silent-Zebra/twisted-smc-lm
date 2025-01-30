@@ -360,6 +360,66 @@ load_prefixes_sent_truepost_comparison = [
 
 
 
+# load_prefixes_toy_rlhf = [
+#     [
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr1e-05_seed0_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr1e-05_seed1_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr1e-05_seed2_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr1e-05_seed3_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr1e-05_seed4_nsamples11",
+#     ],
+#     [
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr0.0001_seed0_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr0.0001_seed1_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_ebm_one_sample_lr0.0001_seed2_nsamples11",
+#     ],
+#     [
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_rl_q_lsq_partial_jit_lr1e-07_seed0_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_rl_q_lsq_partial_jit_lr1e-07_seed1_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_rl_q_lsq_partial_jit_lr1e-07_seed2_nsamples11",
+#
+#     ],
+#     [
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_sixo_partial_jit_lr1e-05_seed0_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_sixo_partial_jit_lr1e-05_seed1_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_sixo_partial_jit_lr1e-05_seed2_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_sixo_partial_jit_lr1e-05_seed3_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_sixo_partial_jit_lr1e-05_seed4_nsamples11",
+#     ],
+#     [
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_bce_p_lr1e-07_seed0_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_bce_p_lr1e-07_seed1_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_bce_p_lr1e-07_seed2_nsamples11",
+#     ],
+#     [
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr1e-05_seed0_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr1e-05_seed1_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr1e-05_seed2_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr1e-05_seed3_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr1e-05_seed4_nsamples11",
+#
+#     ],
+#     [
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr0.0001_seed0_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr0.0001_seed1_nsamples11",
+#         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_one_total_kl_partial_jit_lr0.0001_seed2_nsamples11",
+#     ],
+#     [
+#         "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed0_nsamples11",
+#         "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed1_nsamples11",
+#         "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed2_nsamples11",
+#         "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed3_nsamples11",
+#         "f_q_g_q_estimates_ppo__nntwist_onlytrainnnhead_epochs11_lr3e-05_vfcoef0.1_seed4_nsamples11"
+#     ],
+#     # [
+#     #     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse_adambetas0.9_0.95__seed1",
+#     #     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse_adambetas0.9_0.95__seed2",
+#     #     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse_adambetas0.9_0.95__seed3",
+#     #     "f_q_g_q_iwae_bounds_OpenRLHF_PPO_PPOepochs1__lrscheduleconstant_actorlr1e-06_criticlr0.0001_criticlossmse_adambetas0.9_0.95__seed4",
+#     # ]
+# ]
+
+
 load_prefixes_toy_rlhf = [
     [
         "f_q_g_q_logZbestmidpoint_info_toy_rlhf_2025-01-04_20-08_seed0_ebm_one_sample_lr1e-05_nsamples11",
@@ -439,6 +499,7 @@ color_list_for_g_q = ['xkcd:blue', 'xkcd:green', 'xkcd:orange', 'xkcd:red', 'xkc
 
 def make_table(load_prefixes, twist_learn_method_names, proposal_names, fig_name_modifier, exact_num_epochs=None, legendsize=8):
     print(f"----------Making table for {fig_name_modifier}----------")
+
 
     linestyle_list_for_f_q = ['solid'] * len(load_prefixes)
     linestyle_list_for_g_q = ['dashed'] * len(load_prefixes)
@@ -627,6 +688,10 @@ def get_logZ_midpoint_to_use(fig_name_modifier, load_prefixes):
         print("Using hardcoded/external logZ midpoint estimate")
         logZ_midpoint_to_use = -2.753 # Estimate from thousands of IWAE bounds. Should be pretty accurate.
 
+    elif "rlhf" in fig_name_modifier:
+        print("Using hardcoded/external logZ midpoint estimate")
+        logZ_midpoint_to_use = 4.455 # Estimate from 1024 samples across base, CTL, SIXO, DPG, with median taken among these estimates, 3 different seeds for each
+
     else:
         print("Using median of logZ midpoint estimates")
         logZ_midpoint_estimates = get_logZ_midpoint_estimates(load_prefixes)
@@ -779,11 +844,12 @@ if __name__ == "__main__":
 
     twist_learn_method_names = [
         r"Contrastive, LR 1e-5",
-        r"Contrastive, LR 3e-5",
+        r"Contrastive, LR 1e-4",
         # r"Contrastive, LR 3e-6, 4 Steps",
         r"RL",
         r"SIXO",
         r"FUDGE",
+        "--",
         "--",
         "--",
         "--",
@@ -796,8 +862,9 @@ if __name__ == "__main__":
         "Twisted",
         "Twisted",
         "DPG, LR 1e-5",
-        "DPG, LR 3e-5",
-        "PPO"
+        "DPG, LR 1e-4",
+        "PPO (Shared)",
+        "PPO (Separate)"
     ]
 
-    make_table(load_prefixes_toy_rlhf, twist_learn_method_names, proposal_names, "toy_rlhf-01-04-2025")
+    make_table(load_prefixes_toy_rlhf, twist_learn_method_names, proposal_names, "toy_rlhf-01-22-2025")
