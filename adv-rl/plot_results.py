@@ -477,7 +477,7 @@ results_list = [
     results_len2_nn_mixed_alpha_0001_beta10_lr1_baseline10,
     # results_len2_nn_mixed_alpha_001_beta10_lr1_baseline10,
 ]
-figname_modifier = "len2_nn_01-26-2025"
+figname_modifier = "len2_nn_01-26-2025-test"
 # labels = ["Adv. RL ($E_\sigma[r]$ Baseline)", "Adv. RL (Baseline 10)", "REINFORCE ($E_q[r]$ Baseline)", "Neg. Training (Threshold 10)"]
 # labels = [
 #     r"Adv. RL, $\beta=10$ (Baseline 10)", r"Adv. RL, $\beta=5$ (Baseline 10)",
