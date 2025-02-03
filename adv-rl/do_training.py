@@ -322,6 +322,7 @@ class ExperimentConfig:
             self.smc_procedure_type = "jit"
 
         self.twist_grad_fn = self._get_twist_grad_fn()
+        self.rl_loss_type = rl_loss_type
 
         self.use_hardcoded_baseline = use_hardcoded_baseline
         self.hardcoded_baseline = hardcoded_baseline
