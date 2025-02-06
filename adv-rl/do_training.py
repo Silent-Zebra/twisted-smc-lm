@@ -955,7 +955,8 @@ class ExperimentConfig:
             # "p_continuation", "hard_p_continuation",
             # "exp_beta_toxicity_class_logprob",
             # "exp_beta_sentiment_class_logprob",
-            # "toxicity_threshold", "sentiment_threshold"
+            "toxicity_threshold",
+            # "sentiment_threshold"
         ]: # TODO consider set up a set of final twist classes, sort them into classes, and then do if/else/switch based on those
 
             rew_model = self.curried_rm_fn
@@ -967,10 +968,10 @@ class ExperimentConfig:
                                                       huggingface_model=huggingface_model)
 
             prompt_len = prompt.shape[-1]
-            log_p, log_psi = get_log_p_plus_log_psi_t(p_samples[0][None, :], params_p,
-                                               params_twist, prompt_len, 0,
-                                               None,
-                                               huggingface_model=huggingface_model)
+            # log_p, log_psi = get_log_p_plus_log_psi_t(p_samples[0][None, :], params_p,
+            #                                    params_twist, prompt_len, 0,
+            #                                    None,
+            #                                    huggingface_model=huggingface_model)
             # print(p_samples[0])
             # print(log_p[0][p_samples[0][-2]])
             # print(log_psi[0][p_samples[0][-2]])
@@ -1015,7 +1016,7 @@ class ExperimentConfig:
             print("Highest reward from base model samples")
             print(rew.max())
 
-            if self.rm_type == "exp_neg_beta_tox_score":
+            if self.rm_type in ["exp_neg_beta_tox_score", "toxicity_threshold"]:
                 # bad_word_list = ["\u0120fuck", "\u0120fucking", "\u0120fucked",
                 #                  "\u0120Fuck", "\u0120FUCK", "fuck", "Fuck",
                 #                  "\u0120fuckin",
@@ -1225,6 +1226,15 @@ class ExperimentConfig:
             curried_log_true_final_twist_function = curried_log_exp_neg_beta_toxicity
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
                         = build_exp_neg_beta_tox_score_twists(jnp_prompts, rewardModel, tokenizer_RM, tokenizer, self.beta_temp)
+        elif rm_type == "toxicity_threshold":
+            rng_key, sk = jax.random.split(rng_key)
+            log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
+                = build_toxicity_threshold_twists(
+                sk, jnp_prompts, params_p, output_len,
+                n_samples_at_a_time, rewardModel, tokenizer_RM, tokenizer,
+                threshold, pos_threshold, huggingface_model=huggingface_model,
+                get_true_posterior_samples=get_true_posterior_samples
+            )
         elif rm_type == "f_exploration":
             assert output_len == 2
             print("NOTE: this setting only works with GPT2 vocab tokenizer/model")
@@ -1782,7 +1792,7 @@ def setup_cfg(
     experiment_cfg.tokenizer_RM = tokenizer_RM
     experiment_cfg.tokenizer = tokenizer
 
-    if experiment_cfg.rm_type in ["exp_neg_beta_tox_score"]:
+    if experiment_cfg.rm_type in ["exp_neg_beta_tox_score", "toxicity_threshold"]:
         experiment_cfg.curried_rm_fn = curried_rew_model_toxicity_fn(rewardModel, tokenizer_RM, tokenizer)
     elif experiment_cfg.rm_type in ["f_exploration"]:
         experiment_cfg.curried_rm_fn = f_exploration_rm(first_words_index_of_token_list, second_words_index_of_token_list)
@@ -2607,13 +2617,14 @@ if __name__ == "__main__":
 
     parser.add_argument("--rm_type", type=str, default="exp_neg_beta_tox_score",
                         choices=["exp_neg_beta_tox_score", "f_exploration",
-                                 "adv_rm", "sp500"
+                                 "adv_rm", "sp500",
                                  # "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
                                  # "p_continuation", "hard_p_continuation",
                                  # "exp_beta_toxicity_class_logprob",
                                  # "exp_beta_sentiment_class_logprob",
                                  # "sent_cond_twist",
-                                 # "toxicity_threshold", "sentiment_threshold",
+                                 "toxicity_threshold",
+                                 # "sentiment_threshold",
                                  # "p_last_tokens"
                                  ])
     parser.add_argument("--rl_loss_type", type=str, default="custom_adv",
