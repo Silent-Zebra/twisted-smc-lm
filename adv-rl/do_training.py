@@ -950,7 +950,7 @@ class ExperimentConfig:
         }
 
         if self.rm_type in [
-            "exp_neg_beta_tox_score", "f_exploration", "adv_rm", "sp500"
+            "exp_neg_beta_tox_score", "f_exploration", "adv_rm", "sp500",
             # "exp_beta_rew_p_continuation", "exp_beta_rew_p_continuation_divided_by_p",
             # "p_continuation", "hard_p_continuation",
             # "exp_beta_toxicity_class_logprob",
