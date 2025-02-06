@@ -259,9 +259,9 @@ def reward_model_toxicity_threshold(seq, rewardModel, tokenizer_RM, tokenizer, t
         return (score < threshold)
 
 
-def curried_log_toxicity_threshold(rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold):
+def curried_log_toxicity_threshold(rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold, epsilon=eps):
     def new_rm(seq):
-        return jnp.log(reward_model_toxicity_threshold(seq, rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold) + eps)
+        return jnp.log(reward_model_toxicity_threshold(seq, rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold) + epsilon)
     return new_rm
 
 
@@ -812,12 +812,12 @@ def build_p_of_last_tokens_twists(rng_key, jnp_prompts, params_p, continuation_l
 
 def build_toxicity_threshold_twists(rng_key, jnp_prompts, params_p, output_len, n_samples_at_a_time,
                                     rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold,
-                                    huggingface_model=None, get_true_posterior_samples=True):
+                                    huggingface_model=None, get_true_posterior_samples=True, epsilon=eps):
     log_true_final_twists = []
     true_posterior_samples_by_prompt = []
     for jnp_prompt in jnp_prompts:
 
-        curried_rm = curried_log_toxicity_threshold(rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold)
+        curried_rm = curried_log_toxicity_threshold(rewardModel, tokenizer_RM, tokenizer, threshold, pos_threshold, epsilon=epsilon)
         log_true_final_twist = curried_rm
 
         log_true_final_twists.append(log_true_final_twist)

@@ -1233,7 +1233,7 @@ class ExperimentConfig:
                 sk, jnp_prompts, params_p, output_len,
                 n_samples_at_a_time, rewardModel, tokenizer_RM, tokenizer,
                 threshold, pos_threshold, huggingface_model=huggingface_model,
-                get_true_posterior_samples=get_true_posterior_samples
+                get_true_posterior_samples=get_true_posterior_samples, epsilon=1e-40
             )
         elif rm_type == "f_exploration":
             assert output_len == 2
@@ -1503,7 +1503,7 @@ def get_final_twists_and_posterior_samples(
         text_outputs = tokenizer.batch_decode(true_posterior_samples_by_prompt_and_by_token[0],
                                         skip_special_tokens=True)
         for x in set(text_outputs):
-            print(x)
+            print(x, flush=True)
         print(len(set(text_outputs)))
 
     return rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token
@@ -1888,12 +1888,6 @@ def do_inspection_and_plotting_of_test_info(
     )
 
 
-    # print(get_l_ebm_ml_partial_jit(
-    #     rng_key, prompt, params_p, params_twist, log_true_final_twist,
-    #     output_len, 1000, condition_twist_on_tokens=None, smc_procedure_type=experiment_cfg.smc_procedure_type,
-    #     proposal_is_p=proposal_is_p, huggingface_model=huggingface_model, true_sigma_samples=None,
-    # ))
-    # 1/0
 
     rew_mean, rew_adv_mean, total_log_prob_bad_word = aux_info
     plot_over_time_list['rews'].append(round(float(rew_mean), 3))
@@ -2352,7 +2346,6 @@ def main():
                 true_posterior_samples_by_token = true_posterior_samples_by_prompt_and_by_token[prompt_num]
             else:
                 true_posterior_samples_by_token = None
-
 
             # max_score = 0
             # max_index = 0
