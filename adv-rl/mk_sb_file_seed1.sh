@@ -22,7 +22,7 @@ PARAMS=$(echo "$COMMAND" | awk '
 {
     # Initialize empty variables
     len = lr = lrp = beta = seed = rm = ntwist = npolicy = twist_up = policy_up = ""
-    model = twist_learn = rl_loss = alpha = baseline = threshold = ""
+    model = twist_learn = rl_loss = alpha = baseline = threshold = neg_train = ""
     has_alpha = has_baseline = 0
 
     # Scan through all matches in the string
@@ -52,6 +52,10 @@ PARAMS=$(echo "$COMMAND" | awk '
         if($i == "--hardcoded_baseline" && i<NF && has_baseline) {
             baseline = "_baseline" $(i+1)
         }
+     
+        if($i == "--negative_training_threshold" && i<NF) {
+            neg_train = "_threhsold" $(i+1)
+        }
         if(match($i, /--threshold=(-?[0-9.]+)/) && i<NF ) {
             threshold = substr($i, RSTART+12, RLENGTH-12)
         }
@@ -62,13 +66,13 @@ PARAMS=$(echo "$COMMAND" | awk '
        model != "" && twist_learn != "" && rl_loss != "")
         print len "|" lr "|" lrp "|" beta "|" seed "|" rm "|" ntwist "|" npolicy "|" \
               twist_up "|" policy_up "|" model "|" twist_learn "|" rl_loss "|" \
-              alpha "|" baseline "|" threshold
+              alpha "|" baseline "|" threshold "|" neg_train
 }')
 
 
 # Read using the special delimiter
 IFS='|' read OUTPUT_LEN LR_TWIST LR_P BETA_TEMP SEED RM_TYPE N_TWIST N_POLICY TWIST_UPDATES \
-     POLICY_UPDATES MODEL TWIST_LEARN_TYPE RL_LOSS_TYPE ALPHA_ADV BASELINE THRESHOLD <<< "$PARAMS"
+     POLICY_UPDATES MODEL TWIST_LEARN_TYPE RL_LOSS_TYPE ALPHA_ADV BASELINE THRESHOLD NEG_TRAIN <<< "$PARAMS"
 
 
 # Check if required parameters are empty
@@ -83,8 +87,10 @@ fi
 CURRENT_DATE=$(date +%Y-%m-%d)
 
 # Generate output filename
-PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${OUTPUT_LEN}_batch${N_TWIST}_${N_POLICY}_${TWIST_UPDATES}${TWIST_LEARN_TYPE}_${LR_TWIST}_${POLICY_UPDATES}${RL_LOSS_TYPE}_${LR_P}${ALPHA_ADV}${BASELINE}"
+PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${OUTPUT_LEN}_batch${N_TWIST}_${N_POLICY}_${TWIST_UPDATES}${TWIST_LEARN_TYPE}_${LR_TWIST}_${POLICY_UPDATES}${RL_LOSS_TYPE}${NEG_TRAIN}_${LR_P}${ALPHA_ADV}${BASELINE}"
 
+#echo $NEG_TRAIN
+#exit 1
 #echo $PATTERN
 #echo $CURRENT_DATE
 #echo $RL_LOSS_TYPE
@@ -93,7 +99,7 @@ PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${O
 #echo $THRESHOLD
 #exit 1
 
-SBATCH_FILE="sbatch_${PATTERN}.sbatch"
+SBATCH_FILE="sbatch_${PATTERN}"
 OUTPUT_FILE="result_${PATTERN}_s1.txt"
 
 
@@ -101,7 +107,7 @@ OUTPUT_FILE="result_${PATTERN}_s1.txt"
 # Create the sbatch file
 cat > "$SBATCH_FILE" << EOL
 #!/bin/bash
-#SBATCH -J s1smrb10
+#SBATCH -J s1_$(($RANDOM % 100000))
 #SBATCH --ntasks=1
 #SBATCH --mem=64G
 #SBATCH -c 4
