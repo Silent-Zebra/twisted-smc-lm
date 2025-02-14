@@ -277,6 +277,7 @@ class ExperimentConfig:
     def __init__(self, n_vocab, twist_learn_type, rm_type, beta_temp=1., num_last_tokens_to_condition_on=0,
                  sentiment_class=1, n_twist_ebm_vmap=0, alpha=0.5, train_on_true_posterior_samples=False,
                  rl_loss_type="custom_adv", use_hardcoded_baseline=False, hardcoded_baseline=0.,
+                 adaptive_baseline_percentile=-1,
                  negative_training_threshold=None, ppo_steps=0, clip_epsilon=0,
                  gamma=1., gae_lambda=1., neg_reward_multiplier=1., neg_e_neg_beta_r_transform=False,
                  beta_r_transform=1., alpha_adv=0.5
@@ -326,6 +327,9 @@ class ExperimentConfig:
 
         self.use_hardcoded_baseline = use_hardcoded_baseline
         self.hardcoded_baseline = hardcoded_baseline
+
+        self.adaptive_baseline_percentile = adaptive_baseline_percentile
+
         self.neg_reward_multiplier = neg_reward_multiplier
 
         self.negative_training_threshold = None
@@ -746,6 +750,18 @@ class ExperimentConfig:
 
         rew_model = self.curried_rm_fn
 
+        if self.adaptive_baseline_percentile >= 0:
+            # TODO later, if doing multiple policy updates after twist updates, the adaptive baseline
+            # should either collect these samples only once, or collect them multiple times and average
+            sk, sk2 = jax.random.split(sk)
+            p_samples = stochastic_transformer_sample(sk2, params_p,
+                                                      prompt,
+                                                      output_len, n_samples,
+                                                      huggingface_model=huggingface_model)
+            rew_model = self.curried_rm_fn
+            rews = rew_model(p_samples)
+            self.hardcoded_baseline = jnp.percentile(rews, self.adaptive_baseline_percentile, method='higher').item()
+            print(f"Adaptive baseline value: {self.hardcoded_baseline}", flush=True)
         # DEBUG ONLY
         # reinforce_loss_standard(
         #     sk, prompt, params_p,
@@ -1734,7 +1750,8 @@ def setup_cfg(
     load_posterior_samples=False, sentiment_class=1, use_lora=False, lora_rank=4, hidden_units_multiplier=1.,
     softmax_twist=False, n_twist_ebm_vmap=0, ebm_combined_alpha=0.5, train_on_true_posterior_samples=False,
     output_p_psi=False, separate_proposal_and_twist=False, negative_training_threshold=None,
-    use_hardcoded_baseline=False, hardcoded_baseline=0., neg_reward_multiplier=1.,
+    use_hardcoded_baseline=False, hardcoded_baseline=0., adaptive_baseline_percentile=-1,
+    neg_reward_multiplier=1.,
     neg_e_neg_beta_r_transform=False, beta_r_transform=1., alpha_adv=0.5, tabular_adv_policy=False, adv_token_prob=0.001,
     load_ckpt_p=False
 ):
@@ -1751,6 +1768,7 @@ def setup_cfg(
         negative_training_threshold=negative_training_threshold,
         use_hardcoded_baseline=use_hardcoded_baseline,
         hardcoded_baseline=hardcoded_baseline,
+        adaptive_baseline_percentile=adaptive_baseline_percentile,
         neg_reward_multiplier=neg_reward_multiplier,
         neg_e_neg_beta_r_transform=neg_e_neg_beta_r_transform,
         beta_r_transform=beta_r_transform,
@@ -2251,7 +2269,8 @@ def main():
         "alpha_adv": args.alpha_adv,
         "tabular_adv_policy": args.tabular_adv_policy,
         "adv_token_prob": args.adv_token_prob,
-        "load_ckpt_p": args.load_ckpt_p
+        "load_ckpt_p": args.load_ckpt_p,
+        "adaptive_baseline_percentile": args.adaptive_baseline_percentile
     }
 
 
@@ -2627,6 +2646,10 @@ if __name__ == "__main__":
     parser.add_argument("--hardcoded_baseline", type=float, help="Value of the hardcoded value for baseline for reinforce loss",
                         default=0.)
 
+    parser.add_argument("--adaptive_baseline_percentile", type=float, help="Percentile for the adaptive baseline; e.g. if 90, then ~90% of samples from current model q will have reward less than the baseline. Should be between 0 and 100",
+                        default=-1)
+
+
     parser.add_argument("--negative_training_threshold", type=float, help="Reward threshold below which we consider the samples we've drawn to be 'bad' and worthy of reducing probability on with negative training",
                         default=0.)
     parser.add_argument("--neg_reward_multiplier", type=float, help="Manually multiply the reward function by this factor for all negative reward samples",
@@ -2769,5 +2792,8 @@ if __name__ == "__main__":
 
     if args.output_p_psi:
         assert args.separate_hface_twist_model
+
+    if args.adaptive_baseline_percentile >= 0:
+        args.hardcoded_baseline = True # Implement as a hardcoded baseline that changes adaptively over time depending on threshold
 
     main()
