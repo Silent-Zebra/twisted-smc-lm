@@ -8,13 +8,6 @@ fi
 # Store the full command
 COMMAND="$*"
 
-# Extract output_len from command
-# OUTPUT_LEN=$(echo "$COMMAND" | grep -o '\--output_len [0-9]*' | awk '{print $2}')
-# if [ -z "$OUTPUT_LEN" ]; then
-#     echo "Error: --output_len not found in command"
-#     exit 1
-# fi
-
 
 # Extract multiple parameters in one go
 
@@ -22,7 +15,7 @@ PARAMS=$(echo "$COMMAND" | awk '
 {
     # Initialize empty variables
     len = lr = lrp = beta = seed = rm = ntwist = npolicy = twist_up = policy_up = ""
-    model = twist_learn = rl_loss = alpha = baseline = threshold = neg_train = ""
+    model = twist_learn = rl_loss = alpha = baseline = threshold = neg_train = adaptive_baseline = ""
     has_alpha = has_baseline = 0
 
     # Scan through all matches in the string
@@ -56,6 +49,9 @@ PARAMS=$(echo "$COMMAND" | awk '
         if($i == "--negative_training_threshold" && i<NF) {
             neg_train = "_threhsold" $(i+1)
         }
+        if($i == "--adaptive_baseline_percentile" && i<NF) {
+            adaptive_baseline = "_adaptive" $(i+1)
+        }
         if(match($i, /--threshold=(-?[0-9.]+)/) && i<NF ) {
             threshold = substr($i, RSTART+12, RLENGTH-12)
         }
@@ -66,13 +62,13 @@ PARAMS=$(echo "$COMMAND" | awk '
        model != "" && twist_learn != "" && rl_loss != "")
         print len "|" lr "|" lrp "|" beta "|" seed "|" rm "|" ntwist "|" npolicy "|" \
               twist_up "|" policy_up "|" model "|" twist_learn "|" rl_loss "|" \
-              alpha "|" baseline "|" threshold "|" neg_train
+              alpha "|" baseline "|" threshold "|" neg_train "|" adaptive_baseline
 }')
 
 
 # Read using the special delimiter
 IFS='|' read OUTPUT_LEN LR_TWIST LR_P BETA_TEMP SEED RM_TYPE N_TWIST N_POLICY TWIST_UPDATES \
-     POLICY_UPDATES MODEL TWIST_LEARN_TYPE RL_LOSS_TYPE ALPHA_ADV BASELINE THRESHOLD NEG_TRAIN <<< "$PARAMS"
+     POLICY_UPDATES MODEL TWIST_LEARN_TYPE RL_LOSS_TYPE ALPHA_ADV BASELINE THRESHOLD NEG_TRAIN ADAPTIVE_BASELINE <<< "$PARAMS"
 
 
 # Check if required parameters are empty
@@ -87,17 +83,8 @@ fi
 CURRENT_DATE=$(date +%Y-%m-%d)
 
 # Generate output filename
-PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${OUTPUT_LEN}_batch${N_TWIST}_${N_POLICY}_${TWIST_UPDATES}${TWIST_LEARN_TYPE}_${LR_TWIST}_${POLICY_UPDATES}${RL_LOSS_TYPE}${NEG_TRAIN}_${LR_P}${ALPHA_ADV}${BASELINE}"
+PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${OUTPUT_LEN}_batch${N_TWIST}_${N_POLICY}_${TWIST_UPDATES}${TWIST_LEARN_TYPE}_${LR_TWIST}_${POLICY_UPDATES}${RL_LOSS_TYPE}${NEG_TRAIN}_${LR_P}${ALPHA_ADV}${BASELINE}${ADAPTIVE_BASELINE}"
 
-#echo $NEG_TRAIN
-#exit 1
-#echo $PATTERN
-#echo $CURRENT_DATE
-#echo $RL_LOSS_TYPE
-#echo $ALPHA_ADV
-#echo $BASELINE
-#echo $THRESHOLD
-#exit 1
 
 SBATCH_FILE="sbatch_${PATTERN}"
 OUTPUT_FILE="result_${PATTERN}_s1.txt"
