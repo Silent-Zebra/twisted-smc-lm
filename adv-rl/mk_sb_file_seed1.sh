@@ -80,7 +80,7 @@ if [ -z "$OUTPUT_LEN" ] || [ -z "$LR_TWIST" ] || [ -z "$LR_P" ] || [ -z "$BETA_T
 fi
 
 # Get current date in required format
-CURRENT_DATE=$(date +%Y-%m-%d)
+CURRENT_DATE=$(date +%Y-%m-%d-%H-%M)
 
 # Generate output filename
 PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${OUTPUT_LEN}_batch${N_TWIST}_${N_POLICY}_${TWIST_UPDATES}${TWIST_LEARN_TYPE}_${LR_TWIST}_${POLICY_UPDATES}${RL_LOSS_TYPE}${NEG_TRAIN}_${LR_P}${ALPHA_ADV}${BASELINE}${ADAPTIVE_BASELINE}"
