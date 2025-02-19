@@ -57,24 +57,33 @@ PARAMS=$(echo "$COMMAND" | awk '
         }
     }
     # Print with a special delimiter (|) that wont appear in the values
-    if(len != "" && lr != "" && lrp != "" && beta != "" && seed != "" && rm != "" &&
-       ntwist != "" && npolicy != "" && twist_up != "" && policy_up != "" &&
-       model != "" && twist_learn != "" && rl_loss != "")
-        print len "|" lr "|" lrp "|" beta "|" seed "|" rm "|" ntwist "|" npolicy "|" \
-              twist_up "|" policy_up "|" model "|" twist_learn "|" rl_loss "|" \
+    if(len != "" && lr != "" && beta != "" && seed != "" && rm != "" &&
+       ntwist != "" && model != "" && twist_learn != "")
+        print len "|" lr "|" beta "|" seed "|" rm "|" ntwist "|" \
+               model "|" twist_learn "|"  \
               alpha "|" baseline "|" threshold "|" neg_train "|" adaptive_baseline
 }')
 
 
 # Read using the special delimiter
-IFS='|' read OUTPUT_LEN LR_TWIST LR_P BETA_TEMP SEED RM_TYPE N_TWIST N_POLICY TWIST_UPDATES \
-     POLICY_UPDATES MODEL TWIST_LEARN_TYPE RL_LOSS_TYPE ALPHA_ADV BASELINE THRESHOLD NEG_TRAIN ADAPTIVE_BASELINE <<< "$PARAMS"
+IFS='|' read OUTPUT_LEN LR_TWIST BETA_TEMP SEED RM_TYPE N_TWIST \
+     MODEL TWIST_LEARN_TYPE ALPHA_ADV BASELINE THRESHOLD NEG_TRAIN ADAPTIVE_BASELINE <<< "$PARAMS"
 
+
+
+#echo $OUTPUT_LEN
+#echo $LR_TWIST
+#echo $BETA_TEMP
+#echo $SEED
+#echo $RM_TYPE
+#echo $N_TWIST
+#echo $MODEL
+#echo $TWIST_LEARN_TYPE
 
 # Check if required parameters are empty
-if [ -z "$OUTPUT_LEN" ] || [ -z "$LR_TWIST" ] || [ -z "$LR_P" ] || [ -z "$BETA_TEMP" ] || [ -z "$SEED" ] || \
-   [ -z "$RM_TYPE" ] || [ -z "$N_TWIST" ] || [ -z "$N_POLICY" ] || [ -z "$TWIST_UPDATES" ] || \
-   [ -z "$POLICY_UPDATES" ] || [ -z "$MODEL" ] || [ -z "$TWIST_LEARN_TYPE" ] || [ -z "$RL_LOSS_TYPE" ]; then
+if [ -z "$OUTPUT_LEN" ] || [ -z "$LR_TWIST" ] || [ -z "$BETA_TEMP" ] || [ -z "$SEED" ] || \
+   [ -z "$RM_TYPE" ] || [ -z "$N_TWIST" ] || \
+   [ -z "$MODEL" ] || [ -z "$TWIST_LEARN_TYPE" ]; then
     echo "Error: Missing required parameters"
     exit 1
 fi
@@ -83,18 +92,18 @@ fi
 CURRENT_DATE=$(date +%Y-%m-%d-%H-%M)
 
 # Generate output filename
-PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${OUTPUT_LEN}_batch${N_TWIST}_${N_POLICY}_${TWIST_UPDATES}${TWIST_LEARN_TYPE}_${LR_TWIST}_${POLICY_UPDATES}${RL_LOSS_TYPE}${NEG_TRAIN}_${LR_P}${ALPHA_ADV}${BASELINE}${ADAPTIVE_BASELINE}"
+PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${OUTPUT_LEN}_batch${N_TWIST}_${TWIST_LEARN_TYPE}_${LR_TWIST}${NEG_TRAIN}${ALPHA_ADV}${BASELINE}${ADAPTIVE_BASELINE}"
 
 
 SBATCH_FILE="sbatch_${PATTERN}"
-OUTPUT_FILE="result_${PATTERN}_s1.txt"
+OUTPUT_FILE="result_${PATTERN}_s0.txt"
 
 
 
 # Create the sbatch file
 cat > "$SBATCH_FILE" << EOL
 #!/bin/bash
-#SBATCH -J s1_$(($RANDOM % 100000))
+#SBATCH -J s0_$(($RANDOM % 100000))
 #SBATCH --ntasks=1
 #SBATCH --mem=64G
 #SBATCH -c 4
