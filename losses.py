@@ -40,6 +40,7 @@ def get_l_dre_sixo(rng_key, prompt, params_p, params_twist, log_true_final_twist
                 smc_procedure_type=smc_procedure_type,
                 condition_twist_on_tokens=condition_twist_on_tokens,
                 proposal_is_p=proposal_is_p, huggingface_model=huggingface_model,
+                resample=resample_for_sigma_samples,
                 no_final_resample=no_final_resample, tempered_twist=tempered_twist, beta_prop=beta_prop,
                 params_proposal=params_proposal
             )

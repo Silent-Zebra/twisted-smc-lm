@@ -139,6 +139,32 @@ load_prefixes_toxc = [
 ]
 
 
+load_prefixes_toxc_OpenRLHF_comparison = [
+    load_prefixes_toxc[0],
+#     [
+# "f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.95_actormodbase_seed1",
+# "f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.95_actormodbase_seed2",
+# "f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.95_actormodbase_seed3",
+# "f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.95_actormodbase_seed4",
+# "f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.95_actormodbase_seed5",
+#     ],
+    [
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed1",
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed2",
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed3",
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed4",
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed5",
+    ],
+    load_prefixes_toxc[2],
+    [
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_sixo_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed1",
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_sixo_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed2",
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_sixo_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed3",
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_sixo_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed4",
+"f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_sixo_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed5",
+    ]
+]
+
 load_prefixes_toxc_ppo = [
     load_prefixes_toxc[0],
     [
@@ -672,6 +698,9 @@ def load_checkpoint(prefix):
         x = checkpoints.restore_checkpoint(ckpt_dir=f"{load_dir}/{prefix}",
                                            target=None,
                                            prefix="checkpoint")
+        if isinstance(x, dict):
+            x = [x[str(i)] for i in range(len(x))]
+
         # print(x[0].shape)
         # print(x[1].shape)
     return x
@@ -717,6 +746,8 @@ def get_logZ_midpoint_estimates(load_prefixes):
             x = load_checkpoint(prefix)
 
             # print(prefix)
+            # print(x)
+            # print(len(x))
             if len(x) > 4:
                 if x[3] is not None:
                     logZ_midpoint_estimate = x[3]
@@ -843,28 +874,47 @@ if __name__ == "__main__":
 
 
     twist_learn_method_names = [
-        r"Contrastive, LR 1e-5",
-        r"Contrastive, LR 1e-4",
-        # r"Contrastive, LR 3e-6, 4 Steps",
-        r"RL",
-        r"SIXO",
-        r"FUDGE",
-        "--",
-        "--",
-        "--",
-        "--",
-    ]
-    proposal_names = [
-        "Twisted",
-        "Twisted",
-        # "Twisted",
         "Twisted",
         "Twisted",
         "Twisted",
-        "DPG, LR 1e-5",
-        "DPG, LR 1e-4",
-        "PPO (Shared)",
-        "PPO (Separate)"
+        "Twisted",
     ]
 
-    make_table(load_prefixes_toy_rlhf, twist_learn_method_names, proposal_names, "toy_rlhf-01-22-2025")
+    # All constant LR for now
+    proposal_names = [
+        r"Twisted Proposal (Contrastive, Previous)",
+        # r"Twisted Proposal (Contrastive, OpenRLHF beta2=0.95)",
+        r"Twisted Proposal (Contrastive, OpenRLHF beta2=0.999)",
+        r"Twisted Proposal (SIXO, Previous)",
+        r"Twisted Proposal (SIXO, OpenRLHF beta2=0.999)",
+    ]
+
+    make_table(load_prefixes_toxc_OpenRLHF_comparison, twist_learn_method_names, proposal_names, "toxc_OpenRLHF_comp_02-16")
+
+
+    # twist_learn_method_names = [
+    #     r"Contrastive, LR 1e-5",
+    #     r"Contrastive, LR 1e-4",
+    #     # r"Contrastive, LR 3e-6, 4 Steps",
+    #     r"RL",
+    #     r"SIXO",
+    #     r"FUDGE",
+    #     "--",
+    #     "--",
+    #     "--",
+    #     "--",
+    # ]
+    # proposal_names = [
+    #     "Twisted",
+    #     "Twisted",
+    #     # "Twisted",
+    #     "Twisted",
+    #     "Twisted",
+    #     "Twisted",
+    #     "DPG, LR 1e-5",
+    #     "DPG, LR 1e-4",
+    #     "PPO (Shared)",
+    #     "PPO (Separate)"
+    # ]
+    #
+    # make_table(load_prefixes_toy_rlhf, twist_learn_method_names, proposal_names, "toy_rlhf-01-22-2025")
