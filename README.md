@@ -27,6 +27,8 @@ Some of these commands may result in slightly different results when you run the
 
 Also, note that there are some issues with non-determinism on GPUs specifically (e.g. see https://github.com/google/jax/discussions/10674), such that you may get different results on GPU even with the same random seed, on different runs. A solution to this is to add XLA_FLAGS=--xla_gpu_deterministic_ops=true as an additional flag before the python call. However, note that this makes the code significantly slower to run, so in general I would not recommend doing this unless you are trying to debug something. 
 
+Edited Feb. 20, 2025: I realized that the SIXO uses approximate positive sampling that is inconsistent with what was used for CTL and DPG (it does resampling of the twisted proposal, which seems to add noise). I have now changed this to be consistent. I also reran results; the toxicity classifier and sentiment classifier results are affected; SIXO on toxicity is now 1.37 ± 0.05, 1.50 ± 0.05, and SIXO on sentiment is now 0.64 ± 0.05, 0.57 ± 0.02. This does not change the messaging in our paper though.
+
 ## Commands for Toxicity Threshold (Log Z Bounds) Experiments
 
 First run this command to collect a set of exact posterior (target) distribution samples for evaluation. This command can take quite a while to run because of the difficulty in collecting samples satisfying the toxicity threshold. Change --save_dir to your desired directory, and change that in --load_dir_posterior_samples in the following learning procedures as well: 
