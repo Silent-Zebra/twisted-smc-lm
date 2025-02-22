@@ -120,7 +120,8 @@ class CustomLMWithTwistHead:
             params_twist_head = self.twist_head_params
 
         if hface_model_params is None:
-            raise NotImplementedError # TODO testing backprop twist through backbone, remove later
+            if ret != "twist":
+                raise NotImplementedError # TODO testing backprop twist through backbone, remove later
             # The below potentially has issues with params_p being updated
             hface_model_params = self.huggingface_model.params
 
