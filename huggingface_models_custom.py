@@ -115,7 +115,8 @@ class CustomLMWithTwistHead:
         assert input_ids is not None
 
         if params_twist_head is None:
-            raise NotImplementedError # TODO testing backprop twist through backbone, remove later
+            if ret != "p":
+                raise NotImplementedError # TODO testing backprop twist through backbone, remove later
             params_twist_head = self.twist_head_params
 
         if hface_model_params is None:
