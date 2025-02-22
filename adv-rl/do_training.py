@@ -1767,7 +1767,7 @@ def setup_model_and_params(
         if backprop_twist_through_backbone:
             params_p = model.huggingface_model.params
             params_twist = [model.huggingface_model.params, model.twist_head_params]
-            huggingface_model = HashableDict({'p': model.__call__, 'twist': model.__call__, 'call_type': "custom"})
+            huggingface_model = HashableDict({'p': model.__call__, 'twist': model.__call__, 'call_type': "custom_combined"})
 
         else:
             params_p = model.huggingface_model.params

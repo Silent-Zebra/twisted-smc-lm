@@ -111,8 +111,10 @@ def get_transformer_p_logits(
                 # )
 
             else:
-                p_logits = huggingface_model['p'](params=params_p,
-                                                   input_ids=full_seq)
+                if huggingface_model['call_type'] == "custom_combined":
+                    p_logits = huggingface_model['p'](params=params_p, input_ids=full_seq, ret='p')
+                else:
+                    p_logits = huggingface_model['p'](params=params_p, input_ids=full_seq)
         else:
             print("warning: doing this may have unexpected consequences when updating params_p (model call may be based on diff params than params_p)")
             p_logits = huggingface_model['p'](input_ids=full_seq)
