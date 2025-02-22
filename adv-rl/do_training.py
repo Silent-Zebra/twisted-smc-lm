@@ -2510,11 +2510,10 @@ def main():
             #
             # 1/0
 
-            rng_key, sk1 = jax.random.split(rng_key)
-            p_samples_example = stochastic_transformer_sample(
-                sk1, params_p, prompt, args.output_len,
-                10, huggingface_model=huggingface_model)
-            # TODO REMOVE LATER
+            # rng_key, sk1 = jax.random.split(rng_key)
+            # p_samples_example = stochastic_transformer_sample(
+            #     sk1, params_p, prompt, args.output_len,
+            #     10, huggingface_model=huggingface_model)
 
             # ----- DO plotting and inspection of test info before the twist updates -----
             if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
@@ -2530,12 +2529,11 @@ def main():
                 )
 
             log_p_example = evaluate_log_p_theta_1_to_t(p_samples_example, params_p, prompt.shape[-1], huggingface_model=huggingface_model)
-            print("log_p before twist update")
-            print(log_p_example)
-            log_psi_example = evaluate_log_psi_selected_tokens(p_samples_example, prompt.shape[-1], params_twist, condition_twist_on_tokens=None, huggingface_model=huggingface_model, params_proposal=None, params_p=params_p)
-            print("log_psi before twist update")
-            print(log_psi_example)
-            # TODO remove later
+            # print("log_p before twist update")
+            # print(log_p_example)
+            # log_psi_example = evaluate_log_psi_selected_tokens(p_samples_example, prompt.shape[-1], params_twist, condition_twist_on_tokens=None, huggingface_model=huggingface_model, params_proposal=None, params_p=params_p)
+            # print("log_psi before twist update")
+            # print(log_psi_example)
 
             # ----- DO TWIST UPDATES -----
             print(f"TWIST UPDATES STARTING", flush=True)
@@ -2567,13 +2565,12 @@ def main():
 
             log_p_example2 = evaluate_log_p_theta_1_to_t(p_samples_example, params_p,
                                                         prompt.shape[-1], huggingface_model=huggingface_model)
-            print("log_p after twist update")
-            print(log_p_example2)
-            log_psi_example2 = evaluate_log_psi_selected_tokens(p_samples_example, prompt.shape[-1], params_twist, condition_twist_on_tokens=None, huggingface_model=huggingface_model, params_proposal=None, params_p=params_p)
-
-            print("log_psi after twist update")
-            print(log_psi_example2)
-            # TODO remove later
+            # print("log_p after twist update")
+            # print(log_p_example2)
+            # log_psi_example2 = evaluate_log_psi_selected_tokens(p_samples_example, prompt.shape[-1], params_twist, condition_twist_on_tokens=None, huggingface_model=huggingface_model, params_proposal=None, params_p=params_p)
+            #
+            # print("log_psi after twist update")
+            # print(log_psi_example2)
 
             # ----- DO POLICY (params_p now is changing, so our base model and target distribution for SMC are changing) UPDATES -----
             print(f"POLICY UPDATES STARTING", flush=True)
@@ -2598,22 +2595,20 @@ def main():
 
             log_p_example3 = evaluate_log_p_theta_1_to_t(p_samples_example, params_p,
                                                          prompt.shape[-1], huggingface_model=huggingface_model)
-            print("log_p after policy update")
-            print(log_p_example3)
-            log_psi_example3 = evaluate_log_psi_selected_tokens(p_samples_example, prompt.shape[-1], params_twist, condition_twist_on_tokens=None, huggingface_model=huggingface_model, params_proposal=None, params_p=params_p)
+            # print("log_p after policy update")
+            # print(log_p_example3)
+            # log_psi_example3 = evaluate_log_psi_selected_tokens(p_samples_example, prompt.shape[-1], params_twist, condition_twist_on_tokens=None, huggingface_model=huggingface_model, params_proposal=None, params_p=params_p)
+            #
+            # print("log_psi after policy update")
+            # print(log_psi_example3)
 
-            print("log_psi after policy update")
-            print(log_psi_example3)
-            # TODO remove later
-
-            print("comparison")
-            print("p comparison")
-            print(jnp.abs(log_p_example2 - log_p_example).mean())
-            print(jnp.abs(log_p_example3 - log_p_example2).mean())
-            print("psi comparison")
-            print(jnp.abs(log_psi_example2 - log_psi_example).mean())
-            print(jnp.abs(log_psi_example3 - log_psi_example2).mean())
-            # TODO remove later
+            # print("comparison")
+            # print("p comparison")
+            # print(jnp.abs(log_p_example2 - log_p_example).mean())
+            # print(jnp.abs(log_p_example3 - log_p_example2).mean())
+            # print("psi comparison")
+            # print(jnp.abs(log_psi_example2 - log_psi_example).mean())
+            # print(jnp.abs(log_psi_example3 - log_psi_example2).mean())
 
 
 
