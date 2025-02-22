@@ -2408,6 +2408,8 @@ def main():
     proposal_scores_list = []
     kl_to_prior_list = []
 
+
+
     for epoch in range(args.epochs):
         if (epoch + 1) % args.print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
@@ -2508,6 +2510,12 @@ def main():
             #
             # 1/0
 
+            rng_key, sk1 = jax.random.split(rng_key)
+            p_samples_example = stochastic_transformer_sample(
+                sk1, params_p, prompt, args.output_len,
+                10, huggingface_model=huggingface_model)
+            # TODO REMOVE LATER
+
             # ----- DO plotting and inspection of test info before the twist updates -----
             if (not args.no_test_info) and ((epoch + 1) % args.print_every == 0):
                 rng_key, plot_over_time_list, plot_over_time_list_p_proposal = \
@@ -2521,10 +2529,10 @@ def main():
                     args.exp_num_twist_updates, args.twist_updates_per_epoch, args.tabular_adv_policy, args.load_ckpt_p, dataset_adv, params_p0, huggingface_model_p0
                 )
 
-            log_p_example = evaluate_log_p_theta_1_to_t(true_posterior_samples_by_token[:10], params_p, prompt.shape[-1], huggingface_model=huggingface_model)
+            log_p_example = evaluate_log_p_theta_1_to_t(p_samples_example, params_p, prompt.shape[-1], huggingface_model=huggingface_model)
             print("log_p before twist update")
             print(log_p_example)
-            log_psi_example = evaluate_log_psi_t(true_posterior_samples_by_token[:10], params_twist, condition_twist_on_tokens=None, huggingface_model=huggingface_model)
+            log_psi_example = evaluate_log_psi_t(p_samples_example, params_twist, condition_twist_on_tokens=None, huggingface_model=huggingface_model)
             print("log_psi before twist update")
             print(log_psi_example)
             # TODO remove later
@@ -2557,11 +2565,11 @@ def main():
                 params_p = params_twist[0] # Have the twist update also go to the policy; as if these two are linked together
                 # only problem here is with the optim states not being linked... this should be addressed using joint training of twist and policy
 
-            log_p_example2 = evaluate_log_p_theta_1_to_t(true_posterior_samples_by_token[:10], params_p,
+            log_p_example2 = evaluate_log_p_theta_1_to_t(p_samples_example, params_p,
                                                         prompt.shape[-1], huggingface_model=huggingface_model)
             print("log_p after twist update")
             print(log_p_example2)
-            log_psi_example2 = evaluate_log_psi_t(true_posterior_samples_by_token[:10], params_twist,
+            log_psi_example2 = evaluate_log_psi_t(p_samples_example, params_twist,
                                                  condition_twist_on_tokens=None, huggingface_model=huggingface_model)
             print("log_psi after twist update")
             print(log_psi_example2)
@@ -2588,11 +2596,11 @@ def main():
             if args.backprop_twist_through_backbone:
                 params_twist[0] = params_p # Have the policy update also go to the twist; as if these two are linked together
 
-            log_p_example3 = evaluate_log_p_theta_1_to_t(true_posterior_samples_by_token[:10], params_p,
+            log_p_example3 = evaluate_log_p_theta_1_to_t(p_samples_example, params_p,
                                                          prompt.shape[-1], huggingface_model=huggingface_model)
             print("log_p after policy update")
             print(log_p_example3)
-            log_psi_example3 = evaluate_log_psi_t(true_posterior_samples_by_token[:10], params_twist,
+            log_psi_example3 = evaluate_log_psi_t(p_samples_example, params_twist,
                                                   condition_twist_on_tokens=None, huggingface_model=huggingface_model)
             print("log_psi after policy update")
             print(log_psi_example3)
@@ -2605,6 +2613,9 @@ def main():
             print("psi comparison")
             print(jnp.abs(log_psi_example2 - log_psi_example).mean())
             print(jnp.abs(log_psi_example3 - log_psi_example2).mean())
+            # TODO remove later
+
+
 
             plot_and_print_at_end = True
             if plot_and_print_at_end and (epoch + 1 == args.epochs) and (not args.no_test_info):
