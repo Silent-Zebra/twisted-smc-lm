@@ -2920,4 +2920,7 @@ if __name__ == "__main__":
     if args.adaptive_baseline_percentile >= 0:
         args.hardcoded_baseline = True # Implement as a hardcoded baseline that changes adaptively over time depending on threshold
 
+    if args.backprop_twist_through_backbone:
+        assert not args.separate_hface_twist_model # the backprop_twist_through_backbone is only for the shared twist + policy q parameterization
+
     main()
