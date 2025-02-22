@@ -28,9 +28,12 @@ class CustomLMWithTwistHead:
         assert hidden_units_multiplier > 0
 
         if output_size == -1:
-            output_size, d_model = self.huggingface_model._params['wte']['embedding'].shape
+            output_size, d_model = self.huggingface_model.params['wte']['embedding'].shape
         else: # basically allow for custom choice of the output size of the twist head
-            _, d_model = self.huggingface_model._params['wte']['embedding'].shape
+            _, d_model = self.huggingface_model.params['wte']['embedding'].shape
+
+        # print(self.huggingface_model.params)
+        # print(self.huggingface_model.params.keys())
 
         self.hface_nn_twist = hface_nn_twist
         if hface_nn_twist:
@@ -112,11 +115,13 @@ class CustomLMWithTwistHead:
         assert input_ids is not None
 
         if params_twist_head is None:
+            raise NotImplementedError # TODO testing backprop twist through backbone, remove later
             params_twist_head = self.twist_head_params
 
         if hface_model_params is None:
-            # raise NotImplementedError # The below potentially has issues with params_p being updated
-            hface_model_params = self.huggingface_model._params
+            raise NotImplementedError # TODO testing backprop twist through backbone, remove later
+            # The below potentially has issues with params_p being updated
+            hface_model_params = self.huggingface_model.params
 
         if condition_twist_on_tokens is not None: # TODO should we call it something other than condition_twist_on_tokens, if I also use it for sentiment?
             assert self.conditional_twist_type is not None

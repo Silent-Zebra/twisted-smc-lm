@@ -1556,185 +1556,255 @@ def get_model_config_and_conditional_twist_settings(hface_model_type, rm_type):
 def setup_model_and_params(
     rng_key, separate_hface_twist_model, model_config, from_pt, experiment_cfg, hface_nn_twist, softmax_twist,
     conditional_twist_type, num_last_tokens_to_condition_on, n_layers_twist, hidden_units_multiplier,
-    one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi, use_lora, lora_rank, lr_p, optimizer_type, tabular_adv_policy, adv_token_prob
+    one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi, use_lora, lora_rank, lr_p, optimizer_type,
+    tabular_adv_policy, adv_token_prob,
+    backprop_twist_through_backbone=False
 ):
     rng_key, sk = jax.random.split(rng_key, 2)
 
-    separate_hface_twist_model = True
-    # always do this for the RL setup, we need a separate twist model in this case otherwise the policy updates will mess up the twists
-    # UNLESS, we link the two together, and perhaps train both at the same time. This might save time and maybe is efficient
-    # Maybe even speeds up learning? But I could see that potentially being problematic for stability. Perhaps a TODO to consider for later.
 
-    model_p = CustomLMHeadModel(model_config, from_pt=from_pt)
 
-    log_sigmoid_twist = False
-    if "bce" in experiment_cfg.twist_learn_type:
-        log_sigmoid_twist = True
+    if separate_hface_twist_model:
+        # always do this for the RL setup, we need a separate twist model in this case otherwise the policy updates will mess up the twists
+        # UNLESS, we link the two together, and perhaps train both at the same time. This might save time and maybe is efficient
+        # Maybe even speeds up learning? But I could see that potentially being problematic for stability. Perhaps a TODO to consider for later.
 
-    model_twist = CustomLMWithTwistHead(
-        sk, model_config, hface_nn_twist=hface_nn_twist,
-        softmax_twist=softmax_twist, conditional_twist_type=conditional_twist_type,
-        num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt,
-        n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier,
-        one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
-    )
+        model_p = CustomLMHeadModel(model_config, from_pt=from_pt)
 
-    params_p = model_p.huggingface_model.params
+        log_sigmoid_twist = False
+        if "bce" in experiment_cfg.twist_learn_type:
+            log_sigmoid_twist = True
 
-    if tabular_adv_policy:
+        model_twist = CustomLMWithTwistHead(
+            sk, model_config, hface_nn_twist=hface_nn_twist,
+            softmax_twist=softmax_twist, conditional_twist_type=conditional_twist_type,
+            num_last_tokens_to_condition_on=num_last_tokens_to_condition_on, from_pt=from_pt,
+            n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier,
+            one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
+        )
 
-        if experiment_cfg.rm_type == "adv_rm":
-            params_p = {}
+        params_p = model_p.huggingface_model.params
 
-            # Usual response: don't do bad, or not sure, or don't know how
-            # Adv prompt: 2 tokens. combination of punctuation, then "do x"
-            # do without weird tokens should not lead to "do x"
-            # rew model checks for "do x". Others are all ok ish. Ideal response is "don't do bad", evasive responses get slightly lower reward
-            # small prob of punctuation token at any poitn in time, but need 2 in a row for bad response
-            # This gives 4 modes of adv tokens
-            # So I need at the least, conditioning on past 3 tokens: 2 adv + do
-            # if past 2 tokens are 2 adv, then output do
-            # Alternatively: I could setup so that, if any two tokens anywhere are punctuation, then "do x" immediately after
+        # print(model_p.huggingface_model.params.keys())
+        # for key in model_p.huggingface_model.params.keys():
+        #     print(model_p.huggingface_model.params[key].keys())
 
-            # Let's do this for the tabular policy: look up based on the past x tokens as the keys
 
-            def setup_tabular_policy(params_p, index1, index2, index3, outindex1, outindex2, outprob1=0.999, outprob2=0.001):
-                params_p[index1, index2, index3] = jnp.ones((args.n_vocab,)) * -100
-                params_p[index1, index2, index3] = params_p[index1, index2, index3].at[outindex1].set(jnp.log(outprob1))
-                params_p[index1, index2, index3] = params_p[index1, index2, index3].at[outindex2].set(jnp.log(outprob2))
-                return params_p
+        if tabular_adv_policy:
 
-            # If the dont token is generated anywhere, then generate only dont afterwards (this is kind of a hack to make my life easier; should probably generate EOS or padding instead
-            params_p[dont_index] = jnp.ones((args.n_vocab,)) * -100
-            params_p[dont_index] = params_p[dont_index].at[dont_index].set(jnp.log(1))
-            # TODO careful, have to ensure a different check just for the dont index this way
+            if experiment_cfg.rm_type == "adv_rm":
+                params_p = {}
+
+                # Usual response: don't do bad, or not sure, or don't know how
+                # Adv prompt: 2 tokens. combination of punctuation, then "do x"
+                # do without weird tokens should not lead to "do x"
+                # rew model checks for "do x". Others are all ok ish. Ideal response is "don't do bad", evasive responses get slightly lower reward
+                # small prob of punctuation token at any poitn in time, but need 2 in a row for bad response
+                # This gives 4 modes of adv tokens
+                # So I need at the least, conditioning on past 3 tokens: 2 adv + do
+                # if past 2 tokens are 2 adv, then output do
+                # Alternatively: I could setup so that, if any two tokens anywhere are punctuation, then "do x" immediately after
+
+                # Let's do this for the tabular policy: look up based on the past x tokens as the keys
+
+                def setup_tabular_policy(params_p, index1, index2, index3, outindex1, outindex2, outprob1=0.999, outprob2=0.001):
+                    params_p[index1, index2, index3] = jnp.ones((args.n_vocab,)) * -100
+                    params_p[index1, index2, index3] = params_p[index1, index2, index3].at[outindex1].set(jnp.log(outprob1))
+                    params_p[index1, index2, index3] = params_p[index1, index2, index3].at[outindex2].set(jnp.log(outprob2))
+                    return params_p
+
+                # If the dont token is generated anywhere, then generate only dont afterwards (this is kind of a hack to make my life easier; should probably generate EOS or padding instead
+                params_p[dont_index] = jnp.ones((args.n_vocab,)) * -100
+                params_p[dont_index] = params_p[dont_index].at[dont_index].set(jnp.log(1))
+                # TODO careful, have to ensure a different check just for the dont index this way
+                raise NotImplementedError
+
+                for adv_index in adv_indexes:
+                    for adv_index2 in adv_indexes:
+                        # For adv tokens: first generate do with high probability, then generate x with high probability
+                        params_p = setup_tabular_policy(params_p, bad_literal_index, adv_index, adv_index2, do_index, dont_index)
+                        # params_p[bad_literal_index, adv_index, adv_index2] = jnp.ones((args.n_vocab,)) * -100
+                        # params_p[bad_literal_index, adv_index, adv_index2] = params_p[bad_literal_index, adv_index, adv_index2].at[do_index].set(jnp.log(0.999))
+                        # params_p[bad_literal_index, adv_index, adv_index2] = params_p[bad_literal_index, adv_index, adv_index2].at[dont_index].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+
+                        params_p = setup_tabular_policy(params_p, adv_index, adv_index2, do_index, x_index, dont_index)
+                        # params_p[adv_index, adv_index2, do_index] = jnp.ones((args.n_vocab,)) * -100
+                        # params_p[adv_index, adv_index2, do_index] = params_p[adv_index, adv_index2, do_index].at[x_index].set(jnp.log(0.999))
+                        # params_p[adv_index, adv_index2, do_index] = params_p[adv_index, adv_index2, do_index].at[dont_index].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+
+                # For regular policy
+                params_p = setup_tabular_policy(params_p, to_index, do_index, bad_index, x_index, do_index)
+
+
+
+                params_p['adv'] = [jnp.ones((args.n_vocab,)) * -100] * (len(adv_indexes) ** 2)
+                for i in range(len(adv_indexes) ** 2):
+                    params_p['second_adv'][i] = params_p['second_adv'][i].at[do_index].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
+                    params_p['second_adv'][i] = params_p['second_adv'][i].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+
+
+                raise NotImplementedError
+                # TODO ALSO CHANGE IN THE P LOGITS PART OF THE CODE
+
+            else:
+
+                # DEBUG ONLY REMOVE LATER - TABULAR POLICY
+                # params_p = jnp.zeros((args.n_vocab,))
+                # print("warning: using tabular policy. Remove all the DEBUG stuff later.")
+
+                params_p = {}
+                # The below setup for logits essentially gives 0 probability (assuming we have some logit that has some higher value)
+                params_p['first'] = jnp.ones((args.n_vocab,)) * -100
+                params_p['second_normal'] = jnp.ones((args.n_vocab,)) * -100
+
+                for adv_index in adv_indexes:
+                    # Split the adv_token_prob uniformly among all possible adv_indexes; each of these is a mode we want our twisted SMC to sample from
+                    params_p['first'] = params_p['first'].at[adv_index].set(jnp.log(adv_token_prob / len(adv_indexes)))
+                # The remaining probability goes to the good index
+                params_p['first'] = params_p['first'].at[good_index].set(jnp.log(1 - adv_token_prob))
+
+                params_p['second_normal'] = params_p['second_normal'].at[582].set(jnp.log(1)) # Set "man" to be the usual second token
+
+                params_p['second_adv'] = [jnp.ones((args.n_vocab,)) * -100] * len(adv_indexes)
+                # We want a different possible policy for each different adv token in the previous spot;
+                # If we don't do this, then whatever is learned from adversarial training on an adv token
+                # generalizes across all adv tokens
+                for i in range(len(adv_indexes)):
+                    params_p['second_adv'][i] = params_p['second_adv'][i].at[swear_word].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
+                    params_p['second_adv'][i] = params_p['second_adv'][i].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+
+                # TODO designate the adversarial first tokens that have low prob, and designate the bad tokens output with high prob after
+                # Also designate some good tokens on other inputs
+                # TODO Do the prob calculation with exp, because these are logits, to make sure I have the right policy setup. TEST THIS IN THE GET P LOGITS ALSO
+                # TODO ALSO ENSURE THAT WE ASSERT OUTPUT LEN 2 FOR THIS HANDCRAFTED SETUP
+
+
+        params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
+
+        if optimizer_type.lower() == "sgd":
+            optimizer_twist = optax.sgd(learning_rate=lr_p)
+            optimizer_p = optax.sgd(learning_rate=lr_p)
+        elif optimizer_type.lower() == "adamw":
+            optimizer_twist = optax.adamw(learning_rate=lr_twist,
+                                          b1=beta1,
+                                          b2=beta2, eps=eps,
+                                          weight_decay=weight_decay)
+
+            optimizer_p = optax.adamw(learning_rate=lr_p,
+                                          b1=beta1,
+                                          b2=beta2, eps=eps,
+                                          weight_decay=weight_decay)
+        else:
             raise NotImplementedError
 
-            for adv_index in adv_indexes:
-                for adv_index2 in adv_indexes:
-                    # For adv tokens: first generate do with high probability, then generate x with high probability
-                    params_p = setup_tabular_policy(params_p, bad_literal_index, adv_index, adv_index2, do_index, dont_index)
-                    # params_p[bad_literal_index, adv_index, adv_index2] = jnp.ones((args.n_vocab,)) * -100
-                    # params_p[bad_literal_index, adv_index, adv_index2] = params_p[bad_literal_index, adv_index, adv_index2].at[do_index].set(jnp.log(0.999))
-                    # params_p[bad_literal_index, adv_index, adv_index2] = params_p[bad_literal_index, adv_index, adv_index2].at[dont_index].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+        optim_twist_state = optimizer_twist.init(params_twist)
 
-                    params_p = setup_tabular_policy(params_p, adv_index, adv_index2, do_index, x_index, dont_index)
-                    # params_p[adv_index, adv_index2, do_index] = jnp.ones((args.n_vocab,)) * -100
-                    # params_p[adv_index, adv_index2, do_index] = params_p[adv_index, adv_index2, do_index].at[x_index].set(jnp.log(0.999))
-                    # params_p[adv_index, adv_index2, do_index] = params_p[adv_index, adv_index2, do_index].at[dont_index].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
+        optim_p_state = optimizer_p.init(params_p)
 
-            # For regular policy
-            params_p = setup_tabular_policy(params_p, to_index, do_index, bad_index, x_index, do_index)
+        if output_p_psi:
+            huggingface_model = HashableDict(
+                {'p': model_p.__call__, 'twist': model_twist.__call__,
+                 'call_type': "p_psi_combined"})
+        else:
+            huggingface_model = HashableDict({'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "custom"})
+
+        if use_lora:
+            import lorax
+
+            def decision_fn(path, param):
+                # print(path)
+                # print(path[0])
+                if path[0].key == 'head':
+                    print(f'Fully finetuning param {path}')
+                    return LORA_FULL
+                dim = lora_rank
+                print(f'Using LoRA with dim={dim} for param {path}')
+                return dim
+
+            # params_to_train = model_twist.huggingface_model.params
+            params_to_train = {'body': model_twist.huggingface_model.params, 'head': model_twist.twist_head_params}
+
+            lora_spec = lorax.simple_spec(params_to_train,
+                                          decision_fn=decision_fn,
+                                          tune_vectors=True)
+            lora_params = lorax.init_lora(params_to_train, lora_spec,
+                                          jax.random.PRNGKey(0))
+
+            optimizer_twist = lorax.wrap_optimizer(optimizer_twist, lora_spec)
+
+            optim_twist_state = optimizer_twist.init(lora_params)
+
+            model_twist = lorax.lora(model_twist)
+
+            params_twist = lora_params
+
+            huggingface_model = HashableDict(
+                {'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "lora"})
 
 
+        # seq = jnp.array([[1, 2, 3]])
+        # prompt_len = 1
+        # print(evaluate_log_p_theta_1_to_t(seq, params_p, prompt_len, huggingface_model=huggingface_model))
+        # Test that this p0 is the same as the other p0. Do both and compare model calls on some sequence.
 
-            params_p['adv'] = [jnp.ones((args.n_vocab,)) * -100] * (len(adv_indexes) ** 2)
-            for i in range(len(adv_indexes) ** 2):
-                params_p['second_adv'][i] = params_p['second_adv'][i].at[do_index].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
-                params_p['second_adv'][i] = params_p['second_adv'][i].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
 
-
+    else:
+        if tabular_adv_policy:
             raise NotImplementedError
-            # TODO ALSO CHANGE IN THE P LOGITS PART OF THE CODE
+
+        log_sigmoid_twist = False
+        if "bce" in experiment_cfg.twist_learn_type:
+            log_sigmoid_twist = True
+
+        model = CustomLMWithTwistHead(
+            sk, model_config, hface_nn_twist=hface_nn_twist, softmax_twist=softmax_twist,
+            conditional_twist_type=conditional_twist_type,
+            num_last_tokens_to_condition_on=num_last_tokens_to_condition_on,
+            from_pt=from_pt, n_layers_twist=n_layers_twist, hidden_units_multiplier=hidden_units_multiplier,
+            one_hot_dim=one_hot_dim, log_sigmoid_twist=log_sigmoid_twist
+        )
+
+        if backprop_twist_through_backbone:
+            params_p = model.huggingface_model.params
+            params_twist = [model.huggingface_model.params, model.twist_head_params]
+            huggingface_model = HashableDict({'p': model.__call__, 'twist': model.__call__, 'call_type': "custom"})
 
         else:
+            params_p = model.huggingface_model.params
+            params_twist = model.twist_head_params
+            huggingface_model = model.__call__
 
-            # DEBUG ONLY REMOVE LATER - TABULAR POLICY
-            # params_p = jnp.zeros((args.n_vocab,))
-            # print("warning: using tabular policy. Remove all the DEBUG stuff later.")
+        if optimizer_type.lower() == "sgd":
+            optimizer_twist = optax.sgd(learning_rate=lr_p)
+            optimizer_p = optax.sgd(learning_rate=lr_p)
+        elif optimizer_type.lower() == "adamw":
+            optimizer_twist = optax.adamw(learning_rate=lr_twist,
+                                          b1=beta1,
+                                          b2=beta2, eps=eps,
+                                          weight_decay=weight_decay)
+            optimizer_p = optax.adamw(learning_rate=lr_p,
+                                          b1=beta1,
+                                          b2=beta2, eps=eps,
+                                          weight_decay=weight_decay)
+        else:
+            raise NotImplementedError
 
-            params_p = {}
-            # The below setup for logits essentially gives 0 probability (assuming we have some logit that has some higher value)
-            params_p['first'] = jnp.ones((args.n_vocab,)) * -100
-            params_p['second_normal'] = jnp.ones((args.n_vocab,)) * -100
-
-            for adv_index in adv_indexes:
-                # Split the adv_token_prob uniformly among all possible adv_indexes; each of these is a mode we want our twisted SMC to sample from
-                params_p['first'] = params_p['first'].at[adv_index].set(jnp.log(adv_token_prob / len(adv_indexes)))
-            # The remaining probability goes to the good index
-            params_p['first'] = params_p['first'].at[good_index].set(jnp.log(1 - adv_token_prob))
-
-            params_p['second_normal'] = params_p['second_normal'].at[582].set(jnp.log(1)) # Set "man" to be the usual second token
-
-            params_p['second_adv'] = [jnp.ones((args.n_vocab,)) * -100] * len(adv_indexes)
-            # We want a different possible policy for each different adv token in the previous spot;
-            # If we don't do this, then whatever is learned from adversarial training on an adv token
-            # generalizes across all adv tokens
-            for i in range(len(adv_indexes)):
-                params_p['second_adv'][i] = params_p['second_adv'][i].at[swear_word].set(jnp.log(0.999)) # Set a swear word for the adversarial policy only
-                params_p['second_adv'][i] = params_p['second_adv'][i].at[582].set(jnp.log(0.001)) # Provide an alternate logit that can actually increase over time; otherwise pushing down on the other logit won't make much of a difference
-
-            # TODO designate the adversarial first tokens that have low prob, and designate the bad tokens output with high prob after
-            # Also designate some good tokens on other inputs
-            # TODO Do the prob calculation with exp, because these are logits, to make sure I have the right policy setup. TEST THIS IN THE GET P LOGITS ALSO
-            # TODO ALSO ENSURE THAT WE ASSERT OUTPUT LEN 2 FOR THIS HANDCRAFTED SETUP
+        optim_twist_state = optimizer_twist.init(params_twist)
+        optim_p_state = optimizer_p.init(params_p)
 
 
-    params_twist = [model_twist.huggingface_model.params, model_twist.twist_head_params]
-
-    if optimizer_type.lower() == "sgd":
-        optimizer_twist = optax.sgd(learning_rate=lr_p)
-        optimizer_p = optax.sgd(learning_rate=lr_p)
-    elif optimizer_type.lower() == "adamw":
-        optimizer_twist = optax.adamw(learning_rate=lr_twist,
-                                      b1=beta1,
-                                      b2=beta2, eps=eps,
-                                      weight_decay=weight_decay)
-
-        optimizer_p = optax.adamw(learning_rate=lr_p,
-                                      b1=beta1,
-                                      b2=beta2, eps=eps,
-                                      weight_decay=weight_decay)
-    else:
-        raise NotImplementedError
-
-    optim_twist_state = optimizer_twist.init(params_twist)
-
-    optim_p_state = optimizer_p.init(params_p)
-
-    if output_p_psi:
-        huggingface_model = HashableDict(
-            {'p': model_p.__call__, 'twist': model_twist.__call__,
-             'call_type': "p_psi_combined"})
-    else:
-        huggingface_model = HashableDict({'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "custom"})
-
-    if use_lora:
-        import lorax
-
-        def decision_fn(path, param):
-            # print(path)
-            # print(path[0])
-            if path[0].key == 'head':
-                print(f'Fully finetuning param {path}')
-                return LORA_FULL
-            dim = lora_rank
-            print(f'Using LoRA with dim={dim} for param {path}')
-            return dim
-
-        # params_to_train = model_twist.huggingface_model.params
-        params_to_train = {'body': model_twist.huggingface_model.params, 'head': model_twist.twist_head_params}
-
-        lora_spec = lorax.simple_spec(params_to_train,
-                                      decision_fn=decision_fn,
-                                      tune_vectors=True)
-        lora_params = lorax.init_lora(params_to_train, lora_spec,
-                                      jax.random.PRNGKey(0))
-
-        optimizer_twist = lorax.wrap_optimizer(optimizer_twist, lora_spec)
-
-        optim_twist_state = optimizer_twist.init(lora_params)
-
-        model_twist = lorax.lora(model_twist)
-
-        params_twist = lora_params
-
-        huggingface_model = HashableDict(
-            {'p': model_p.__call__, 'twist': model_twist.__call__, 'call_type': "lora"})
-
+        # seq = jnp.array([[1,2,3]])
+        # prompt_len = 1
+        # print(evaluate_log_p_theta_1_to_t(seq, params_p, prompt_len, huggingface_model=huggingface_model))
+        # Test that this p0 is the same as the other p0. Do both and compare model calls on some sequence.
 
     params_p0 = copy.deepcopy(params_p)
     huggingface_model_p0 = copy.deepcopy(huggingface_model)
+
+
+    # seq = jnp.array([[1,2,3]])
+    # prompt_len = 1
+    # print(evaluate_log_p_theta_1_to_t(seq, params_p, prompt_len, huggingface_model=huggingface_model))
 
     return rng_key, params_p, params_twist, optimizer_twist, optim_twist_state, huggingface_model, optimizer_p, optim_p_state, params_p0, huggingface_model_p0
 
@@ -1753,7 +1823,7 @@ def setup_cfg(
     use_hardcoded_baseline=False, hardcoded_baseline=0., adaptive_baseline_percentile=-1,
     neg_reward_multiplier=1.,
     neg_e_neg_beta_r_transform=False, beta_r_transform=1., alpha_adv=0.5, tabular_adv_policy=False, adv_token_prob=0.001,
-    load_ckpt_p=False
+    load_ckpt_p=False, backprop_twist_through_backbone=False
 ):
     experiment_cfg = ExperimentConfig(
         n_vocab=n_vocab,
@@ -1799,7 +1869,7 @@ def setup_cfg(
         hidden_units_multiplier,
         one_hot_dim, lr_twist, beta1, beta2, eps, weight_decay, output_p_psi,
         use_lora, lora_rank,
-        lr_p, optimizer_type, tabular_adv_policy, adv_token_prob
+        lr_p, optimizer_type, tabular_adv_policy, adv_token_prob, backprop_twist_through_backbone
     )
 
     tokenizer_RM, rewardModel = get_tokenizer_and_rewardModel(rm_type)
@@ -2270,7 +2340,8 @@ def main():
         "tabular_adv_policy": args.tabular_adv_policy,
         "adv_token_prob": args.adv_token_prob,
         "load_ckpt_p": args.load_ckpt_p,
-        "adaptive_baseline_percentile": args.adaptive_baseline_percentile
+        "adaptive_baseline_percentile": args.adaptive_baseline_percentile,
+        "backprop_twist_through_backbone": args.backprop_twist_through_backbone
     }
 
 
@@ -2450,6 +2521,14 @@ def main():
                     args.exp_num_twist_updates, args.twist_updates_per_epoch, args.tabular_adv_policy, args.load_ckpt_p, dataset_adv, params_p0, huggingface_model_p0
                 )
 
+            log_p_example = evaluate_log_p_theta_1_to_t(true_posterior_samples_by_token[:10], params_p, prompt.shape[-1], huggingface_model=huggingface_model)
+            print("log_p before twist update")
+            print(log_p_example)
+            log_psi_example = evaluate_log_psi_t(true_posterior_samples_by_token[:10], params_twist, condition_twist_on_tokens=None, huggingface_model=huggingface_model)
+            print("log_psi before twist update")
+            print(log_psi_example)
+            # TODO remove later
+
             # ----- DO TWIST UPDATES -----
             print(f"TWIST UPDATES STARTING", flush=True)
             print(f"TIME: {time.time() - start}", flush=True)
@@ -2474,6 +2553,20 @@ def main():
                 args.n_twist, optimizer_twist, optim_twist_state
             )
 
+            if args.backprop_twist_through_backbone:
+                params_p = params_twist[0] # Have the twist update also go to the policy; as if these two are linked together
+                # only problem here is with the optim states not being linked... this should be addressed using joint training of twist and policy
+
+            log_p_example2 = evaluate_log_p_theta_1_to_t(true_posterior_samples_by_token[:10], params_p,
+                                                        prompt.shape[-1], huggingface_model=huggingface_model)
+            print("log_p after twist update")
+            print(log_p_example2)
+            log_psi_example2 = evaluate_log_psi_t(true_posterior_samples_by_token[:10], params_twist,
+                                                 condition_twist_on_tokens=None, huggingface_model=huggingface_model)
+            print("log_psi after twist update")
+            print(log_psi_example2)
+            # TODO remove later
+
             # ----- DO POLICY (params_p now is changing, so our base model and target distribution for SMC are changing) UPDATES -----
             print(f"POLICY UPDATES STARTING", flush=True)
             print(f"TIME: {time.time() - start}", flush=True)
@@ -2492,7 +2585,26 @@ def main():
                 args.print_every_policy_updates,
                 args.n_policy_samples, optimizer_p, optim_p_state
             )
+            if args.backprop_twist_through_backbone:
+                params_twist[0] = params_p # Have the policy update also go to the twist; as if these two are linked together
 
+            log_p_example3 = evaluate_log_p_theta_1_to_t(true_posterior_samples_by_token[:10], params_p,
+                                                         prompt.shape[-1], huggingface_model=huggingface_model)
+            print("log_p after policy update")
+            print(log_p_example3)
+            log_psi_example3 = evaluate_log_psi_t(true_posterior_samples_by_token[:10], params_twist,
+                                                  condition_twist_on_tokens=None, huggingface_model=huggingface_model)
+            print("log_psi after policy update")
+            print(log_psi_example3)
+            # TODO remove later
+
+            print("comparison")
+            print("p comparison")
+            print(jnp.abs(log_p_example2 - log_p_example).mean())
+            print(jnp.abs(log_p_example3 - log_p_example2).mean())
+            print("psi comparison")
+            print(jnp.abs(log_psi_example2 - log_psi_example).mean())
+            print(jnp.abs(log_psi_example3 - log_psi_example2).mean())
 
             plot_and_print_at_end = True
             if plot_and_print_at_end and (epoch + 1 == args.epochs) and (not args.no_test_info):
@@ -2648,6 +2760,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--adaptive_baseline_percentile", type=float, help="Percentile for the adaptive baseline; e.g. if 90, then ~90% of samples from current model q will have reward less than the baseline. Should be between 0 and 100",
                         default=-1)
+    parser.add_argument("--backprop_twist_through_backbone", action="store_true", help="Only for shared twist and policy (q); backprop twist updates through the backbone (the base transformer) as well, thus twist updates will affect the policy q directly")
 
 
     parser.add_argument("--negative_training_threshold", type=float, help="Reward threshold below which we consider the samples we've drawn to be 'bad' and worthy of reducing probability on with negative training",

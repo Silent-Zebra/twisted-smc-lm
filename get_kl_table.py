@@ -138,6 +138,21 @@ load_prefixes_toxc = [
 
 ]
 
+load_prefixes_toxc_new = [
+    load_prefixes_toxc[0],
+    load_prefixes_toxc[1],
+    load_prefixes_toxc[2],
+
+    ["f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed1_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed0_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed3_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed2_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed4_nsamples11",],
+    load_prefixes_toxc[3],
+    load_prefixes_toxc[4],
+    load_prefixes_toxc[5],
+
+]
 
 load_prefixes_toxc_OpenRLHF_comparison = [
     load_prefixes_toxc[0],
@@ -155,7 +170,14 @@ load_prefixes_toxc_OpenRLHF_comparison = [
 "f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed4",
 "f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_ctl_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed5",
     ],
-    load_prefixes_toxc[2],
+    # load_prefixes_toxc[2],
+    [
+"f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed1_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed0_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed3_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed2_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_toxicity_class_logprob_sixo_partial_jit_lr3e-05_seed4_nsamples11",
+    ],
     [
 "f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_sixo_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed1",
 "f_q_g_q_iwae_bounds_OpenRLHF_exp_beta_toxicity_class_logprob_sixo_epochs1_lrscheduleconstant_actorlr3e-05_adambetas0.9_0.999_actormodbase_seed2",
@@ -242,6 +264,21 @@ load_prefixes_sent1_nnonly = [
      "f_q_g_q_estimates_2024-04-23_10-29_ppo_seed1_nsamples11",
     ]
 ]
+load_prefixes_sent1_nnonly_new = [
+    load_prefixes_sent1_nnonly[0],
+    load_prefixes_sent1_nnonly[1],
+    load_prefixes_sent1_nnonly[2],
+    ["f_q_g_q_logZbestmidpoint_info_exp_beta_sentiment_class_logprob_sixo_partial_jit_lr0.0001_seed0_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_sentiment_class_logprob_sixo_partial_jit_lr0.0001_seed1_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_sentiment_class_logprob_sixo_partial_jit_lr0.0001_seed2_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_sentiment_class_logprob_sixo_partial_jit_lr0.0001_seed3_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_exp_beta_sentiment_class_logprob_sixo_partial_jit_lr0.0001_seed4_nsamples11",
+],
+    load_prefixes_sent1_nnonly[3],
+    load_prefixes_sent1_nnonly[4],
+    load_prefixes_sent1_nnonly[5],
+
+]
 
 load_prefixes_plasttok15_10 = [
     ["f_q_g_q_logZbestmidpoint_info_2024-04-22_09-35_seed0_ebm_ml_jit_vmapped_over_condition_tokens_nsamples11",
@@ -280,6 +317,23 @@ load_prefixes_plasttok15_10 = [
     "f_q_g_q_estimates_2024-04-22_20-34_ppo_seed0_nsamples11",
     "f_q_g_q_estimates_2024-04-22_20-46_ppo_seed3_nsamples11",
     ]
+]
+
+load_prefixes_plasttok15_10_new = [
+    load_prefixes_plasttok15_10[0],
+    load_prefixes_plasttok15_10[1],
+    load_prefixes_plasttok15_10[2],
+    [
+"f_q_g_q_logZbestmidpoint_info_p_last_tokens_sixo_lr0.0001_seed0_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_p_last_tokens_sixo_lr0.0001_seed1_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_p_last_tokens_sixo_lr0.0001_seed2_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_p_last_tokens_sixo_lr0.0001_seed3_nsamples11",
+"f_q_g_q_logZbestmidpoint_info_p_last_tokens_sixo_lr0.0001_seed4_nsamples11",
+    ],
+    load_prefixes_plasttok15_10[3],
+    load_prefixes_plasttok15_10[4],
+    load_prefixes_plasttok15_10[5],
+
 ]
 
 load_prefixes_plasttok2_1 = [
@@ -806,6 +860,35 @@ if __name__ == "__main__":
     # make_table(load_prefixes_plasttok2_1, twist_learn_method_names, proposal_names, "plast2_1_04-22")
     # NOTE THE FIG NAME MATTERS FOR INFILLING
 
+    twist_learn_method_names = [
+        "Contrastive",
+        "RL",
+        "SIXO",
+        "SIXO (Updated)",
+        "FUDGE",
+        "--",
+        "--",
+    ]
+
+    # All constant LR for now
+    proposal_names = [
+        "Twisted",
+        "Twisted",
+        "Twisted",
+        "Twisted",
+        "Twisted",
+        "DPG",
+        "PPO"
+    ]
+
+    # make_table(load_prefixes_sent1_nnonly, twist_learn_method_names, proposal_names, "sent1_nnonly_2024-04-20")
+
+    # make_table(load_prefixes_sent1_nnonly_new, twist_learn_method_names, proposal_names, "sent1_nnonly_2025-02-20")
+    # make_table(load_prefixes_plasttok15_10_new, twist_learn_method_names, proposal_names, "plast15_2025-02-20")
+    make_table(load_prefixes_toxc_new, twist_learn_method_names, proposal_names, "toxc_2025-02-20")
+
+    # NOTE THE FIG NAME MATTERS FOR INFILLING
+    1/0
 
     # make_table(load_prefixes_toxc, twist_learn_method_names, proposal_names, "toxc_11-30")
     # -------------
@@ -890,7 +973,6 @@ if __name__ == "__main__":
     ]
 
     make_table(load_prefixes_toxc_OpenRLHF_comparison, twist_learn_method_names, proposal_names, "toxc_OpenRLHF_comp_02-16")
-
 
     # twist_learn_method_names = [
     #     r"Contrastive, LR 1e-5",
