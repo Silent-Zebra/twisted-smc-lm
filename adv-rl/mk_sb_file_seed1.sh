@@ -15,7 +15,7 @@ PARAMS=$(echo "$COMMAND" | awk '
 {
     # Initialize empty variables
     len = lr = lrp = beta = seed = rm = ntwist = npolicy = twist_up = policy_up = ""
-    model = twist_learn = rl_loss = alpha = baseline = threshold = neg_train = adaptive_baseline = separate_twist = backprop_through = ""
+    model = twist_learn = rl_loss = alpha = baseline = threshold = neg_train = adaptive_baseline = separate_twist = backprop_through = nn_twist ""
     has_alpha = has_baseline = 0
 
     # Scan through all matches in the string
@@ -55,6 +55,9 @@ PARAMS=$(echo "$COMMAND" | awk '
 	if($i == "--separate_hface_twist_model" ) {
             separate_twist = "_separatetwist"
         }
+	if($i == "--hface_nn_twist" ) {
+            nn_twist = "_nntwist"
+        }
 	if($i == "--backprop_twist_through_backbone" ) {
             backprop_through = "_backpropthrough"
         }
@@ -68,13 +71,13 @@ PARAMS=$(echo "$COMMAND" | awk '
        model != "" && twist_learn != "" && rl_loss != "")
         print len "|" lr "|" lrp "|" beta "|" seed "|" rm "|" ntwist "|" npolicy "|" \
               twist_up "|" policy_up "|" model "|" twist_learn "|" rl_loss "|" \
-              alpha "|" baseline "|" threshold "|" neg_train "|" adaptive_baseline "|" separate_twist "|" backprop_through
+              alpha "|" baseline "|" threshold "|" neg_train "|" adaptive_baseline "|" separate_twist "|" backprop_through "|" nn_twist
 }')
 
 
 # Read using the special delimiter
 IFS='|' read OUTPUT_LEN LR_TWIST LR_P BETA_TEMP SEED RM_TYPE N_TWIST N_POLICY TWIST_UPDATES \
-     POLICY_UPDATES MODEL TWIST_LEARN_TYPE RL_LOSS_TYPE ALPHA_ADV BASELINE THRESHOLD NEG_TRAIN ADAPTIVE_BASELINE SEPARATE_TWIST BACKPROP_THROUGH <<< "$PARAMS"
+     POLICY_UPDATES MODEL TWIST_LEARN_TYPE RL_LOSS_TYPE ALPHA_ADV BASELINE THRESHOLD NEG_TRAIN ADAPTIVE_BASELINE SEPARATE_TWIST BACKPROP_THROUGH NN_TWIST <<< "$PARAMS"
 
 
 # Check if required parameters are empty
@@ -89,7 +92,7 @@ fi
 CURRENT_DATE=$(date +%Y-%m-%d-%H-%M)
 
 # Generate output filename
-PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${OUTPUT_LEN}_batch${N_TWIST}_${N_POLICY}_${TWIST_UPDATES}${TWIST_LEARN_TYPE}_${LR_TWIST}_${POLICY_UPDATES}${RL_LOSS_TYPE}${NEG_TRAIN}_${LR_P}${ALPHA_ADV}${BASELINE}${ADAPTIVE_BASELINE}${SEPARATE_TWIST}${BACKPROP_THROUGH}"
+PATTERN="${CURRENT_DATE}_${RM_TYPE}${THRESHOLD}_${MODEL}_beta${BETA_TEMP}_len${OUTPUT_LEN}_batch${N_TWIST}_${N_POLICY}_${TWIST_UPDATES}${TWIST_LEARN_TYPE}_${LR_TWIST}_${POLICY_UPDATES}${RL_LOSS_TYPE}${NEG_TRAIN}_${LR_P}${ALPHA_ADV}${BASELINE}${ADAPTIVE_BASELINE}${SEPARATE_TWIST}${NN_TWIST}${BACKPROP_THROUGH}"
 
 SBATCH_FILE="sbatch_${PATTERN}"
 OUTPUT_FILE="result_${PATTERN}_s1.txt"
