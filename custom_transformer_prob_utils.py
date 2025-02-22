@@ -670,29 +670,29 @@ def evaluate_normalized_log_q_1_to_t_nojit(
 evaluate_normalized_log_q_1_to_t = partial(jax.jit, static_argnames=[
     "prompt_len", "huggingface_model", "return_cumsum", "return_cumsum_w_last_all", "params_proposal"])(evaluate_normalized_log_q_1_to_t_nojit)
 
-def evaluate_log_psi_t(seq, params_twist, condition_twist_on_tokens,   huggingface_model=None):
-    # Takes in sequences s_{1:t} of (n_batch, seq_length) shape
-    # Evaluate log psi (s_{1:t})
-
-    log_psi = get_log_psi_all_vocab(seq, params_twist, condition_twist_on_tokens,  huggingface_model=huggingface_model)
-
-    # If I use a single transformer, essentially I am doing a kind of weight tying between the different psi_t (which should be desirable)
-    # I could use a separate transformer for each psi_t but that seems a little inefficient
-    # Then we take [seq[-1]] because that is the index of the corresponding token
-    # The way to think about the twist function / psi transformer here is that:
-    # essentially each prob distribution over n_vocab tokens at time step i describes a psi value for s_{1:i} where the previous s_{1:i-1} are based on
-    # the input seq, and then s_i is whatever n_vocab token you are taking from this distribution over n_vocab tokens
-    # First axis is batch, last is n_vocab
-    # We take [-2] index because this is for the last token in the current sequence (not including the next predicted token)
-    # Then we take [seq[:, -1]] because that gives the indices of the corresponding token that was generated, for which we want the psi value
-    # jnp.arange(seq.shape[0]), seq[:,-1] just lets us do the indexing we want.
-    # What it does is take index 0, 1, 2, ... from the first axis, and then the indices according to the tokens from the second axis
-    # Now an important thing to note: since the optimal psi_T is just the exp(-beta r(s)), and the optimal psi_t is sigma(s_{1:t})/p(s_{1:t}),
-    # we cannot constrain the psi (psi, or at least the output from the twist, is not a probability). We also have a choice: we can make the twist directly
-    # represent exp(-beta r(s)), or we can make it represent the log of that, -beta r(s).
-    # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
-    # return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
-    return log_psi[:,-1,:][jnp.arange(seq.shape[0]), seq[:,-1]]
+# def evaluate_log_psi_t(seq, params_twist, condition_twist_on_tokens, huggingface_model=None):
+#     # Takes in sequences s_{1:t} of (n_batch, seq_length) shape
+#     # Evaluate log psi (s_{1:t})
+#
+#     log_psi = get_log_psi_all_vocab(seq, params_twist, condition_twist_on_tokens,  huggingface_model=huggingface_model)
+#
+#     # If I use a single transformer, essentially I am doing a kind of weight tying between the different psi_t (which should be desirable)
+#     # I could use a separate transformer for each psi_t but that seems a little inefficient
+#     # Then we take [seq[-1]] because that is the index of the corresponding token
+#     # The way to think about the twist function / psi transformer here is that:
+#     # essentially each prob distribution over n_vocab tokens at time step i describes a psi value for s_{1:i} where the previous s_{1:i-1} are based on
+#     # the input seq, and then s_i is whatever n_vocab token you are taking from this distribution over n_vocab tokens
+#     # First axis is batch, last is n_vocab
+#     # We take [-2] index because this is for the last token in the current sequence (not including the next predicted token)
+#     # Then we take [seq[:, -1]] because that gives the indices of the corresponding token that was generated, for which we want the psi value
+#     # jnp.arange(seq.shape[0]), seq[:,-1] just lets us do the indexing we want.
+#     # What it does is take index 0, 1, 2, ... from the first axis, and then the indices according to the tokens from the second axis
+#     # Now an important thing to note: since the optimal psi_T is just the exp(-beta r(s)), and the optimal psi_t is sigma(s_{1:t})/p(s_{1:t}),
+#     # we cannot constrain the psi (psi, or at least the output from the twist, is not a probability). We also have a choice: we can make the twist directly
+#     # represent exp(-beta r(s)), or we can make it represent the log of that, -beta r(s).
+#     # The latter seems better for numerical stability, so let's just do that, and don't add any further log on top of it when calculating log psi
+#     # return log_psi[:,-2,:][jnp.arange(seq.shape[0]), seq[:,-1]]
+#     return log_psi[:,-1,:][jnp.arange(seq.shape[0]), seq[:,-1]]
 
 @partial(jax.jit, static_argnames = ["prompt_len", "huggingface_model"])
 # Evaluate log psi_t for every t from 1 to T for the sequence seq (not including the prompt)
