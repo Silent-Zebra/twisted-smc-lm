@@ -1,3 +1,4 @@
+"""KL to prior on line 987"""
 import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"
 os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"]=".5"
@@ -984,6 +985,7 @@ class ExperimentConfig:
         else:
             raise NotImplementedError
 
+        # NOTE: KL to prior is calculated here.
         kl_vals = get_kl_vals(no_intermediate_resample_proposal_samples,
                               params_p, params_twist,
                               prompt_len, output_len,
@@ -991,6 +993,7 @@ class ExperimentConfig:
                               condition_twist_on_tokens=condition_twist_on_tokens,
                               huggingface_model=huggingface_model)
         print(f"KL to prior estimate: {kl_vals.mean()}")
+
         if params_proposal is not None:
             kl_vals_prop = get_kl_vals(
                 no_intermediate_resample_proposal_samples,
@@ -1005,14 +1008,13 @@ class ExperimentConfig:
 
 
 
-
     def get_log_true_final_twists(
         self, rng_key, jnp_prompts, params_p, rm_type, output_len,
         n_samples_at_a_time, huggingface_model=None,
         indices_of_continuation=None, rewardModel=None, tokenizer_RM=None,
         tokenizer=None, threshold=0, pos_threshold=True, get_true_posterior_samples=True, reward_cap=None
     ):
-
+        # NOTE reward model = rm. Each rm_type defines a different target distribution.
         if rm_type == "exp_beta_rew_p_continuation":
             assert indices_of_continuation is not None
             log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
@@ -2668,40 +2670,6 @@ def main():
             else:
                 true_posterior_samples_by_token = None
 
-
-            # # TODO DEBUG ONLY REMOVE LATER - check how much the additional/new head is warping the logits with its random initialization
-            # rng, sk_smc, sk_sis = jax.random.split(rng_key, 3)
-            # smc_args = {
-            #     "rng_key": sk_smc,
-            #     "prompt": prompt,
-            #     "params_p": params_p,
-            #     "params_twist": params_twist,
-            #     "log_true_final_twist": log_true_final_twist,
-            #     "output_len": args.output_len,
-            #     "n_smc_samples": args.n_twist,
-            #     "smc_procedure_type": experiment_cfg.smc_procedure_type,
-            #     "get_intermediate_sample_history_based_on_learned_twists": False,
-            #     "resample": False,
-            #     "proposal_is_p": args.proposal_is_p,
-            #     "huggingface_model": huggingface_model,
-            #     "params_proposal": params_proposal,
-            #     "OpenRLHF_critic_ckpt": args.load_OpenRLHF_critic_ckpt
-            # }
-            # (_, log_z_hat_t, _), q_samples = smc_procedure(
-            #     **smc_args)
-            # p_logits, log_psi_all_vocab = get_p_logits_and_log_psi_all_vocab(
-            #     q_samples, params_p, params_twist,
-            #     None, huggingface_model, prompt_len=prompt.shape[-1]
-            # )
-            # print(log_psi_all_vocab)
-            # print(log_psi_all_vocab.shape)
-            # print(jnp.abs(log_psi_all_vocab).mean())
-            #
-            # kl_vals = get_kl_vals(q_samples, params_p, params_twist, prompt.shape[-1], args.output_len,
-            #             None, huggingface_model,
-            #             params_proposal=None)
-            # print(kl_vals.mean())
-            # 1/0
 
             if args.inspect_policy:
                 n_samples = 100

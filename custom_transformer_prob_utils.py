@@ -295,6 +295,21 @@ def stochastic_transformer_sample_iter(carry, t, huggingface_model=None, return_
 # lax.scan works on stochastic transformer sample - yes it wastes computation on the later time steps, but still this is faster than not using scan+jit)
 @partial(jax.jit, static_argnames=["output_len", "n_samples", "huggingface_model", "return_p_eval", "prompt_is_already_batch"])
 def stochastic_transformer_sample(rng_key, params, prompt: jnp.ndarray, output_len, n_samples, huggingface_model=None, return_p_eval=False, prompt_is_already_batch=False):
+    """
+    
+    Args:
+        rng_key (_type_): _description_
+        params (_type_): _description_
+        prompt (jnp.ndarray): _description_
+        output_len (_type_): _description_
+        n_samples (_type_): _description_
+        huggingface_model (_type_, optional): _description_. Defaults to None.
+        return_p_eval (bool, optional): _description_. Defaults to False.
+        prompt_is_already_batch (bool, optional): _description_. Defaults to False.
+
+    Returns:
+        _type_: _description_
+    """
     if prompt_is_already_batch:
         prompt_len = prompt.shape[-1]
         batch_prompt = prompt

@@ -7,7 +7,8 @@ import torch
 from custom_transformer_prob_utils import evaluate_log_p_theta_t, \
     stochastic_transformer_sample, evaluate_log_p_selected_tokens
 
-
+# TODO: modify beta passed to the function
+# NOTE: curry is just fixing some arguments to the function.
 # curry the prompt_len... TODO think about whether this structure or the one where you pass in (e.g. like batch_reward_model below) makes more sense
 def neg_beta_times_batch_reward_model_curry(prompt_len, beta, reward_model_fn):
     def curried_batch_rm_fn(seq):
@@ -15,7 +16,7 @@ def neg_beta_times_batch_reward_model_curry(prompt_len, beta, reward_model_fn):
         return neg_beta_batch_rm(seq, prompt_len, beta, reward_model_fn)
     return curried_batch_rm_fn
 
-
+# TODO: modify beta passed to the function
 def neg_beta_times_reward_model(single_seq, prompt_len, beta, reward_model_fn):
     return reward_model_fn(single_seq, prompt_len) * -1. * beta
 
