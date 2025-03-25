@@ -76,7 +76,7 @@ def parse_args():
                                  help="Length of output sequences")
     posterior_group.add_argument("--seed", type=int, default=1,
                                  help="Random seed")
-    posterior_group.add_argument("--save_dir", type=str, default='.',
+    posterior_group.add_argument("--save_dir", type=str, default='./checkpoints',
                                  help="Directory to save collected samples")
     posterior_group.add_argument("--experiment_name", type=str, default='posterior_sampling',
                                  help="Experiment name for logging and saving")
@@ -683,7 +683,7 @@ def main():
     config.reward_model_config.indices_of_continuation = indices_of_continuation
     
     # Collect true posterior samples
-    true_posterior_samples = collect_true_posterior_samples(
+    rng_key, true_posterior_samples = collect_true_posterior_samples(
         rng_key=rng_key,
         config=config,
         jnp_prompts=jnp_prompts,
@@ -709,13 +709,14 @@ def main():
     if config.reward_model_config.reward_cap is not None:
         reward_cap_str = f"_rewardcap{config.reward_model_config.reward_cap}"
     
-    # Create the samples directory if it doesn't exist
-    os.makedirs(args.save_dir, exist_ok=True)
+    save_dir = os.path.abspath(args.save_dir)
+    os.makedirs(save_dir, exist_ok=True)
+    print(f"Saving posterior samples to {save_dir}")
     
     from flax.training import checkpoints
     checkpoints.save_checkpoint(
         overwrite=True,
-        ckpt_dir=args.save_dir,
+        ckpt_dir=save_dir,
         target=(true_posterior_samples,),
         step=true_posterior_samples[0].shape[0],
         prefix=f"true_posterior_samples_{timestamp}_{config.reward_model_config.rm_type}_" +
@@ -728,11 +729,11 @@ def main():
         inspect_text_samples(
             tokenizer=config.tokenizer,
             samples=true_posterior_samples_for_prompt,
-            rewards=None,
+            n_samples_to_print=None,
             name="TRUE TARGET"
         )
     
-    print(f"Posterior samples collection completed and saved to {args.save_dir}")
+    print(f"Posterior samples collection completed and saved to {save_dir}")
 
 if __name__ == "__main__":
     main() 
