@@ -1,10 +1,8 @@
-from .smc import SequentialMonteCarlo, TwistedSMC
-from .exact_posterior_sampler import ExactPosteriorSampler
-from custom_transformer_prob_utils import stochastic_transformer_sample as sample_from_base_model
+from twisted_smc.inference.custom_transformer_prob_utils import stochastic_transformer_sample
+from twisted_smc.inference.exact_posterior_sampler import collect_true_posterior_samples, ExactPosteriorSampler
 
 __all__ = [
-    'SequentialMonteCarlo',
-    'TwistedSMC',
+    'stochastic_transformer_sample',
     'ExactPosteriorSampler',
-    'sample_from_base_model'
+    'collect_true_posterior_samples'
 ]

@@ -9,7 +9,95 @@ import torch
 from ..config import ExperimentConfig
 from ..utils.logging import ExperimentLogger
 from custom_transformer_prob_utils import stochastic_transformer_sample
+from twisted_smc.rewards.reward_calculators import calculate_reward_cap
 
+    
+def collect_true_posterior_samples(
+    rng_key, config, jnp_prompts, params_p, rm_type,
+    output_len, n_samples_at_a_time, huggingface_model,
+    indices_of_continuation, rewardModel,
+    tokenizer_RM, tokenizer, threshold, pos_threshold, 
+    num_samples_if_only_collect_true_posterior_samples,
+    reward_cap=None, n_samples_for_cap=None
+):
+    """
+    Collect samples from the true posterior distribution.
+    
+    Args:
+        rng_key: JAX random key
+        config: The experiment configuration
+        jnp_prompts: Tokenized prompts as JAX arrays
+        params_p: Model parameters
+        rm_type: Type of reward model to use
+        output_len: Length of generated outputs
+        n_samples_at_a_time: Batch size for sampling
+        huggingface_model: The base language model
+        indices_of_continuation: Indices of continuation tokens (if applicable)
+        rewardModel: The reward model
+        tokenizer_RM: Tokenizer for the reward model
+        tokenizer: Tokenizer for the language model
+        threshold: Threshold for reward-based filtering
+        pos_threshold: Whether to use positive threshold
+        num_samples_if_only_collect_true_posterior_samples: Target number of samples
+        reward_cap: Optional cap on reward values
+        n_samples_for_cap: Number of samples to use for determining reward cap
+    
+    Returns:
+        combined_true_posterior_samples: List of posterior samples by prompt
+    """
+    new_start = time.time()
+    enough_samples = False
+    combined_true_posterior_samples = None
+    
+    # Handle reward cap calculation for toy_rlhf (if needed)
+    if rm_type in ["toy_rlhf"] and reward_cap is None:
+        reward_cap = calculate_reward_cap(
+            rng_key, config, jnp_prompts, output_len, 
+            n_samples_at_a_time, n_samples_for_cap
+        )
+    
+    # Main sampling loop
+    while not enough_samples:
+        rng_key, sk = jax.random.split(rng_key)
+        
+        # Get samples from the posterior
+        from twisted_smc.rewards.reward_models import get_log_true_final_twists
+        log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
+            = get_log_true_final_twists(
+            sk, jnp_prompts, params_p, rm_type,
+            output_len, n_samples_at_a_time, huggingface_model,
+            indices_of_continuation, rewardModel,
+            tokenizer_RM, tokenizer, threshold, pos_threshold, get_true_posterior_samples=True, reward_cap=reward_cap
+        )
+        
+        if combined_true_posterior_samples is None:
+            combined_true_posterior_samples = true_posterior_samples_by_prompt_and_by_token
+        else:
+            for i in range(len(combined_true_posterior_samples)):
+                print("----")
+                print(combined_true_posterior_samples[i].shape)
+                print(true_posterior_samples_by_prompt_and_by_token[i].shape)
+                combined_true_posterior_samples[i] = jnp.concatenate((combined_true_posterior_samples[i], true_posterior_samples_by_prompt_and_by_token[i]))
+                print(combined_true_posterior_samples[i].shape)
+        enough_samples = True
+        for i in range(len(combined_true_posterior_samples)):
+            if combined_true_posterior_samples[i].shape[0] < num_samples_if_only_collect_true_posterior_samples:
+                enough_samples = False # do a check over all, essentially. Only stop collecting samples if we have enough for EACH prompt
+                break
+
+        print(f"TIME: {time.time() - new_start}", flush=True)
+
+    for i in range(len(combined_true_posterior_samples)):
+        print(combined_true_posterior_samples[i].shape)
+        if combined_true_posterior_samples[i].shape[0] > num_samples_if_only_collect_true_posterior_samples:
+            combined_true_posterior_samples[i] = combined_true_posterior_samples[i][:num_samples_if_only_collect_true_posterior_samples]
+            print("reduce to n true post samples size")
+            print(combined_true_posterior_samples[i].shape)
+
+    print("Finished collecting true posterior (target) samples")
+    print(combined_true_posterior_samples)
+
+    return rng_key, combined_true_posterior_samples 
 
 class ExactPosteriorSampler:
     """
