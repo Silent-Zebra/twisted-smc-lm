@@ -6,7 +6,7 @@ from .base import TwistLoss
 from twisted_smc.inference.smc import TwistedSMC
 from typing import Dict
 
-class EBMLoss(TwistLoss):
+class CTLLoss(TwistLoss):
     """Contrastive Twist Learning (CTL) loss from original implementation."""
     
     def __init__(self, config):

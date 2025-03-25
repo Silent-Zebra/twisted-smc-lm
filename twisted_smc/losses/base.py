@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Tuple
 import jax
 import jax.numpy as jnp
-from twisted_smc.config import TwistTrainingConfig
+# from twisted_smc.config import TwistTrainingConfig
 from twisted_smc.inference.smc import TwistedSMC
 
 class TwistLoss(ABC):

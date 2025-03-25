@@ -1,0 +1,17 @@
+*.pyc
+*METADATA
+*.pdf
+checkpoint
+*.pt
+*.pth
+*.pkl
+*.pickle
+*.pickle.gz
+*.pickle.bz2
+*.out
+*.err
+*.log
+*.log.*
+*.log.*.*
+*.log.*.*.*
+*.log.*.*.*.*

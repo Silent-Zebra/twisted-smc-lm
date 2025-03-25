@@ -1,12 +1,12 @@
 from .base import TwistLoss
-from .ebm import EBMLoss
+from .ctl import CTLLoss
 # from .bce import BCELoss
 # from .sixo import SIXOLoss
 # from .rl import RLLoss
 
 __all__ = [
     'TwistLoss',
-    'EBMLoss',
+    'CTLLoss',
     # 'BCELoss',
     # 'SIXOLoss',
     # 'RLLoss',
