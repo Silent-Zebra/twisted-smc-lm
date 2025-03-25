@@ -13,10 +13,8 @@ from twisted_smc.config import (
     CheckpointConfig, 
     ExperimentConfig
 )
-from twisted_smc.models import TwistedLanguageModel, get_tokenizer
-from twisted_smc.rewards import get_reward_function
+from twisted_smc.models import get_tokenizer
 from twisted_smc.inference import ExactPosteriorSampler
-from twisted_smc.data import load_prompts
 from huggingface_models_custom import (
     CustomLMWithTwistHead, 
     CustomLMHeadModel, 
@@ -238,8 +236,6 @@ def setup_model_and_params_for_sampling(
     additional_sd_divider
 ):
     """Set up model using original architecture for posterior sampling."""
-    
-    # Split random key
     rng_key, sk = jax.random.split(rng_key, 2)
     
     # Determine whether to use log_sigmoid_twist based on twist_learn_type
