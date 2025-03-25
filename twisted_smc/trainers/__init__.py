@@ -3,7 +3,7 @@ from .ppo_trainer import PPOTrainer
 from .base_trainer import BaseTrainer
 
 __all__ = [
+    'BaseTrainer',
     'TwistTrainer',
     'PPOTrainer',
-    'BaseTrainer'
 ]

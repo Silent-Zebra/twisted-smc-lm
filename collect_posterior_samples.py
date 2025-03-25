@@ -14,14 +14,14 @@ from twisted_smc.config import (
     ExperimentConfig
 )
 from twisted_smc.models import get_tokenizer
-from twisted_smc.inference import ExactPosteriorSampler
 from huggingface_models_custom import (
     CustomLMWithTwistHead, 
     CustomLMHeadModel, 
     get_tokenizer, 
 )
 from utils import HashableDict, inspect_text_samples
-from twisted_smc.reward_models import get_log_true_final_twists
+from twisted_smc.rewards.reward_models import get_log_true_final_twists
+
 
 def parse_args():
     parser = argparse.ArgumentParser("Collect Exact Posterior Samples")
@@ -455,53 +455,6 @@ def calculate_reward_cap(
     
     return reward_cap
 
-def sample_from_posterior(
-    rng_key, config, jnp_prompts, params_p, rm_type,
-    output_len, n_samples_at_a_time, huggingface_model,
-    indices_of_continuation, rewardModel,
-    tokenizer_RM, tokenizer, threshold, pos_threshold, 
-    reward_cap=None
-):
-    """Sample from the posterior distribution using the ExactPosteriorSampler."""
-    from flax.core.frozen_dict import freeze
-    
-    # Split random key
-    rng_key, sk = jax.random.split(rng_key)
-    
-    # Create an exact posterior sampler
-    sampler = ExactPosteriorSampler(
-        config=config,  # Pass the config parameter
-        model=huggingface_model,
-        params=params_p,
-        reward_model=rewardModel,
-        tokenizer=tokenizer,
-        reward_tokenizer=tokenizer_RM,
-        reward_type=rm_type,
-        beta=config.training_config.beta_temp,
-        threshold=threshold,
-        pos_threshold=pos_threshold,
-        reward_cap=reward_cap,
-        indices_of_continuation=indices_of_continuation,
-        num_last_tokens_to_condition_on=getattr(config.reward_model_config, 'num_last_tokens_to_condition_on', 0)
-    )
-    
-    # Sample from each prompt
-    posterior_samples_by_prompt = []
-    for prompt in jnp_prompts:
-        
-        # Choose sampling method based on reward type
-        if rm_type in ["toxicity_threshold", "sentiment_threshold", "hard_p_continuation"]:
-            method = "rejection"
-        else:
-            method = "importance"
-            
-        # Sample from the posterior
-        samples = sampler.sample(
-            sk, prompt, output_len, n_samples_at_a_time, method=method
-        )
-        posterior_samples_by_prompt.append(samples)
-    
-    return posterior_samples_by_prompt
 
 def concatenate_samples(existing_samples, new_samples):
     """Concatenate new samples with existing ones."""

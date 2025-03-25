@@ -1,8 +1,15 @@
-from .twists.factory import TwistBuilderFactory
-from .twists.base import TwistConfig
-from typing import Tuple, List, Callable, Any, Optional
-import jax.numpy as jnp
 
+import jax
+from jax import vmap
+import jax.numpy as jnp
+from functools import partial
+import torch
+from ..twists.factory import TwistBuilderFactory
+from ..twists.base import TwistConfig
+from typing import Tuple, List, Callable, Any, Optional
+
+from custom_transformer_prob_utils import evaluate_log_p_theta_t, \
+    stochastic_transformer_sample, evaluate_log_p_selected_tokens
 
 def get_log_true_final_twists(
     rng_key: jnp.ndarray,
@@ -78,14 +85,6 @@ def get_log_true_final_twists(
     builder = TwistBuilderFactory.create(rm_type, **builder_params)
     return builder.build_for_prompts(config)
 
-import jax
-from jax import vmap
-import jax.numpy as jnp
-from functools import partial
-import torch
-
-from custom_transformer_prob_utils import evaluate_log_p_theta_t, \
-    stochastic_transformer_sample, evaluate_log_p_selected_tokens
 
 # TODO: modify beta passed to the function
 # NOTE: curry is just fixing some arguments to the function.
