@@ -4,13 +4,14 @@ import time
 import datetime
 import jax
 import jax.numpy as jnp
+from flax.training import checkpoints
 
 from twisted_smc.config import (
     build_experiment_config
 )
 from twisted_smc.models import (
     get_model_config_and_conditional_twist_settings,
-    setup_model_and_params_for_sampling,
+    setup_model_and_params,
     get_tokenizer_and_rewardModel,
     get_tokenizer
 )
@@ -93,16 +94,15 @@ def main():
     
     rng_key = jax.random.PRNGKey(config.training_config.seed)
     
-    # Get model configuration and twist settings
-    model_config, from_pt, conditional_twist_type, one_hot_dim = \
+    # Get model configuration string and twist settings
+    model_config_str, from_pt, conditional_twist_type, one_hot_dim = \
         get_model_config_and_conditional_twist_settings(config.model_config.hface_model_type, 
                                                         config.reward_model_config.rm_type)
     
-    # Set up model using original architecture
-    model_interface = setup_model_and_params_for_sampling(
+    model_interface = setup_model_and_params(
         rng_key=rng_key,
         separate_hface_twist_model=config.model_config.separate_hface_twist_model,
-        model_config=model_config,
+        model_config=model_config_str,
         from_pt=from_pt,
         twist_learn_type=config.training_config.twist_learn_type,
         hface_nn_twist=config.model_config.hface_nn_twist,
@@ -115,38 +115,25 @@ def main():
         additional_sd_divider=config.model_config.additional_sd_divider
     )
     
-    tokenizer = get_tokenizer(model_config)
+    tokenizer = get_tokenizer(model_config_str)
     tokenizer_RM, rewardModel = get_tokenizer_and_rewardModel(config.reward_model_config.rm_type)
     
-    # Store tokenizers and reward model in config
-    config.tokenizer = tokenizer
-    config.tokenizer_RM = tokenizer_RM
-    config.rewardModel = rewardModel
-    
-    # Store model components in the config based on architecture choice
-    config.huggingface_model = model_interface['huggingface_model']
-    config.params_p = model_interface['params_p']
-    config.params_twist = model_interface['params_twist']
-    config.optimizer_twist = model_interface['optimizer_twist']
-    config.optim_twist_state = model_interface['optim_twist_state']
-    
-    # Get the appropriate model to pass to the posterior sampler
-    if config.model_config.separate_hface_twist_model:
-        model = model_interface['model_twist']  # For separate models, use the twist model
-    else:
-        model = model_interface['model']  # For combined model, use the single model
-    
-    # Handle prompts
     indices_of_continuation, jnp_prompts = get_jnp_prompts(
         config.model_config.hface_model_type, 
         config.reward_model_config.rm_type, 
         tokenizer
     )
     
-    # Store prompts and continuation indices in config
+    config.tokenizer = tokenizer
+    config.tokenizer_RM = tokenizer_RM
+    config.rewardModel = rewardModel
+    config.huggingface_model = model_interface['huggingface_model']
+    config.params_p = model_interface['params_p']
+    config.params_twist = model_interface['params_twist']
+    config.optimizer_twist = model_interface['optimizer_twist']
+    config.optim_twist_state = model_interface['optim_twist_state']
     config.reward_model_config.indices_of_continuation = indices_of_continuation
     
-    # Collect true posterior samples
     rng_key, true_posterior_samples = collect_true_posterior_samples(
         rng_key=rng_key,
         config=config,
@@ -177,7 +164,6 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
     print(f"Saving posterior samples to {save_dir}")
     
-    from flax.training import checkpoints
     checkpoints.save_checkpoint(
         overwrite=True,
         ckpt_dir=save_dir,
