@@ -13,13 +13,12 @@ The package implements the Factory and Builder design patterns to support:
 
 from .base import TwistBuilder, TwistConfig
 from .factory import TwistBuilderFactory
+from .api import get_log_true_final_twists
 
-# Expose the main function for creating twists based on reward models
-from .factory import TwistBuilderFactory as create_twist_builder
 
 __all__ = [
     'TwistBuilder',
     'TwistConfig',
     'TwistBuilderFactory',
-    'create_twist_builder',
+    'get_log_true_final_twists'
 ] 

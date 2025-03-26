@@ -9,8 +9,8 @@ import torch
 from ..config import ExperimentConfig
 from ..utils.logging import ExperimentLogger
 from custom_transformer_prob_utils import stochastic_transformer_sample
-from twisted_smc.rewards.reward_calculators import calculate_reward_cap
-
+from twisted_smc.rewards import calculate_reward_cap
+from twisted_smc.twists import get_log_true_final_twists
     
 def collect_true_posterior_samples(
     rng_key,
@@ -60,7 +60,6 @@ def collect_true_posterior_samples(
         rng_key, sk = jax.random.split(rng_key)
         
         # Get samples from the posterior
-        from twisted_smc.rewards.reward_models import get_log_true_final_twists
         log_true_final_twists, true_posterior_samples_by_prompt_and_by_token \
             = get_log_true_final_twists(
             sk, jnp_prompts, params_p, rm_type,
