@@ -26,7 +26,7 @@ def parse_args():
     # Model configuration (relevant parts for sampling)
     model_group = parser.add_argument_group("Model Configuration")
     model_group.add_argument("--n_vocab", type=int, default=50257, help="Num of tokens in vocab")
-    model_group.add_argument("--hface_model_type", type=str, default="distilgpt2",
+    model_group.add_argument("--hface_model_type", type=str, default="TinyStories",
                              choices=["distilgpt2", "gpt2small", "gpt2medium", "gpt2large", "TinyStories"],
                              help="Type of Hugging Face model to use")
     model_group.add_argument("--hface_nn_twist", action="store_true",
@@ -134,12 +134,13 @@ def main():
     config.optim_twist_state = model_interface['optim_twist_state']
     config.reward_model_config.indices_of_continuation = indices_of_continuation
     
+    print("Collecting true posterior samples (note: this may take a while)")
     rng_key, true_posterior_samples = collect_true_posterior_samples(
         rng_key=rng_key,
         config=config,
         jnp_prompts=jnp_prompts,
     )
-    
+    print("True posterior samples collected")
     # Save checkpoint with samples
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')
     reward_cap_str = ""

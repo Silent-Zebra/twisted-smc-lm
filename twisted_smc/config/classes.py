@@ -63,7 +63,8 @@ class TrainingConfig:
                  n_buffer_samples_at_a_time=10,  # Number of buffer samples at a time
                  n_times_to_sample_for_buffer=1,  # Number of times to sample for buffer
                  one_big_sample=False,        # Whether to use one big sample
-                 print_every_twist_updates=10 # Print frequency
+                 print_every_twist_updates=10, # Print frequency
+                 verbose=True                 # Whether to print verbose output
                 ):
         self.seed = seed
         self.twist_learn_type = twist_learn_type
@@ -91,6 +92,7 @@ class TrainingConfig:
         self.n_times_to_sample_for_buffer = n_times_to_sample_for_buffer
         self.one_big_sample = one_big_sample
         self.print_every_twist_updates = print_every_twist_updates
+        self.verbose = verbose
 
 
 class RewardModelConfig:
@@ -139,16 +141,37 @@ class CheckpointConfig:
         self.load_prefix_posterior_samples = load_prefix_posterior_samples
 
 
+class PosteriorSamplesConfig:
+    def __init__(self,
+                 load_posterior_samples=False,
+                 load_dir=None,
+                 load_prefix=None
+                ):
+        """
+        Configuration for posterior samples loading/generation.
+        
+        Args:
+            load_posterior_samples: Whether to load pre-existing samples
+            load_dir: Directory to load samples from
+            load_prefix: Prefix for the checkpoint files
+        """
+        self.load_posterior_samples = load_posterior_samples
+        self.load_dir = load_dir
+        self.load_prefix = load_prefix
+
+
 class ExperimentConfig:
     def __init__(self,
                  model_config,
                  training_config,
                  reward_model_config,
-                 checkpoint_config=None):
+                 checkpoint_config=None,
+                 posterior_samples_config=None):
         self.model_config = model_config
         self.training_config = training_config
         self.reward_model_config = reward_model_config
         self.checkpoint_config = checkpoint_config or CheckpointConfig()
+        self.posterior_samples_config = posterior_samples_config or PosteriorSamplesConfig()
 
         # Determine SMC procedure type based on reward model and checkpoint config
         if self.reward_model_config.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob", 
@@ -164,9 +187,6 @@ class ExperimentConfig:
 
         # Init sentiment class index for zero-based indexing
         self.sentiment_class_zero_index = self.reward_model_config.sentiment_class - 1
-
-        # Create the twist gradient function
-        # self.twist_grad_fn = self._get_twist_grad_fn()
         
         # These will be initialized later during model setup
         self.rewardModel = None
@@ -180,188 +200,3 @@ class ExperimentConfig:
         self.params_proposal = None
         self.optimizer_twist = None
         self.optim_twist_state = None
-
-    # def _get_twist_grad_fn(self):
-    #     standard_argnum = 3 # For the params_twist argument
-
-    #     get_l_ebm_fn = get_l_ebm_ml_jit
-    #     if self.reward_model_config.rm_type in ["toxicity_threshold", "exp_beta_toxicity_class_logprob", "sentiment_threshold", "exp_beta_sentiment_class_logprob", "sent_cond_twist", "toy_rlhf"]:
-    #         get_l_ebm_fn = get_l_ebm_ml_partial_jit
-
-    #     if self.training_config.twist_learn_type == "ebm_old":
-    #         twist_grad_fn = jax.grad(get_l_ebm_fn, argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_one_sample":
-    #         if self.training_config.twist_updates_per_batch > 1:
-    #             twist_grad_fn = jax.value_and_grad(partial(get_l_ebm_fn, only_one_sample=True, return_proposal_samples=True), argnums=standard_argnum, has_aux=True)
-    #         else:
-    #             twist_grad_fn = jax.grad(partial(get_l_ebm_fn, only_one_sample=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_reweight":
-    #         twist_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_partial_jit":
-    #         twist_grad_fn = jax.grad(get_l_ebm_ml_partial_jit, argnums=standard_argnum)
-    #     # elif self.training_config.twist_learn_type == "ebm_q_rsmp": # Removed in original code
-    #     #     twist_grad_fn = jax.grad(get_l_ebm_ml_w_q_resample_jit, argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_mixed_p_q":
-    #         twist_grad_fn = jax.grad(partial(get_l_ebm_fn, mixed_p_q_sample=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_mixed_p_q_reweight":
-    #         twist_grad_fn = jax.grad(partial(get_l_ebm_fn, reweight_for_second_term=True, mixed_p_q_sample=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens":
-    #         twist_grad_fn = jax.grad(partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, n_twist_ebm_vmap=self.model_config.n_twist_ebm_vmap), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens_finalrl":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens, add_rl_final_twist_loss=True,
-    #                     reweight_for_second_term=True, n_twist_ebm_vmap=self.model_config.n_twist_ebm_vmap),
-    #             argnums=standard_argnum
-    #         )
-    #     elif self.training_config.twist_learn_type == "ebm_ml_partial_jit_vmapped_over_condition_tokens":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_ebm_ml_partial_jit_vmapped_over_condition_tokens,
-    #                     reweight_for_second_term=True,
-    #                     n_twist_ebm_vmap=self.model_config.n_twist_ebm_vmap), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_vmap_os":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_ebm_ml_os_jit_vmapped_over_condition_tokens,
-    #                     n_twist_ebm_vmap=self.model_config.n_twist_ebm_vmap), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_ml_pprop_jit_vmapped_over_condition_tokens":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_ebm_ml_jit_vmapped_over_condition_tokens,
-    #                     reweight_for_second_term=True, proposal_is_p=True,
-    #                     n_twist_ebm_vmap=self.model_config.n_twist_ebm_vmap), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_ml_jit_vmapped_over_condition_tokens_nosmcub":
-    #         twist_grad_fn = jax.grad(partial(
-    #             get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True,
-    #             n_twist_ebm_vmap=self.model_config.n_twist_ebm_vmap, use_smc_ub_for_pos_samples=False), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_ml_pprop_jit_vmapped_over_condition_tokens_nosmcub":
-    #         twist_grad_fn = jax.grad(partial(
-    #             get_l_ebm_ml_jit_vmapped_over_condition_tokens, reweight_for_second_term=True, proposal_is_p=True,
-    #             n_twist_ebm_vmap=self.model_config.n_twist_ebm_vmap, use_smc_ub_for_pos_samples=False), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_ml_vmap_with_one_total_kl":
-    #         twist_grad_fn = jax.grad(partial(get_l_ebm_ml_vmap_with_one_total_kl, reweight_for_second_term=True, n_twist_ebm_vmap=self.model_config.n_twist_ebm_vmap, alpha=self.reward_model_config.ebm_combined_alpha), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "ebm_combined":
-    #         twist_grad_fn = jax.grad(partial(get_l_ebm_ml_combined_objective_partial_jit, alpha=self.reward_model_config.ebm_combined_alpha), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "nvi_partial_jit":
-    #         twist_grad_fn = jax.grad(get_l_nvi_partial_jit , argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "nvi_jit":
-    #         twist_grad_fn = jax.grad(get_l_nvi_jit,
-    #                                argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "nvi_vmapped_over_condition_tokens":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_nvi_jit_vmapped_over_condition_tokens,
-    #                     n_twist_ebm_vmap=self.model_config.n_twist_ebm_vmap),
-    #             argnums=standard_argnum
-    #         )
-    #     elif self.training_config.twist_learn_type == "one_total_kl":
-    #         twist_grad_fn = jax.grad(get_l_one_total_kl_jit, argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_mixed_p_q":
-    #         twist_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_sample":
-    #         twist_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, exact_expectation=False), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_sample_mixed_p_q":
-    #         twist_grad_fn = jax.grad(partial(get_l_one_total_kl_jit, mixed_p_q_sample=True, exact_expectation=False), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_partial_jit":
-    #         twist_grad_fn = jax.grad(get_l_one_total_kl, argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_rl_lsq_sgtarget":
-    #         twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.reward_model_config.ebm_combined_alpha,
-    #                                        rl_loss_type="squared_error_in_log_space", rl_stop_grad="target"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_rl_lsq_sgvalue":
-    #         twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.reward_model_config.ebm_combined_alpha,
-    #                                        rl_loss_type="squared_error_in_log_space", rl_stop_grad="value"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_rl_lsq_sgnone":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_combined_rl_onekl, alpha=self.reward_model_config.ebm_combined_alpha,
-    #                     rl_loss_type="squared_error_in_log_space",
-    #                     rl_stop_grad=None), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_rl_sq_sgtarget":
-    #         twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.reward_model_config.ebm_combined_alpha,
-    #                                        rl_loss_type="squared_error", rl_stop_grad="target"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_rl_sq_sgvalue":
-    #         twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.reward_model_config.ebm_combined_alpha,
-    #                                        rl_loss_type="squared_error", rl_stop_grad="value"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_rl_sq_sgnone":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_combined_rl_onekl, alpha=self.reward_model_config.ebm_combined_alpha,
-    #                     rl_loss_type="squared_error",
-    #                     rl_stop_grad=None), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_rl_ratio_sgtarget":
-    #         twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.reward_model_config.ebm_combined_alpha,
-    #                                        rl_loss_type="ratio", rl_stop_grad="target"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_rl_ratio_sgvalue":
-    #         twist_grad_fn = jax.grad(partial(get_l_combined_rl_onekl, alpha=self.reward_model_config.ebm_combined_alpha,
-    #                                        rl_loss_type="ratio", rl_stop_grad="value"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_rl_ratio_sgnone":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_combined_rl_onekl, alpha=self.reward_model_config.ebm_combined_alpha,
-    #                     rl_loss_type="ratio",
-    #                     rl_stop_grad=None), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "one_total_kl_with_sixo":
-    #         twist_grad_fn = jax.grad(get_l_combined_sixo_onekl, argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_p_sq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="squared_error"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_sq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_qrsmp_sq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="qrsmp", loss_type="squared_error"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_sigma_sq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="sigma", loss_type="squared_error"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_mixed_p_q_sq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_p_lsq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_lsq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_qsigma_lsq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space", append_sigma_samples=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_qsigma_lsq_partial_jit":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q",
-    #                     loss_type="squared_error_in_log_space",
-    #                     append_sigma_samples=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_qsigma_gcd":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="googleCD", append_sigma_samples=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_gcd":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="googleCD"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_sq_partial_jit":
-    #         twist_grad_fn = jax.grad(
-    #             partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q",
-    #                     loss_type="squared_error"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_lsq_partial_jit":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_gcd_partial_jit":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="googleCD"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_lsq_nostopgrad":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_lsq_partial_jit_nostopgrad":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, stop_grad=False, evaluate_over_samples_from="q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_multistep":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="q", loss_type="multistep"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_q_multistep_partial_jit":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="q", loss_type="multistep"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_qrsmp_lsq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="qrsmp", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_sigma_lsq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="sigma", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_mixed_p_q_lsq":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_mixed_p_q_lsq_partial_jit":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="mixed_p_q", loss_type="squared_error_in_log_space"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_mc":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_jit, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "rl_mc_partial_jit":
-    #         twist_grad_fn = jax.grad(partial(get_l_rl_based_partial_jit, evaluate_over_samples_from="p", loss_type="monte_carlo"), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "sixo":
-    #         twist_grad_fn = jax.grad(get_l_dre_sixo_jit, argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "sixo_mixed_p_q":
-    #         twist_grad_fn = jax.grad(partial(get_l_dre_sixo_jit, mixed_p_q_sample=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "sixo_partial_jit":
-    #         twist_grad_fn = jax.grad(get_l_dre_sixo, argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "sixo_mixed_p_q_partial_jit":
-    #         twist_grad_fn = jax.grad(partial(get_l_dre_sixo, mixed_p_q_sample=True), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "bce_sigma":
-    #         twist_grad_fn = jax.grad(partial(get_l_bce_sigma, rm_type=self.reward_model_config.rm_type, beta_temp=self.training_config.beta_temp), argnums=standard_argnum)
-    #     elif self.training_config.twist_learn_type == "bce_psigma":
-    #         twist_grad_fn = jax.grad(partial(get_l_bce_p_sigma, rm_type=self.reward_model_config.rm_type, beta_temp=self.training_config.beta_temp), argnums=standard_argnum)
-    #     elif "bce" in self.training_config.twist_learn_type: # in ["bce_p", "bce_q"]:
-    #         twist_grad_fn = jax.grad(partial(get_l_bce, rm_type=self.reward_model_config.rm_type, beta_temp=self.training_config.beta_temp), argnums=standard_argnum)
-    #     else:
-    #         raise NotImplementedError
-    #     return twist_grad_fn
