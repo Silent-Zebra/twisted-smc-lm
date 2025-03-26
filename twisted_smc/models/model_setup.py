@@ -58,35 +58,47 @@ def get_model_config_and_conditional_twist_settings(hface_model_type, rm_type):
 
 
 def setup_model_and_params(
-    rng_key, 
-    separate_hface_twist_model, 
-    model_config, 
-    from_pt, 
-    twist_learn_type,
-    hface_nn_twist, 
-    softmax_twist,
-    conditional_twist_type, 
-    num_last_tokens_to_condition_on, 
-    n_layers_twist, 
-    hidden_units_multiplier,
-    one_hot_dim,
-    additional_sd_divider,
-    # Add parameters for optimizer configuration
-    lr_twist=0.0,  # Default to 0 for sampling only
-    beta1=0.9,
-    beta2=0.999,
-    eps=1e-8,
-    weight_decay=0.01,
-    output_p_psi=False,
-    # Add LoRA parameters
-    use_lora=False,
-    lora_rank=4
+    rng_key,
+    config,
+    model_config_str,
+    from_pt,
+    conditional_twist_type,
+    one_hot_dim
 ):
     """Set up model and parameters for sampling or training with configurable optimizer.
     
-    Supports both standard models and LoRA (Low-Rank Adaptation) for parameter-efficient fine-tuning.
+    Args:
+        rng_key: JAX random key
+        config: ExperimentConfig containing model, training, and reward model configurations
+        model_config_str: Configuration string for the HuggingFace model
+        from_pt: Whether to load from PyTorch checkpoint
+        conditional_twist_type: Type of conditional twist to use (if applicable)
+        one_hot_dim: Dimension for one-hot encoding (if applicable)
+        
+    Returns:
+        Dictionary containing the model interface components
     """
     rng_key, sk = jax.random.split(rng_key, 2)
+    
+    # Extract parameters from config
+    separate_hface_twist_model = config.model_config.separate_hface_twist_model
+    twist_learn_type = config.training_config.twist_learn_type
+    hface_nn_twist = config.model_config.hface_nn_twist
+    softmax_twist = config.model_config.softmax_twist
+    num_last_tokens_to_condition_on = config.reward_model_config.num_last_tokens_to_condition_on
+    n_layers_twist = config.model_config.n_layers_twist
+    hidden_units_multiplier = config.model_config.hidden_units_multiplier
+    additional_sd_divider = config.model_config.additional_sd_divider
+    
+    # Optional parameters with defaults
+    lr_twist = getattr(config.training_config, 'lr_twist', 0.0)
+    beta1 = getattr(config.training_config, 'beta1', 0.9)
+    beta2 = getattr(config.training_config, 'beta2', 0.999)
+    eps = getattr(config.training_config, 'eps', 1e-8)
+    weight_decay = getattr(config.training_config, 'weight_decay', 0.01)
+    output_p_psi = getattr(config.model_config, 'output_p_psi', False)
+    use_lora = getattr(config.model_config, 'use_lora', False)
+    lora_rank = getattr(config.model_config, 'lora_rank', 4)
     
     # Determine whether to use log_sigmoid_twist based on twist_learn_type
     log_sigmoid_twist = "bce" in twist_learn_type
@@ -102,10 +114,10 @@ def setup_model_and_params(
     
     if separate_hface_twist_model:
         # Set up separate models for base and twist
-        model_p = CustomLMHeadModel(model_config, from_pt=from_pt)
+        model_p = CustomLMHeadModel(model_config_str, from_pt=from_pt)
         
         model_twist = CustomLMWithTwistHead(
-            sk, model_config, 
+            sk, model_config_str, 
             hface_nn_twist=hface_nn_twist,
             softmax_twist=softmax_twist, 
             conditional_twist_type=conditional_twist_type,
@@ -181,7 +193,7 @@ def setup_model_and_params(
     else:
         # Set up combined model
         model = CustomLMWithTwistHead(
-            sk, model_config, 
+            sk, model_config_str, 
             hface_nn_twist=hface_nn_twist, 
             softmax_twist=softmax_twist,
             conditional_twist_type=conditional_twist_type, 

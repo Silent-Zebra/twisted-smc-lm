@@ -90,7 +90,14 @@ def main():
     args = parse_args()
     args.only_collect_true_posterior_samples = True
 
+    # ExperimentConfig is built in two stages:
+    # 1. Build the config from the command line arguments
+    # 2. Add other components to the config later on after they are setup 
+    #       (e.g. model, reward model, tokenizer, etc.)
     config = build_experiment_config(args)
+    
+    # Store the original args in the config for access to CLI parameters
+    config.args = args
     
     rng_key = jax.random.PRNGKey(config.training_config.seed)
     
@@ -101,27 +108,20 @@ def main():
     
     model_interface = setup_model_and_params(
         rng_key=rng_key,
-        separate_hface_twist_model=config.model_config.separate_hface_twist_model,
-        model_config=model_config_str,
+        config=config,
+        model_config_str=model_config_str,
         from_pt=from_pt,
-        twist_learn_type=config.training_config.twist_learn_type,
-        hface_nn_twist=config.model_config.hface_nn_twist,
-        softmax_twist=config.model_config.softmax_twist,
         conditional_twist_type=conditional_twist_type,
-        num_last_tokens_to_condition_on=config.reward_model_config.num_last_tokens_to_condition_on,
-        n_layers_twist=config.model_config.n_layers_twist,
-        hidden_units_multiplier=config.model_config.hidden_units_multiplier,
-        one_hot_dim=one_hot_dim,
-        additional_sd_divider=config.model_config.additional_sd_divider
+        one_hot_dim=one_hot_dim
     )
     
     tokenizer = get_tokenizer(model_config_str)
     tokenizer_RM, rewardModel = get_tokenizer_and_rewardModel(config.reward_model_config.rm_type)
     
     indices_of_continuation, jnp_prompts = get_jnp_prompts(
-        config.model_config.hface_model_type, 
-        config.reward_model_config.rm_type, 
-        tokenizer
+        hface_model_type=config.model_config.hface_model_type, 
+        rm_type=config.reward_model_config.rm_type, 
+        tokenizer=tokenizer
     )
     
     config.tokenizer = tokenizer
@@ -138,20 +138,6 @@ def main():
         rng_key=rng_key,
         config=config,
         jnp_prompts=jnp_prompts,
-        params_p=config.params_p,
-        rm_type=config.reward_model_config.rm_type,
-        output_len=config.training_config.output_len,
-        n_samples_at_a_time=config.training_config.n_samples_at_a_time,
-        huggingface_model=config.huggingface_model,
-        indices_of_continuation=indices_of_continuation,
-        rewardModel=rewardModel,
-        tokenizer_RM=tokenizer_RM,
-        tokenizer=tokenizer,
-        threshold=config.reward_model_config.threshold,
-        pos_threshold=config.reward_model_config.pos_threshold,
-        num_samples_if_only_collect_true_posterior_samples=config.training_config.num_samples_if_only_collect_true_posterior_samples,
-        reward_cap=config.reward_model_config.reward_cap,
-        n_samples_for_cap=config.reward_model_config.n_samples_for_cap
     )
     
     # Save checkpoint with samples

@@ -13,41 +13,40 @@ from twisted_smc.rewards.reward_calculators import calculate_reward_cap
 
     
 def collect_true_posterior_samples(
-    rng_key, config, jnp_prompts, params_p, rm_type,
-    output_len, n_samples_at_a_time, huggingface_model,
-    indices_of_continuation, rewardModel,
-    tokenizer_RM, tokenizer, threshold, pos_threshold, 
-    num_samples_if_only_collect_true_posterior_samples,
-    reward_cap=None, n_samples_for_cap=None
+    rng_key,
+    config,
+    jnp_prompts
 ):
     """
     Collect samples from the true posterior distribution.
     
     Args:
         rng_key: JAX random key
-        config: The experiment configuration
+        config: The complete experiment configuration containing all model, reward and training settings
         jnp_prompts: Tokenized prompts as JAX arrays
-        params_p: Model parameters
-        rm_type: Type of reward model to use
-        output_len: Length of generated outputs
-        n_samples_at_a_time: Batch size for sampling
-        huggingface_model: The base language model
-        indices_of_continuation: Indices of continuation tokens (if applicable)
-        rewardModel: The reward model
-        tokenizer_RM: Tokenizer for the reward model
-        tokenizer: Tokenizer for the language model
-        threshold: Threshold for reward-based filtering
-        pos_threshold: Whether to use positive threshold
-        num_samples_if_only_collect_true_posterior_samples: Target number of samples
-        reward_cap: Optional cap on reward values
-        n_samples_for_cap: Number of samples to use for determining reward cap
     
     Returns:
-        combined_true_posterior_samples: List of posterior samples by prompt
+        Tuple of (new_rng_key, combined_true_posterior_samples)
     """
     new_start = time.time()
     enough_samples = False
     combined_true_posterior_samples = None
+    
+    # Access parameters from config
+    rm_type = config.reward_model_config.rm_type
+    output_len = config.training_config.output_len
+    n_samples_at_a_time = config.training_config.n_samples_at_a_time
+    num_samples_if_only_collect_true_posterior_samples = config.training_config.num_samples_if_only_collect_true_posterior_samples
+    params_p = config.params_p
+    huggingface_model = config.huggingface_model
+    indices_of_continuation = config.reward_model_config.indices_of_continuation
+    rewardModel = config.rewardModel
+    tokenizer_RM = config.tokenizer_RM
+    tokenizer = config.tokenizer
+    threshold = config.reward_model_config.threshold
+    pos_threshold = config.reward_model_config.pos_threshold
+    reward_cap = config.reward_model_config.reward_cap
+    n_samples_for_cap = config.reward_model_config.n_samples_for_cap
     
     # Handle reward cap calculation for toy_rlhf (if needed)
     if rm_type in ["toy_rlhf"] and reward_cap is None:
