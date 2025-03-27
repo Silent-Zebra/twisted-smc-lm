@@ -45,7 +45,7 @@ def sample_for_replay_buffer(
     """
     # This is a placeholder - in practice, this would reference the actual implementation
     # For now, import from the original implementation
-    from do_training_and_log_Z_bounds import sample_for_replay_buffer as original_sample
+    from old.do_training_and_log_Z_bounds import sample_for_replay_buffer as original_sample
     
     # Try to access the sample_for_replay_buffer function from the experimental_code module
     try:

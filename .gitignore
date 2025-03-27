@@ -17,3 +17,4 @@ checkpoint
 *.log.*.*.*.*
 checkpoints/true_posterior_samples_*
 checkpoints/*
+old code don't use/*
