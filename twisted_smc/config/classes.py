@@ -40,6 +40,7 @@ class TrainingConfig:
     def __init__(self,
                  seed,                        # Random seed
                  twist_learn_type,            # Type of twist learning method
+                 epochs,                      # Number of epochs
                  lr_twist,                    # Learning rate for twist
                  beta1=0.9,                   # Beta1 for Adam
                  beta2=0.999,                 # Beta2 for Adam
@@ -63,11 +64,17 @@ class TrainingConfig:
                  n_buffer_samples_at_a_time=10,  # Number of buffer samples at a time
                  n_times_to_sample_for_buffer=1,  # Number of times to sample for buffer
                  one_big_sample=False,        # Whether to use one big sample
-                 print_every_twist_updates=10, # Print frequency
+                 print_every_twist_updates=10, # Print frequency for twist updates
+                 print_every=1,               # Print frequency in epochs
+                 no_test_info=False,          # Whether to disable test info collection
+                 n_samples_for_plots=100,     # Number of samples for plots
+                 n_samples_for_plots_larger=100, # Number of samples for larger plots
+                 proposal_is_p=False,         # Whether to use base model as proposal
                  verbose=True                 # Whether to print verbose output
                 ):
         self.seed = seed
         self.twist_learn_type = twist_learn_type
+        self.epochs = epochs
         self.lr_twist = lr_twist
         self.beta1 = beta1
         self.beta2 = beta2
@@ -92,6 +99,11 @@ class TrainingConfig:
         self.n_times_to_sample_for_buffer = n_times_to_sample_for_buffer
         self.one_big_sample = one_big_sample
         self.print_every_twist_updates = print_every_twist_updates
+        self.print_every = print_every
+        self.no_test_info = no_test_info
+        self.n_samples_for_plots = n_samples_for_plots
+        self.n_samples_for_plots_larger = n_samples_for_plots_larger
+        self.proposal_is_p = proposal_is_p
         self.verbose = verbose
 
 
@@ -122,23 +134,25 @@ class RewardModelConfig:
 
 class CheckpointConfig:
     def __init__(self,
+                 save_dir=None,
                  load_ckpt=False,
                  load_dirs=None,
                  load_prefix=None,
                  load_OpenRLHF_critic_ckpt=False,
                  load_OpenRLHF_actor_ckpt=False,
                  load_prefix_actor_ckpt=None,
-                 load_posterior_samples=False,
-                 load_prefix_posterior_samples=None
+                 load_dir_OpenRLHF_ckpt=None,
+                 ckpt_every=1
                 ):
+        self.save_dir = save_dir
         self.load_ckpt = load_ckpt
         self.load_dirs = load_dirs
         self.load_prefix = load_prefix
         self.load_OpenRLHF_critic_ckpt = load_OpenRLHF_critic_ckpt
         self.load_OpenRLHF_actor_ckpt = load_OpenRLHF_actor_ckpt
         self.load_prefix_actor_ckpt = load_prefix_actor_ckpt
-        self.load_posterior_samples = load_posterior_samples
-        self.load_prefix_posterior_samples = load_prefix_posterior_samples
+        self.load_dir_OpenRLHF_ckpt = load_dir_OpenRLHF_ckpt
+        self.ckpt_every = ckpt_every
 
 
 class PosteriorSamplesConfig:

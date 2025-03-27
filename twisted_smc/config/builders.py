@@ -32,6 +32,7 @@ def build_training_config(args):
     """Build TrainingConfig from command line arguments."""
     return TrainingConfig(
         seed=args.seed,
+        epochs=args.epochs,
         twist_learn_type=getattr(args, "twist_learn_type", "ebm_ml_jit_vmapped_over_condition_tokens"),
         lr_twist=getattr(args, "lr_twist", 0.0),
         output_len=args.output_len,
@@ -42,7 +43,21 @@ def build_training_config(args):
         n_twist=getattr(args, "n_twist", 10),
         exp_num_twist_updates=getattr(args, "exp_num_twist_updates", 100),
         twist_updates_per_epoch=getattr(args, "twist_updates_per_epoch", 10),
-        verbose=True
+        print_every=getattr(args, "print_every", 1),
+        no_test_info=getattr(args, "no_test_info", False),
+        n_samples_for_plots=getattr(args, "n_samples_for_plots", 100),
+        n_samples_for_plots_larger=getattr(args, "n_samples_for_plots_larger", 100),
+        use_replay_buffer=getattr(args, "use_replay_buffer", False),
+        twist_updates_between_buffer_samples=getattr(args, "twist_updates_between_buffer_samples", 10),
+        n_buffer_samples_at_a_time=getattr(args, "n_buffer_samples_at_a_time", 10),
+        n_times_to_sample_for_buffer=getattr(args, "n_times_to_sample_for_buffer", 1),
+        one_big_sample=getattr(args, "one_big_sample", False),
+        max_buffer_size=getattr(args, "max_buffer_size", 1000),
+        proposal_is_p=getattr(args, "proposal_is_p", False),
+        tempered_twist=getattr(args, "tempered_twist", False),
+        beta_prop=getattr(args, "beta_prop", 1.0),
+        print_every_twist_updates=getattr(args, "print_every_twist_updates", 100),
+        verbose=getattr(args, "verbose", False)
     )
 
 
@@ -63,14 +78,15 @@ def build_reward_model_config(args):
 def build_checkpoint_config(args):
     """Build CheckpointConfig from command line arguments."""
     return CheckpointConfig(
+        save_dir=getattr(args, "save_dir", None),
         load_ckpt=getattr(args, "load_ckpt", False),
-        load_dirs=getattr(args, "load_dirs", None),
-        load_prefix=getattr(args, "load_prefix", None),
+        load_dirs=getattr(args, "load_dir_ckpt", None),
+        load_prefix=getattr(args, "load_prefix_ckpt", None),
         load_OpenRLHF_critic_ckpt=getattr(args, "load_OpenRLHF_critic_ckpt", False),
         load_OpenRLHF_actor_ckpt=getattr(args, "load_OpenRLHF_actor_ckpt", False),
         load_prefix_actor_ckpt=getattr(args, "load_prefix_actor_ckpt", None),
-        load_posterior_samples=getattr(args, "load_posterior_samples", False),
-        load_prefix_posterior_samples=getattr(args, "load_prefix_posterior_samples", None)
+        load_dir_OpenRLHF_ckpt=getattr(args, "load_dir_OpenRLHF_ckpt", None),
+        ckpt_every=getattr(args, "ckpt_every", 1)
     )
 
 

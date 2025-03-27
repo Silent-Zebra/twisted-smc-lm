@@ -16,12 +16,10 @@ def load_posterior_samples(
     Returns:
         Loaded posterior samples by prompt and token
     """
-    load_dir = config.checkpoint_config.load_dirs 
-    load_prefix = config.checkpoint_config.load_prefix_posterior_samples
-    
-    # If load_dirs is None, use the specified posterior samples directory
-    if load_dir is None and hasattr(config, 'args'):
-        load_dir = config.args.load_dir_posterior_samples
+    load_dir = config.posterior_samples_config.load_dir
+    load_prefix = config.posterior_samples_config.load_prefix
+    full_load_path = f"{load_dir}/{load_prefix}"
+    print(f"Loading posterior samples from: {full_load_path}", flush=True)
     
     checkpoint_data = checkpoints.restore_checkpoint(
         ckpt_dir=load_dir, 
@@ -31,7 +29,6 @@ def load_posterior_samples(
     
     true_posterior_samples = list(checkpoint_data['0'].values())
     
-    # Print sample information for debugging
     if config.training_config.verbose if hasattr(config.training_config, 'verbose') else True:
         print("Loaded posterior samples:", true_posterior_samples[0].shape)
         text_outputs = tokenizer.batch_decode(

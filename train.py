@@ -1,6 +1,4 @@
-# This is supposed to be a script that is used for training the model.
-# It is not used for collecting posterior samples.
-# It uses much of the same setup code but will be used for training.
+"""Train a twist function for a twisted sequential Monte Carlo language model."""
 
 import argparse
 import os
@@ -22,7 +20,7 @@ from twisted_smc.models import (
 from twisted_smc.prompts.prompt_processing import get_jnp_prompts
 from twisted_smc.inference import setup_twist_functions_and_posterior_samples
 from twisted_smc.utils import inspect_text_samples
-
+from twisted_smc.trainers import train
 
 def parse_args():
     parser = argparse.ArgumentParser("Training Script")
@@ -79,6 +77,40 @@ def parse_args():
                                 help="Number of twist updates per epoch")
     training_group.add_argument("--seed", type=int, default=1,
                                 help="Random seed")
+    training_group.add_argument("--print_every", type=int, default=1,
+                                help="Print information every N epochs")
+    training_group.add_argument("--no_test_info", action="store_true",
+                                help="Don't run test info collection")
+    training_group.add_argument("--n_samples_for_plots", type=int, default=100,
+                                help="Number of samples to use for plotting")
+    training_group.add_argument("--n_samples_for_plots_larger", type=int, default=100,
+                                help="Number of samples to use for larger plots")
+    training_group.add_argument("--use_replay_buffer", action="store_true",
+                                help="Use replay buffer for training")
+    training_group.add_argument("--twist_updates_between_buffer_samples", type=int, default=100,
+                                help="Number of twist updates between buffer samples")
+    training_group.add_argument("--n_buffer_samples_at_a_time", type=int, default=1000,
+                                help="Number of buffer samples to generate at a time")
+    training_group.add_argument("--n_times_to_sample_for_buffer", type=int, default=10,
+                                help="Number of times to sample for buffer")
+    training_group.add_argument("--one_big_sample", action="store_true",
+                                help="Use one big sample for buffer")
+    training_group.add_argument("--max_buffer_size", type=int, default=10000,
+                                help="Maximum buffer size")
+    training_group.add_argument("--proposal_is_p", action="store_true",
+                                help="Use the base model p as proposal q")
+    training_group.add_argument("--tempered_twist", action="store_true",
+                                help="Use tempered twist")
+    training_group.add_argument("--beta_prop", type=float, default=1.0,
+                                help="Beta for proposal")
+    training_group.add_argument("--reward_cap", type=float, default=None,
+                                help="Cap on rewards")
+    training_group.add_argument("--print_every_twist_updates", type=int, default=100,
+                                help="Print information every N twist updates")
+    training_group.add_argument("--exp_num_twist_updates", action="store_true",
+                                help="Use exponentially increasing number of twist updates")
+    training_group.add_argument("--verbose", action="store_true",
+                                help="Print verbose output during training")
     
     # Posterior samples configuration
     posterior_group = parser.add_argument_group("Posterior Samples")
@@ -97,6 +129,20 @@ def parse_args():
                             help="Checkpoint frequency in epochs")
     ckpt_group.add_argument("--save_dir", type=str, default='./checkpoints',
                             help="Directory to save checkpoints")
+    ckpt_group.add_argument("--load_ckpt", action="store_true",
+                            help="Load checkpoint")
+    ckpt_group.add_argument("--load_dir_ckpt", type=str, default=None,
+                            help="Directory to load checkpoint from")
+    ckpt_group.add_argument("--load_prefix_ckpt", type=str, default=None,
+                            help="Prefix for checkpoint")
+    ckpt_group.add_argument("--load_OpenRLHF_critic_ckpt", action="store_true",
+                            help="Load OpenRLHF critic checkpoint")
+    ckpt_group.add_argument("--load_OpenRLHF_actor_ckpt", action="store_true",
+                            help="Load OpenRLHF actor checkpoint")
+    ckpt_group.add_argument("--load_dir_OpenRLHF_ckpt", type=str, default=None,
+                            help="Directory to load OpenRLHF checkpoint from")
+    ckpt_group.add_argument("--load_prefix_actor_ckpt", type=str, default=None,
+                            help="Prefix for actor checkpoint")
 
     return parser.parse_args()
     
@@ -138,6 +184,7 @@ def main():
         tokenizer=tokenizer
     )
     
+    # Update the config with additional needed attributes
     config.tokenizer = tokenizer
     config.tokenizer_RM = tokenizer_RM
     config.rewardModel = rewardModel
@@ -162,12 +209,21 @@ def main():
     print("Finished building final twists and getting posterior samples", flush=True)
     print(f"TIME: {time.time()}", flush=True)
 
-    raise Exception("Stop here")    
-    ### TODO: add training code here eventually.
-    #### Training code would go here...
+    print("Starting training", flush=True)
+    params_twist, optim_twist_state, metrics = train(
+        config=config,
+        model_interface=model_interface,
+        jnp_prompts=jnp_prompts,
+        log_true_final_twists=log_true_final_twists,
+        true_posterior_samples=true_posterior_samples_by_prompt_and_by_token
+    )
     
+    # Update the model interface with the trained parameters
+    model_interface['params_twist'] = params_twist
+    model_interface['optim_twist_state'] = optim_twist_state
+    raise Exception("Stop here")
     # For now, just save the posterior samples if this is the first run
-    if not args.load_posterior_samples:
+    if not config.posterior_samples_config.load_posterior_samples:
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')
         reward_cap_str = ""
         if config.reward_model_config.reward_cap is not None:
@@ -197,7 +253,7 @@ def main():
             name="TRUE TARGET"
         )
     
-    print(f"Setup completed successfully.")
+    print(f"Training completed successfully.")
 
 if __name__ == "__main__":
     main() 

@@ -74,7 +74,6 @@ def setup_twist_functions_and_posterior_samples(
     Returns:
         Tuple of (new_rng_key, log_true_final_twists, true_posterior_samples_by_prompt_and_by_token)
     """
-    # First create the twist functions
     rng_key, log_true_final_twists = create_log_true_final_twists(
         rng_key,
         config,
@@ -82,7 +81,7 @@ def setup_twist_functions_and_posterior_samples(
     )
     
     # Then either load or generate posterior samples
-    if config.checkpoint_config.load_posterior_samples:
+    if config.posterior_samples_config.load_posterior_samples:
         true_posterior_samples = load_posterior_samples(
             config,
             config.tokenizer
