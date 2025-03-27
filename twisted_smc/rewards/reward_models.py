@@ -5,9 +5,10 @@ import jax.numpy as jnp
 from functools import partial
 import torch
 
-from custom_transformer_prob_utils import evaluate_log_p_theta_t, \
-    stochastic_transformer_sample, evaluate_log_p_selected_tokens
-
+# from custom_transformer_prob_utils import evaluate_log_p_theta_t, \
+#     stochastic_transformer_sample, evaluate_log_p_selected_tokens
+from twisted_smc.evaluation import evaluate_log_p_selected_tokens, evaluate_log_p_theta_t
+from twisted_smc.sampling.stochastic_sampling import stochastic_transformer_sample
 
 # TODO: modify beta passed to the function
 # NOTE: curry is just fixing some arguments to the function.

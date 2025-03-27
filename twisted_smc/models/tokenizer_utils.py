@@ -1,5 +1,7 @@
 from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification, AutoModelForSequenceClassification
 import torch
+import jax
+import jax.numpy as jnp
 
 def get_tokenizer_and_rewardModel(rm_type):
     """Get the appropriate tokenizer and reward model based on reward type."""
@@ -25,3 +27,23 @@ def get_tokenizer_and_rewardModel(rm_type):
         rewardModel = FlaxAutoModelForSequenceClassification.from_pretrained(model_name, from_pt=True) 
 
     return tokenizer_RM, rewardModel 
+
+# Helper functions from huggingface_models_custom.py
+def linear_init_normal(key, in_features, out_features, in_plus_out_for_sd, additional_sd_divider=1.):
+    params = {}
+    key, sk = jax.random.split(key)
+    sd = (2. / (in_plus_out_for_sd)) ** 0.5 # Xavier initialization based on average of in/out
+    sd = sd / additional_sd_divider
+    # print(sd)
+    params['w'] = jax.random.normal(sk, shape=(in_features, out_features)) * sd
+
+    params['b'] = jnp.zeros((out_features,)) # 0 init for the bias
+    return key, params
+
+def linear(params, x: jnp.ndarray):
+    return x @ params['w'] + params['b'][None, :]
+
+def get_tokenizer(model_config: str) -> AutoTokenizer:
+    tokenizer = AutoTokenizer.from_pretrained(model_config)
+    tokenizer.pad_token = tokenizer.eos_token
+    return tokenizer 

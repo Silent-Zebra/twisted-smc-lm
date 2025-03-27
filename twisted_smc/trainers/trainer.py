@@ -140,7 +140,7 @@ class TwistTrainer:
         
     def _generate_samples(self, rng_key: jnp.ndarray, prompt: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """Generate samples for metrics collection."""
-        from twisted_smc.sampling import stochastic_transformer_sample
+        from twisted_smc.inference import stochastic_transformer_sample
         
         rng_key, sk = jax.random.split(rng_key)
         samples = stochastic_transformer_sample(

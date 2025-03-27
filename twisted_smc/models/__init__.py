@@ -1,10 +1,9 @@
-from twisted_smc.models.models import get_tokenizer
 from twisted_smc.models.model_setup import (
     get_model_config_str, 
     get_model_config_and_conditional_twist_settings,
-    setup_model_and_params
+    setup_model_and_params,
 )
-from twisted_smc.models.tokenizer_utils import get_tokenizer_and_rewardModel
+from twisted_smc.models.tokenizer_utils import get_tokenizer_and_rewardModel, get_tokenizer
 
 __all__ = [
     "get_tokenizer",

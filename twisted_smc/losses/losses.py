@@ -1,9 +1,15 @@
 import jax
 import jax.numpy as jnp
-from custom_transformer_prob_utils import smc_procedure, \
-    stochastic_transformer_sample, evaluate_log_psi_selected_tokens, get_proposal_q_sample, \
-    get_p_logits_and_log_psi_all_vocab, evaluate_log_phi_final, \
-    evaluate_normalized_log_q_1_to_t, evaluate_log_p_selected_tokens, evaluate_log_p_theta_1_to_t
+from twisted_smc.inference.custom_transformer_prob_utils import smc_procedure, \
+    get_proposal_q_sample, get_p_logits_and_log_psi_all_vocab, stochastic_transformer_sample
+from twisted_smc.evaluation.evaluate import (
+    evaluate_log_p_selected_tokens, 
+    evaluate_log_p_theta_t, 
+    evaluate_log_p_theta_1_to_t, 
+    evaluate_normalized_log_q_1_to_t,
+    evaluate_log_phi_final,
+    evaluate_log_psi_selected_tokens
+)
 
 from functools import partial
 

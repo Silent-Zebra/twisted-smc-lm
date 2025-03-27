@@ -77,13 +77,14 @@ class MetricsCollector:
         metrics.update(iwae_metrics)
         
         # TODO: Calculate bounds metrics if true posterior samples available
-        # if true_posterior_samples is not None:
-        #     bounds_metrics = self._calculate_bounds_metrics(
-        #         true_posterior_samples, params_p, params_twist,
-        #         prompt_len, condition_twist_on_tokens,
-        #         huggingface_model
-        #     )
-        #     metrics.update(bounds_metrics)
+        if true_posterior_samples is not None:
+            pass
+            # bounds_metrics = self._calculate_bounds_metrics(
+            #     true_posterior_samples, params_p, params_twist,
+            #     prompt_len, condition_twist_on_tokens,
+            #     huggingface_model
+            # )
+            # metrics.update(bounds_metrics)
         
         # Update the metrics storage
         self._update_metrics_storage(metrics)

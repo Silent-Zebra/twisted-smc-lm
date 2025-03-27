@@ -10,7 +10,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 from plot_utils import *
 
-from get_kl_table import load_prefixes_toy_rlhf
+from old.get_kl_table import load_prefixes_toy_rlhf
 
 
 n_epochs = 100

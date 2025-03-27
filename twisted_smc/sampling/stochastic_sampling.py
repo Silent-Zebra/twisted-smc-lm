@@ -22,7 +22,7 @@ def stochastic_transformer_sample(rng_key, params, prompt, output_len, n_samples
     """
     # This is a placeholder - in practice, this would reference the actual implementation
     # For now, import from the original implementation
-    from old.do_training_and_log_Z_bounds import stochastic_transformer_sample as original_sample
+    from twisted_smc.inference import stochastic_transformer_sample as original_sample
     
     return original_sample(rng_key, params, prompt, output_len, n_samples, huggingface_model=huggingface_model)
 
@@ -45,7 +45,7 @@ def stochastic_classify(rng_key, samples, reward_model, tokenizer_rm, tokenizer,
     """
     # This is a placeholder - in practice, this would reference the actual implementation
     # For now, import from the original implementation
-    from old.do_training_and_log_Z_bounds import stochastic_classify as original_classify
+    from twisted_smc.rewards.reward_models import stochastic_classify as original_classify
     
     return original_classify(rng_key, samples, reward_model, tokenizer_rm, tokenizer, singledimlogit=singledimlogit)
 

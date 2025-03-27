@@ -2,7 +2,7 @@ from typing import Optional, Callable, List
 import jax
 import jax.numpy as jnp
 from .base import TwistBuilder, TwistConfig
-from reward_models import (
+from twisted_smc.rewards.reward_models import (
     curried_log_toxicity_threshold,
     reward_model_toxicity_threshold,
     curried_log_exp_beta_reward_model_toy_rlhf,
