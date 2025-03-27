@@ -24,14 +24,14 @@ def train(config: ExperimentConfig, model_interface, jnp_prompts, log_true_final
     trainer = TwistTrainer(config, model_interface, metrics_tracker)
     
     rng_key = jax.random.PRNGKey(config.training_config.seed)
-    params_twist, optim_twist_state = trainer.train(
+    params_twist, optim_twist_state, metrics = trainer.train(
         rng_key, 
         jnp_prompts, 
         log_true_final_twists, 
         true_posterior_samples
     )
     
-    return params_twist, optim_twist_state, metrics_tracker.get_metrics() 
+    return params_twist, optim_twist_state, metrics.get_metrics() 
 
 __all__ = [
     'TwistTrainer',

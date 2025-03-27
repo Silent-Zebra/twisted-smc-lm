@@ -111,10 +111,8 @@ class TwistTrainer:
             if self._should_checkpoint(epoch):
                 last_ckpt_epoch = self._save_checkpoint(epoch)
                 
-        # Save final checkpoint if needed
-        save_ckpt_at_end = getattr(self.config, 'save_ckpt_at_end', False)
-        if save_ckpt_at_end and last_ckpt_epoch != (self.config.epochs - 1):
-            self._save_checkpoint(self.config.epochs - 1)
+        # Save final checkpoint
+        self._save_checkpoint(self.config.training_config.epochs - 1)
             
         # Final timing information
         total_time = time.time() - start_time
@@ -172,9 +170,9 @@ class TwistTrainer:
         """
         plot_and_print_at_end = True
         no_test_info = getattr(self.config, 'no_test_info', False)
-        if self.config.twist_updates_per_epoch == 0:
+        if self.config.training_config.twist_updates_per_epoch == 0:
             plot_and_print_at_end = False
-        return plot_and_print_at_end and (epoch + 1 == self.config.epochs) and (not no_test_info)
+        return plot_and_print_at_end and (epoch + 1 == self.config.training_config.epochs) and (not no_test_info)
     
     def _should_checkpoint(self, epoch: int) -> bool:
         """Determine if we should checkpoint at this epoch.
@@ -185,7 +183,7 @@ class TwistTrainer:
         Returns:
             Whether to checkpoint
         """
-        return (epoch + 1) % self.config.ckpt_every == 0
+        return (epoch + 1) % self.config.checkpoint_config.ckpt_every == 0
     
     def _save_checkpoint(self, epoch: int) -> int:
         """Save a checkpoint.
@@ -200,8 +198,8 @@ class TwistTrainer:
             self.params_twist, 
             self.optim_twist_state, 
             epoch, 
-            self.config.seed, 
-            self.config.twist_learn_type
+            self.config.training_config.seed, 
+            self.config.training_config.twist_learn_type
         )
         return epoch
     
@@ -211,7 +209,7 @@ class TwistTrainer:
         Args:
             epoch: Current epoch
         """
-        print_every = getattr(self.config, 'print_every', 1)
+        print_every = getattr(self.config.training_config, 'print_every', 1)
         if (epoch + 1) % print_every == 0:
             print(f"Epoch: {epoch + 1}", flush=True)
     

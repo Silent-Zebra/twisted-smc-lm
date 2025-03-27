@@ -14,8 +14,9 @@ class CheckpointManager:
         Args:
             save_dir: Directory to save checkpoints in
         """
-        self.save_dir = save_dir
-        os.makedirs(save_dir, exist_ok=True)
+        self.save_dir = os.path.abspath(save_dir)
+        os.makedirs(self.save_dir, exist_ok=True)
+        print(f"Checkpoints will be saved to {self.save_dir}")
         
     def save_checkpoint(self, params_twist, optim_twist_state, epoch, seed, twist_learn_type):
         """Save a checkpoint.

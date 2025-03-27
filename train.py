@@ -67,13 +67,13 @@ def parse_args():
                               help="Type of twist learning method")
     training_group.add_argument("--lr_twist", type=float, default=0.0001,
                               help="Learning rate for the twist model")
-    training_group.add_argument("--n_twist", type=int, default=1000,
+    training_group.add_argument("--n_twist", type=int, default=10,  # should be 1000
                               help="Number of twist samples to use for training")
     training_group.add_argument("--output_len", type=int, default=10,
                                 help="Length of output sequences")
-    training_group.add_argument("--epochs", type=int, default=10, 
+    training_group.add_argument("--epochs", type=int, default=2,  # should be 10
                                 help="Number of training epochs")
-    training_group.add_argument("--twist_updates_per_epoch", type=int, default=500,
+    training_group.add_argument("--twist_updates_per_epoch", type=int, default=2, # should be 500
                                 help="Number of twist updates per epoch")
     training_group.add_argument("--seed", type=int, default=1,
                                 help="Random seed")
@@ -81,21 +81,21 @@ def parse_args():
                                 help="Print information every N epochs")
     training_group.add_argument("--no_test_info", action="store_true",
                                 help="Don't run test info collection")
-    training_group.add_argument("--n_samples_for_plots", type=int, default=100,
+    training_group.add_argument("--n_samples_for_plots", type=int, default=10,  # should be 100
                                 help="Number of samples to use for plotting")
-    training_group.add_argument("--n_samples_for_plots_larger", type=int, default=100,
+    training_group.add_argument("--n_samples_for_plots_larger", type=int, default=10,  # should be 100
                                 help="Number of samples to use for larger plots")
     training_group.add_argument("--use_replay_buffer", action="store_true",
                                 help="Use replay buffer for training")
-    training_group.add_argument("--twist_updates_between_buffer_samples", type=int, default=100,
+    training_group.add_argument("--twist_updates_between_buffer_samples", type=int, default=10,  # should be 100
                                 help="Number of twist updates between buffer samples")
-    training_group.add_argument("--n_buffer_samples_at_a_time", type=int, default=1000,
+    training_group.add_argument("--n_buffer_samples_at_a_time", type=int, default=1000,  # should be 1000
                                 help="Number of buffer samples to generate at a time")
-    training_group.add_argument("--n_times_to_sample_for_buffer", type=int, default=10,
+    training_group.add_argument("--n_times_to_sample_for_buffer", type=int, default=10,  # should be 10
                                 help="Number of times to sample for buffer")
     training_group.add_argument("--one_big_sample", action="store_true",
                                 help="Use one big sample for buffer")
-    training_group.add_argument("--max_buffer_size", type=int, default=10000,
+    training_group.add_argument("--max_buffer_size", type=int, default=10000,  # should be 10000
                                 help="Maximum buffer size")
     training_group.add_argument("--proposal_is_p", action="store_true",
                                 help="Use the base model p as proposal q")
@@ -105,7 +105,7 @@ def parse_args():
                                 help="Beta for proposal")
     training_group.add_argument("--reward_cap", type=float, default=None,
                                 help="Cap on rewards")
-    training_group.add_argument("--print_every_twist_updates", type=int, default=100,
+    training_group.add_argument("--print_every_twist_updates", type=int, default=2,  # should be 100
                                 help="Print information every N twist updates")
     training_group.add_argument("--exp_num_twist_updates", action="store_true",
                                 help="Use exponentially increasing number of twist updates")
