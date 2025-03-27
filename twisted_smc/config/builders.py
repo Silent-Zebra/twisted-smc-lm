@@ -31,8 +31,8 @@ def build_model_config(args):
 def build_training_config(args):
     """Build TrainingConfig from command line arguments."""
     return TrainingConfig(
-        seed=args.seed,
-        epochs=args.epochs,
+        seed=getattr(args, "seed", 1),
+        epochs=getattr(args, "epochs", 0.0),
         twist_learn_type=getattr(args, "twist_learn_type", "ebm_ml_jit_vmapped_over_condition_tokens"),
         lr_twist=getattr(args, "lr_twist", 0.0),
         output_len=args.output_len,
