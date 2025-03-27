@@ -200,7 +200,7 @@ def setup_plot_over_time_lists(n_samples_for_plots):
         logZ_lbs_smc_across_samples_seeds_time
     ]
     for lst in logZ_all_bounds_across_samples_seeds_time:
-        for n in range(len(n_samples_for_plots)):
+        for n in range(n_samples_for_plots):
             lst.append([])
 
     plot_over_time_list = [

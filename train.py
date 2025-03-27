@@ -221,7 +221,7 @@ def main():
     # Update the model interface with the trained parameters
     model_interface['params_twist'] = params_twist
     model_interface['optim_twist_state'] = optim_twist_state
-    raise Exception("Stop here")
+
     # For now, just save the posterior samples if this is the first run
     if not config.posterior_samples_config.load_posterior_samples:
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')

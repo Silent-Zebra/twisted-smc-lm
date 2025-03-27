@@ -20,8 +20,7 @@ def train(config: ExperimentConfig, model_interface, jnp_prompts, log_true_final
     Returns:
         Tuple of (params_twist, optim_twist_state, metrics)
     """
-    metrics_tracker = MetricsTracker(getattr(config, 'n_samples_for_plots', None))
-    trainer = TwistTrainer(config, model_interface, metrics_tracker)
+    trainer = TwistTrainer(config, model_interface)
     
     rng_key = jax.random.PRNGKey(config.training_config.seed)
     params_twist, optim_twist_state, metrics = trainer.train(
@@ -31,7 +30,7 @@ def train(config: ExperimentConfig, model_interface, jnp_prompts, log_true_final
         true_posterior_samples
     )
     
-    return params_twist, optim_twist_state, metrics.get_metrics() 
+    return params_twist, optim_twist_state, metrics 
 
 __all__ = [
     'TwistTrainer',
